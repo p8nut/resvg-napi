@@ -137,6 +137,21 @@
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
 
+  const debounce = (fn, ms) => {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), ms);
+    };
+  };
+
+  // Deferred variants, declared up here because the wiring below runs during
+  // module evaluation. 200 ms is short enough to feel live, long enough that a
+  // burst of keystrokes parses once instead of once per character. `analyse` and
+  // `render` are function declarations, so referring to them now is fine.
+  const analyseSoon = debounce(() => analyse(), 200);
+  const renderSoon = debounce(() => render(), 350);
+
   // Images the user supplied, keyed by the href the document uses. Declared up
   // here because `analyse()` runs during init, above its own definition.
   const images = new Map();
@@ -149,7 +164,9 @@
   // so an image href placeholder stays visible to `pendingImages()` and can be
   // resolved by an upload.
   function source() {
-    const raw = $('svg').value;
+    // usvg rejects an XML declaration that is not at offset 0, and Illustrator
+    // exports routinely arrive with a leading newline.
+    const raw = $('svg').value.replace(/^\s+(?=<\?xml)/, '');
     let names = [];
     try {
       names = liquid.globalVariablesSync(liquid.parse(raw));
@@ -158,7 +175,12 @@
     }
     if (!names.length) return raw;
     const scope = {};
-    for (const name of names) scope[name] = vars.get(name) || `{{ ${name} }}`;
+    for (const name of names) {
+      // A variable is a value, never a document: an XML declaration pasted into
+      // a field would land mid-file and make the whole SVG invalid.
+      const value = (vars.get(name) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
+      scope[name] = value || `{{ ${name} }}`;
+    }
     try {
       return liquid.parseAndRenderSync(raw, scope);
     } catch (e) {
@@ -181,6 +203,11 @@
     return chains;
   }
 
+  // Signature of the *shape* of the form. Rebuilding the fields on every
+  // keystroke would blow away the focused input mid-word, so the DOM is only
+  // touched when the variables or their filter chains actually change.
+  let varsSignature = null;
+
   function showVariables() {
     let names = [];
     try {
@@ -188,7 +215,13 @@
     } catch { /* incomplete template while typing */ }
     const chains = filterChains($('svg').value);
     $('vars').hidden = names.length === 0;
-    if (!names.length) return;
+    if (!names.length) {
+      varsSignature = null;
+      return;
+    }
+    const signature = names.map((n) => `${n}:${(chains.get(n) ?? []).join('|')}`).join(',');
+    if (signature === varsSignature) return;
+    varsSignature = signature;
     $('varsCount').textContent = `— ${names.length} found by liquidjs`;
     const stubbed = [...chains.values()]
       .map((c) => c[0].split(':')[0].trim())
@@ -213,11 +246,17 @@
       const input = document.createElement('input');
       input.value = vars.get(name) ?? '';
       input.placeholder = `{{ ${name} }}`;
+      // The value is recorded immediately; re-parsing and re-rendering wait
+      // until typing stops.
       input.addEventListener('input', () => {
         vars.set(name, input.value);
-        analyse();
+        analyseSoon();
+        renderSoon();
       });
-      input.addEventListener('change', () => render());
+      input.addEventListener('change', () => {
+        analyse();
+        render();
+      });
       return [code, input];
     }));
   }
@@ -399,7 +438,7 @@
 
   $('font').addEventListener('change', (ev) => accept(ev.target.files));
 
-  $('svg').addEventListener('input', () => analyse());
+  $('svg').addEventListener('input', analyseSoon);
 
   $('render').addEventListener('click', render);
 

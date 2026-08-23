@@ -1,0 +1,74 @@
+{
+  "page": 1,
+  "accent": "#4cc9a4",
+  "warn": "#e0623d",
+  "ink": "#12191f",
+  "dim": "#3b4d5a",
+  "paper": "#e8eff3",
+  "base": "https://example.test/sheet",
+  "items": [
+    {
+      "name": "Ada Lovelace",
+      "code": "AL-1843",
+      "dept": "Analysis",
+      "score": 98,
+      "delta": 4
+    },
+    {
+      "name": "Grace Hopper",
+      "code": "GH-1952",
+      "dept": "Analysis",
+      "score": 95,
+      "delta": 2
+    },
+    {
+      "name": "Linus Torvalds",
+      "code": "LT-1991",
+      "dept": "Systems",
+      "score": 91,
+      "delta": -3
+    },
+    {
+      "name": "Ken Thompson",
+      "code": "KT-1969",
+      "dept": "Systems",
+      "score": 88,
+      "delta": 1
+    },
+    {
+      "name": "Barbara Liskov",
+      "code": "BL-1974",
+      "dept": "Theory",
+      "score": 84,
+      "delta": 5
+    },
+    {
+      "name": "Alan Kay",
+      "code": "AK-1972",
+      "dept": "Theory",
+      "score": 71,
+      "delta": -6
+    },
+    {
+      "name": "Radia Perlman",
+      "code": "RP-1985",
+      "dept": "Networks",
+      "score": 67,
+      "delta": 3
+    },
+    {
+      "name": "Vint Cerf",
+      "code": "VC-1974",
+      "dept": "Networks",
+      "score": 58,
+      "delta": -2
+    },
+    {
+      "name": "Ada Byron",
+      "code": "AB-1815",
+      "dept": "Theory",
+      "score": 44,
+      "delta": -9
+    }
+  ]
+}

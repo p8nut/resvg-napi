@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="420" viewBox="0 0 620 420">
+  <!--
+    The data half of the tour: pagination, grouping, theming and language, all
+    from Liquid. Headless, one page at a time:
+
+      node demo/render.mjs examples/sheet.svg out.png (with a language flag)
+
+    `page` is a variable, so rendering pages 1..n is a loop around the renderer
+    rather than anything the template knows about.
+  -->
+  <defs>
+    <style>
+      .plate  { fill: {{ ink | default: "#12191f" }} }
+      .rule   { stroke: {{ dim | default: "#3b4d5a" }}; stroke-width: 1 }
+      .label  { fill: {{ dim | default: "#3b4d5a" }}; font-size: 8px; letter-spacing: .12em }
+      .value  { fill: {{ paper | default: "#e8eff3" }} }
+      .accent { fill: {{ accent | default: "#4cc9a4" }} }
+      .warn   { fill: {{ warn | default: "#e0623d" }} }
+    </style>
+    <marker id="up" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+      <path d="M0 7 L3.5 0 L7 7z" fill="{{ accent | default: '#4cc9a4' }}"/>
+    </marker>
+    <marker id="down" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+      <path d="M0 0 L3.5 7 L7 0z" fill="{{ warn | default: '#e0623d' }}"/>
+    </marker>
+  </defs>
+
+  <rect width="620" height="420" class="plate"/>
+
+  {%- liquid
+    assign per = 5
+    assign page = page | default: 1 | at_least: 1
+    assign total = items.size | divided_by: per | ceil
+    assign page = page | at_most: total
+    assign start = page | minus: 1 | times: per
+    assign departments = items | map: "dept" | uniq | sort_natural
+  -%}
+
+  <!-- 1. the same title in two languages: usvg tests systemLanguage against
+          the `languages` option, and picks nothing when it is empty -->
+  <switch>
+    <text x="20" y="34" systemLanguage="fr" font-size="21" font-weight="700"
+          class="value">Relevé trimestriel</text>
+    <text x="20" y="34" systemLanguage="de" font-size="21" font-weight="700"
+          class="value">Quartalsbericht</text>
+    <text x="20" y="34" font-size="21" font-weight="700" class="value">Quarterly sheet</text>
+  </switch>
+  <text x="20" y="48" class="label">SWITCH · systemLanguage, then the fallback branch</text>
+  <path d="M20 56 H600" class="rule" stroke-dasharray="2 4"/>
+
+  <!-- 2. one page of rows: `limit` and `offset` are the whole of pagination -->
+  <text x="20" y="76" class="label">FOR · limit {{ per }}, offset {{ start }}</text>
+  {%- assign lastDept = "" -%}
+  {% for row in items limit: per offset: start %}
+    {%- assign y = forloop.index0 | times: 46 | plus: 96 -%}
+
+    {%- comment -%}
+      liquidjs has no `ifchanged`, so a group header is a remembered value.
+    {%- endcomment -%}
+    {% if row.dept != lastDept %}
+    <text x="20" y="{{ y | minus: 6 }}" class="accent" font-size="9"
+          letter-spacing=".1em">{{ row.dept | upcase | escape }}</text>
+    {% assign lastDept = row.dept %}
+    {% endif %}
+
+    <text x="20" y="{{ y | plus: 12 }}" class="value" font-size="14"
+          >{{ row.name | fit: 210, 14 | escape }}</text>
+    <text x="238" y="{{ y | plus: 12 }}" class="label" font-size="9"
+          >{{ row.code | escape }}</text>
+
+    <!-- the bar is clamped, so bad data cannot draw outside the plate -->
+    {%- assign bar = row.score | times: 2.4 | at_most: 250 | at_least: 4 | round -%}
+    <rect x="320" y="{{ y | plus: 2 }}" width="{{ bar }}" height="12" rx="2"
+          class="{% if row.score >= 60 %}accent{% else %}warn{% endif %}" opacity=".8"/>
+    <text x="{{ bar | plus: 326 }}" y="{{ y | plus: 12 }}" class="value" font-size="11"
+          >{{ row.score }}</text>
+
+    <!-- direction as a marker, chosen by the data. A zero-length path cannot
+         be stroked, so the leader is short rather than empty. -->
+    <path d="M292 {{ y | plus: 8 }} h14" class="rule" stroke-opacity=".5"
+          marker-end="url(#{% if row.delta >= 0 %}up{% else %}down{% endif %})"/>
+
+    {% unless forloop.last %}
+    <path d="M20 {{ y | plus: 24 }} H600" class="rule" stroke-opacity=".35"/>
+    {% endunless %}
+  {% endfor %}
+
+  <!-- 3. the empty slots of a short last page, from a range -->
+  {%- assign shown = items.size | minus: start | at_most: per -%}
+  {% for slot in (1..per) %}
+    {% if slot > shown %}
+    {%- assign y = slot | minus: 1 | times: 46 | plus: 96 -%}
+    <path d="M20 {{ y | plus: 12 }} H600" class="rule" stroke-dasharray="3 5" stroke-opacity=".25"/>
+    {% endif %}
+  {% endfor %}
+
+  <!-- 4. footer: the page arithmetic, the legend, and a target that carries
+          the page number through url_encode -->
+  <path d="M20 342 H600" class="rule"/>
+  <text x="20" y="360" class="label">PAGE</text>
+  <text x="20" y="380" class="value" font-size="16"
+        >{{ page }} / {{ total }}</text>
+  <text x="20" y="396" class="label"
+        >{{ items.size }} rows · {{ per }} per page · showing {{ start | plus: 1 }}–{{ start | plus: shown }}</text>
+
+  <text x="200" y="360" class="label">DEPARTMENTS · uniq, sort_natural</text>
+  <text x="200" y="380" class="value" font-size="11"
+        >{{ departments | join: " · " | escape }}</text>
+  {%- comment -%}
+    `increment` prints every value it returns, so the counting happens inside a
+    capture and only the total is drawn.
+  {%- endcomment -%}
+  {%- capture counting -%}
+    {%- for row in items -%}{%- if row.score < 60 -%}{%- increment flagged -%}{%- endif -%}{%- endfor -%}
+  {%- endcapture -%}
+  <text x="200" y="396" class="label"
+        >FLAGGED · {{ flagged | default: 0 }} below target, counted by increment</text>
+
+  <!-- {% raw %}`{%- -%}`{% endraw %} matters here: Liquid runs before the XML
+       parser, so it reads comments too, and stray whitespace would land inside
+       the QR text -->
+  {%- assign target = base | default: "https://example.test/sheet" | append: "?page=" | append: page -%}
+  <svg id="qr" x="536" y="348" width="64" height="64"
+    >{{- target | qr: '#e8eff3', '#00000000' -}}</svg>
+  <text x="424" y="412" class="label">QR · {{ target | url_encode | truncate: 16 }}</text>
+
+  <!-- raw: the only way to print the syntax itself -->
+  <text x="20" y="412" class="label"
+        >RAW · {% raw %}{{ page }}{% endraw %} and {% raw %}{% if %}{% endraw %} stay literal</text>
+</svg>

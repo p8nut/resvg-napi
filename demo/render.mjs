@@ -18,9 +18,14 @@ const here = dirname(new URL(import.meta.url).pathname);
 const require = createRequire(join(here, '..', 'index.js'));
 const mod = require(join(here, '..', 'index.js'));
 
-const [templateArg, outArg] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+// `--lang fr` drives `<switch systemLanguage>`; usvg picks nothing without it.
+const langAt = argv.indexOf('--lang');
+const languages = langAt === -1 ? undefined : [argv[langAt + 1]];
+if (langAt !== -1) argv.splice(langAt, 2);
+const [templateArg, outArg] = argv;
 if (!templateArg) {
-  console.error('usage: node demo/render.mjs <template.svg> [out.png]');
+  console.error('usage: node demo/render.mjs <template.svg> [out.png] [--lang xx]');
   process.exit(2);
 }
 const template = resolve(here, templateArg);
@@ -34,12 +39,14 @@ const fontFiles = [join(here, 'DejaVuSans.ttf'),
     .filter((f) => /\.(ttf|otf)$/i.test(f)).map((f) => join(here, 'fonts', f)) : [])]
   .filter(existsSync);
 for (const file of fontFiles) fonts.loadFontData(readFileSync(file));
-if (!fonts.len()) fonts.loadSystemFonts();
+// Local files first, so the generic families below point at a known face; then
+// the system, for the glyphs the local files do not have (emoji, scripts).
+fonts.loadSystemFonts();
 // The examples ask for `sans-serif`; point every generic family at what we have.
 const family = fonts.faces()[0].families[0];
 for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
                    'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
-const options = { fontFamily: family };
+const options = { fontFamily: family, languages };
 
 const escape = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -69,10 +76,15 @@ for (const name of wanted) {
 const rendered = liquid.parseAndRenderSync(source, scope);
 // An unrendered tag means the template asked for something Liquid did not do,
 // which is a failure and not a warning: resvg would parse the tag as markup.
+// A `{% raw %}` block emits braces on purpose, so that check cannot apply.
+const emitsLiteralBraces = /\{%-?\s*raw\s*-?%\}/.test(source);
 const left = rendered.match(/\{[{%]/g);
-if (left) {
+if (left && !emitsLiteralBraces) {
   console.error(`${left.length} unrendered Liquid tag(s) left in the output`);
   process.exit(1);
+}
+if (left && emitsLiteralBraces) {
+  console.log(`  note: ${left.length} literal brace(s) from a {% raw %} block, not checked`);
 }
 
 const doc = new mod.Resvg(rendered, options, fonts);

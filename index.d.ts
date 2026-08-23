@@ -887,6 +887,14 @@ export interface RenderParams {
 }
 
 /**
+ * Starts collecting what usvg and resvg report.
+ *
+ * `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to
+ * call repeatedly: the logger is installed once, the level always applies.
+ */
+export declare function setLogLevel(level: string): void
+
+/**
  * A shape rendering method.
  *
  * `shape-rendering` attribute in the SVG.
@@ -914,6 +922,9 @@ export interface Stop {
   color: Color
   opacity: number
 }
+
+/** Drains the messages collected since the last call. */
+export declare function takeLogs(): Array<string>
 
 /** A text chunk anchor property. */
 export declare const enum TextAnchor {

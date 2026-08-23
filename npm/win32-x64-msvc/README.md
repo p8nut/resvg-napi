@@ -53,13 +53,39 @@ fonts must be supplied with `loadFontData(buffer)`.
 Adding a target is one line in `package.json` under `napi.targets`, plus a row in
 the CI matrix; then `npm run create-npm-dirs`.
 
+## Diagnostics
+
+usvg and resvg report every recoverable problem through the `log` crate —
+unparsable values, skipped shapes, unmatched font families, images that could not
+be read. Nothing consumes that by default, so those messages used to vanish:
+
+```js
+import { setLogLevel, takeLogs, Resvg } from 'resvg-napi'
+
+setLogLevel('warn')            // off | error | warn | info | debug | trace
+new Resvg(svg).renderPng()
+takeLogs()
+// [ "WARN usvg::parser::style: Failed to parse fill value: 'notacolour'. Fallback to black.",
+//   "WARN usvg::parser::shapes: Rect '' has an invalid 'width' value. Skipped." ]
+```
+
+`takeLogs()` drains the buffer, which is capped at 500 entries so a pathological
+document cannot grow it without end.
+
 ## Browser demo
 
 ```bash
 npm run demo      # builds the wasm, bundles the loaders, serves on :8787
 ```
 
-![demo](demo/screenshot.png)
+![the proof bench](demo/screenshot.png)
+
+The page is laid out as a prepress proof: a slug line of job metadata, crop
+corners, and the render framed by registration marks with tick rules measuring
+its real extent. `absLayerBoundingBox()` can be drawn over it in registration
+magenta. Everything both engines said — Liquid errors, unknown filters, and every
+`log` message from usvg — accumulates in a diagnostics list, with a count in the
+slug line so a problem is visible without scrolling.
 
 The page parses the SVG first and **asks for what the document is missing**, then
 lets you supply it:

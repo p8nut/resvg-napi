@@ -1675,6 +1675,53 @@ pub enum NodeKind {
     Text,
 }
 #[doc = " Walks a child-index path down from the root group."]
+#[doc = " usvg and resvg report every recoverable problem through the `log` crate"]
+#[doc = " -- unsupported elements, unparsable values, skipped images. Nothing"]
+#[doc = " consumes it by default, so those messages are lost; this buffers them."]
+static LOGS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+struct LogCollector;
+static LOG_COLLECTOR: LogCollector = LogCollector;
+impl log::Log for LogCollector {
+    fn enabled(&self, _: &log::Metadata) -> bool {
+        true
+    }
+    fn log(&self, record: &log::Record) {
+        if let Ok(mut buf) = LOGS.lock() {
+            if buf.len() < 500 {
+                buf.push(format!(
+                    "{} {}: {}",
+                    record.level(),
+                    record.target(),
+                    record.args()
+                ));
+            }
+        }
+    }
+    fn flush(&self) {}
+}
+#[doc = " Starts collecting what usvg and resvg report."]
+#[doc = ""]
+#[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
+#[doc = " call repeatedly: the logger is installed once, the level always applies."]
+#[napi]
+pub fn set_log_level(level: String) -> Result<()> {
+    let filter: log::LevelFilter = level
+        .parse()
+        .map_err(|_| Error::from_reason(format!("unknown log level: {level:?}")))?;
+    static INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    INSTALLED.get_or_init(|| {
+        let _ = log::set_logger(&LOG_COLLECTOR);
+    });
+    log::set_max_level(filter);
+    Ok(())
+}
+#[doc = " Drains the messages collected since the last call."]
+#[napi]
+pub fn take_logs() -> Vec<String> {
+    LOGS.lock()
+        .map(|mut buf| std::mem::take(&mut *buf))
+        .unwrap_or_default()
+}
 #[doc = " Anything that owns a content group: the document, or a def such as a"]
 #[doc = " pattern, a mask or a clip path. The generator implements it for every"]
 #[doc = " wrapped type that has a `root() -> &Group`."]

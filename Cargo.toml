@@ -16,6 +16,9 @@ napi-derive = "3.6"
 resvg = "0.48.1"
 # resvg's own CSS colour parser, same version it uses internally.
 svgtypes = "0.16.1"
+# usvg/resvg report recoverable problems through `log`; nothing consumes it by
+# default, so the messages are lost. We install a collector.
+log = "0.4"
 
 [build-dependencies]
 napi-build = "2.4"

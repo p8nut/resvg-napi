@@ -1,4 +1,4 @@
-// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","FontDatabase","FontFace","LinearGradient","Mask","Pattern","Primitive","RadialGradient","Resvg","SvgNode","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","ShapeRendering","SpreadMethod","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
+// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","FontDatabase","FontFace","LinearGradient","Mask","Pattern","Primitive","RadialGradient","Resvg","SvgNode","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
 /* eslint-disable */
 /* prettier-ignore */
 
@@ -951,8 +951,10 @@ module.exports.MorphologyOperator = __napiModule.exports.MorphologyOperator
 module.exports.NodeKind = __napiModule.exports.NodeKind
 module.exports.PaintOrder = __napiModule.exports.PaintOrder
 module.exports.renderAsync = __napiModule.exports.renderAsync
+module.exports.setLogLevel = __napiModule.exports.setLogLevel
 module.exports.ShapeRendering = __napiModule.exports.ShapeRendering
 module.exports.SpreadMethod = __napiModule.exports.SpreadMethod
+module.exports.takeLogs = __napiModule.exports.takeLogs
 module.exports.TextAnchor = __napiModule.exports.TextAnchor
 module.exports.TextRendering = __napiModule.exports.TextRendering
 module.exports.TurbulenceKind = __napiModule.exports.TurbulenceKind

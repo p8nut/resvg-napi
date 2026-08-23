@@ -436,7 +436,18 @@
     const paths = templatePaths(raw);
     if (!paths.length) return raw;
     const scope = {};
-    for (const { path, parts } of paths) {
+    // Shortest first, so a value given for `staff` is in place before anything
+    // asks about `staff.size`.
+    const ordered = [...paths].sort((a, b) => a.parts.length - b.parts.length);
+    const provided = new Set(ordered.filter((p) => vars.get(p.path)).map((p) => p.path));
+    for (const { path, parts } of ordered) {
+      // `{{ staff.size }}` is reported as its own variable, but `size` belongs to
+      // the array: writing a placeholder there would graft a property onto the
+      // value the user supplied.
+      const ancestorGiven = parts
+        .slice(0, -1)
+        .some((_, i) => provided.has(parts.slice(0, i + 1).join('.')));
+      if (ancestorGiven && !vars.get(path)) continue;
       // A variable is a value, never a document: an XML declaration pasted into
       // a field would land mid-file and make the whole SVG invalid.
       const raw = (vars.get(path) || '').replace(/<\?xml[^>]*\?>/g, '').trim();

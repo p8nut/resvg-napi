@@ -136,6 +136,9 @@ lets you supply it:
   is picked, substitutes a synthetic `var:<name>` href and registers the bytes
   under it — so resolution never depends on what the placeholder renders to.
 
+`demo/examples/roster.svg` is a worked example: a table whose rows come from an
+array of objects, with the payload to paste in a comment at the top.
+
 Tags work as they do anywhere in Liquid, `{% for %}` and `{% if %}` included. A
 collection a loop iterates over is labelled `iterated` and takes **JSON**: a value
 starting with `[` or `{` is parsed, so `staff` can be

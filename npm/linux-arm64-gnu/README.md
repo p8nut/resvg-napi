@@ -94,8 +94,21 @@ templated document can be previewed:
   (`upn | qr: '#ffffff', '#00000000'`) — the static analysis only reports the
   variable name, so the chains are read off the output tags.
 - `strictFilters` is off, so an unknown filter passes its value through instead of
-  throwing. `qr` is registered as a **stub returning an empty string**; swap it
-  for the real QR-code SVG generator in `demo/index.html`.
+  throwing.
+- `{{ upn | qr: '#ffffff', '#00000000' }}` generates a real QR code, as SVG:
+  `qrSvg()` in `demo/liquid-entry.mjs` encodes with `qrcode-generator` and emits
+  one `<path>` for the dark modules inside a nested `<svg viewBox="0 0 n n"
+  width="100%" height="100%">`, so it scales to whatever viewport the template
+  drops it into without knowing the module count. Arguments are the module
+  colour, the background (`#00000000` for transparent — usvg accepts 8-digit hex)
+  and the error-correction level.
+
+The variable names come from LiquidJS's static analysis
+(`globalVariablesSync`). The filter chains do not: that API reports variables
+only, so they are read off the parsed template — an `Output` node carries
+`value.initial` and `value.filters` (name plus args), which beats splitting the
+source on `|`. Which variables are image hrefs is an XML question, so that one
+goes through `DOMParser`, with a scan as fallback while the source is mid-edit.
 
 Typing in a variable field records the value immediately but defers the work:
 re-parsing is debounced to 200 ms, re-rendering to 350 ms, and the fields are

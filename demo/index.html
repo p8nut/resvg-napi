@@ -129,13 +129,15 @@
   }
   globalThis.Buffer ??= BufferPolyfill;
 
-  const { Liquid } = await import('./liquid.js');
+  const { Liquid, qrSvg } = await import('./liquid.js');
   // Lenient on purpose: an unknown filter passes its value through instead of
   // throwing, so a template can be inspected before every filter exists.
   const liquid = new Liquid({ strictFilters: false, strictVariables: false });
-  // Placeholder. The real `qr` filter returns a QR-code SVG -- to be wired in.
-  const STUBBED = new Set(['qr']);
-  liquid.registerFilter('qr', () => '');
+  // `{{ upn | qr: '#ffffff', '#00000000' }}` -> a QR code as a nested <svg>
+  // that scales to the viewport it lands in. Arguments: module colour,
+  // background colour (`#00000000` for transparent), error-correction level.
+  const STUBBED = new Set();
+  liquid.registerFilter('qr', (value, dark, light, level) => qrSvg(value, dark, light, level));
 
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
@@ -192,40 +194,73 @@
     }
   }
 
-  // `{{ upn | qr: '#fff', '#000' }}` is a variable *and* a filter chain, and the
-  // static analysis only reports the variable. Read the chains off the output
-  // tags so the form can show what each value is piped through.
+  // `{{ upn | qr: '#fff', '#000' }}` is a variable *and* a filter chain. The
+  // static analysis API reports variables only, so the chains come off the
+  // parsed template instead: an Output node carries `value.initial` (the
+  // variable) and `value.filters` (name + args), which beats string-splitting
+  // the source -- it handles `{{-`, quoting, newlines and nested arguments.
   function filterChains(raw) {
     const chains = new Map();
-    for (const [, body] of raw.matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
-      const parts = body.split('|').map((p) => p.trim()).filter(Boolean);
-      if (parts.length < 2) continue;
-      const root = parts[0].split(/[.[\s]/)[0];
-      chains.set(root, parts.slice(1));
+    let templates;
+    try {
+      templates = liquid.parse(raw);
+    } catch {
+      return chains;
     }
+    const visit = (nodes, depth = 0) => {
+      if (!Array.isArray(nodes) || depth > 6) return;
+      for (const node of nodes) {
+        const filters = node?.value?.filters ?? [];
+        if (filters.length) {
+          const path = node.value.initial?.postfix?.[0]?.getText?.() ?? '';
+          const root = path.split(/[.[]/)[0];
+          if (root) {
+            chains.set(root, filters.map((f) => {
+              const args = (f.args ?? []).map((a) => a.getText?.() ?? String(a));
+              return args.length ? `${f.name}: ${args.join(', ')}` : f.name;
+            }));
+          }
+        }
+        // blocks: {% if %}, {% for %}, {% case %}...
+        visit(node?.templates, depth + 1);
+        visit(node?.elseTemplates, depth + 1);
+        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
+      }
+    };
+    visit(templates);
     return chains;
   }
 
-  // Signature of the *shape* of the form. Rebuilding the fields on every
-  // keystroke would blow away the focused input mid-word, so the DOM is only
-  // touched when the variables or their filter chains actually change.
-  let varsSignature = null;
-
-  // A variable used as an `<image>` href wants a file, not a string. Find them by
-  // looking at the href attribute of every image tag in the source.
+  // A variable used as an `<image>` href wants a file, not a string. This one is
+  // an XML question, not a Liquid one, so parse the document; while the source is
+  // being typed it will not be well-formed, hence the fallback scan.
   function imageHrefVars(raw) {
     const found = new Set();
-    for (const [, attrs] of raw.matchAll(/<image\b([^>]*)>/gi)) {
-      const href = attrs.match(/(?:xlink:)?href\s*=\s*"([^"]*)"/i)?.[1] ?? '';
-      for (const [, expr] of href.matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
+    const add = (href) => {
+      for (const [, expr] of (href ?? '').matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
         found.add(expr.split('|')[0].trim().split(/[.[\s]/)[0]);
       }
+    };
+    const doc = new DOMParser().parseFromString(raw, 'image/svg+xml');
+    if (!doc.querySelector('parsererror')) {
+      for (const img of doc.getElementsByTagName('image')) {
+        add(img.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ?? img.getAttribute('href'));
+      }
+      return found;
+    }
+    for (const [, attrs] of raw.matchAll(/<image\b([^>]*)>/gi)) {
+      add(attrs.match(/(?:xlink:)?href\s*=\s*"([^"]*)"/i)?.[1]);
     }
     return found;
   }
 
   // Files chosen for those variables, by variable name.
   const imageVars = new Map();
+
+  // Signature of the *shape* of the form. Rebuilding the fields on every
+  // keystroke would blow away the focused input mid-word, so the DOM is only
+  // touched when the variables, their filter chains or their kind change.
+  let varsSignature = null;
 
   function showVariables() {
     let names = [];
@@ -249,8 +284,9 @@
       .map((c) => c[0].split(':')[0].trim())
       .filter((f) => STUBBED.has(f));
     $('varsNote').textContent = 'Empty fields keep their `{{ name }}` placeholder, so an '
-      + 'image variable stays uploadable. Unknown filters pass their value through'
-      + (stubbed.length ? `; ${[...new Set(stubbed)].join(', ')} is stubbed and returns nothing.` : '.');
+      + 'image variable stays uploadable. Unknown filters pass their value through; '
+      + '`qr` generates a QR code as SVG.'
+      + (stubbed.length ? ` Stubbed: ${[...new Set(stubbed)].join(', ')}.` : '');
     $('varsList').replaceChildren(...names.flatMap((name) => {
       const code = document.createElement('code');
       const chain = chains.get(name);

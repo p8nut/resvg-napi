@@ -13,6 +13,22 @@
 
 const ATTR = 'data-maxwidth';
 
+/**
+ * Ratio between the tree's canvas units and the document's own coordinates.
+ *
+ * `width="85.6mm" viewBox="0 0 240.94 …"` makes usvg normalise the tree to the
+ * physical size (323.53 units at 96 dpi), so `extent()` comes back 1.343× larger
+ * than the numbers written in the file. A limit expressed in the document's own
+ * units has to be compared in those units, or everything wider than
+ * `limit / ratio` gets compressed while it actually fits.
+ */
+function unitScale(svg, canvasWidth) {
+  const viewBox = svg.match(/\bviewBox\s*=\s*"\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/);
+  const width = viewBox ? Number(viewBox[1]) : NaN;
+  if (!Number.isFinite(width) || width <= 0) return 1;
+  return canvasWidth / width;
+}
+
 /** Elements carrying a width constraint, with the tag text needed to rewrite it. */
 export function findWidthConstraints(svg) {
   const found = [];
@@ -60,6 +76,8 @@ export function fitTextWidths(svg, render) {
     return { svg, adjustments: [], problems: [`could not measure: ${e.message}`] };
   }
 
+  // Every width below is in the document's own units, like the attribute.
+  const scale = unitScale(svg, doc.width);
   let out = svg;
   const adjustments = [];
   for (const c of constraints) {
@@ -76,11 +94,12 @@ export function fitTextWidths(svg, render) {
       problems.push(`#${c.id} has no visible extent: nothing to fit`);
       continue;
     }
-    if (extent.width <= c.max) continue;
+    const width = extent.width / scale;
+    if (width <= c.max) continue;
 
-    const factor = c.max / extent.width;
+    const factor = c.max / width;
     out = out.replace(c.tag, withHorizontalScale(c.tag, c.attrs, factor));
-    adjustments.push({ id: c.id, from: round(extent.width), to: c.max, factor: round(factor) });
+    adjustments.push({ id: c.id, from: round(width), to: c.max, factor: round(factor) });
   }
 
   if (!adjustments.length) return { svg: out, adjustments, problems };
@@ -88,8 +107,10 @@ export function fitTextWidths(svg, render) {
   // Verify rather than trust: report what the widths actually became.
   try {
     const after = render(out);
+    const afterScale = unitScale(out, after.width);
     for (const a of adjustments) {
-      a.measured = round(after.node(a.id)?.extent()?.width ?? NaN);
+      const got = after.node(a.id)?.extent()?.width;
+      a.measured = got === undefined ? NaN : round(got / afterScale);
     }
   } catch (e) {
     problems.push(`could not verify: ${e.message}`);

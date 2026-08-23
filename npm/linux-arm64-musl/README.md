@@ -70,6 +70,12 @@ const { svg, adjustments, problems } = fitTextWidths(source,
 // adjustments: [{ id: 'surname', from: 200.23, to: 90, factor: 0.4495, measured: 90.0031 }]
 ```
 
+The limit is read in **the document's own units**, the ones the attribute is
+written in. That matters: `width="85.6mm"` with a `viewBox` 240.94 wide makes usvg
+normalise the tree to 323.53 units, so `extent()` comes back 1.343× larger than
+anything the file says. Comparing raw canvas widths compresses text that actually
+fits — everything past `limit / 1.343`.
+
 A geometric scale is exactly linear in width, so one pass lands on the target;
 the second measurement is a check, and it is reported. Text that already fits is
 left untouched, and a constraint that cannot be honoured says why: no `id` to

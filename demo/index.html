@@ -124,8 +124,10 @@
   #bboxOverlay { position: absolute; border: 1px dashed var(--mag); pointer-events: none;
                  display: none; }
   #bboxOverlay[data-on] { display: block; }
-  #bboxOverlay span { position: absolute; top: -1.35rem; left: -1px; white-space: nowrap;
-                      font: 400 10px var(--mono); color: var(--mag); }
+  #bboxOverlay span { position: absolute; top: 3px; left: 4px; white-space: nowrap;
+                      font: 400 10px var(--mono); color: var(--mag);
+                      background: color-mix(in oklab, var(--proof) 75%, transparent);
+                      padding: 0 .25rem; }
 
   /* Measurements: a data list, not prose. */
   .measure { margin: var(--gap) 0 0; display: grid; grid-template-columns: auto 1fr;
@@ -792,6 +794,9 @@
     // fonts
     const wantFonts = missingFonts.length > 0 || needAnyFont;
     $('fontsWanted').hidden = !wantFonts;
+    // A hidden panel keeping its old rows reads as stale state to anyone
+    // inspecting it -- it fooled me once. Empty it when it goes away.
+    if (!wantFonts) $('fontsList').replaceChildren();
     if (wantFonts) {
       $('fontsMsg').textContent = missingFonts.length
         ? `This SVG asks for ${missingFonts.length} font famil`
@@ -956,7 +961,7 @@
         ['output', `${Math.round(doc.width * scaleOf(params, doc))} px wide · ${png.length.toLocaleString()} bytes`],
         ['elapsed', `${ms} ms`],
         ['text', doc.hasTextNodes() ? 'nodes kept' : 'flattened to paths'],
-        ['fonts', fonts.faces().map((f) => f.families[0]).join(', ') || 'none loaded'],
+        ['fonts', [...new Set(fonts.faces().map((f) => f.families[0]))].join(', ') || 'none loaded'],
         ['gradients', doc.linearGradients().concat(doc.radialGradients()).map((g) => g.id()).join(' ') || '—'],
         ['filters', doc.filters().map((f) => f.id()).join(' ') || '—'],
         ['top level', doc.children().map((n) => `${n.kind}${n.id() ? '#' + n.id() : ''}`).join('  ')],

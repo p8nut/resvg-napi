@@ -15,6 +15,15 @@
   #wanted ul { margin: 0; padding-left: 1.1rem; }
   #wanted li { font: 12px/1.6 ui-monospace, monospace; }
   #wanted li.ok { opacity: .55; text-decoration: line-through; }
+  #wanted > div + div { margin-top: .9rem; padding-top: .7rem;
+                       border-top: 1px solid #b4530933; }
+  #imagesList li { display: flex; align-items: center; gap: .5rem; margin: .25rem 0; }
+  #imagesList code { background: #8881; padding: .1rem .3rem; border-radius: 4px; }
+  #imagesList input[type=file] { font-size: 11px; }
+  #drop { border: 1.5px dashed var(--line); border-radius: 8px; padding: 1rem;
+          text-align: center; display: grid; gap: .2rem; margin: .75rem 0; }
+  #drop span { font-size: 12px; opacity: .65; }
+  #drop.over { border-color: #0ea5e9; background: #0ea5e911; }
   textarea { width: 100%; height: 14rem; font: 12px/1.5 ui-monospace, monospace;
              padding: .6rem; border: 1px solid var(--line); border-radius: 6px;
              background: transparent; color: inherit; resize: vertical; }
@@ -50,12 +59,25 @@
 
   <div class="row">
     <button id="render" disabled>Render</button>
-    <label>add font <input id="font" type="file" accept=".ttf,.otf,.ttc" multiple></label>
+  </div>
+
+  <div id="drop">
+    <b>Drop fonts and images here</b>
+    <span>or paste them (⌘/Ctrl-V) — or use the file fields below</span>
   </div>
 
   <div id="wanted" hidden>
-    <p id="wantedMsg" class="warn"></p>
-    <ul id="wantedList"></ul>
+    <div id="fontsWanted" hidden>
+      <p id="fontsMsg" class="warn"></p>
+      <ul id="fontsList"></ul>
+      <label>upload font file(s)
+        <input id="font" type="file" accept=".ttf,.otf,.ttc" multiple></label>
+    </div>
+    <div id="imagesWanted" hidden>
+      <p class="warn">This SVG references images that could not be resolved.
+        Upload one file per reference:</p>
+      <ul id="imagesList"></ul>
+    </div>
   </div>
 
   <pre id="log">loading wasm…</pre>
@@ -89,6 +111,10 @@
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
 
+  // Images the user supplied, keyed by the href the document uses. Declared up
+  // here because `analyse()` runs during init, above its own definition.
+  const images = new Map();
+
   $('svg').value = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -116,79 +142,163 @@
     globalThis.resvg = { mod, fonts };
     log(`wasm ready — ${Object.keys(mod).length} exports. `
       + `loadSystemFonts() finds ${fonts.len()} faces in the sandbox, so text needs a font file.`);
-    analyse();
   } catch (e) {
     if (e.message !== 'not isolated') log(`failed to load wasm: ${e.message}`);
   }
 
-  // Parse once with the current database to find out what the document is
-  // missing: `pendingFonts()` lists named families absent from it, and a look at
-  // the source tells us whether there is any text at all (a generic
-  // `font-family` never shows up as a named family).
+  // After the module body has run, so every helper below is initialised.
+  if (mod) analyse();
+
+  // Function declaration, not a const arrow: `analyse()` runs from the init
+  // block above, before this point in the module body.
+  function parse() {
+    return new mod.Resvg($('svg').value, defaults(), fonts, Object.fromEntries(images));
+  }
+
+  // Parse once with the current state to find out what the document is missing:
+  // `pendingFonts()` lists named families the database does not have,
+  // `pendingImages()` the hrefs neither the uploads nor the filesystem resolved,
+  // and a look at the source tells us whether there is any text at all
+  // (a generic `font-family` never shows up as a named family).
   function analyse() {
     let doc;
     try {
-      doc = new mod.Resvg($('svg').value, defaults(), fonts);
+      doc = parse();
     } catch {
       $('wanted').hidden = true;
       return;
     }
-    const missing = doc.pendingFonts();
-    // Not `doc.toString({preserveText:true})`: with no font at all usvg drops the
-    // text node at parse time, so the parsed tree cannot tell us text was there.
-    // The source can.
-    const hasText = /<text[\s>]/.test($('svg').value);
-    const noFonts = fonts.len() === 0;
 
-    if (!missing.length && !(hasText && noFonts)) {
-      $('wanted').hidden = true;
-      return;
+    const missingFonts = doc.pendingFonts();
+    const hasText = /<text[\s>]/.test($('svg').value);
+    const needAnyFont = hasText && fonts.len() === 0;
+    const missingImages = doc.pendingImages();
+
+    // fonts
+    const wantFonts = missingFonts.length > 0 || needAnyFont;
+    $('fontsWanted').hidden = !wantFonts;
+    if (wantFonts) {
+      $('fontsMsg').textContent = missingFonts.length
+        ? `This SVG asks for ${missingFonts.length} font famil`
+          + `${missingFonts.length > 1 ? 'ies' : 'y'} the database does not have:`
+        : 'This SVG has text but no font is loaded — WASI has no system fonts.';
+      $('fontsList').replaceChildren(...(missingFonts.length
+        ? missingFonts
+        : ['(any font, for the generic families)']).map((name) => {
+          const li = document.createElement('li');
+          li.textContent = name;
+          return li;
+        }));
     }
-    $('wanted').hidden = false;
-    $('wantedMsg').textContent = missing.length
-      ? `This SVG asks for ${missing.length} font famil${missing.length > 1 ? 'ies' : 'y'} `
-        + `the database does not have. Add the file(s) above:`
-      : 'This SVG has text but no font is loaded — WASI has no system fonts. '
-        + 'Add any font file above.';
-    $('wantedList').innerHTML = '';
-    for (const name of missing.length ? missing : ['(any font, for generic families)']) {
+
+    // images: one input per href, because the file/href pairing is explicit
+    $('imagesWanted').hidden = missingImages.length === 0;
+    $('imagesList').replaceChildren(...missingImages.map((href) => {
       const li = document.createElement('li');
-      li.textContent = name;
-      $('wantedList').append(li);
-    }
+      const code = document.createElement('code');
+      code.textContent = href;
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
+      input.addEventListener('change', async (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        images.set(href, new Uint8Array(await file.arrayBuffer()));
+        log(`resolved ${href} with ${file.name} (${file.size.toLocaleString()} bytes)`);
+        analyse();
+        render();
+      });
+      // Dropping straight onto a row pins the file to that href.
+      for (const type of ['dragenter', 'dragover']) {
+        li.addEventListener(type, (e) => { e.preventDefault(); li.style.opacity = '.6'; });
+      }
+      li.addEventListener('dragleave', () => { li.style.opacity = ''; });
+      li.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        li.style.opacity = '';
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        images.set(href, new Uint8Array(await file.arrayBuffer()));
+        log(`resolved ${href} with ${file.name}`);
+        analyse();
+        render();
+      });
+      li.append(code, input);
+      return li;
+    }));
+
+    $('wanted').hidden = $('fontsWanted').hidden && $('imagesWanted').hidden;
   }
 
-  // Function declaration, not a const arrow: `analyse()` runs from the init
-  // block above, before this point in the module body.
   function defaults() {
     const first = fonts.len() ? fonts.faces()[0].families[0] : undefined;
     return first ? { fontFamily: first } : undefined;
   }
 
-  $('font').addEventListener('change', async (ev) => {
-    const loaded = [];
-    for (const file of ev.target.files) {
+  // Anything dropped or pasted lands here. A font goes into the database; an
+  // image is matched to a pending href -- by file name when it matches, else to
+  // the first one still waiting.
+  async function accept(fileList) {
+    const files = [...fileList];
+    if (!files.length) return;
+    const isFont = (f) => /\.(ttf|otf|ttc)$/i.test(f.name);
+    const fontFiles = files.filter(isFont);
+    const imageFiles = files.filter((f) => !isFont(f));
+
+    for (const file of fontFiles) {
       fonts.loadFontData(new Uint8Array(await file.arrayBuffer()));
-      loaded.push(file.name);
     }
-    // fontdb resolves by *family*, not by PostScript name, and the generic
-    // families still point at fontdb's defaults -- which this database does not
-    // have. Aim them at the first loaded family.
-    const family = fonts.faces()[0].families[0];
-    for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
-                       'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
-    log(`loaded ${loaded.join(', ')} — ${fonts.len()} face(s): `
-      + fonts.faces().map((f) => f.families[0]).join(', ')
-      + `; generic families now resolve to ${family}`);
+    if (fontFiles.length) {
+      const family = fonts.faces()[0].families[0];
+      for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
+                         'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
+    }
+
+    let pending = [];
+    try { pending = parse().pendingImages(); } catch { /* unparseable, skip */ }
+    for (const file of imageFiles) {
+      const href = pending.find((h) => h.endsWith(file.name))
+        ?? pending.find((h) => !images.has(h));
+      if (href) {
+        images.set(href, new Uint8Array(await file.arrayBuffer()));
+        pending = pending.filter((h) => h !== href);
+      }
+    }
+
+    const parts = [];
+    if (fontFiles.length) {
+      parts.push(`${fontFiles.length} font(s) → ${fonts.faces().map((f) => f.families[0]).join(', ')}`);
+    }
+    if (imageFiles.length) parts.push(`${images.size} image(s) resolved`);
+    log(parts.join('; ') || 'nothing usable in that drop');
     analyse();
+    render();
+  }
+
+  const drop = $('drop');
+  for (const type of ['dragenter', 'dragover']) {
+    drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  }
+  for (const type of ['dragleave', 'drop']) {
+    drop.addEventListener(type, () => drop.classList.remove('over'));
+  }
+  drop.addEventListener('drop', (e) => { e.preventDefault(); accept(e.dataTransfer.files); });
+  window.addEventListener('paste', (e) => {
+    const files = [...e.clipboardData.files];
+    if (files.length) accept(files);
   });
+
+  $('font').addEventListener('change', (ev) => accept(ev.target.files));
 
   $('svg').addEventListener('input', () => analyse());
 
-  $('render').addEventListener('click', () => {
+  $('render').addEventListener('click', render);
+
+  function render() {
     const t0 = performance.now();
     try {
-      const doc = new mod.Resvg($('svg').value, defaults(), fonts);
+      const doc = parse();
       const params = {
         scale: Number($('scale').value) || 1,
         width: $('width').value ? Number($('width').value) : undefined,
@@ -221,7 +331,7 @@
       $('info').textContent = '';
       log(`error: ${e.message}`);
     }
-  });
+  }
 
   const fmt = (b) => b ? `${b.x} ${b.y} ${b.width} × ${b.height}` : 'none';
 </script>

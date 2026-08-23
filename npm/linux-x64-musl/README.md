@@ -93,6 +93,16 @@ templated document can be previewed:
   throwing. `qr` is registered as a **stub returning an empty string**; swap it
   for the real QR-code SVG generator in `demo/index.html`.
 
+Typing in a variable field records the value immediately but defers the work:
+re-parsing is debounced to 200 ms, re-rendering to 350 ms, and the fields are
+only rebuilt when the *set* of variables changes — rebuilding them on every
+keystroke destroys the focused input mid-word.
+
+Two input guards, both learned the hard way: a leading newline before
+`<?xml … ?>` makes usvg reject the document (Illustrator exports have one), and
+an XML declaration pasted into a variable field would land mid-file. Both are
+stripped in `source()`.
+
 ### Browser specifics
 
 Three things the demo has to handle, all visible in

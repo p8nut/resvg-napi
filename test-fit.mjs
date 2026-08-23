@@ -61,4 +61,26 @@ const bare = fitTextWidths(
 assert.match(bare.svg, /transform="scale\(0\.\d+ 1\)"/);
 assert.ok(Math.abs(bare.adjustments[0].measured - 20) < 0.5);
 
+// 8. the limit is in the document's own units, not the canvas ones. `85.6mm`
+//    with a 240.94-wide viewBox makes usvg normalise the tree to 323.53, so a
+//    naive comparison inflates every width by 1.343 and compresses text that fits.
+const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6mm" height="53.98mm"
+  preserveAspectRatio="none" viewBox="0 0 240.94 153.07">
+  <text id="t" transform="translate(10 30)" x="0" y="0" font-size="12" data-maxwidth="${max}">${text}</text>
+</svg>`;
+{
+  const src = inMm('ab', 15);
+  const canvas = render(src).node('t').extent().width;
+  assert.ok(canvas > 15, `canvas width ${canvas} exceeds the limit, which is the trap`);
+  const { adjustments, problems } = fitTextWidths(src, render);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(adjustments, [], 'fits in document units, so nothing to do');
+}
+{
+  const { adjustments } = fitTextWidths(inMm('Wolfeschlegelsteinhausen', 60), render);
+  assert.equal(adjustments.length, 1);
+  assert.ok(Math.abs(adjustments[0].measured - 60) < 0.5,
+    `landed at ${adjustments[0].measured} document units, wanted 60`);
+}
+
 console.log('ok — horizontal fitting: all checks passed');

@@ -61,10 +61,21 @@ npm run demo      # builds the wasm, bundles the loaders, serves on :8787
 
 ![demo](demo/screenshot.png)
 
-The page parses the SVG first and **asks for the fonts the document needs**:
-`pendingFonts()` gives the named families the database is missing, and a text
-element with no font loaded gets its own prompt (a generic `font-family` never
-appears as a named family). Drop a `.ttf` in and it re-analyses.
+The page parses the SVG first and **asks for what the document is missing**, then
+lets you supply it:
+
+- **fonts** — `pendingFonts()` gives the named families the database does not
+  have; a text element with no font loaded gets its own prompt (a generic
+  `font-family` never appears as a named family).
+- **images** — `pendingImages()` gives the hrefs neither the uploads nor the
+  filesystem resolved, one file field per href, because the file/href pairing has
+  to be explicit. Works for placeholder hrefs too (`{{ photo }}`).
+
+Drop files on the zone, paste them, or use the per-item fields; a font goes to
+the database, an image is matched to a pending href by file name when it matches
+and to the first one still waiting otherwise. Uploads are kept in a page-level
+map and handed to every parse, so they survive edits and re-renders — unlike
+`resolveImage`, which only patches one instance.
 
 Three browser-specific things the demo has to handle, all visible in
 `demo/index.html`:

@@ -1,0 +1,8 @@
+node_modules/
+target/
+*.node
+*.wasm
+out.png
+demo/resvg.js
+demo/wasi-worker-browser.mjs
+.playwright-mcp/

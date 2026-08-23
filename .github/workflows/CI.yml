@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            host: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            host: ubuntu-latest
+            # pure-Rust dependency tree, so napi-cross's sysroot is enough
+            build_args: --use-napi-cross
+          - target: x86_64-unknown-linux-musl
+            host: ubuntu-latest
+            build_args: --use-cross
+          - target: aarch64-unknown-linux-musl
+            host: ubuntu-latest
+            build_args: --use-cross
+          - target: aarch64-apple-darwin
+            host: macos-latest
+          - target: x86_64-apple-darwin
+            host: macos-latest
+          - target: x86_64-pc-windows-msvc
+            host: windows-latest
+          - target: aarch64-pc-windows-msvc
+            host: windows-latest
+          # WASI build: same generated bindings, emnapi instead of node-api.
+          - target: wasm32-wasip1-threads
+            host: ubuntu-latest
+            artifact_path: |
+              *.wasm
+              resvg-napi.wasi*.*js
+              resvg-napi.wasi.d.cts
+              wasi-worker*.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: npm ci
+      - name: Build
+        run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
+
+      # build.rs regenerates src/lib.rs from the upstream sources. It is
+      # committed, and the generator is deterministic, so any diff here means the
+      # checked-in bindings no longer match what the pinned usvg/resvg produce.
+      - name: Generated bindings are up to date
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: git diff --exit-code -- src/lib.rs index.d.ts index.js
+
+      - name: WASI smoke test
+        if: matrix.target == 'wasm32-wasip1-threads'
+        run: |
+          node -e "
+            const m = require('./resvg-napi.wasi.cjs');
+            const svg = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"><rect width=\"8\" height=\"8\" fill=\"teal\"/></svg>';
+            const png = new m.Resvg(svg).renderPng();
+            if (png.subarray(0, 4).toString('hex') !== '89504e47') throw new Error('not a PNG');
+            console.log('wasm renders:', png.length, 'bytes');
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: ${{ matrix.artifact_path || '*.node' }}
+          if-no-files-found: error
+
+  test:
+    name: test ${{ matrix.target }} on node ${{ matrix.node }}
+    needs: build
+    runs-on: ${{ matrix.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, host: ubuntu-latest, node: 18 }
+          - { target: x86_64-unknown-linux-gnu, host: ubuntu-latest, node: 22 }
+          - { target: aarch64-apple-darwin, host: macos-latest, node: 22 }
+          - { target: x86_64-pc-windows-msvc, host: windows-latest, node: 22 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+      - run: npm test
+
+  publish:
+    name: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      # Sorts each *.node into its npm/<platform>/ package, then rewrites the
+      # root package.json optionalDependencies to match.
+      - run: npx napi artifacts -d artifacts --npm-dir npm
+      # Publishes nothing itself: rewrites optionalDependencies and fills npm/*.
+      - run: npx napi pre-publish -t npm --no-gh-release --skip-optional-publish
+      - name: Publish
+        run: |
+          npm publish --access public --provenance
+          for dir in npm/*/; do npm publish "$dir" --access public --provenance; done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

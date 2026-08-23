@@ -1,0 +1,25 @@
+{
+  "name": "resvg-napi-linux-x64-musl",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "resvg-napi.linux-x64-musl.node",
+  "files": [
+    "resvg-napi.linux-x64-musl.node"
+  ],
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/resvg-napi.git"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "musl"
+  ]
+}

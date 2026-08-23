@@ -1,0 +1,72 @@
+{
+  "name": "resvg-napi",
+  "version": "0.1.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "napi build --platform --release",
+    "test": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs",
+    "typecheck": "tsc",
+    "build:debug": "napi build --platform",
+    "artifacts": "napi artifacts",
+    "create-npm-dirs": "napi create-npm-dirs",
+    "prepublishOnly": "napi pre-publish -t npm",
+    "version": "napi version",
+    "demo": "napi build --platform --release --target wasm32-wasip1-threads && cp resvg-napi.wasm32-wasi.wasm demo/ && esbuild resvg-napi.wasi-browser.js --bundle --format=esm --outfile=demo/resvg.js && esbuild wasi-worker-browser.mjs --bundle --format=esm --outfile=demo/wasi-worker-browser.mjs && node demo/serve.mjs"
+  },
+  "types": "index.d.ts",
+  "devDependencies": {
+    "@napi-rs/cli": "^3.8.6",
+    "@types/node": "^26.2.0",
+    "emnapi": "1.11.2",
+    "esbuild": "^0.25.12"
+  },
+  "napi": {
+    "binaryName": "resvg-napi",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "wasm32-wasip1-threads"
+    ]
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "browser.js",
+    "README.md",
+    "resvg-napi.wasi.cjs",
+    "resvg-napi.wasi.d.cts",
+    "resvg-napi.wasi-browser.js",
+    "wasi-worker.mjs",
+    "wasi-worker-browser.mjs"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "license": "Apache-2.0 OR MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/resvg-napi.git"
+  },
+  "optionalDependencies": {
+    "resvg-napi-darwin-arm64": "0.1.0",
+    "resvg-napi-darwin-x64": "0.1.0",
+    "resvg-napi-linux-arm64-gnu": "0.1.0",
+    "resvg-napi-linux-arm64-musl": "0.1.0",
+    "resvg-napi-linux-x64-gnu": "0.1.0",
+    "resvg-napi-linux-x64-musl": "0.1.0",
+    "resvg-napi-wasm32-wasi": "0.1.0",
+    "resvg-napi-win32-arm64-msvc": "0.1.0",
+    "resvg-napi-win32-x64-msvc": "0.1.0"
+  },
+  "dependencies": {
+    "@emnapi/runtime": "1.11.2",
+    "@napi-rs/wasm-runtime": "1.2.3"
+  },
+  "browser": "browser.js"
+}

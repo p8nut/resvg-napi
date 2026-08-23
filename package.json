@@ -19,7 +19,8 @@
     "@types/node": "^26.2.0",
     "emnapi": "1.11.2",
     "esbuild": "^0.25.12",
-    "liquidjs": "^10.29.0"
+    "liquidjs": "^10.29.0",
+    "qrcode-generator": "^2.0.4"
   },
   "napi": {
     "binaryName": "resvg-napi",

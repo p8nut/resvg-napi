@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "build": "napi build --platform --release",
-    "test": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && node test-logs.mjs && node test-fit.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs",
+    "test": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && node test-logs.mjs && node test-fit.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs && npm run test:examples",
+    "test:examples": "node demo/render.mjs examples/roster.svg && node demo/render.mjs examples/badge-sheet.svg",
     "typecheck": "tsc",
     "build:debug": "napi build --platform",
     "artifacts": "napi artifacts",

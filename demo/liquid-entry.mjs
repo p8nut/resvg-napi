@@ -3,6 +3,7 @@ import qrcode from 'qrcode-generator';
 
 export { Liquid } from 'liquidjs';
 export { fitTextWidths } from '../fit.mjs';
+export { registerSvgFilters, memoryFs, referencedPartials } from './svg-filters.mjs';
 
 /**
  * QR code as an SVG fragment, sized to whatever viewport it is dropped into.

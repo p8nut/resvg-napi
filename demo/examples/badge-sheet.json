@@ -1,0 +1,13 @@
+{
+  "heading": "Q3 badge sheet",
+  "state": "review",
+  "note": "",
+  "issued": "",
+  "link": "",
+  "staff": [
+    { "name": "Ada Lovelace", "dept": { "code": "R&D" }, "score": 98, "lead": true, "trend": [72, 80, 91, 98] },
+    { "name": "Grace Hopper", "dept": { "code": "NAV" }, "score": 95, "lead": false, "trend": [88, 90, 93, 95] },
+    { "name": "Linus Torvalds", "dept": { "code": "OS" }, "score": 91, "lead": false, "trend": [95, 93, 92, 91] },
+    { "name": "Wolfeschlegelsteinhausenbergerdorff", "dept": { "code": "ETC" }, "score": 72, "lead": false, "trend": [40, 55, 61, 72] }
+  ]
+}

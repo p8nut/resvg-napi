@@ -155,11 +155,25 @@
   #drop span { font-size: 11px; color: var(--rule); }
   #drop.over { border-color: var(--cyan); border-style: solid; }
 
-  /* Variables. */
-  #varsList { display: grid; grid-template-columns: auto 1fr; gap: .3rem .8rem; align-items: center; }
-  #varsList code { font: 400 12px var(--mono); text-align: right; }
-  #varsList .chain { color: var(--cyan); }
+  /* Variables. One row per variable, name above its control: a long filter
+     chain in the label column used to squeeze every input to a sliver. */
+  #varsList { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+              gap: .6rem 1rem; align-items: start; min-width: 0; }
+  #varsList .row { display: grid; gap: .15rem; min-width: 0; }
+  #varsList .row.wide { grid-column: 1 / -1; }
+  #varsList .row.hit code { color: var(--cyan); }
+  /* min-width:0 or the grid item sizes itself to the nowrap chain and spills
+     out of the panel instead of ellipsizing. */
+  #varsList code { font: 400 12px var(--mono); overflow-wrap: anywhere;
+                   min-width: 0; overflow: hidden; }
+  /* The chain can be a whole sentence (`default: "..."`); one line, hover for
+     the rest. */
+  #varsList .chain { display: block; color: var(--cyan); font-size: 11px;
+                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #varsList .chain.stub { color: var(--amber); }
+  #varsFind { margin-left: auto; font: 400 11px var(--mono); width: 9rem;
+              padding: .15rem .35rem; border: 1px solid var(--rule);
+              background: transparent; color: inherit; }
   #varsList input[type=text], #varsList textarea { width: 100%; }
   #varsList textarea { font: 400 11px/1.5 var(--mono); padding: .3rem .45rem;
                        border: 1px solid var(--rule); background: transparent;
@@ -169,6 +183,12 @@
   #varsList .imgvar input.href { width: 8rem; }
   #varsList .imgvar.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
   #varsNote { margin: .5rem 0 0; font-size: 11px; color: var(--rule); }
+  /* What Liquid produced, which is what resvg was handed. */
+  #renderedWrap { margin: .5rem 0 0; font: 400 10px var(--mono); color: var(--rule); }
+  #renderedWrap summary { cursor: pointer; text-transform: uppercase; letter-spacing: .1em; }
+  #renderedSource { max-height: 12rem; overflow: auto; margin: .35rem 0 0;
+                    padding: .4rem .5rem; border: 1px solid var(--rule);
+                    color: var(--plate); white-space: pre; tab-size: 2; }
   .collection table { border-collapse: collapse; width: 100%; }
   .collection th, .collection td { padding: 0; border: 1px solid var(--rule); }
   .collection thead td { font: 700 9px var(--mono); text-transform: uppercase;
@@ -203,6 +223,7 @@
   #diagList .info .lvl { color: var(--cyan); }
   #diagList .src { color: var(--rule); }
   #diagList .msg { overflow-wrap: anywhere; }
+  #diagList li.stale { opacity: .4; }
   #diagEmpty { font-size: 12px; color: var(--rule); padding: .4rem 0; }
   .diagbar { display: flex; align-items: center; gap: .8rem; }
   .diagbar button { padding: .2rem .6rem; font-size: 10px; }
@@ -226,6 +247,10 @@
       <section>
         <p class="legend"><b>Source</b> SVG, Liquid allowed</p>
         <textarea id="svg" spellcheck="false" autocomplete="off"></textarea>
+        <details id="renderedWrap">
+          <summary>rendered source</summary>
+          <pre id="renderedSource"></pre>
+        </details>
         <div class="controls">
           <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
           <label>width px <input id="width" type="number" placeholder="auto" min="1"></label>
@@ -233,12 +258,14 @@
           <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
           <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
           <label class="inline"><input id="fit" type="checkbox" checked> fit data-maxwidth</label>
+          <label class="inline"><input id="strict" type="checkbox" checked> strict variables</label>
           <button id="render" disabled>Render</button>
         </div>
       </section>
 
       <section id="vars" hidden>
-        <p class="legend"><b>Variables</b> <span id="varsCount"></span></p>
+        <p class="legend"><b>Variables</b> <span id="varsCount"></span>
+          <input id="varsFind" type="search" placeholder="filter…" hidden></p>
         <div id="varsList"></div>
         <p id="varsNote"></p>
       </section>
@@ -255,13 +282,18 @@
             <p>Images the renderer could not find. One file per reference:</p>
             <ul id="imagesList"></ul>
           </div>
+          <div id="partialsWanted" hidden>
+            <p>Fragments this template renders but the page does not hold. Drop
+              the files with the same names:</p>
+            <ul id="partialsList"></ul>
+          </div>
         </div>
       </section>
 
       <section>
         <div id="drop">
-          <b>Drop fonts and images</b>
-          <span>or paste them, or use the fields above</span>
+          <b>Drop fonts, images, fragments</b>
+          <span>fonts, images, and .liquid or .svg fragments</span>
         </div>
       </section>
     </div>
@@ -313,15 +345,45 @@
   }
   globalThis.Buffer ??= BufferPolyfill;
 
-  const { Liquid, qrSvg, fitTextWidths } = await import('./liquid.js');
-  // Lenient on purpose: an unknown filter passes its value through instead of
-  // throwing, so a template can be inspected before every filter exists.
-  const liquid = new Liquid({ strictFilters: false, strictVariables: false });
-  // `{{ upn | qr: '#ffffff', '#00000000' }}` -> a QR code as a nested <svg>
-  // that scales to the viewport it lands in. Arguments: module colour,
-  // background colour (`#00000000` for transparent), error-correction level.
+  const { Liquid, qrSvg, fitTextWidths, registerSvgFilters, memoryFs, referencedPartials }
+    = await import('./liquid.js');
+
+  // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
+  // filesystem. Dropped `.liquid` files land here, and so do `.svg` files the
+  // template actually renders.
+  const partials = new Map();
+
+  // Measuring is a render: the filters that need a width ask the engine.
+  const measureText = (text, { fontSize = 12, family } = {}) => {
+    const fam = family ?? fonts?.faces()[0]?.families[0] ?? 'sans-serif';
+    const escaped = String(text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const probe = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">`
+      + `<text id="m" font-family="${fam}" font-size="${fontSize}">${escaped}</text></svg>`;
+    try {
+      return new mod.Resvg(probe, { fontFamily: fam }, fonts).node('m')?.extent()?.width ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Rebuildable, because `strictVariables` is an instance option and the page
+  // offers it as a switch.
+  let liquid;
+  function makeLiquid() {
+    // Filters stay lenient: an unknown one passes its value through instead of
+    // throwing, so a template can be inspected before every filter exists.
+    liquid = new Liquid({
+      strictFilters: false,
+      // getElementById, not the `$` helper: this runs during module evaluation,
+      // above where `$` is declared.
+      strictVariables: document.getElementById('strict')?.checked ?? false,
+      fs: memoryFs(partials),
+    });
+    registerSvgFilters(liquid, { measure: measureText, qrSvg });
+  }
+  makeLiquid();
   const STUBBED = new Set();
-  liquid.registerFilter('qr', (value, dark, light, level) => qrSvg(value, dark, light, level));
 
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
@@ -330,12 +392,25 @@
   // said. Newest first, deduplicated by level+source+message so a re-render does
   // not repeat the same warning ten times.
   const seen = new Map();
+
+  // A pass is one refresh: the analyse and the render of the same input. Rows
+  // from an earlier pass are dimmed and stop counting, so the slug line says
+  // what the current render did instead of everything since page load.
+  let pass = 0;
+  function beginPass() {
+    pass += 1;
+    for (const entry of seen.values()) entry.node.classList.add('stale');
+    countIssues();
+  }
+
   function report(level, src, message) {
     const key = `${level}|${src}|${message}`;
     const known = seen.get(key);
     if (known) {
       known.count += 1;
+      known.node.classList.remove('stale');
       known.node.querySelector('.msg').textContent = `${message} (×${known.count})`;
+      countIssues();
       return;
     }
     const li = document.createElement('li');
@@ -359,8 +434,8 @@
   // Kept in the slug line so a problem is visible without scrolling to the
   // bottom of the sheet.
   function countIssues() {
-    const errors = $('diagList').querySelectorAll('.error').length;
-    const warns = $('diagList').querySelectorAll('.warn').length;
+    const errors = $('diagList').querySelectorAll('.error:not(.stale)').length;
+    const warns = $('diagList').querySelectorAll('.warn:not(.stale)').length;
     const parts = [];
     if (errors) parts.push(`${errors} error${errors > 1 ? 's' : ''}`);
     if (warns) parts.push(`${warns} warning${warns > 1 ? 's' : ''}`);
@@ -397,6 +472,13 @@
   // `render` are function declarations, so referring to them now is fine.
   const analyseSoon = debounce(() => analyse(), 200);
   const renderSoon = debounce(() => render(), 350);
+
+  /** Anything that changes the input goes through here, so the two stay in step. */
+  function refresh() {
+    beginPass();
+    analyseSoon();
+    renderSoon();
+  }
 
   // Images the user supplied, keyed by the href the document uses. Declared up
   // here because `analyse()` runs during init, above its own definition.
@@ -459,6 +541,7 @@
     const paths = templatePaths(raw);
     if (!paths.length) return raw;
     const chains = filterChains(raw);
+    const cols = loopColumns(raw);
     const scope = {};
     // Shortest first, so a value given for `staff` is in place before anything
     // asks about `staff.size`.
@@ -476,7 +559,12 @@
       // a field would land mid-file and make the whole SVG invalid.
       const raw = (vars.get(path) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
       if (!raw) {
-        setDeep(scope, parts, `{{ ${path} }}`);
+        // `{{ note | default: "..." }}` left empty should show the template's
+        // default, not the placeholder -- but strict variables still wants the
+        // name to exist, so it is an empty string rather than nothing.
+        const hasDefault = (chains.get(path) ?? [])
+          .some((f) => f.split(':')[0].trim() === 'default');
+        setDeep(scope, parts, hasDefault ? '' : `{{ ${path} }}`);
         continue;
       }
       // A loop needs an array and an object variable needs an object, so a value
@@ -487,6 +575,25 @@
           value = JSON.parse(raw);
         } catch (e) {
           report('warn', 'liquid', `\`${path}\` looks like JSON but does not parse: ${e.message}`);
+        }
+      }
+      // An entry missing a field the loop reads is an `undefined variable` under
+      // strict -- and `{% render %}` reports it at line 1 of the partial, which
+      // says nothing. Fill the gaps the way an empty field gets a placeholder,
+      // and name what was filled.
+      if (Array.isArray(value)) {
+        const filled = new Map();
+        value.forEach((entry, i) => {
+          if (entry == null || typeof entry !== 'object') return;
+          for (const key of cols.get(path) ?? []) {
+            if (get(entry, key) !== undefined) continue;
+            put(entry, key, '');
+            filled.set(key, [...(filled.get(key) ?? []), i + 1]);
+          }
+        });
+        for (const [key, rows] of filled) {
+          report('warn', 'liquid', `\`${path}\` ${rows.length > 1 ? 'entries' : 'entry'} `
+            + `${rows.join(', ')} have no \`${key}\`: filled with an empty value.`);
         }
       }
       // Liquid does not auto-escape and this lands inside XML, so a raw `&`,
@@ -512,7 +619,14 @@
       warnAboutFilters(raw);
       return out;
     } catch (e) {
-      report('error', 'liquid', e.message);
+      // `undefined variable: lead, line:1, col:1` is the strict-mode report from
+      // inside a partial, where the position is useless. Say what it means.
+      const undef = /undefined variable: ([\w.]+)/.exec(e.message);
+      report('error', 'liquid', undef
+        ? `undefined variable \`${undef[1]}\`: strict variables is on, and a `
+          + `{% render %} partial sees only the arguments passed to it. Give `
+          + `\`${undef[1]}\` a value, or untick strict variables.`
+        : e.message);
       return raw;
     }
   }
@@ -692,8 +806,7 @@
       vars.set(name, JSON.stringify(rows));
       if (redraw) draw();
       else if (json) json.value = vars.get(name);
-      analyseSoon();
-      renderSoon();
+      refresh();
     };
 
     const draw = () => {
@@ -770,6 +883,7 @@
       json.addEventListener('change', () => {
         vars.set(name, json.value);
         draw();
+        beginPass();
         analyse();
         render();
       });
@@ -811,11 +925,16 @@
     const stubbed = [...chains.values()]
       .map((c) => c[0].split(':')[0].trim())
       .filter((f) => STUBBED.has(f));
-    $('varsNote').textContent = 'Empty fields keep their `{{ name }}` placeholder, so an '
-      + 'image variable stays uploadable. Unknown filters pass their value through; '
+    $('varsNote').textContent = 'Strict variables is on: anything the analysis missed '
+      + 'raises `undefined variable` instead of rendering as empty. '
+      + 'An empty field keeps its `{{ name }}` placeholder, so an '
+      + 'image variable stays uploadable -- unless the chain has `default`, '
+      + 'which then supplies the value. Unknown filters pass their value through; '
       + '`qr` generates a QR code as SVG.'
       + (stubbed.length ? ` Stubbed: ${[...new Set(stubbed)].join(', ')}.` : '');
-    $('varsList').replaceChildren(...names.flatMap((name) => {
+    // One row per variable -- name and chain above the control -- so a long
+    // chain cannot squeeze the input, and the rows tile into columns.
+    const field = (name) => {
       const code = document.createElement('code');
       const chain = chains.get(name);
       code.textContent = name;
@@ -823,9 +942,11 @@
         const pipe = document.createElement('span');
         pipe.className = 'chain';
         pipe.textContent = ` | ${chain.join(' | ')}`;
-        pipe.title = STUBBED.has(chain[0].split(':')[0].trim())
-          ? 'filter registered as a stub: returns an empty string'
-          : 'filter applied by liquidjs';
+        // The chain is clipped to one line, so the whole of it lives here.
+        pipe.title = `${chain.join(' | ')}\n`
+          + (STUBBED.has(chain[0].split(':')[0].trim())
+            ? 'filter registered as a stub: returns an empty string'
+            : 'filter applied by liquidjs');
         if (STUBBED.has(chain[0].split(':')[0].trim())) pipe.classList.add('stub');
         code.append(pipe);
       }
@@ -845,6 +966,7 @@
           images.set(href, bytes);
           vars.set(name, href);
           status.textContent = `${picked.name} (${picked.size.toLocaleString()} bytes)`;
+          beginPass();
           analyse();
           render();
         };
@@ -867,8 +989,7 @@
           imageVars.delete(name);
           images.delete(href);
           vars.set(name, typed.value);
-          analyseSoon();
-          renderSoon();
+          refresh();
         });
 
         for (const type of ['dragenter', 'dragover']) {
@@ -902,17 +1023,42 @@
       // until typing stops.
       input.addEventListener('input', () => {
         vars.set(name, input.value);
-        analyseSoon();
-        renderSoon();
+        refresh();
       });
       input.addEventListener('change', () => {
         // A paste or an autofill can arrive without a single `input` event.
         vars.set(name, input.value);
+        beginPass();
         analyse();
         render();
       });
       return [code, input];
+    };
+
+    $('varsList').replaceChildren(...names.map((name) => {
+      const [code, control] = field(name);
+      const row = document.createElement('div');
+      // A table or a JSON editor needs the full width; a text input does not.
+      row.className = control.classList.contains('collection') ? 'row wide' : 'row';
+      row.dataset.name = name;
+      row.append(code, control);
+      return row;
     }));
+
+    // A template with twenty variables is a scroll; typing narrows it.
+    const find = $('varsFind');
+    find.hidden = names.length < 8;
+    if (!find.hidden) filterFields();
+  }
+
+  /** Hides the rows whose variable does not contain the typed text. */
+  function filterFields() {
+    const q = $('varsFind').value.trim().toLowerCase();
+    for (const row of $('varsList').children) {
+      const match = !q || row.dataset.name.toLowerCase().includes(q);
+      row.hidden = !match;
+      row.classList.toggle('hit', Boolean(q) && match);
+    }
   }
 
   $('svg').value = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120">
@@ -982,6 +1128,8 @@
     const hasText = /<text[\s>]/.test(source());
     const needAnyFont = hasText && fonts.len() === 0;
     const missingImages = doc.pendingImages();
+    const missingPartials = [...referencedPartials(liquid, $('svg').value)]
+      .filter((name) => !partials.has(name));
 
     // fonts
     const wantFonts = missingFonts.length > 0 || needAnyFont;
@@ -1017,6 +1165,7 @@
         if (!file) return;
         images.set(href, new Uint8Array(await file.arrayBuffer()));
         log(`resolved ${href} with ${file.name} (${file.size.toLocaleString()} bytes)`);
+        beginPass();
         analyse();
         render();
       });
@@ -1033,6 +1182,7 @@
         if (!file) return;
         images.set(href, new Uint8Array(await file.arrayBuffer()));
         log(`resolved ${href} with ${file.name}`);
+        beginPass();
         analyse();
         render();
       });
@@ -1040,7 +1190,17 @@
       return li;
     }));
 
-    $('wanted').hidden = $('fontsWanted').hidden && $('imagesWanted').hidden;
+    $('partialsWanted').hidden = missingPartials.length === 0;
+    $('partialsList').replaceChildren(...missingPartials.map((name) => {
+      const li = document.createElement('li');
+      const code = document.createElement('code');
+      code.textContent = name;
+      li.append(code);
+      return li;
+    }));
+
+    $('wanted').hidden = $('fontsWanted').hidden && $('imagesWanted').hidden
+      && $('partialsWanted').hidden;
   }
 
   function defaults() {
@@ -1055,8 +1215,17 @@
     const files = [...fileList];
     if (!files.length) return;
     const isFont = (f) => /\.(ttf|otf|ttc)$/i.test(f.name);
+    // A `.liquid` file is always a fragment; a `.svg` is one only when the
+    // template renders it by that name -- otherwise it is an image.
+    const wanted = referencedPartials(liquid, $('svg').value);
+    const isPartial = (f) => /\.liquid$/i.test(f.name) || wanted.has(f.name);
     const fontFiles = files.filter(isFont);
-    const imageFiles = files.filter((f) => !isFont(f));
+    const partialFiles = files.filter((f) => !isFont(f) && isPartial(f));
+    const imageFiles = files.filter((f) => !isFont(f) && !isPartial(f));
+
+    for (const file of partialFiles) {
+      partials.set(file.name, await file.text());
+    }
 
     for (const file of fontFiles) {
       fonts.loadFontData(new Uint8Array(await file.arrayBuffer()));
@@ -1094,8 +1263,12 @@
     if (fontFiles.length) {
       parts.push(`${fontFiles.length} font(s) → ${fonts.faces().map((f) => f.families[0]).join(', ')}`);
     }
+    if (partialFiles.length) {
+      parts.push(`${partialFiles.length} fragment(s) → ${partialFiles.map((f) => f.name).join(', ')}`);
+    }
     if (imageFiles.length) parts.push(`${images.size} image(s) resolved`);
     log(parts.join('; ') || 'nothing usable in that drop');
+    beginPass();
     analyse();
     render();
   }
@@ -1118,11 +1291,12 @@
   // Editing the source must move the proof too: variables auto-render, so a
   // source edit doing nothing until an explicit click was the odd one out.
   $('svg').addEventListener('input', () => {
-    analyseSoon();
-    renderSoon();
+    refresh();
   });
 
-  $('render').addEventListener('click', render);
+  $('render').addEventListener('click', () => { beginPass(); render(); });
+
+  $('varsFind').addEventListener('input', filterFields);
 
   // Fitting measures and re-renders, so it belongs to the render path only:
   // `analyse()` is about missing resources, which compression does not change.
@@ -1142,7 +1316,11 @@
   function render() {
     const t0 = performance.now();
     try {
-      const doc = new mod.Resvg(fittedSource(), defaults(), fonts, Object.fromEntries(images));
+      const rendered = fittedSource();
+      // The exact string resvg was handed: a template bench without this makes
+      // every Liquid question a guess.
+      $('renderedSource').textContent = rendered;
+      const doc = new mod.Resvg(rendered, defaults(), fonts, Object.fromEntries(images));
       const params = {
         scale: Number($('scale').value) || 1,
         width: $('width').value ? Number($('width').value) : undefined,
@@ -1227,8 +1405,14 @@
     frame.style.setProperty('--plate-h', `${$('plate').offsetHeight}px`);
   });
 
-  $('showBbox').addEventListener('change', () => render());
-  $('fit').addEventListener('change', () => render());
+  $('showBbox').addEventListener('change', () => { beginPass(); render(); });
+  $('fit').addEventListener('change', () => { beginPass(); render(); });
+  $('strict').addEventListener('change', () => {
+    makeLiquid();
+    beginPass();
+    analyse();
+    render();
+  });
   $('diagClear').addEventListener('click', () => {
     seen.clear();
     $('diagList').replaceChildren();

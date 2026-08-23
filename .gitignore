@@ -7,3 +7,5 @@ demo/resvg.js
 demo/wasi-worker-browser.mjs
 .playwright-mcp/
 demo/liquid.js
+demo/DejaVuSans.ttf
+demo/examples/*.png

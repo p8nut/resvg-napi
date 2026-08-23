@@ -102,6 +102,18 @@ lets you supply it:
   is picked, substitutes a synthetic `var:<name>` href and registers the bytes
   under it — so resolution never depends on what the placeholder renders to.
 
+Tags work as they do anywhere in Liquid, `{% for %}` and `{% if %}` included. A
+collection a loop iterates over is labelled `iterated` and takes **JSON**: a value
+starting with `[` or `{` is parsed, so `staff` can be
+`[{"name":"Ada","dept":{"code":"OS"}}]` and the loop renders a row per entry. Bad
+JSON is reported rather than silently used as a string. Loop locals (`row.*`) get
+no field of their own — correctly, they come from the collection.
+
+Liquid does not auto-escape and this output lands inside XML, so a value holding
+`&`, `<` or `>` breaks the document. Escaping the scope would corrupt what a
+filter receives (`qr` legitimately returns markup), so the page reports the exact
+path instead: `` `staff[0].name` contains <, > or & … pipe it through `escape` ``.
+
 Every upload has three routes, because a file picker is not always usable — a
 browser driven by automation swallows the dialog, for one: drop on the zone or on
 the row itself, paste (⌘/Ctrl-V), or the per-item field.  a font goes to

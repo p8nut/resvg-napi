@@ -209,6 +209,7 @@
           <label>background <input id="bg" type="text" placeholder="none"></label>
           <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
           <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
+          <label class="inline"><input id="fit" type="checkbox" checked> fit data-maxwidth</label>
           <button id="render" disabled>Render</button>
         </div>
       </section>
@@ -289,7 +290,7 @@
   }
   globalThis.Buffer ??= BufferPolyfill;
 
-  const { Liquid, qrSvg } = await import('./liquid.js');
+  const { Liquid, qrSvg, fitTextWidths } = await import('./liquid.js');
   // Lenient on purpose: an unknown filter passes its value through instead of
   // throwing, so a template can be inspected before every filter exists.
   const liquid = new Liquid({ strictFilters: false, strictVariables: false });
@@ -932,10 +933,25 @@
 
   $('render').addEventListener('click', render);
 
+  // Fitting measures and re-renders, so it belongs to the render path only:
+  // `analyse()` is about missing resources, which compression does not change.
+  function fittedSource() {
+    const raw = source();
+    if (!$('fit').checked) return raw;
+    const { svg, adjustments, problems } = fitTextWidths(
+      raw, (s) => new mod.Resvg(s, defaults(), fonts, Object.fromEntries(images)));
+    for (const p of problems) report('warn', 'fit', p);
+    for (const a of adjustments) {
+      report('info', 'fit',
+        `#${a.id} compressed to ${a.measured} of ${a.to} user units (was ${a.from}, ×${a.factor}).`);
+    }
+    return svg;
+  }
+
   function render() {
     const t0 = performance.now();
     try {
-      const doc = parse();
+      const doc = new mod.Resvg(fittedSource(), defaults(), fonts, Object.fromEntries(images));
       const params = {
         scale: Number($('scale').value) || 1,
         width: $('width').value ? Number($('width').value) : undefined,
@@ -1021,6 +1037,7 @@
   });
 
   $('showBbox').addEventListener('change', () => render());
+  $('fit').addEventListener('change', () => render());
   $('diagClear').addEventListener('click', () => {
     seen.clear();
     $('diagList').replaceChildren();

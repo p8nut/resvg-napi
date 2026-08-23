@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="360" height="240" viewBox="0 0 360 240">
+  <!--
+    Paste this into the bench, then put a JSON array in the `staff` field:
+
+    [{"name":"Ada Lovelace","dept":{"code":"R&D"},"score":98,"lead":true},
+     {"name":"Grace Hopper","dept":{"code":"NAV"},"score":95},
+     {"name":"Linus Torvalds","dept":{"code":"OS"},"score":91},
+     {"name":"Wolfeschlegelsteinhausen","dept":{"code":"ETC"},"score":72}]
+
+    `title`, `issued` and `qrTarget` are plain fields; `logo` is an image href, so
+    the bench gives it a file picker. Loop locals (`row.*`) have no field of
+    their own: they come from the array.
+  -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16222e"/>
+      <stop offset="1" stop-color="#22384a"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="360" height="240" fill="url(#sky)"/>
+  <rect x="0" y="0" width="360" height="34" fill="#0091b4"/>
+
+  <image xlink:href="{{ logo }}" x="12" y="7" width="20" height="20"
+         preserveAspectRatio="xMidYMid slice"/>
+  <text x="40" y="23" font-family="sans-serif" font-size="15" font-weight="700" fill="#fff"
+        data-maxwidth="180">{{ title | default: "Roster" | upcase }}</text>
+  <text x="346" y="23" text-anchor="end" font-family="sans-serif" font-size="10" fill="#cfe9f3">{{ issued }}</text>
+
+
+  <!-- One band per entry. forloop.index drives the placement, so the array's
+       length decides how many rows exist. -->
+  {% for row in staff %}
+  <g>
+    {% if row.lead %}
+    <rect x="10" y="{{ forloop.index | times: 34 | plus: 8 }}" width="340" height="28" fill="#0091b422" stroke="#0091b4"/>
+    {% else %}
+    <rect x="10" y="{{ forloop.index | times: 34 | plus: 8 }}" width="340" height="28" fill="#ffffff0d"/>
+    {% endif %}
+
+    <text x="20" y="{{ forloop.index | times: 34 | plus: 27 }}" font-family="sans-serif" font-size="9"
+          fill="#93a7b6">{{ forloop.index }}</text>
+
+    <text x="36" y="{{ forloop.index | times: 34 | plus: 27 }}" font-family="sans-serif" font-size="13"
+          fill="#ffffff" data-maxwidth="150">{{ row.name | escape }}</text>
+
+    <text x="240" y="{{ forloop.index | times: 34 | plus: 27 }}" font-family="sans-serif" font-size="10"
+          fill="#7fd4ea" data-maxwidth="46">{{ row.dept.code | escape }}</text>
+
+    <text x="342" y="{{ forloop.index | times: 34 | plus: 27 }}" text-anchor="end"
+          font-family="sans-serif" font-size="13" font-weight="700"
+          fill="{% if row.score >= 95 %}#85bf5d{% else %}#e0e9ef{% endif %}">{{ row.score }}</text>
+  </g>
+  {% endfor %}
+
+  <text x="14" y="232" font-family="sans-serif" font-size="8" fill="#5d7789">{{ staff.size }} entries</text>
+  <svg id="qr" x="316" y="196" width="30" height="30">{{ qrTarget | qr: '#ffffff', '#00000000' }}</svg>
+</svg>

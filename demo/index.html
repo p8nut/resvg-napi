@@ -436,8 +436,47 @@
     for (const { path, parts } of paths) {
       // A variable is a value, never a document: an XML declaration pasted into
       // a field would land mid-file and make the whole SVG invalid.
-      const value = (vars.get(path) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
-      setDeep(scope, parts, value || `{{ ${path} }}`);
+      const raw = (vars.get(path) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
+      if (!raw) {
+        setDeep(scope, parts, `{{ ${path} }}`);
+        continue;
+      }
+      // A loop needs an array and an object variable needs an object, so a value
+      // that looks like JSON is parsed. Anything else stays a string.
+      let value = raw;
+      if (/^[[{]/.test(raw)) {
+        try {
+          value = JSON.parse(raw);
+        } catch (e) {
+          report('warn', 'liquid', `\`${path}\` looks like JSON but does not parse: ${e.message}`);
+        }
+      }
+      // Liquid does not auto-escape and this lands inside XML, so a raw `&`,
+      // `<` or `>` breaks the document. Escaping the scope would be wrong -- it
+      // would corrupt what a filter receives, and `qr` legitimately returns
+      // markup -- so say it instead. Values arrive nested inside JSON too, hence
+      // the walk.
+      const offenders = [];
+      const scan = (node, at) => {
+        if (typeof node === 'string') {
+          if (/[<>&]/.test(node) && !/^\s*</.test(node) && !node.startsWith('var:')) {
+            offenders.push(at);
+          }
+          return;
+        }
+        if (Array.isArray(node)) {
+          node.forEach((v, i) => scan(v, `${at}[${i}]`));
+        } else if (node && typeof node === 'object') {
+          for (const [k, v] of Object.entries(node)) scan(v, `${at}.${k}`);
+        }
+      };
+      scan(value, path);
+      for (const at of offenders.slice(0, 3)) {
+        report('warn', 'liquid',
+          `\`${at}\` contains <, > or & and lands in XML text. `
+          + `Pipe it through \`escape\` in the template.`);
+      }
+      setDeep(scope, parts, value);
     }
     try {
       const out = liquid.parseAndRenderSync(raw, scope);
@@ -483,6 +522,33 @@
     };
     visit(templates);
     return chains;
+  }
+
+  // `{% for row in staff %}` means `staff` must be an array, and `row.*` is a
+  // loop local with no field of its own. Read the collections off the AST so the
+  // form can say so.
+  function loopCollections(raw) {
+    const found = new Set();
+    let templates;
+    try {
+      templates = liquid.parse(raw);
+    } catch {
+      return found;
+    }
+    const visit = (nodes, depth = 0) => {
+      if (!Array.isArray(nodes) || depth > 6) return;
+      for (const node of nodes) {
+        const c = node?.collection;
+        if (node?.variable && c?.input && c.begin != null) {
+          found.add(c.input.slice(c.begin, c.end).trim());
+        }
+        visit(node?.templates, depth + 1);
+        visit(node?.elseTemplates, depth + 1);
+        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
+      }
+    };
+    visit(templates);
+    return found;
   }
 
   // A variable used as an `<image>` href wants a file, not a string. This one is
@@ -541,8 +607,10 @@
       return;
     }
     const asImage = imageHrefVars($('svg').value);
+    const asLoop = loopCollections($('svg').value);
     const signature = names
-      .map((n) => `${n}:${(chains.get(n) ?? []).join('|')}:${asImage.has(n) ? 'img' : 'txt'}`)
+      .map((n) => `${n}:${(chains.get(n) ?? []).join('|')}`
+        + `:${asImage.has(n) ? 'img' : asLoop.has(n) ? 'arr' : 'txt'}`)
       .join(',');
     if (signature === varsSignature) return;
     varsSignature = signature;
@@ -626,8 +694,16 @@
       }
 
       const input = document.createElement('input');
+      input.type = 'text';
       input.value = vars.get(name) ?? '';
-      input.placeholder = `{{ ${name} }}`;
+      const loop = asLoop.has(name);
+      input.placeholder = loop ? '[{ "…": "…" }]  JSON array' : `{{ ${name} }}`;
+      if (loop) {
+        const tag = document.createElement('span');
+        tag.className = 'chain';
+        tag.textContent = ' iterated';
+        code.append(tag);
+      }
       // The value is recorded immediately; re-parsing and re-rendering wait
       // until typing stops.
       input.addEventListener('input', () => {
@@ -636,6 +712,8 @@
         renderSoon();
       });
       input.addEventListener('change', () => {
+        // A paste or an autofill can arrive without a single `input` event.
+        vars.set(name, input.value);
         analyse();
         render();
       });
@@ -840,7 +918,12 @@
 
   $('font').addEventListener('change', (ev) => accept(ev.target.files));
 
-  $('svg').addEventListener('input', analyseSoon);
+  // Editing the source must move the proof too: variables auto-render, so a
+  // source edit doing nothing until an explicit click was the odd one out.
+  $('svg').addEventListener('input', () => {
+    analyseSoon();
+    renderSoon();
+  });
 
   $('render').addEventListener('click', render);
 

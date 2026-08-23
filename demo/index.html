@@ -307,7 +307,7 @@
           <div class="plate" id="plate">
             <span class="reg tl"></span><span class="reg tr"></span>
             <span class="reg bl"></span><span class="reg br"></span>
-            <img id="out" alt="rendered proof">
+            <img id="out" alt="rendered proof" hidden>
             <div id="bboxOverlay"><span></span></div>
           </div>
         </div>
@@ -1097,9 +1097,6 @@
     if (e.message !== 'not isolated') report('error', 'page', `Could not load the wasm module: ${e.message}`);
   }
 
-  // After the module body has run, so every helper below is initialised.
-  if (mod) analyse();
-
   // Function declaration, not a const arrow: `analyse()` runs from the init
   // block above, before this point in the module body.
   function parse() {
@@ -1335,6 +1332,7 @@
       // fetch bodies, postMessage and canvas data.
       const bytes = new Uint8Array(png);
       $('out').src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+      $('out').hidden = false;
       $('plate').classList.remove('fresh');
       void $('plate').offsetWidth;
       $('plate').classList.add('fresh');
@@ -1364,7 +1362,8 @@
       drainEngineLogs();
       log(`${ms} ms`);
     } catch (e) {
-      $('info').textContent = '';
+      // No `$('info')` reset here: that element is long gone, and touching it
+      // made the catch throw and hide the error it was reporting.
       report('error', 'resvg', e.message);
       drainEngineLogs();
       log('failed');
@@ -1419,4 +1418,15 @@
     $('diagEmpty').hidden = false;
     countIssues();
   });
+
+  // Last in the module body on purpose: `function` declarations hoist, `const`
+  // ones do not, so an init call placed higher up hits a TDZ on the first
+  // helper declared below it. The first render happens here too -- an empty
+  // <img> shows a broken icon, and the page should prove itself before it is
+  // asked to.
+  if (mod) {
+    beginPass();
+    analyse();
+    render();
+  }
 </script>

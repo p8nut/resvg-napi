@@ -42,11 +42,15 @@ const roomy = fitTextWidths(card('Ada'), render);
 assert.deepEqual(roomy.adjustments, []);
 assert.equal(roomy.svg, card('Ada'));
 
-// 5. a constraint with no id cannot be measured, and says so
+// 5. an element without an id is still fitted: the constraint should not depend
+//    on the template carrying ids, so one is generated
 const noId = fitTextWidths(
   '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30">'
   + '<text x="2" y="20" font-size="12" data-maxwidth="10">overflowing</text></svg>', render);
-assert.match(noId.problems[0], /no id, so it cannot be measured/);
+assert.deepEqual(noId.problems, []);
+assert.equal(noId.adjustments.length, 1);
+assert.match(noId.svg, /<text id="fit-1"/);
+assert.ok(Math.abs(noId.adjustments[0].measured - 10) < 0.5);
 
 // 6. an element with no visible extent is reported, not silently skipped
 const empty = fitTextWidths(
@@ -58,7 +62,8 @@ assert.match(empty.problems[0], /no visible extent/);
 const bare = fitTextWidths(
   '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="30">'
   + '<text id="bare" x="2" y="20" font-size="14" data-maxwidth="20">far too long for that</text></svg>', render);
-assert.match(bare.svg, /transform="scale\(0\.\d+ 1\)"/);
+// x="2", so the scale is anchored there rather than at the origin
+assert.match(bare.svg, /transform="translate\(2 0\) scale\(0\.\d+ 1\) translate\(-2 0\)"/);
 assert.ok(Math.abs(bare.adjustments[0].measured - 20) < 0.5);
 
 // 8. the limit is in the document's own units, not the canvas ones. `85.6mm`
@@ -81,6 +86,31 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
   assert.equal(adjustments.length, 1);
   assert.ok(Math.abs(adjustments[0].measured - 60) < 0.5,
     `landed at ${adjustments[0].measured} document units, wanted 60`);
+}
+
+// 9. an element positioned by `x` must be compressed in place, not slid toward
+//    the origin: a bare scale() is anchored at 0 and moves the text.
+{
+  const src = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120">
+  <text x="28" y="55" font-size="30" data-maxwidth="10">resvg</text>
+  <text x="28" y="85" font-size="30" data-maxwidth="10">resvg</text>
+</svg>`;
+  const { svg: fitted, adjustments, problems } = fitTextWidths(src, render);
+  assert.deepEqual(problems, []);
+  assert.equal(adjustments.length, 2, 'both, and neither needed an id in the source');
+  const after = render(fitted);
+  for (const a of adjustments) {
+    const box = after.node(a.id).extent();
+    assert.ok(Math.abs(a.measured - 10) < 0.5, `${a.id} width ${a.measured}`);
+    // The invariant is the anchor, x=28, not the ink edge: the first glyph's
+    // side bearing compresses too, so the ink starts nearer the anchor than
+    // before. Anchored at the origin instead, this lands around 4.
+    assert.ok(box.x >= 27.9 && box.x < 30,
+      `${a.id} ink starts at ${box.x.toFixed(2)}, expected just right of the x=28 anchor`);
+  }
+  // two near-identical tags must get distinct ids, numbered in document order
+  const ids = [...fitted.matchAll(/id="(fit-\d+)"/g)].map((m) => m[1]);
+  assert.deepEqual(ids, ['fit-1', 'fit-2']);
 }
 
 console.log('ok — horizontal fitting: all checks passed');

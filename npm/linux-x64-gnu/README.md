@@ -76,6 +76,11 @@ normalise the tree to 323.53 units, so `extent()` comes back 1.343× larger than
 anything the file says. Comparing raw canvas widths compresses text that actually
 fits — everything past `limit / 1.343`.
 
+No `id` needed: an element that has none gets one generated, numbered in document
+order, so the constraint does not depend on the template carrying ids. The scale
+is anchored at the element's own `x` — a bare `scale()` is anchored at the origin
+and slides the text left as it narrows.
+
 A geometric scale is exactly linear in width, so one pass lands on the target;
 the second measurement is a check, and it is reported. Text that already fits is
 left untouched, and a constraint that cannot be honoured says why: no `id` to

@@ -171,6 +171,8 @@
   #varsList .chain { display: block; color: var(--cyan); font-size: 11px;
                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #varsList .chain.stub { color: var(--amber); }
+  #example { font: 400 11px var(--mono); padding: .15rem .3rem;
+             border: 1px solid var(--rule); background: transparent; color: inherit; }
   #varsFind { margin-left: auto; font: 400 11px var(--mono); width: 9rem;
               padding: .15rem .35rem; border: 1px solid var(--rule);
               background: transparent; color: inherit; }
@@ -245,7 +247,8 @@
   <div class="bench">
     <div>
       <section>
-        <p class="legend"><b>Source</b> SVG, Liquid allowed</p>
+        <p class="legend"><b>Source</b> SVG, Liquid allowed
+          <select id="example"><option value="">example…</option></select></p>
         <textarea id="svg" spellcheck="false" autocomplete="off"></textarea>
         <details id="renderedWrap">
           <summary>rendered source</summary>
@@ -255,6 +258,7 @@
           <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
           <label>width px <input id="width" type="number" placeholder="auto" min="1"></label>
           <label>background <input id="bg" type="text" placeholder="none"></label>
+          <label>lang <input id="lang" type="text" placeholder="en" size="4"></label>
           <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
           <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
           <label class="inline"><input id="fit" type="checkbox" checked> fit data-maxwidth</label>
@@ -1202,7 +1206,13 @@
 
   function defaults() {
     const first = fonts.len() ? fonts.faces()[0].families[0] : undefined;
-    return first ? { fontFamily: first } : undefined;
+    // `languages` is what `<switch systemLanguage>` tests against: usvg picks
+    // no branch at all when the list is empty.
+    const lang = $('lang').value.trim();
+    const opts = {};
+    if (first) opts.fontFamily = first;
+    if (lang) opts.languages = lang.split(/[\s,]+/);
+    return Object.keys(opts).length ? opts : undefined;
   }
 
   // Anything dropped or pasted lands here. A font goes into the database; an
@@ -1294,6 +1304,47 @@
   $('render').addEventListener('click', () => { beginPass(); render(); });
 
   $('varsFind').addEventListener('input', filterFields);
+
+  // The examples ship with their data and their fragments, and one of them
+  // carries a photo as a data: URI -- pasting that by hand is not a demo.
+  fetch('/examples/')
+    .then((r) => r.json())
+    .then((names) => {
+      for (const name of names) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name.replace(/\.svg$/, '');
+        $('example').append(option);
+      }
+    })
+    .catch(() => { $('example').hidden = true; });
+
+  $('example').addEventListener('change', async () => {
+    const name = $('example').value;
+    if (!name) return;
+    const src = await (await fetch(`/examples/${name}`)).text();
+    $('svg').value = src;
+
+    // Fragments the template renders, fetched from the same directory.
+    for (const partial of referencedPartials(liquid, src)) {
+      const res = await fetch(`/examples/${partial}`);
+      if (res.ok) partials.set(partial, await res.text());
+    }
+
+    // `<template>.json` holds the sample data, one field per key.
+    const data = await fetch(`/examples/${name.replace(/\.svg$/, '.json')}`);
+    if (data.ok) {
+      vars.clear();
+      imageVars.clear();
+      for (const [key, value] of Object.entries(await data.json())) {
+        vars.set(key, typeof value === 'string' ? value : JSON.stringify(value));
+      }
+    }
+    varsSignature = null; // the field set changed, so the panel has to rebuild
+    log(`loaded ${name}`);
+    refresh();
+  });
+  $('lang').addEventListener('input', () => refresh());
 
   // Fitting measures and re-renders, so it belongs to the render path only:
   // `analyse()` is about missing resources, which compression does not change.

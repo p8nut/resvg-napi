@@ -230,17 +230,48 @@ keystroke destroys the focused input mid-word.
 The **rendered source** view under the source box holds the exact string handed
 to resvg. Every Liquid question is a guess without it.
 
-Two worked examples ship with the page, and both render without a browser:
+Four worked examples ship with the page. The **example picker** next to the
+source legend loads one with its data and its fragments — one of them carries a
+photo as a `data:` URI, which is not something to paste by hand. All four render
+without a browser:
 
 ```
-node demo/render.mjs examples/roster.svg        # array of objects, one row per entry
-node demo/render.mjs examples/badge-sheet.svg   # guided tour, one zone per capability
+node demo/render.mjs examples/roster.svg           # array of objects, one row per entry
+node demo/render.mjs examples/badge-sheet.svg      # guided tour, one zone per capability
+node demo/render.mjs examples/photo-card.svg       # images and glyphs
+node demo/render.mjs examples/sheet.svg --lang fr  # pagination, grouping, theme, language
 ```
+
+`photo-card.svg` is what a renderer does with pictures and letters:
+`preserveAspectRatio="slice"` cropping a portrait into a landscape hole, a
+`clipPath` and a `mask` on the same `<image>`, `image-rendering="optimizeSpeed"`
+against the default smoothing (the CSS keyword `pixelated` does nothing),
+`<symbol>` used twice at different sizes, a `<pattern>` ground,
+`paint-order="stroke"`, `letter-spacing` with a rule measured to match,
+`writing-mode="tb"`, a colour emoji — the family is a variable, because a
+monochrome fallback wins otherwise — and a caption on a `<textPath>` fitted to
+the curve's own length.
+
+`sheet.svg` is the data half: `{% for %}` with `limit` and `offset` is the whole
+of pagination (`page` is just a variable, so rendering pages 1..n is a loop
+around the renderer), `divided_by | ceil` for the page count, `at_least`/`at_most`
+clamping a bar so bad data cannot draw outside the plate, `<marker>` arrows
+chosen per row, a group header kept by hand because **liquidjs has no
+`ifchanged`**, `{% increment %}` inside a `{% capture %}` (it prints every value
+it returns), `uniq | sort_natural` for the legend, `url_encode` in the QR
+target, `{% raw %}` to print the syntax itself, and a `<switch>` whose
+`systemLanguage` branches only work when the **lang** field is set — usvg tests
+it against the `languages` option and picks nothing when the list is empty.
+
+A `<style>` block with classes is the cheapest theming there is, and its values
+can come from variables: both new examples paint from `ink`, `paper`, `accent`.
 
 `demo/render.mjs` is the headless twin of the bench: the same filter vocabulary,
 partials read from the template's directory, variables from `<template>.json`,
-fonts from `demo/fonts` or the system. `npm test` runs both, and fails if any
-Liquid tag survives into the output. Two things the tour records because they
+fonts from `demo/DejaVuSans.ttf` if it is there plus the system's (local first,
+so the generic families point at a known face). `npm test` runs all four, and
+fails if any Liquid tag survives into the output — except when the template uses
+`{% raw %}`, which emits braces on purpose. Two things the tour records because they
 cost an afternoon: a filter cannot go in a tag argument (`x: col | times: 306,
 y: 70` reads `y: 70` as a second argument to `times`), and LiquidJS divides as
 floats, so a row index wants `| floor`.

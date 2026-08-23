@@ -69,7 +69,11 @@ lets you supply it:
   `font-family` never appears as a named family).
 - **images** — `pendingImages()` gives the hrefs neither the uploads nor the
   filesystem resolved, one file field per href, because the file/href pairing has
-  to be explicit. Works for placeholder hrefs too (`{{ photo }}`).
+  to be explicit.
+- **a variable used as an image href** gets a *file* field instead of a text one:
+  the page scans the `href` of every `<image>` tag for `{{ … }}` and, once a file
+  is picked, substitutes a synthetic `var:<name>` href and registers the bytes
+  under it — so resolution never depends on what the placeholder renders to.
 
 Drop files on the zone, paste them, or use the per-item fields; a font goes to
 the database, an image is matched to a pending href by file name when it matches

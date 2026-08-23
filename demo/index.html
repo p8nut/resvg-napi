@@ -34,6 +34,9 @@
   #varsList code { font: 12px ui-monospace, monospace; text-align: right; }
   #varsList .chain { opacity: .55; }
   #varsList .chain.stub { color: #b45309; opacity: .85; }
+  #varsList .imgvar { display: flex; align-items: center; gap: .5rem; }
+  #varsList .imgvar span { font-size: 11px; opacity: .6; }
+  #varsList .imgvar input[type=file] { font-size: 11px; }
   #varsList input { padding: .3rem .45rem; border-radius: 5px; border: 1px solid var(--line);
                     background: transparent; color: inherit; font: inherit; width: 100%; }
   textarea { width: 100%; height: 14rem; font: 12px/1.5 ui-monospace, monospace;
@@ -208,6 +211,22 @@
   // touched when the variables or their filter chains actually change.
   let varsSignature = null;
 
+  // A variable used as an `<image>` href wants a file, not a string. Find them by
+  // looking at the href attribute of every image tag in the source.
+  function imageHrefVars(raw) {
+    const found = new Set();
+    for (const [, attrs] of raw.matchAll(/<image\b([^>]*)>/gi)) {
+      const href = attrs.match(/(?:xlink:)?href\s*=\s*"([^"]*)"/i)?.[1] ?? '';
+      for (const [, expr] of href.matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
+        found.add(expr.split('|')[0].trim().split(/[.[\s]/)[0]);
+      }
+    }
+    return found;
+  }
+
+  // Files chosen for those variables, by variable name.
+  const imageVars = new Map();
+
   function showVariables() {
     let names = [];
     try {
@@ -219,7 +238,10 @@
       varsSignature = null;
       return;
     }
-    const signature = names.map((n) => `${n}:${(chains.get(n) ?? []).join('|')}`).join(',');
+    const asImage = imageHrefVars($('svg').value);
+    const signature = names
+      .map((n) => `${n}:${(chains.get(n) ?? []).join('|')}:${asImage.has(n) ? 'img' : 'txt'}`)
+      .join(',');
     if (signature === varsSignature) return;
     varsSignature = signature;
     $('varsCount').textContent = `— ${names.length} found by liquidjs`;
@@ -243,6 +265,32 @@
         if (STUBBED.has(chain[0].split(':')[0].trim())) pipe.classList.add('stub');
         code.append(pipe);
       }
+      if (asImage.has(name)) {
+        // Substituting a stable synthetic href and registering the bytes under
+        // it keeps resolution independent of what the placeholder renders to.
+        const href = `var:${name}`;
+        const wrap = document.createElement('div');
+        wrap.className = 'imgvar';
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
+        const name_ = document.createElement('span');
+        name_.textContent = imageVars.get(name)?.name ?? 'used as an <image> href';
+        file.addEventListener('change', async (ev) => {
+          const picked = ev.target.files[0];
+          if (!picked) return;
+          const bytes = new Uint8Array(await picked.arrayBuffer());
+          imageVars.set(name, { name: picked.name, bytes });
+          images.set(href, bytes);
+          vars.set(name, href);
+          name_.textContent = `${picked.name} (${picked.size.toLocaleString()} bytes)`;
+          analyse();
+          render();
+        });
+        wrap.append(file, name_);
+        return [code, wrap];
+      }
+
       const input = document.createElement('input');
       input.value = vars.get(name) ?? '';
       input.placeholder = `{{ ${name} }}`;
@@ -402,14 +450,26 @@
                          'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
     }
 
+    // Targets for a dropped image: an unresolved href, or an image-href variable
+    // still waiting for a file.
     let pending = [];
     try { pending = parse().pendingImages(); } catch { /* unparseable, skip */ }
+    const varTargets = [...imageHrefVars($('svg').value)].filter((n) => !imageVars.has(n));
     for (const file of imageFiles) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
       const href = pending.find((h) => h.endsWith(file.name))
         ?? pending.find((h) => !images.has(h));
       if (href) {
-        images.set(href, new Uint8Array(await file.arrayBuffer()));
+        images.set(href, bytes);
         pending = pending.filter((h) => h !== href);
+        continue;
+      }
+      const name = varTargets.shift();
+      if (name) {
+        imageVars.set(name, { name: file.name, bytes });
+        images.set(`var:${name}`, bytes);
+        vars.set(name, `var:${name}`);
+        varsSignature = null; // force the field to redraw with the file name
       }
     }
 

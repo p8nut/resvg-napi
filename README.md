@@ -143,10 +143,11 @@ editor has a column per field, a control per type — checkbox for a boolean,
 number field for a number — and add/remove per row. The value underneath stays a
 JSON array, and the raw JSON is one disclosure away.
 
-![the array editor](demo/array-editor.png)
+![the variables panel and the node list](demo/array-editor.png)
 
 `demo/examples/roster.svg` is a worked example: a table whose rows come from an
-array of objects, with the payload to paste in a comment at the top.
+array of objects. Its data lives in `roster.json` next to it, which the example
+picker loads for you.
 
 Tags work as they do anywhere in Liquid, `{% for %}` and `{% if %}` included. A
 collection a loop iterates over is labelled `iterated` and takes **JSON**: a value
@@ -228,7 +229,24 @@ only rebuilt when the *set* of variables changes — rebuilding them on every
 keystroke destroys the focused input mid-word.
 
 The **rendered source** view under the source box holds the exact string handed
-to resvg. Every Liquid question is a guess without it.
+to resvg. Every Liquid question is a guess without it. Under it, **resolved
+tree** is `Resvg.toString()`: what usvg made of that string, with the CSS
+applied, `use` expanded and inheritance settled. The *keep text nodes* box
+flips `preserveText`, which is the difference between 23 KB of `<text>` and
+175 KB of outlines on the same document — a good look at what
+`shape-rendering` is actually asked to draw.
+
+The **Nodes** panel is the tree, indented by depth, one row per element with its
+canvas size. Clicking a row outlines it on the proof (`absLayerBoundingBox()`,
+no checkbox needed); *png* saves that element alone, cropped to its own extent,
+because `SvgNode.renderPng()` needs no `id` — a QR group comes out as a 128×128
+transparent PNG.
+
+The **stylesheet** field is usvg's `style_sheet` option: CSS injected at parse
+time, so a theme needs no edit to the document. One detail worth knowing, and
+the field's tooltip says it: the injection lands *before* the document's own
+`<style>`, so an equally specific rule loses. `!important` or a longer selector
+wins, and either beats a presentation attribute.
 
 Four worked examples ship with the page. The **example picker** next to the
 source legend loads one with its data and its fragments — one of them carries a

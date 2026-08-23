@@ -185,6 +185,27 @@
   #varsList .imgvar input.href { width: 8rem; }
   #varsList .imgvar.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
   #varsNote { margin: .5rem 0 0; font-size: 11px; color: var(--rule); }
+  /* The node tree: one row per element, indented by depth. */
+  #treeList { margin: 0; padding: 0; list-style: none; font: 400 11px var(--mono); }
+  /* max-width, or the export button sits a panel-width away from its row. */
+  #treeList li { display: flex; align-items: center; gap: .5rem; padding: .1rem 0;
+                 max-width: 26rem; }
+  #treeList button.pick { flex: 1; text-align: left; border: 0; background: none;
+                          color: inherit; font: inherit; cursor: pointer; padding: .1rem .2rem; }
+  #treeList button.pick:hover { color: var(--cyan); }
+  #treeList li[data-on] button.pick { color: var(--mag); }
+  #treeList .kind { color: var(--plate); }
+  #treeList .ident { color: var(--cyan); }
+  #treeList .size { color: var(--rule); }
+  #treeList button.save { font: 400 9px var(--mono); text-transform: uppercase;
+                          letter-spacing: .1em; padding: .1rem .35rem;
+                          border: 1px solid var(--rule); background: transparent;
+                          color: inherit; cursor: pointer; }
+  #resolvedWrap { margin: .35rem 0 0; font: 400 10px var(--mono); color: var(--rule); }
+  #resolvedWrap summary { cursor: pointer; text-transform: uppercase; letter-spacing: .1em; }
+  #resolvedTree { max-height: 12rem; overflow: auto; margin: .35rem 0 0;
+                  padding: .4rem .5rem; border: 1px solid var(--rule);
+                  color: var(--plate); white-space: pre; }
   /* What Liquid produced, which is what resvg was handed. */
   #renderedWrap { margin: .5rem 0 0; font: 400 10px var(--mono); color: var(--rule); }
   #renderedWrap summary { cursor: pointer; text-transform: uppercase; letter-spacing: .1em; }
@@ -254,11 +275,19 @@
           <summary>rendered source</summary>
           <pre id="renderedSource"></pre>
         </details>
+        <details id="resolvedWrap">
+          <summary>resolved tree · what usvg understood</summary>
+          <label class="inline"><input id="preserveText" type="checkbox" checked> keep text nodes</label>
+          <pre id="resolvedTree"></pre>
+        </details>
         <div class="controls">
           <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
           <label>width px <input id="width" type="number" placeholder="auto" min="1"></label>
           <label>background <input id="bg" type="text" placeholder="none"></label>
           <label>lang <input id="lang" type="text" placeholder="en" size="4"></label>
+          <label title="Injected before the document's own &lt;style&gt;, so an equally specific rule loses: use !important or a longer selector. It always beats a presentation attribute."
+            >stylesheet <input id="styleSheet" type="text"
+            placeholder=".value{fill:#c8005e !important}"></label>
           <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
           <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
           <label class="inline"><input id="fit" type="checkbox" checked> fit data-maxwidth</label>
@@ -316,6 +345,11 @@
           </div>
         </div>
         <dl class="measure" id="measure"></dl>
+      </section>
+
+      <section id="nodes" hidden>
+        <p class="legend"><b>Nodes</b> <span id="nodesCount"></span></p>
+        <ul id="treeList"></ul>
       </section>
 
       <section id="diag">
@@ -1209,9 +1243,15 @@
     // `languages` is what `<switch systemLanguage>` tests against: usvg picks
     // no branch at all when the list is empty.
     const lang = $('lang').value.trim();
+    const css = $('styleSheet').value.trim();
     const opts = {};
     if (first) opts.fontFamily = first;
     if (lang) opts.languages = lang.split(/[\s,]+/);
+    // Injected at parse time, so a theme needs no edit to the document. usvg
+    // puts it *before* the document's own <style>, so an equally specific rule
+    // loses -- `!important` or a longer selector wins, and either beats a
+    // presentation attribute.
+    if (css) opts.styleSheet = css;
     return Object.keys(opts).length ? opts : undefined;
   }
 
@@ -1304,6 +1344,8 @@
   $('render').addEventListener('click', () => { beginPass(); render(); });
 
   $('varsFind').addEventListener('input', filterFields);
+  $('styleSheet').addEventListener('input', () => refresh());
+  $('preserveText').addEventListener('change', () => { beginPass(); render(); });
 
   // The examples ship with their data and their fragments, and one of them
   // carries a photo as a data: URI -- pasting that by hand is not a demo.
@@ -1409,6 +1451,16 @@
       }));
       $('slugPlate').textContent = `${round(doc.width)}×${round(doc.height)}`;
       $('slugFonts').textContent = String(fonts.len());
+      lastRender = { doc, params };
+      showTree(doc);
+      // The resolved tree: CSS applied, `use` expanded, inheritance settled --
+      // and text either kept or flattened to paths, which is the one thing a
+      // rendered source cannot tell you.
+      $('resolvedTree').textContent = doc.toString({
+        preserveText: $('preserveText').checked,
+        coordinatesPrecision: 2,
+        transformsPrecision: 4,
+      });
       placeBbox(doc, params);
       drainEngineLogs();
       log(`${ms} ms`);
@@ -1427,12 +1479,95 @@
     : p.height ? p.height / doc.height
     : (p.scale ?? 1);
 
+  // The last render, so a click on a node row can measure against the same
+  // scale and origin the proof was drawn with.
+  let lastRender = null;
+  let picked = null;
+
+  // One row per element, depth first. A node handle stays valid after a
+  // re-render (it holds an Arc), but the tree is rebuilt anyway so the rows
+  // always describe what is on the plate.
+  function showTree(doc) {
+    const rows = [];
+    const walk = (nodes, depth) => {
+      if (depth > 8) return;
+      for (const node of nodes) {
+        rows.push(nodeRow(node, depth));
+        walk(node.children(), depth + 1);
+      }
+    };
+    walk(doc.children(), 0);
+    $('nodes').hidden = rows.length === 0;
+    $('nodesCount').textContent = rows.length ? `— ${rows.length} elements` : '';
+    $('treeList').replaceChildren(...rows);
+  }
+
+  function nodeRow(node, depth) {
+    const li = document.createElement('li');
+    li.style.paddingLeft = `${depth * 1.1}rem`;
+    const id = node.id();
+    const box = node.absLayerBoundingBox() ?? node.absBoundingBox();
+
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'pick';
+    const kind = document.createElement('span');
+    kind.className = 'kind';
+    kind.textContent = node.kind;
+    pick.append(kind);
+    if (id) {
+      const ident = document.createElement('span');
+      ident.className = 'ident';
+      ident.textContent = `#${id}`;
+      pick.append(' ', ident);
+    }
+    if (box) {
+      const size = document.createElement('span');
+      size.className = 'size';
+      size.textContent = ` ${round(box.width)}×${round(box.height)}`;
+      pick.append(size);
+    }
+    pick.addEventListener('click', () => {
+      picked = picked?.li === li ? null : { node, li };
+      for (const row of $('treeList').children) row.removeAttribute('data-on');
+      if (picked) li.setAttribute('data-on', '');
+      if (lastRender) placeBbox(lastRender.doc, lastRender.params);
+    });
+
+    // Every node can render itself, cropped to its own extent -- no id needed.
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'save';
+    save.textContent = 'png';
+    save.addEventListener('click', () => {
+      try {
+        const png = node.renderPng({ scale: Number($('scale').value) || 1 });
+        const url = URL.createObjectURL(new Blob([new Uint8Array(png)], { type: 'image/png' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${id || node.kind}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+        log(`${id || node.kind}.png · ${png.length.toLocaleString()} bytes`);
+      } catch (e) {
+        report('error', 'resvg', `renderPng on ${id || node.kind}: ${e.message}`);
+      }
+    });
+
+    li.append(pick, save);
+    return li;
+  }
+
   // The bounding box, drawn over the proof in registration magenta. Positions
   // come from absLayerBoundingBox(), scaled to the rendered pixels.
   function placeBbox(doc, params) {
     const overlay = $('bboxOverlay');
-    const box = doc.absLayerBoundingBox();
-    if (!$('showBbox').checked || !box) {
+    // A picked node overrides the document box, and shows without the checkbox:
+    // clicking a row is the request.
+    const box = picked
+      ? (picked.node.absLayerBoundingBox() ?? picked.node.absBoundingBox())
+      : doc.absLayerBoundingBox();
+    if ((!picked && !$('showBbox').checked) || !box) {
       overlay.removeAttribute('data-on');
       return;
     }

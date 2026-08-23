@@ -136,6 +136,15 @@ lets you supply it:
   is picked, substitutes a synthetic `var:<name>` href and registers the bytes
   under it — so resolution never depends on what the placeholder renders to.
 
+A collection gets a **table**, not a JSON box: the columns come from the loop
+body itself. `{% for row in staff %}` plus the locals it reads (`row.name`,
+`row.dept.code`, `row.lead`) are enough to know the shape of one entry, so the
+editor has a column per field, a control per type — checkbox for a boolean,
+number field for a number — and add/remove per row. The value underneath stays a
+JSON array, and the raw JSON is one disclosure away.
+
+![the array editor](demo/array-editor.png)
+
 `demo/examples/roster.svg` is a worked example: a table whose rows come from an
 array of objects, with the payload to paste in a comment at the top.
 

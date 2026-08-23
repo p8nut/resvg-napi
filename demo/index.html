@@ -24,6 +24,18 @@
           text-align: center; display: grid; gap: .2rem; margin: .75rem 0; }
   #drop span { font-size: 12px; opacity: .65; }
   #drop.over { border-color: #0ea5e9; background: #0ea5e911; }
+  #vars { border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem;
+          margin: .75rem 0; }
+  #vars p { margin: 0 0 .5rem; }
+  #vars #varsCount, #vars #varsNote { font-size: 12px; opacity: .6; font-weight: 400; }
+  #vars #varsNote { margin: .5rem 0 0; }
+  #varsList { display: grid; grid-template-columns: auto 1fr; gap: .35rem .6rem;
+              align-items: center; }
+  #varsList code { font: 12px ui-monospace, monospace; text-align: right; }
+  #varsList .chain { opacity: .55; }
+  #varsList .chain.stub { color: #b45309; opacity: .85; }
+  #varsList input { padding: .3rem .45rem; border-radius: 5px; border: 1px solid var(--line);
+                    background: transparent; color: inherit; font: inherit; width: 100%; }
   textarea { width: 100%; height: 14rem; font: 12px/1.5 ui-monospace, monospace;
              padding: .6rem; border: 1px solid var(--line); border-radius: 6px;
              background: transparent; color: inherit; resize: vertical; }
@@ -59,6 +71,12 @@
 
   <div class="row">
     <button id="render" disabled>Render</button>
+  </div>
+
+  <div id="vars" hidden>
+    <p><b>Template variables</b> <span id="varsCount"></span></p>
+    <div id="varsList"></div>
+    <p id="varsNote"></p>
   </div>
 
   <div id="drop">
@@ -108,12 +126,101 @@
   }
   globalThis.Buffer ??= BufferPolyfill;
 
+  const { Liquid } = await import('./liquid.js');
+  // Lenient on purpose: an unknown filter passes its value through instead of
+  // throwing, so a template can be inspected before every filter exists.
+  const liquid = new Liquid({ strictFilters: false, strictVariables: false });
+  // Placeholder. The real `qr` filter returns a QR-code SVG -- to be wired in.
+  const STUBBED = new Set(['qr']);
+  liquid.registerFilter('qr', () => '');
+
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
 
   // Images the user supplied, keyed by the href the document uses. Declared up
   // here because `analyse()` runs during init, above its own definition.
   const images = new Map();
+
+  // Values typed for the template's variables, by name.
+  const vars = new Map();
+
+  // The SVG actually handed to resvg: the source rendered through Liquid when it
+  // has variables. A variable left empty renders back to its own `{{ name }}`,
+  // so an image href placeholder stays visible to `pendingImages()` and can be
+  // resolved by an upload.
+  function source() {
+    const raw = $('svg').value;
+    let names = [];
+    try {
+      names = liquid.globalVariablesSync(liquid.parse(raw));
+    } catch {
+      return raw; // not a valid template: hand the source over untouched
+    }
+    if (!names.length) return raw;
+    const scope = {};
+    for (const name of names) scope[name] = vars.get(name) || `{{ ${name} }}`;
+    try {
+      return liquid.parseAndRenderSync(raw, scope);
+    } catch (e) {
+      log(`liquid: ${e.message}`);
+      return raw;
+    }
+  }
+
+  // `{{ upn | qr: '#fff', '#000' }}` is a variable *and* a filter chain, and the
+  // static analysis only reports the variable. Read the chains off the output
+  // tags so the form can show what each value is piped through.
+  function filterChains(raw) {
+    const chains = new Map();
+    for (const [, body] of raw.matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
+      const parts = body.split('|').map((p) => p.trim()).filter(Boolean);
+      if (parts.length < 2) continue;
+      const root = parts[0].split(/[.[\s]/)[0];
+      chains.set(root, parts.slice(1));
+    }
+    return chains;
+  }
+
+  function showVariables() {
+    let names = [];
+    try {
+      names = liquid.globalVariablesSync(liquid.parse($('svg').value));
+    } catch { /* incomplete template while typing */ }
+    const chains = filterChains($('svg').value);
+    $('vars').hidden = names.length === 0;
+    if (!names.length) return;
+    $('varsCount').textContent = `— ${names.length} found by liquidjs`;
+    const stubbed = [...chains.values()]
+      .map((c) => c[0].split(':')[0].trim())
+      .filter((f) => STUBBED.has(f));
+    $('varsNote').textContent = 'Empty fields keep their `{{ name }}` placeholder, so an '
+      + 'image variable stays uploadable. Unknown filters pass their value through'
+      + (stubbed.length ? `; ${[...new Set(stubbed)].join(', ')} is stubbed and returns nothing.` : '.');
+    $('varsList').replaceChildren(...names.flatMap((name) => {
+      const code = document.createElement('code');
+      const chain = chains.get(name);
+      code.textContent = name;
+      if (chain) {
+        const pipe = document.createElement('span');
+        pipe.className = 'chain';
+        pipe.textContent = ` | ${chain.join(' | ')}`;
+        pipe.title = STUBBED.has(chain[0].split(':')[0].trim())
+          ? 'filter registered as a stub: returns an empty string'
+          : 'filter applied by liquidjs';
+        if (STUBBED.has(chain[0].split(':')[0].trim())) pipe.classList.add('stub');
+        code.append(pipe);
+      }
+      const input = document.createElement('input');
+      input.value = vars.get(name) ?? '';
+      input.placeholder = `{{ ${name} }}`;
+      input.addEventListener('input', () => {
+        vars.set(name, input.value);
+        analyse();
+      });
+      input.addEventListener('change', () => render());
+      return [code, input];
+    }));
+  }
 
   $('svg').value = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120">
   <defs>
@@ -152,7 +259,7 @@
   // Function declaration, not a const arrow: `analyse()` runs from the init
   // block above, before this point in the module body.
   function parse() {
-    return new mod.Resvg($('svg').value, defaults(), fonts, Object.fromEntries(images));
+    return new mod.Resvg(source(), defaults(), fonts, Object.fromEntries(images));
   }
 
   // Parse once with the current state to find out what the document is missing:
@@ -161,6 +268,7 @@
   // and a look at the source tells us whether there is any text at all
   // (a generic `font-family` never shows up as a named family).
   function analyse() {
+    showVariables();
     let doc;
     try {
       doc = parse();
@@ -170,7 +278,7 @@
     }
 
     const missingFonts = doc.pendingFonts();
-    const hasText = /<text[\s>]/.test($('svg').value);
+    const hasText = /<text[\s>]/.test(source());
     const needAnyFont = hasText && fonts.len() === 0;
     const missingImages = doc.pendingImages();
 

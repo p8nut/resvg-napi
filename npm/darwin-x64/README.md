@@ -115,12 +115,16 @@ map and handed to every parse, so they survive edits and re-renders — unlike
 The page runs the SVG through [LiquidJS](https://liquidjs.com) first, so a
 templated document can be previewed:
 
-- `liquid.globalVariablesSync()` lists the variables the template expects, and the
-  page builds one field per variable.
+- `liquid.globalVariableSegmentsSync()` lists the variables the template expects,
+  as segments, and the page builds one field per **full path**:
+  `{{ user.givenName }}` is its own field, not a field called `user`. Values are
+  written back into a nested scope (`{ user: { givenName } }`), including array
+  indices (`a[0].b`). A dynamic key (`{{ x[y.z] }}`) has no fixed field, so it is
+  skipped.
 - A field left empty renders back to its own `{{ name }}`, which is why an image
   variable stays visible to `pendingImages()` and can still be uploaded.
-- A variable that is piped through filters shows the whole chain
-  (`upn | qr: '#ffffff', '#00000000'`) — the static analysis only reports the
+- A variable that is piped through filters shows the whole chain on its own row
+  (`user.dept.name | upcase`) — the static analysis only reports the
   variable name, so the chains are read off the output tags.
 - `strictFilters` is off, so an unknown filter passes its value through instead of
   throwing.

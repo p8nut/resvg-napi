@@ -3,10 +3,10 @@
   <!--
     Paste this into the bench, then put a JSON array in the `staff` field:
 
-    [{"name":"Ada Lovelace","dept":{"code":"R&D"},"score":98,"lead":true},
-     {"name":"Grace Hopper","dept":{"code":"NAV"},"score":95},
-     {"name":"Linus Torvalds","dept":{"code":"OS"},"score":91},
-     {"name":"Wolfeschlegelsteinhausen","dept":{"code":"ETC"},"score":72}]
+    [{"name":"Ada Lovelace","dept":{"code":"R&D"},"score":98,"lead":true},{"name":"Grace Hopper","dept":{"code":"NAV"},"score":95},{"name":"Linus Torvalds","dept":{"code":"OS"},"score":91},{"name":"Wolfeschlegelsteinhausen","dept":{"code":"ETC"},"score":72}]
+
+    Text needs a font: WASI has no system fonts, so drop a .ttf on the page
+    first or every text node is dropped and only the bands render.
 
     `title`, `issued` and `qrTarget` are plain fields; `logo` is an image href, so
     the bench gives it a file picker. Loop locals (`row.*`) have no field of

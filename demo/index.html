@@ -160,12 +160,35 @@
   #varsList code { font: 400 12px var(--mono); text-align: right; }
   #varsList .chain { color: var(--cyan); }
   #varsList .chain.stub { color: var(--amber); }
-  #varsList input[type=text] { width: 100%; }
+  #varsList input[type=text], #varsList textarea { width: 100%; }
+  #varsList textarea { font: 400 11px/1.5 var(--mono); padding: .3rem .45rem;
+                       border: 1px solid var(--rule); background: transparent;
+                       color: inherit; resize: vertical; }
   #varsList .imgvar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
   #varsList .imgvar span { font: 400 11px var(--mono); color: var(--rule); }
   #varsList .imgvar input.href { width: 8rem; }
   #varsList .imgvar.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
   #varsNote { margin: .5rem 0 0; font-size: 11px; color: var(--rule); }
+  .collection table { border-collapse: collapse; width: 100%; }
+  .collection th, .collection td { padding: 0; border: 1px solid var(--rule); }
+  .collection thead td { font: 700 9px var(--mono); text-transform: uppercase;
+                         letter-spacing: .08em; color: var(--rule); padding: .2rem .3rem;
+                         border: 1px solid var(--rule); }
+  .collection td input[type=text], .collection td input[type=number] {
+    width: 100%; border: 0; padding: .25rem .35rem; font: 400 11px var(--mono); }
+  .collection td input[type=checkbox] { margin: .3rem .4rem; }
+  .collection td:last-child { width: 1.6rem; text-align: center; }
+  .collection td button { border: 0; padding: .1rem .3rem; font: 400 12px var(--mono);
+                          color: var(--rule); cursor: pointer; }
+  .collection td button:hover { color: var(--mag); background: transparent; }
+  .collection .add { margin-top: .35rem; padding: .2rem .6rem; font-size: 10px; }
+  .collection details { margin-top: .4rem; }
+  .collection summary { font: 700 9px var(--mono); text-transform: uppercase;
+                        letter-spacing: .08em; color: var(--rule); cursor: pointer; }
+  .collection textarea { width: 100%; margin-top: .3rem; font: 400 11px/1.5 var(--mono);
+                         padding: .3rem; border: 1px solid var(--rule);
+                         background: transparent; color: inherit; resize: vertical; }
+  .collection .hint { margin: 0; font-size: 11px; color: var(--rule); }
 
   /* Diagnostics: everything both engines had to say. */
   #diag { margin-top: var(--gap); }
@@ -435,6 +458,7 @@
     const raw = $('svg').value.replace(/^\s+(?=<\?xml)/, '');
     const paths = templatePaths(raw);
     if (!paths.length) return raw;
+    const chains = filterChains(raw);
     const scope = {};
     // Shortest first, so a value given for `staff` is in place before anything
     // asks about `staff.size`.
@@ -468,26 +492,17 @@
       // Liquid does not auto-escape and this lands inside XML, so a raw `&`,
       // `<` or `>` breaks the document. Escaping the scope would be wrong -- it
       // would corrupt what a filter receives, and `qr` legitimately returns
-      // markup -- so say it instead. Values arrive nested inside JSON too, hence
-      // the walk.
-      const offenders = [];
-      const scan = (node, at) => {
-        if (typeof node === 'string') {
-          if (/[<>&]/.test(node) && !/^\s*</.test(node) && !node.startsWith('var:')) {
-            offenders.push(at);
-          }
-          return;
-        }
-        if (Array.isArray(node)) {
-          node.forEach((v, i) => scan(v, `${at}[${i}]`));
-        } else if (node && typeof node === 'object') {
-          for (const [k, v] of Object.entries(node)) scan(v, `${at}.${k}`);
-        }
-      };
-      scan(value, path);
-      for (const at of offenders.slice(0, 3)) {
+      // markup -- so warn instead. Only for a plain string whose own expression
+      // has no escaping filter: a value nested in a JSON array is printed by a
+      // loop-local expression this cannot see, and guessing there produced false
+      // warnings on a template that does pipe through `escape`.
+      const escapes = new Set(['escape', 'xml_escape', 'escape_once']);
+      const escaped = (chains.get(path) ?? [])
+        .some((f) => escapes.has(f.split(':')[0].trim()));
+      if (typeof value === 'string' && !escaped && /[<>&]/.test(value)
+          && !/^\s*</.test(value) && !value.startsWith('var:')) {
         report('warn', 'liquid',
-          `\`${at}\` contains <, > or & and lands in XML text. `
+          `\`${path}\` contains <, > or & and lands in XML text. `
           + `Pipe it through \`escape\` in the template.`);
       }
       setDeep(scope, parts, value);
@@ -541,6 +556,53 @@
   // `{% for row in staff %}` means `staff` must be an array, and `row.*` is a
   // loop local with no field of its own. Read the collections off the AST so the
   // form can say so.
+  // `{% for row in staff %}` plus the locals the body reads (`row.name`,
+  // `row.dept.code`) tell us the shape of one entry -- so the columns of the
+  // editor come from the template, not from a guess.
+  function loopColumns(raw) {
+    const byCollection = new Map();
+    let templates;
+    let locals = [];
+    try {
+      templates = liquid.parse(raw);
+      locals = liquid.variableSegmentsSync(templates);
+    } catch {
+      return byCollection;
+    }
+    const visit = (nodes, depth = 0) => {
+      if (!Array.isArray(nodes) || depth > 6) return;
+      for (const node of nodes) {
+        const c = node?.collection;
+        if (node?.variable && c?.input && c.begin != null) {
+          const collection = c.input.slice(c.begin, c.end).trim();
+          const columns = [];
+          for (const parts of locals) {
+            if (parts[0] !== node.variable || parts.length < 2) continue;
+            if (!parts.every((p) => typeof p === 'string' || typeof p === 'number')) continue;
+            const key = parts.slice(1).join('.');
+            if (key && !columns.includes(key)) columns.push(key);
+          }
+          byCollection.set(collection, columns);
+        }
+        visit(node?.templates, depth + 1);
+        visit(node?.elseTemplates, depth + 1);
+        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
+      }
+    };
+    visit(templates);
+    return byCollection;
+  }
+
+  const get = (obj, key) => key.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+  const put = (obj, key, value) => {
+    const parts = key.split('.');
+    let node = obj;
+    parts.forEach((p, i) => {
+      if (i === parts.length - 1) node[p] = value;
+      else node = (node[p] ??= {});
+    });
+  };
+
   function loopCollections(raw) {
     const found = new Set();
     let templates;
@@ -611,6 +673,122 @@
     }
   }
 
+  // One row per entry, one column per field the loop body reads. The value
+  // stays a JSON array in `vars`, so nothing downstream changes.
+  function collectionEditor(name, columns) {
+    const wrap = document.createElement('div');
+    wrap.className = 'collection';
+
+    const read = () => {
+      try {
+        const parsed = JSON.parse(vars.get(name) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+    let json;   // the escape hatch is a second view of the same value
+    const write = (rows, redraw) => {
+      vars.set(name, JSON.stringify(rows));
+      if (redraw) draw();
+      else if (json) json.value = vars.get(name);
+      analyseSoon();
+      renderSoon();
+    };
+
+    const draw = () => {
+      const rows = read();
+      // One control type per column, from the first entry that has the key: a
+      // row that simply omits `lead` must still get the checkbox, not a text box.
+      const kindOf = new Map(columns.map((col) => {
+        const sample = rows.map((e) => get(e, col)).find((v) => v !== undefined);
+        return [col, typeof sample === 'boolean' ? 'checkbox'
+          : typeof sample === 'number' ? 'number' : 'text'];
+      }));
+      const table = document.createElement('table');
+      const head = table.createTHead().insertRow();
+      for (const col of columns) head.insertCell().textContent = col;
+      head.insertCell().textContent = '';
+
+      const body = table.createTBody();
+      rows.forEach((entry, i) => {
+        const tr = body.insertRow();
+        for (const col of columns) {
+          const value = get(entry, col);
+          const cell = tr.insertCell();
+          const kind = kindOf.get(col);
+          const field = document.createElement('input');
+          field.type = kind;
+          if (kind === 'checkbox') field.checked = value === true;
+          else field.value = value ?? '';
+          field.addEventListener(kind === 'checkbox' ? 'change' : 'input', () => {
+            const next = read();
+            put(next[i], col, kind === 'checkbox' ? field.checked
+              : kind === 'number' ? Number(field.value)
+              : field.value);
+            write(next, false);
+          });
+          cell.append(field);
+        }
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.title = `Remove entry ${i + 1}`;
+        remove.addEventListener('click', () => {
+          const next = read();
+          next.splice(i, 1);
+          write(next, true);
+        });
+        tr.insertCell().append(remove);
+      });
+
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'add';
+      add.textContent = '+ entry';
+      add.addEventListener('click', () => {
+        const next = read();
+        const blank = {};
+        // Types come from the first entry that actually has the key: the last
+        // row may simply omit it, which would type a boolean column as text.
+        for (const col of columns) {
+          const sample = next.map((e) => get(e, col)).find((v) => v !== undefined);
+          put(blank, col, typeof sample === 'boolean' ? false
+            : typeof sample === 'number' ? 0 : '');
+        }
+        next.push(blank);
+        write(next, true);
+      });
+
+      const raw = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = 'JSON';
+      json = document.createElement('textarea');
+      json.rows = 3;
+      json.spellcheck = false;
+      json.value = vars.get(name) ?? '';
+      json.addEventListener('change', () => {
+        vars.set(name, json.value);
+        draw();
+        analyse();
+        render();
+      });
+      raw.append(summary, json);
+
+      wrap.replaceChildren(columns.length ? table : note(), add, raw);
+    };
+
+    const note = () => {
+      const p = document.createElement('p');
+      p.className = 'hint';
+      p.textContent = 'The loop body reads no field of its entries, so there are no columns.';
+      return p;
+    };
+
+    draw();
+    return wrap;
+  }
+
   function showVariables() {
     const paths = templatePaths($('svg').value);
     const names = paths.map((p) => p.path);
@@ -622,9 +800,10 @@
     }
     const asImage = imageHrefVars($('svg').value);
     const asLoop = loopCollections($('svg').value);
+    const columns = loopColumns($('svg').value);
     const signature = names
       .map((n) => `${n}:${(chains.get(n) ?? []).join('|')}`
-        + `:${asImage.has(n) ? 'img' : asLoop.has(n) ? 'arr' : 'txt'}`)
+        + `:${asImage.has(n) ? 'img' : asLoop.has(n) ? `arr(${(columns.get(n) ?? []).join('|')})` : 'txt'}`)
       .join(',');
     if (signature === varsSignature) return;
     varsSignature = signature;
@@ -707,17 +886,18 @@
         return [code, wrap];
       }
 
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = vars.get(name) ?? '';
-      const loop = asLoop.has(name);
-      input.placeholder = loop ? '[{ "…": "…" }]  JSON array' : `{{ ${name} }}`;
-      if (loop) {
+      if (asLoop.has(name)) {
         const tag = document.createElement('span');
         tag.className = 'chain';
         tag.textContent = ' iterated';
         code.append(tag);
+        return [code, collectionEditor(name, columns.get(name) ?? [])];
       }
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = vars.get(name) ?? '';
+      input.placeholder = `{{ ${name} }}`;
       // The value is recorded immediately; re-parsing and re-rendering wait
       // until typing stops.
       input.addEventListener('input', () => {

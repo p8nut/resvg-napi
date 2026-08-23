@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="440" viewBox="0 0 640 440">
+  <!--
+    A guided tour: every zone is one Liquid capability, rendered by resvg.
+
+    Drop `badge.svg` (next to this file) on the page first, plus a font, then
+    paste `badge-sheet.json` into the fields. Headless equivalent:
+
+      node demo/render.mjs examples/badge-sheet.svg
+
+    Strict variables is on by default, and liquidjs has no in-template escape
+    from it (not even `default`), so every field is present in the data.
+    `note`, `issued` and `link` are present but empty, which is what `default`
+    is actually for.
+  -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16222e"/>
+      <stop offset="1" stop-color="#22384a"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="440" fill="url(#sky)"/>
+
+  {% assign scores = staff | map: "score" %}
+  {% assign leads = staff | where: "lead", true %}
+  {% assign average = scores | sum | divided_by: staff.size %}
+  {% assign top = staff | sort: "score" | reverse | first %}
+
+  <!-- 1. header: measured title, aggregates -->
+  <rect width="640" height="42" fill="#0091b4"/>
+  <text x="16" y="27" font-family="sans-serif" font-size="17" font-weight="700"
+        fill="#fff">{{ heading | default: "Badge sheet" | upcase | fit: 380, 17 | escape }}</text>
+  <text x="624" y="27" text-anchor="end" font-family="sans-serif" font-size="10" fill="#d7f0f8"
+        >{{ staff.size }} entries · avg {{ average | round: 1 }} · {{ leads.size }} lead · top {{ top.name | fit: 90, 10 | escape }}</text>
+
+  <!-- 2. render: one fragment, two columns, positions computed by Liquid -->
+  <text x="16" y="62" font-family="sans-serif" font-size="8" fill="#5d7789">RENDER · one fragment per entry</text>
+  {% for row in staff %}
+    {% assign col = forloop.index0 | modulo: 2 %}
+    {% comment %}liquidjs divides as floats, so round the row down.{% endcomment %}
+    {% assign line = forloop.index0 | divided_by: 2 | floor %}
+    {% comment %}
+      A filter cannot go in a tag argument: `x: col | times: 306, y: 70` reads
+      `y: 70` as a second argument to `times`. Assign first, pass the name.
+    {% endcomment %}
+    {% assign bx = col | times: 306 | plus: 16 %}
+    {% assign by = line | times: 56 | plus: 70 %}
+    {% render "badge.svg", x: bx, y: by, name: row.name, code: row.dept.code,
+        score: row.score, lead: row.lead, trend: row.trend %}
+  {% endfor %}
+
+  <!-- 3. fit vs truncate: measured against counted -->
+  <text x="16" y="210" font-family="sans-serif" font-size="8" fill="#5d7789">FIT VS TRUNCATE · measured against counted</text>
+  <rect x="16" y="216" width="150" height="1" fill="#c8005e"/>
+  <text x="16" y="234" font-family="sans-serif" font-size="13" fill="#fff"
+        >{{ top.name | append: " and friends" | fit: 150, 13 | escape }}</text>
+  <text x="16" y="252" font-family="sans-serif" font-size="13" fill="#93a7b6"
+        >{{ top.name | append: " and friends" | truncate: 18 | escape }}</text>
+  <text x="16" y="266" font-family="sans-serif" font-size="8" fill="#5d7789"
+        >the magenta rule is 150 units: only the first line was measured, and both are escaped for XML</text>
+
+  <!-- 4. wrap: SVG has no line breaking of its own -->
+  <text x="330" y="210" font-family="sans-serif" font-size="8" fill="#5d7789">WRAP · tspans placed by measurement</text>
+  <!-- `x` on a tspan is absolute, so the block is positioned by a transform
+       and every line stays at x="0". -->
+  <text transform="translate(330 226)" font-family="sans-serif" font-size="10" fill="#e0e9ef"
+        >{{ note | default: "Scores are relative to the period, and the last column is the one that counts." | wrap: 280, 10, 13 }}</text>
+
+  <!-- 5. sparkline + cycle: numbers become geometry, striping without a counter -->
+  <text x="16" y="300" font-family="sans-serif" font-size="8" fill="#5d7789">SPARKLINE · numbers to geometry</text>
+  <polyline points="{{ scores | sparkline: 240, 40 }}" transform="translate(16 310)"
+            fill="none" stroke="#85bf5d" stroke-width="1.5"/>
+  {% for s in scores %}
+  <rect x="{{ forloop.index0 | times: 60 | plus: 16 }}" y="356" width="56" height="14"
+        fill="{% cycle '#ffffff14', '#ffffff08' %}"/>
+  <text x="{{ forloop.index0 | times: 60 | plus: 20 }}" y="366" font-family="sans-serif"
+        font-size="9" fill="#93a7b6">{{ s }}</text>
+  {% endfor %}
+
+  <!-- 6. case: a status word becomes a colour -->
+  <text x="330" y="300" font-family="sans-serif" font-size="8" fill="#5d7789">CASE · status to colour</text>
+  {% assign status = state | default: "review" %}
+  <rect x="330" y="308" width="96" height="22" rx="3"
+        fill="{% case status %}{% when 'shipped' %}#85bf5d{% when 'review' %}#a8630a{% when 'blocked' %}#c8005e{% else %}#5d7789{% endcase %}"/>
+  <text x="338" y="323" font-family="sans-serif" font-size="11" font-weight="700"
+        fill="#fff">{{ status | upcase }}</text>
+
+  <!-- 7. date and qr -->
+  <text x="330" y="352" font-family="sans-serif" font-size="8" fill="#5d7789">DATE · {{ issued | default: "now" | date: "%d %b %Y" }}</text>
+  <svg id="qr" x="560" y="356" width="64" height="64">{{ link | default: "https://github.com/linebender/resvg" | qr: '#ffffff', '#00000000' }}</svg>
+
+  <text x="16" y="428" font-family="sans-serif" font-size="8" fill="#5d7789"
+        >{{ scores | join: " · " }} — {{ scores | size }} values, min {{ scores | sort | first }}, max {{ scores | sort | last }}</text>
+</svg>

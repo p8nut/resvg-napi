@@ -1,0 +1,14 @@
+<g transform="translate({{ x }} {{ y }})">
+  <rect width="166" height="44" rx="4"
+        fill="{% if lead %}#0091b422{% else %}#ffffff0d{% endif %}"
+        stroke="{% if lead %}#0091b4{% else %}none{% endif %}"/>
+  <text x="10" y="20" font-family="sans-serif" font-size="12" font-weight="700" fill="#fff"
+        >{{ name | fit: 110, 12 | escape }}</text>
+  <text x="10" y="34" font-family="sans-serif" font-size="9" fill="#7fd4ea">{{ code | escape }}</text>
+  <text x="156" y="28" text-anchor="end" font-family="sans-serif" font-size="14" font-weight="700"
+        fill="{% if score >= 95 %}#85bf5d{% else %}#e0e9ef{% endif %}">{{ score }}</text>
+  {% if trend %}
+  <polyline points="{{ trend | sparkline: 40, 9 }}" transform="translate(106 30)"
+            fill="none" stroke="#7fd4ea" stroke-width="1"/>
+  {% endif %}
+</g>

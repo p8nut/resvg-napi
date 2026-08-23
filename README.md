@@ -180,12 +180,33 @@ templated document can be previewed:
   indices (`a[0].b`). A dynamic key (`{{ x[y.z] }}`) has no fixed field, so it is
   skipped.
 - A field left empty renders back to its own `{{ name }}`, which is why an image
-  variable stays visible to `pendingImages()` and can still be uploaded.
+  variable stays visible to `pendingImages()` and can still be uploaded. The
+  exception is a chain containing `default:` — that field starts empty so the
+  template's own default is what you see.
 - A variable that is piped through filters shows the whole chain on its own row
   (`user.dept.name | upcase`) — the static analysis only reports the
   variable name, so the chains are read off the output tags.
 - `strictFilters` is off, so an unknown filter passes its value through instead of
-  throwing.
+  throwing. `strictVariables` is **on**: anything the analysis missed raises
+  `undefined variable` instead of rendering as empty. LiquidJS has no
+  in-template escape from it — not even `default` — so a field a loop reads must
+  exist on every entry. The page fills the gaps it can see (the columns the loop
+  body reads) with an empty value and says which entries it filled, because
+  `{% render %}` reports the failure at line 1 of the partial, where it means
+  nothing.
+- `{% render %}` and `{% include %}` work: the partial names the template asks
+  for are read off the parsed tags (`node.file`), listed under **Not resolved**
+  until you drop them, and served to LiquidJS from a `Map` through a small
+  in-memory `fs`. A `.liquid` file is always a fragment; a `.svg` is one only
+  when the template renders it by that name, otherwise it is an image.
+- Four filters exist because a renderer is in the room, and all four ask resvg
+  how wide a string is (`node('m').extent()`):
+  `fit: width, size` cuts a string to an ellipsis that fits, by bisection;
+  `wrap: width, size[, lineHeight]` breaks text into `<tspan>` lines, which SVG
+  1.1 will not do for you (place the block with a `transform` — a tspan's `x` is
+  absolute); `sparkline: w, h` turns an array of numbers into a `points`
+  attribute; `measure: size` returns the width itself. They live in
+  `demo/svg-filters.mjs`, next to the `memoryFs` and the partial scanner.
 - `{{ upn | qr: '#ffffff', '#00000000' }}` generates a real QR code, as SVG:
   `qrSvg()` in `demo/liquid-entry.mjs` encodes with `qrcode-generator` and emits
   one `<path>` for the dark modules inside a nested `<svg viewBox="0 0 n n"
@@ -205,6 +226,24 @@ Typing in a variable field records the value immediately but defers the work:
 re-parsing is debounced to 200 ms, re-rendering to 350 ms, and the fields are
 only rebuilt when the *set* of variables changes — rebuilding them on every
 keystroke destroys the focused input mid-word.
+
+The **rendered source** view under the source box holds the exact string handed
+to resvg. Every Liquid question is a guess without it.
+
+Two worked examples ship with the page, and both render without a browser:
+
+```
+node demo/render.mjs examples/roster.svg        # array of objects, one row per entry
+node demo/render.mjs examples/badge-sheet.svg   # guided tour, one zone per capability
+```
+
+`demo/render.mjs` is the headless twin of the bench: the same filter vocabulary,
+partials read from the template's directory, variables from `<template>.json`,
+fonts from `demo/fonts` or the system. `npm test` runs both, and fails if any
+Liquid tag survives into the output. Two things the tour records because they
+cost an afternoon: a filter cannot go in a tag argument (`x: col | times: 306,
+y: 70` reads `y: 70` as a second argument to `times`), and LiquidJS divides as
+floats, so a row index wants `| floor`.
 
 Two input guards, both learned the hard way: a leading newline before
 `<?xml … ?>` makes usvg reject the document (Illustrator exports have one), and
@@ -230,7 +269,7 @@ Three things the demo has to handle, all visible in
 
 ```
 npm run build        # napi build --platform --release
-npm test             # 9 test files, native + typings
+npm test             # 11 test files, native + typings, plus both examples
 npm run typecheck    # tsc --strict over index.d.ts and demo.mts
 ```
 

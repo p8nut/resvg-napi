@@ -1,0 +1,12 @@
+{
+  "title": "Flight roster",
+  "issued": "23 Aug 2026",
+  "logo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACWklEQVR4nMWXv0/bQBTHv+e46dZmYWqlpiMTZutWZ+wPJNR/IOlYVSj8B81/UFJUdQT+AUoFtCPuBBvOxEiQ2FgcNiD4uHc4jhPbd5dglI8UK757997X9+P52cKMsTBj7Imsf+47uOF1IdsBR0W0OFGPD4YAnHnC4x98/eCbumRGVu29uri2xK8KM7rSvvlxS2eoFvDrXxU3txviaV1MA4OHJ6XP+PKum2+Sx/qui5D9Fv8qeBgBbFbLWxamCH6AIrHZYpaItACa9uvbYzz8yccJUC4tji9H+hjSmhcfHNLnvW/kC/ix35h6w5lAvtf/LiebRvMA599gQNOpojH/Es7cc3nvX/Sw5nexdXKuHxyG38V1Z3A73AOUZPr8WDW28tTGwac3ceBxSEht+wjBVR9KEhtyuAR9NKBBFZygPrLR0g/jZUjsgdBRjVl1XiuDJ0XQ8mhwMwQwpff6/AuYQntEzTBWchMqZ8Dk6SewjWPN/HWcFNBRGXYuLmGKgW0nQwAPVCM2Tc54xJp/qrEYxkoIsHydU5NZIBsDsV5agI1N3Sh3+1ApgvrIRottZWRCor3XFddX0EDnnPLCwtyzODDNkOEynYlKqRprGelirCXeBxs6DxRokj0xgmWtjoRMGbR3PdH8Fo8C/4/mkptsSeeBst0Q1x6Kpxf5hloAVSwWX0bR2MzNKk6zM+HKkidE1FDMTPTy6sF8AQMR5ZIj121qxFjyofhQMfswkaUab8HgiEacyd2+8n5HZ2gmYICsmmQx4YqhVLguRD2dKL16MskU/mn2iMz8dXwHTP/FC+WxJ04AAAAASUVORK5CYII=",
+  "qrTarget": "https://github.com/linebender/resvg",
+  "staff": [
+    { "name": "Ada Lovelace", "dept": { "code": "R&D" }, "score": 98, "lead": true },
+    { "name": "Grace Hopper", "dept": { "code": "NAV" }, "score": 95, "lead": false },
+    { "name": "Linus Torvalds", "dept": { "code": "OS" }, "score": 91, "lead": false },
+    { "name": "Wolfeschlegelsteinhausenbergerdorff", "dept": { "code": "ETC" }, "score": 72, "lead": false }
+  ]
+}

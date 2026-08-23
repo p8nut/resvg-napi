@@ -6,3 +6,4 @@ out.png
 demo/resvg.js
 demo/wasi-worker-browser.mjs
 .playwright-mcp/
+demo/liquid.js

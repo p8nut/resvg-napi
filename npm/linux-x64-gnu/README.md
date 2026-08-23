@@ -77,7 +77,25 @@ and to the first one still waiting otherwise. Uploads are kept in a page-level
 map and handed to every parse, so they survive edits and re-renders — unlike
 `resolveImage`, which only patches one instance.
 
-Three browser-specific things the demo has to handle, all visible in
+### Liquid templates
+
+The page runs the SVG through [LiquidJS](https://liquidjs.com) first, so a
+templated document can be previewed:
+
+- `liquid.globalVariablesSync()` lists the variables the template expects, and the
+  page builds one field per variable.
+- A field left empty renders back to its own `{{ name }}`, which is why an image
+  variable stays visible to `pendingImages()` and can still be uploaded.
+- A variable that is piped through filters shows the whole chain
+  (`upn | qr: '#ffffff', '#00000000'`) — the static analysis only reports the
+  variable name, so the chains are read off the output tags.
+- `strictFilters` is off, so an unknown filter passes its value through instead of
+  throwing. `qr` is registered as a **stub returning an empty string**; swap it
+  for the real QR-code SVG generator in `demo/index.html`.
+
+### Browser specifics
+
+Three things the demo has to handle, all visible in
 `demo/index.html`:
 
 - **COOP + COEP headers.** The wasm is built for `wasm32-wasip1-threads`, so it

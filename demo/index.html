@@ -376,8 +376,51 @@
   // here because `analyse()` runs during init, above its own definition.
   const images = new Map();
 
-  // Values typed for the template's variables, by name.
+  // Values typed for the template's variables, keyed by full path
+  // (`user.givenName`, not `user`).
   const vars = new Map();
+
+  // `globalVariablesSync` only reports roots, so `{{ user.givenName }}` would
+  // show up as one field called `user`. Segments give the whole path, and let a
+  // value be written back into the right place of a nested scope.
+  function templatePaths(raw) {
+    let segments = [];
+    try {
+      segments = liquid.globalVariableSegmentsSync(liquid.parse(raw));
+    } catch {
+      return [];
+    }
+    const out = [];
+    const seenPaths = new Set();
+    for (const parts of segments) {
+      // A dynamic key (`{{ x[y.z] }}`) has a nested array: no fixed field for it.
+      if (!parts.every((p) => typeof p === 'string' || typeof p === 'number')) continue;
+      const path = parts.reduce(
+        (acc, p) => (typeof p === 'number' ? `${acc}[${p}]` : acc ? `${acc}.${p}` : String(p)),
+        '',
+      );
+      if (path && !seenPaths.has(path)) {
+        seenPaths.add(path);
+        out.push({ path, parts });
+      }
+    }
+    return out;
+  }
+
+  // Writes `value` at `parts` in `scope`, creating objects and arrays on the way.
+  function setDeep(scope, parts, value) {
+    let node = scope;
+    parts.forEach((part, i) => {
+      if (i === parts.length - 1) {
+        node[part] = value;
+        return;
+      }
+      if (node[part] == null || typeof node[part] !== 'object') {
+        node[part] = typeof parts[i + 1] === 'number' ? [] : {};
+      }
+      node = node[part];
+    });
+  }
 
   // The SVG actually handed to resvg: the source rendered through Liquid when it
   // has variables. A variable left empty renders back to its own `{{ name }}`,
@@ -387,19 +430,14 @@
     // usvg rejects an XML declaration that is not at offset 0, and Illustrator
     // exports routinely arrive with a leading newline.
     const raw = $('svg').value.replace(/^\s+(?=<\?xml)/, '');
-    let names = [];
-    try {
-      names = liquid.globalVariablesSync(liquid.parse(raw));
-    } catch {
-      return raw; // not a valid template: hand the source over untouched
-    }
-    if (!names.length) return raw;
+    const paths = templatePaths(raw);
+    if (!paths.length) return raw;
     const scope = {};
-    for (const name of names) {
+    for (const { path, parts } of paths) {
       // A variable is a value, never a document: an XML declaration pasted into
       // a field would land mid-file and make the whole SVG invalid.
-      const value = (vars.get(name) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
-      scope[name] = value || `{{ ${name} }}`;
+      const value = (vars.get(path) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
+      setDeep(scope, parts, value || `{{ ${path} }}`);
     }
     try {
       const out = liquid.parseAndRenderSync(raw, scope);
@@ -430,9 +468,8 @@
         const filters = node?.value?.filters ?? [];
         if (filters.length) {
           const path = node.value.initial?.postfix?.[0]?.getText?.() ?? '';
-          const root = path.split(/[.[]/)[0];
-          if (root) {
-            chains.set(root, filters.map((f) => {
+          if (path) {
+            chains.set(path.trim(), filters.map((f) => {
               const args = (f.args ?? []).map((a) => a.getText?.() ?? String(a));
               return args.length ? `${f.name}: ${args.join(', ')}` : f.name;
             }));
@@ -455,7 +492,7 @@
     const found = new Set();
     const add = (href) => {
       for (const [, expr] of (href ?? '').matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
-        found.add(expr.split('|')[0].trim().split(/[.[\s]/)[0]);
+        found.add(expr.split('|')[0].trim());
       }
     };
     const doc = new DOMParser().parseFromString(raw, 'image/svg+xml');
@@ -495,10 +532,8 @@
   }
 
   function showVariables() {
-    let names = [];
-    try {
-      names = liquid.globalVariablesSync(liquid.parse($('svg').value));
-    } catch { /* incomplete template while typing */ }
+    const paths = templatePaths($('svg').value);
+    const names = paths.map((p) => p.path);
     const chains = filterChains($('svg').value);
     $('vars').hidden = names.length === 0;
     if (!names.length) {

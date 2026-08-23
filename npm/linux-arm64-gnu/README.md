@@ -53,6 +53,29 @@ fonts must be supplied with `loadFontData(buffer)`.
 Adding a target is one line in `package.json` under `napi.targets`, plus a row in
 the CI matrix; then `npm run create-npm-dirs`.
 
+## Fitting text to a width
+
+An Illustrator template says how wide a field may be on the element itself
+(`data-maxwidth="85"`), which is not SVG — resvg drops it. `fit.mjs` reads the
+constraint from the source, measures the rendered text with
+`node(id).extent()`, and compresses the element horizontally, composing a
+`scale(k 1)` onto whatever transform it already has (the same device those
+templates use by hand):
+
+```js
+import { fitTextWidths } from 'resvg-napi/fit.mjs'
+
+const { svg, adjustments, problems } = fitTextWidths(source,
+  (s) => new Resvg(s, { fontFamily }, fonts))
+// adjustments: [{ id: 'surname', from: 200.23, to: 90, factor: 0.4495, measured: 90.0031 }]
+```
+
+A geometric scale is exactly linear in width, so one pass lands on the target;
+the second measurement is a check, and it is reported. Text that already fits is
+left untouched, and a constraint that cannot be honoured says why: no `id` to
+measure by, no visible extent, or an unusable width. It compresses glyphs rather
+than reducing `font-size` — the choice the templates already made.
+
 ## Diagnostics
 
 usvg and resvg report every recoverable problem through the `log` crate —

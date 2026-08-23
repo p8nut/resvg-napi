@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "build": "napi build --platform --release",
-    "test": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs",
+    "test": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && node test-logs.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs",
     "typecheck": "tsc",
     "build:debug": "napi build --platform",
     "artifacts": "napi artifacts",
@@ -15,6 +15,8 @@
   },
   "types": "index.d.ts",
   "devDependencies": {
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0",
     "@napi-rs/cli": "^3.8.6",
     "@types/node": "^26.2.0",
     "emnapi": "1.11.2",

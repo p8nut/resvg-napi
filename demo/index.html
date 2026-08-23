@@ -1,117 +1,273 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>resvg-napi — WASI demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>resvg proof bench</title>
 <style>
-  :root { color-scheme: light dark; --line: color-mix(in oklab, currentColor 15%, transparent); }
-  body { margin: 0; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
-         display: grid; grid-template-columns: minmax(320px, 30rem) 1fr; height: 100vh; }
-  section { padding: 1.25rem; overflow: auto; }
-  section + section { border-left: 1px solid var(--line); }
-  h1 { font-size: 1rem; margin: 0 0 1rem; font-weight: 650; }
-  h1 small { font-weight: 400; opacity: .6; }
-  #wanted { border: 1px solid #b4530955; background: #b4530911;
-            border-radius: 6px; padding: .6rem .9rem; margin: .75rem 0; }
-  #wanted p { margin: 0 0 .4rem; font-weight: 600; }
-  #wanted ul { margin: 0; padding-left: 1.1rem; }
-  #wanted li { font: 12px/1.6 ui-monospace, monospace; }
-  #wanted li.ok { opacity: .55; text-decoration: line-through; }
-  #wanted > div + div { margin-top: .9rem; padding-top: .7rem;
-                       border-top: 1px solid #b4530933; }
-  #imagesList li { display: flex; align-items: center; gap: .5rem; margin: .25rem 0; }
-  #imagesList code { background: #8881; padding: .1rem .3rem; border-radius: 4px; }
-  #imagesList input[type=file] { font-size: 11px; }
-  #drop { border: 1.5px dashed var(--line); border-radius: 8px; padding: 1rem;
-          text-align: center; display: grid; gap: .2rem; margin: .75rem 0; }
-  #drop span { font-size: 12px; opacity: .65; }
-  #drop.over { border-color: #0ea5e9; background: #0ea5e911; }
-  #vars { border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem;
-          margin: .75rem 0; }
-  #vars p { margin: 0 0 .5rem; }
-  #vars #varsCount, #vars #varsNote { font-size: 12px; opacity: .6; font-weight: 400; }
-  #vars #varsNote { margin: .5rem 0 0; }
-  #varsList { display: grid; grid-template-columns: auto 1fr; gap: .35rem .6rem;
-              align-items: center; }
-  #varsList code { font: 12px ui-monospace, monospace; text-align: right; }
-  #varsList .chain { opacity: .55; }
-  #varsList .chain.stub { color: #b45309; opacity: .85; }
-  #varsList .imgvar { display: flex; align-items: center; gap: .5rem; }
-  #varsList .imgvar span { font-size: 11px; opacity: .6; }
-  #varsList .imgvar input[type=file] { font-size: 11px; }
-  #varsList .imgvar input.href { width: 9rem; font-size: 11px; }
-  #varsList .imgvar.over { outline: 2px dashed #0ea5e9; outline-offset: 3px; border-radius: 4px; }
-  #varsList input { padding: .3rem .45rem; border-radius: 5px; border: 1px solid var(--line);
-                    background: transparent; color: inherit; font: inherit; width: 100%; }
-  textarea { width: 100%; height: 14rem; font: 12px/1.5 ui-monospace, monospace;
-             padding: .6rem; border: 1px solid var(--line); border-radius: 6px;
-             background: transparent; color: inherit; resize: vertical; }
-  .row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; margin: .75rem 0; }
-  label { display: grid; gap: .25rem; font-size: 12px; opacity: .8; }
-  label.inline { display: flex; align-items: center; gap: .4rem; }
-  textarea { overflow: auto; }
-  input[type=number], input[type=text] { width: 7rem; padding: .35rem .5rem; border-radius: 6px;
-    border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }
-  button { padding: .45rem .9rem; border-radius: 6px; border: 1px solid var(--line);
-           background: color-mix(in oklab, currentColor 8%, transparent); color: inherit;
-           font: inherit; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
-  #out { max-width: 100%; border: 1px solid var(--line); border-radius: 6px;
-         background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0/16px 16px; }
-  pre { font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap;
-        background: color-mix(in oklab, currentColor 6%, transparent);
-        padding: .6rem .75rem; border-radius: 6px; }
-  .warn { color: #b45309; }
+  /* Self-hosted: COEP require-corp is needed for SharedArrayBuffer, and it
+     blocks cross-origin fonts that carry no CORP header. */
+  @font-face { font-family: 'Space Mono'; src: url('fonts/space-mono-latin-400-normal.woff2') format('woff2');
+               font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'Space Mono'; src: url('fonts/space-mono-latin-700-normal.woff2') format('woff2');
+               font-weight: 700; font-display: swap; }
+  @font-face { font-family: 'IBM Plex Sans'; src: url('fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
+               font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'IBM Plex Sans'; src: url('fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
+               font-weight: 600; font-display: swap; }
+
+  /* A blueline proof: the paper prepress used to check a job before it ran.
+     Cyan carries structure, magenta marks anything unresolved. */
+  :root {
+    --proof: #dce4ea;
+    --plate: #16222e;
+    --rule: #93a7b6;
+    --tint: #cbd8e1;
+    --cyan: #0091b4;
+    --mag: #c8005e;
+    --amber: #a8630a;
+    --mono: 'Space Mono', ui-monospace, monospace;
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --gap: clamp(.75rem, 2vw, 1.5rem);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --proof: #0c141c; --plate: #d9e4ec; --rule: #3d5567; --tint: #16222e;
+            --cyan: #35c6e8; --mag: #ff5d97; --amber: #e2a33f; }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--proof); color: var(--plate); font: 400 14px/1.55 var(--sans);
+         -webkit-font-smoothing: antialiased; }
+
+  /* Crop corners: the page is a plate. */
+  .sheet { position: relative; min-height: 100vh; padding: var(--gap); }
+  .sheet::before, .sheet::after,
+  .sheet > .corners::before, .sheet > .corners::after {
+    content: ''; position: absolute; width: 14px; height: 14px; pointer-events: none;
+    border: 1px solid var(--rule);
+  }
+  .sheet::before { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+  .sheet::after { top: 6px; right: 6px; border-left: 0; border-bottom: 0; }
+  .sheet > .corners::before { bottom: 6px; left: 6px; border-right: 0; border-top: 0; }
+  .sheet > .corners::after { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+  /* Slug line: what a printer stamps in the margin. */
+  .slug { display: flex; flex-wrap: wrap; gap: .1rem 1.25rem; align-items: baseline;
+          border-bottom: 1px solid var(--rule); padding-bottom: .55rem; margin-bottom: var(--gap);
+          font: 400 11px/1.7 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+  .slug h1 { font: 700 11px/1.7 var(--mono); letter-spacing: .16em; margin: 0;
+             padding-right: 1rem; border-right: 1px solid var(--rule); }
+  .slug h1 em { font-style: normal; color: var(--cyan); }
+  .slug dl { display: flex; gap: .4rem; margin: 0; }
+  .slug dt { color: var(--rule); }
+  .slug dd { margin: 0; }
+
+  .bench { display: grid; grid-template-columns: minmax(0, 26rem) minmax(0, 1fr); gap: var(--gap); }
+  @media (max-width: 62rem) { .bench { grid-template-columns: minmax(0, 1fr); } }
+
+  /* Legends read like plate labels. */
+  .legend { font: 700 10px/1 var(--mono); text-transform: uppercase; letter-spacing: .18em;
+            color: var(--rule); display: flex; align-items: center; gap: .5rem; margin: 0 0 .5rem; }
+  .legend::after { content: ''; flex: 1; height: 1px; background: var(--rule); opacity: .5; }
+  .legend b { color: var(--plate); font-weight: 700; }
+
+  section + section { margin-top: var(--gap); }
+
+  textarea, input, button { font: inherit; color: inherit; background: transparent;
+                            border: 1px solid var(--rule); border-radius: 0; }
+  textarea { width: 100%; height: 15rem; padding: .6rem .7rem; resize: vertical;
+             font: 400 12px/1.6 var(--mono); overflow: auto; }
+  textarea:focus-visible, input:focus-visible, button:focus-visible,
+  [tabindex]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: end; margin: .7rem 0; }
+  label { display: grid; gap: .2rem; font: 400 10px/1.4 var(--mono);
+          text-transform: uppercase; letter-spacing: .1em; color: var(--rule); }
+  label.inline { display: flex; align-items: center; gap: .4rem; text-transform: none;
+                 letter-spacing: 0; font-size: 12px; color: inherit; font-family: var(--sans); }
+  input[type=number], input[type=text] { width: 6.5rem; padding: .3rem .45rem;
+                                         font: 400 12px var(--mono); }
+  button { padding: .45rem 1.1rem; cursor: pointer; font: 700 11px var(--mono);
+           text-transform: uppercase; letter-spacing: .12em;
+           border-color: var(--plate); }
+  button:hover:not(:disabled) { background: var(--plate); color: var(--proof); }
+  button:disabled { opacity: .4; cursor: default; }
+
+  /* The proof: registration marks and a tick rule around the output. */
+  .frame { position: relative; padding: 18px 0 0 18px; }
+  .ticks { position: absolute; background-repeat: repeat; opacity: .8; }
+  .ticks.top { top: 4px; left: 18px; width: var(--plate-w, 0); height: 8px;
+               background-image: repeating-linear-gradient(to right,
+                 var(--rule) 0 1px, transparent 1px 10px); }
+  .ticks.left { left: 4px; top: 18px; height: var(--plate-h, 0); width: 8px;
+                background-image: repeating-linear-gradient(to bottom,
+                  var(--rule) 0 1px, transparent 1px 10px); }
+  /* Shrink to the render: the registration marks must sit on the proof's own
+     corners, not on the column's. */
+  .plate { position: relative; display: inline-block; vertical-align: top;
+           border: 1px solid var(--rule);
+           background-image: linear-gradient(45deg, var(--tint) 25%, transparent 25% 75%, var(--tint) 75%),
+                             linear-gradient(45deg, var(--tint) 25%, transparent 25% 75%, var(--tint) 75%);
+           background-size: 16px 16px; background-position: 0 0, 8px 8px;
+           opacity: 1; }
+  .plate img { display: block; max-width: 100%; height: auto; }
+  .frame { display: inline-block; }
+  .plate.fresh img { animation: expose 160ms ease-out; }
+  @keyframes expose { from { opacity: .25; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .plate.fresh img { animation: none; } }
+  /* Registration crosses, one per corner of the proof. */
+  .reg { position: absolute; width: 13px; height: 13px; pointer-events: none; color: var(--cyan); }
+  .reg::before, .reg::after { content: ''; position: absolute; background: currentColor; }
+  .reg::before { left: 6px; top: 0; width: 1px; height: 100%; }
+  .reg::after { top: 6px; left: 0; height: 1px; width: 100%; }
+  .reg.tl { left: -7px; top: -7px; } .reg.tr { right: -7px; top: -7px; }
+  .reg.bl { left: -7px; bottom: -7px; } .reg.br { right: -7px; bottom: -7px; }
+  /* The bounding box, drawn from absLayerBoundingBox(). */
+  #bboxOverlay { position: absolute; border: 1px dashed var(--mag); pointer-events: none;
+                 display: none; }
+  #bboxOverlay[data-on] { display: block; }
+  #bboxOverlay span { position: absolute; top: -1.35rem; left: -1px; white-space: nowrap;
+                      font: 400 10px var(--mono); color: var(--mag); }
+
+  /* Measurements: a data list, not prose. */
+  .measure { margin: var(--gap) 0 0; display: grid; grid-template-columns: auto 1fr;
+             gap: .1rem .9rem; font: 400 12px/1.6 var(--mono); }
+  .measure dt { color: var(--rule); text-transform: uppercase; font-size: 10px;
+                letter-spacing: .1em; align-self: center; }
+  .measure dd { margin: 0; overflow-wrap: anywhere; }
+
+  /* Unresolved: the missing plates. */
+  .unresolved { border-left: 2px solid var(--mag); padding-left: .8rem; }
+  .unresolved p { margin: 0 0 .4rem; font-size: 13px; }
+  .unresolved ul { margin: 0; padding: 0; list-style: none; }
+  .unresolved li { display: flex; align-items: center; gap: .5rem; margin: .3rem 0;
+                   font: 400 12px var(--mono); }
+  .unresolved li.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
+  .unresolved code { color: var(--mag); }
+  input[type=file] { font: 400 11px var(--mono); border: 0; padding: 0; max-width: 13rem; }
+  input[type=file]::file-selector-button { font: 700 10px var(--mono); text-transform: uppercase;
+    letter-spacing: .1em; padding: .25rem .6rem; margin-right: .5rem; cursor: pointer;
+    color: inherit; background: transparent; border: 1px solid var(--rule); border-radius: 0; }
+
+  #drop { border: 1px dashed var(--rule); padding: .8rem; text-align: center;
+          display: grid; gap: .15rem; }
+  #drop b { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+  #drop span { font-size: 11px; color: var(--rule); }
+  #drop.over { border-color: var(--cyan); border-style: solid; }
+
+  /* Variables. */
+  #varsList { display: grid; grid-template-columns: auto 1fr; gap: .3rem .8rem; align-items: center; }
+  #varsList code { font: 400 12px var(--mono); text-align: right; }
+  #varsList .chain { color: var(--cyan); }
+  #varsList .chain.stub { color: var(--amber); }
+  #varsList input[type=text] { width: 100%; }
+  #varsList .imgvar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+  #varsList .imgvar span { font: 400 11px var(--mono); color: var(--rule); }
+  #varsList .imgvar input.href { width: 8rem; }
+  #varsList .imgvar.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
+  #varsNote { margin: .5rem 0 0; font-size: 11px; color: var(--rule); }
+
+  /* Diagnostics: everything both engines had to say. */
+  #diag { margin-top: var(--gap); }
+  #diagList { margin: 0; padding: 0; list-style: none; max-height: 14rem; overflow: auto;
+              border-top: 1px solid var(--rule); }
+  #diagList li { display: grid; grid-template-columns: 4.5rem 5rem 1fr; gap: .8rem;
+                 padding: .3rem 0; border-bottom: 1px solid color-mix(in oklab, var(--rule) 40%, transparent);
+                 font: 400 12px/1.5 var(--mono); }
+  #diagList .lvl { font-weight: 700; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  #diagList .error .lvl { color: var(--mag); }
+  #diagList .warn .lvl { color: var(--amber); }
+  #diagList .info .lvl { color: var(--cyan); }
+  #diagList .src { color: var(--rule); }
+  #diagList .msg { overflow-wrap: anywhere; }
+  #diagEmpty { font-size: 12px; color: var(--rule); padding: .4rem 0; }
+  .diagbar { display: flex; align-items: center; gap: .8rem; }
+  .diagbar button { padding: .2rem .6rem; font-size: 10px; }
 </style>
 
-<section>
-  <h1>resvg-napi <small>— same generated bindings, running as WASI wasm</small></h1>
+<div class="sheet">
+  <div class="corners"></div>
 
-  <textarea id="svg" spellcheck="false" autocomplete="off"></textarea>
-
-  <div class="row">
-    <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
-    <label>width (px) <input id="width" type="number" placeholder="auto" min="1"></label>
-    <label>background <input id="bg" type="text" value="" placeholder="transparent"></label>
-    <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
+  <div class="slug">
+    <h1>resvg <em>proof bench</em></h1>
+    <dl><dt>engine</dt><dd id="slugEngine">loading…</dd></dl>
+    <dl><dt>target</dt><dd>wasm32-wasip1-threads</dd></dl>
+    <dl><dt>fonts</dt><dd id="slugFonts">0</dd></dl>
+    <dl><dt>plate</dt><dd id="slugPlate">—</dd></dl>
+    <dl><dt>last run</dt><dd id="log">loading wasm…</dd></dl>
+    <dl><dt>issues</dt><dd id="slugIssues">0</dd></dl>
   </div>
 
-  <div class="row">
-    <button id="render" disabled>Render</button>
-  </div>
+  <div class="bench">
+    <div>
+      <section>
+        <p class="legend"><b>Source</b> SVG, Liquid allowed</p>
+        <textarea id="svg" spellcheck="false" autocomplete="off"></textarea>
+        <div class="controls">
+          <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
+          <label>width px <input id="width" type="number" placeholder="auto" min="1"></label>
+          <label>background <input id="bg" type="text" placeholder="none"></label>
+          <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
+          <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
+          <button id="render" disabled>Render</button>
+        </div>
+      </section>
 
-  <div id="vars" hidden>
-    <p><b>Template variables</b> <span id="varsCount"></span></p>
-    <div id="varsList"></div>
-    <p id="varsNote"></p>
-  </div>
+      <section id="vars" hidden>
+        <p class="legend"><b>Variables</b> <span id="varsCount"></span></p>
+        <div id="varsList"></div>
+        <p id="varsNote"></p>
+      </section>
 
-  <div id="drop">
-    <b>Drop fonts and images here</b>
-    <span>or paste them (⌘/Ctrl-V) — or use the file fields below</span>
-  </div>
+      <section id="wanted" hidden>
+        <p class="legend"><b>Not resolved</b> supply the files</p>
+        <div class="unresolved">
+          <div id="fontsWanted" hidden>
+            <p id="fontsMsg"></p>
+            <ul id="fontsList"></ul>
+            <label>font files <input id="font" type="file" accept=".ttf,.otf,.ttc" multiple></label>
+          </div>
+          <div id="imagesWanted" hidden>
+            <p>Images the renderer could not find. One file per reference:</p>
+            <ul id="imagesList"></ul>
+          </div>
+        </div>
+      </section>
 
-  <div id="wanted" hidden>
-    <div id="fontsWanted" hidden>
-      <p id="fontsMsg" class="warn"></p>
-      <ul id="fontsList"></ul>
-      <label>upload font file(s)
-        <input id="font" type="file" accept=".ttf,.otf,.ttc" multiple></label>
+      <section>
+        <div id="drop">
+          <b>Drop fonts and images</b>
+          <span>or paste them, or use the fields above</span>
+        </div>
+      </section>
     </div>
-    <div id="imagesWanted" hidden>
-      <p class="warn">This SVG references images that could not be resolved.
-        Upload one file per reference:</p>
-      <ul id="imagesList"></ul>
+
+    <div>
+      <section>
+        <p class="legend"><b>Proof</b> rendered by resvg</p>
+        <div class="frame">
+          <div class="ticks top"></div>
+          <div class="ticks left"></div>
+          <div class="plate" id="plate">
+            <span class="reg tl"></span><span class="reg tr"></span>
+            <span class="reg bl"></span><span class="reg br"></span>
+            <img id="out" alt="rendered proof">
+            <div id="bboxOverlay"><span></span></div>
+          </div>
+        </div>
+        <dl class="measure" id="measure"></dl>
+      </section>
+
+      <section id="diag">
+        <p class="legend"><b>Diagnostics</b>
+          <span class="diagbar"><button id="diagClear" type="button">Clear</button></span></p>
+        <p id="diagEmpty">No problems reported.</p>
+        <ul id="diagList"></ul>
+      </section>
     </div>
   </div>
-
-  <pre id="log">loading wasm…</pre>
-</section>
-
-<section>
-  <img id="out" alt="rendered output">
-  <pre id="info"></pre>
-</section>
+</div>
 
 <script type="module">
+
   // napi's `Buffer` return type is Node's Buffer, and emnapi looks it up on
   // globalThis -- browsers have no such thing. Node's Buffer is a Uint8Array
   // subclass, and emnapi only touches `from`, `alloc` and `isBuffer`, so this
@@ -143,6 +299,63 @@
 
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
+
+  // Diagnostics accumulate: a one-line status bar loses everything the engines
+  // said. Newest first, deduplicated by level+source+message so a re-render does
+  // not repeat the same warning ten times.
+  const seen = new Map();
+  function report(level, src, message) {
+    const key = `${level}|${src}|${message}`;
+    const known = seen.get(key);
+    if (known) {
+      known.count += 1;
+      known.node.querySelector('.msg').textContent = `${message} (×${known.count})`;
+      return;
+    }
+    const li = document.createElement('li');
+    li.className = level;
+    const lvl = document.createElement('span');
+    lvl.className = 'lvl';
+    lvl.textContent = level;
+    const source = document.createElement('span');
+    source.className = 'src';
+    source.textContent = src;
+    const msg = document.createElement('span');
+    msg.className = 'msg';
+    msg.textContent = message;
+    li.append(lvl, source, msg);
+    $('diagList').prepend(li);
+    seen.set(key, { count: 1, node: li });
+    $('diagEmpty').hidden = true;
+    countIssues();
+  }
+
+  // Kept in the slug line so a problem is visible without scrolling to the
+  // bottom of the sheet.
+  function countIssues() {
+    const errors = $('diagList').querySelectorAll('.error').length;
+    const warns = $('diagList').querySelectorAll('.warn').length;
+    const parts = [];
+    if (errors) parts.push(`${errors} error${errors > 1 ? 's' : ''}`);
+    if (warns) parts.push(`${warns} warning${warns > 1 ? 's' : ''}`);
+    const out = $('slugIssues');
+    out.textContent = parts.join(' · ') || 'none';
+    out.style.color = errors ? 'var(--mag)' : warns ? 'var(--amber)' : '';
+  }
+
+  // Everything usvg and resvg buffered during the last parse or render.
+  function drainEngineLogs() {
+    if (!mod?.takeLogs) return;
+    for (const line of mod.takeLogs()) {
+      const m = line.match(/^(ERROR|WARN|INFO|DEBUG|TRACE)\s+(\S+):\s*(.*)$/);
+      if (m) {
+        const level = { ERROR: 'error', WARN: 'warn' }[m[1]] ?? 'info';
+        report(level, 'resvg', `${m[3]}  ·  ${m[2]}`);
+      } else {
+        report('info', 'resvg', line);
+      }
+    }
+  }
 
   const debounce = (fn, ms) => {
     let timer;
@@ -189,9 +402,11 @@
       scope[name] = value || `{{ ${name} }}`;
     }
     try {
-      return liquid.parseAndRenderSync(raw, scope);
+      const out = liquid.parseAndRenderSync(raw, scope);
+      warnAboutFilters(raw);
+      return out;
     } catch (e) {
-      log(`liquid: ${e.message}`);
+      report('error', 'liquid', e.message);
       return raw;
     }
   }
@@ -263,6 +478,21 @@
   // keystroke would blow away the focused input mid-word, so the DOM is only
   // touched when the variables, their filter chains or their kind change.
   let varsSignature = null;
+
+  // strictFilters is off, so an unknown filter silently passes its value
+  // through. That is convenient and invisible -- say it out loud instead.
+  function warnAboutFilters(raw) {
+    for (const [, filters] of filterChains(raw)) {
+      for (const f of filters) {
+        const name = f.split(':')[0].trim();
+        // `liquid.filters` is a plain map of name -> implementation; its `has`
+        // is a generator, not a predicate, so test the key.
+        if (typeof liquid.filters[name] !== 'function') {
+          report('warn', 'liquid', `Unknown filter \`${name}\`: its value passes through unchanged.`);
+        }
+      }
+    }
+  }
 
   function showVariables() {
     let names = [];
@@ -394,19 +624,24 @@
   let mod, fonts;
   try {
     if (!globalThis.crossOriginIsolated) {
-      log('⚠ not cross-origin isolated: SharedArrayBuffer is unavailable, so the threaded '
-        + 'wasm cannot start. Serve this page with serve.mjs (COOP + COEP).');
+      report('error', 'page', 'Not cross-origin isolated: SharedArrayBuffer is unavailable, so the '
+        + 'threaded wasm cannot start. Serve this page with demo/serve.mjs, which sets COOP and COEP.');
       throw new Error('not isolated');
     }
     mod = await import('./resvg.js');
+    // usvg/resvg report recoverable problems through the log crate; without this
+    // they are collected nowhere and the page cannot show them.
+    mod.setLogLevel('warn');
     fonts = new mod.FontDatabase();
     $('render').disabled = false;
     // Handy for poking at the API from the devtools console.
     globalThis.resvg = { mod, fonts };
-    log(`wasm ready — ${Object.keys(mod).length} exports. `
-      + `loadSystemFonts() finds ${fonts.len()} faces in the sandbox, so text needs a font file.`);
+    $('slugEngine').textContent = `resvg 0.48 · ${Object.keys(mod).length} exports`;
+    log('idle');
+    report('info', 'page',
+      `Ready. loadSystemFonts() finds ${fonts.len()} faces in this sandbox, so text needs a font file.`);
   } catch (e) {
-    if (e.message !== 'not isolated') log(`failed to load wasm: ${e.message}`);
+    if (e.message !== 'not isolated') report('error', 'page', `Could not load the wasm module: ${e.message}`);
   }
 
   // After the module body has run, so every helper below is initialised.
@@ -428,10 +663,13 @@
     let doc;
     try {
       doc = parse();
-    } catch {
+    } catch (e) {
+      report('error', 'resvg', e.message);
+      drainEngineLogs();
       $('wanted').hidden = true;
       return;
     }
+    drainEngineLogs();
 
     const missingFonts = doc.pendingFonts();
     const hasText = /<text[\s>]/.test(source());
@@ -589,25 +827,81 @@
       // fetch bodies, postMessage and canvas data.
       const bytes = new Uint8Array(png);
       $('out').src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
-      $('info').textContent = [
-        `viewport        ${doc.width} × ${doc.height}`,
-        `content bbox    ${fmt(doc.absLayerBoundingBox())}`,
-        `geometry bbox   ${fmt(doc.absBoundingBox())}`,
-        `png             ${png.length.toLocaleString()} bytes in ${ms} ms`,
-        `text nodes      ${doc.hasTextNodes()}   defs: ${doc.hasDefsNodes()}`,
-        `pending fonts   ${JSON.stringify(doc.pendingFonts())}`,
-        `fonts loaded    ${fonts.faces().map((f) => f.families[0]).join(', ') || 'none'}`,
-        `pending images  ${JSON.stringify(doc.pendingImages())}`,
-        `gradients       ${doc.linearGradients().map((g) => g.id()).join(', ') || '—'}`,
-        `filters         ${doc.filters().map((f) => f.id()).join(', ') || '—'}`,
-        `top-level nodes ${doc.children().map((n) => `${n.kind}#${n.id() || '?'}`).join('  ')}`,
-      ].join('\n');
-      log(`rendered in ${ms} ms`);
+      $('plate').classList.remove('fresh');
+      void $('plate').offsetWidth;
+      $('plate').classList.add('fresh');
+
+      const bbox = doc.absLayerBoundingBox();
+      const rows = [
+        ['viewport', `${round(doc.width)} × ${round(doc.height)} user units`],
+        ['content', bbox ? `${round(bbox.width)} × ${round(bbox.height)} at ${round(bbox.x)}, ${round(bbox.y)}` : 'empty'],
+        ['output', `${Math.round(doc.width * scaleOf(params, doc))} px wide · ${png.length.toLocaleString()} bytes`],
+        ['elapsed', `${ms} ms`],
+        ['text', doc.hasTextNodes() ? 'nodes kept' : 'flattened to paths'],
+        ['fonts', fonts.faces().map((f) => f.families[0]).join(', ') || 'none loaded'],
+        ['gradients', doc.linearGradients().concat(doc.radialGradients()).map((g) => g.id()).join(' ') || '—'],
+        ['filters', doc.filters().map((f) => f.id()).join(' ') || '—'],
+        ['top level', doc.children().map((n) => `${n.kind}${n.id() ? '#' + n.id() : ''}`).join('  ')],
+      ];
+      $('measure').replaceChildren(...rows.flatMap(([k, v]) => {
+        const dt = document.createElement('dt');
+        dt.textContent = k;
+        const dd = document.createElement('dd');
+        dd.textContent = v;
+        return [dt, dd];
+      }));
+      $('slugPlate').textContent = `${round(doc.width)}×${round(doc.height)}`;
+      $('slugFonts').textContent = String(fonts.len());
+      placeBbox(doc, params);
+      drainEngineLogs();
+      log(`${ms} ms`);
     } catch (e) {
       $('info').textContent = '';
-      log(`error: ${e.message}`);
+      report('error', 'resvg', e.message);
+      drainEngineLogs();
+      log('failed');
     }
   }
 
-  const fmt = (b) => b ? `${b.x} ${b.y} ${b.width} × ${b.height}` : 'none';
+  const round = (n) => Math.round(n * 100) / 100;
+
+  const scaleOf = (p, doc) => p.width ? p.width / doc.width
+    : p.height ? p.height / doc.height
+    : (p.scale ?? 1);
+
+  // The bounding box, drawn over the proof in registration magenta. Positions
+  // come from absLayerBoundingBox(), scaled to the rendered pixels.
+  function placeBbox(doc, params) {
+    const overlay = $('bboxOverlay');
+    const box = doc.absLayerBoundingBox();
+    if (!$('showBbox').checked || !box) {
+      overlay.removeAttribute('data-on');
+      return;
+    }
+    const s = scaleOf(params, doc);
+    const origin = params.crop ?? { x: 0, y: 0 };
+    overlay.style.left = `${(box.x - origin.x) * s}px`;
+    overlay.style.top = `${(box.y - origin.y) * s}px`;
+    overlay.style.width = `${box.width * s}px`;
+    overlay.style.height = `${box.height * s}px`;
+    overlay.querySelector('span').textContent =
+      `${round(box.width)} × ${round(box.height)}`;
+    overlay.setAttribute('data-on', '');
+  }
+
+  // The tick rules measure the proof, so they need its size -- which only
+  // exists once the new image has decoded.
+  $('out').addEventListener('load', () => {
+    const frame = document.querySelector('.frame');
+    frame.style.setProperty('--plate-w', `${$('plate').offsetWidth}px`);
+    frame.style.setProperty('--plate-h', `${$('plate').offsetHeight}px`);
+  });
+
+  $('showBbox').addEventListener('change', () => render());
+  $('diagClear').addEventListener('click', () => {
+    seen.clear();
+    $('diagList').replaceChildren();
+    $('diagEmpty').hidden = false;
+    countIssues();
+  });
 </script>

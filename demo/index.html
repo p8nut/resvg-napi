@@ -37,6 +37,8 @@
   #varsList .imgvar { display: flex; align-items: center; gap: .5rem; }
   #varsList .imgvar span { font-size: 11px; opacity: .6; }
   #varsList .imgvar input[type=file] { font-size: 11px; }
+  #varsList .imgvar input.href { width: 9rem; font-size: 11px; }
+  #varsList .imgvar.over { outline: 2px dashed #0ea5e9; outline-offset: 3px; border-radius: 4px; }
   #varsList input { padding: .3rem .45rem; border-radius: 5px; border: 1px solid var(--line);
                     background: transparent; color: inherit; font: inherit; width: 100%; }
   textarea { width: 100%; height: 14rem; font: 12px/1.5 ui-monospace, monospace;
@@ -307,23 +309,54 @@
         const href = `var:${name}`;
         const wrap = document.createElement('div');
         wrap.className = 'imgvar';
-        const file = document.createElement('input');
-        file.type = 'file';
-        file.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
-        const name_ = document.createElement('span');
-        name_.textContent = imageVars.get(name)?.name ?? 'used as an <image> href';
-        file.addEventListener('change', async (ev) => {
-          const picked = ev.target.files[0];
-          if (!picked) return;
+
+        const status = document.createElement('span');
+        status.textContent = imageVars.get(name)?.name ?? 'drop a file here, or type a URL';
+
+        const use = async (picked) => {
           const bytes = new Uint8Array(await picked.arrayBuffer());
           imageVars.set(name, { name: picked.name, bytes });
           images.set(href, bytes);
           vars.set(name, href);
-          name_.textContent = `${picked.name} (${picked.size.toLocaleString()} bytes)`;
+          status.textContent = `${picked.name} (${picked.size.toLocaleString()} bytes)`;
           analyse();
           render();
+        };
+
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
+        file.addEventListener('change', (ev) => {
+          if (ev.target.files[0]) use(ev.target.files[0]);
         });
-        wrap.append(file, name_);
+
+        // A file picker is not always available -- a browser under automation
+        // swallows it, for one -- so the row also takes a drop and a typed value.
+        const typed = document.createElement('input');
+        typed.type = 'text';
+        typed.className = 'href';
+        typed.placeholder = 'or data: / file name';
+        typed.value = vars.get(name)?.startsWith('var:') ? '' : (vars.get(name) ?? '');
+        typed.addEventListener('input', () => {
+          imageVars.delete(name);
+          images.delete(href);
+          vars.set(name, typed.value);
+          analyseSoon();
+          renderSoon();
+        });
+
+        for (const type of ['dragenter', 'dragover']) {
+          wrap.addEventListener(type, (e) => { e.preventDefault(); wrap.classList.add('over'); });
+        }
+        wrap.addEventListener('dragleave', () => wrap.classList.remove('over'));
+        wrap.addEventListener('drop', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          wrap.classList.remove('over');
+          if (e.dataTransfer.files[0]) use(e.dataTransfer.files[0]);
+        });
+
+        wrap.append(file, typed, status);
         return [code, wrap];
       }
 

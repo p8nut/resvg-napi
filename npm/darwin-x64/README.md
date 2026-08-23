@@ -70,12 +70,15 @@ lets you supply it:
 - **images** — `pendingImages()` gives the hrefs neither the uploads nor the
   filesystem resolved, one file field per href, because the file/href pairing has
   to be explicit.
-- **a variable used as an image href** gets a *file* field instead of a text one:
+- **a variable used as an image href** gets a *file* field, a drop target and a
+  text field (for a `data:` URI or a file name) instead of a plain text one:
   the page scans the `href` of every `<image>` tag for `{{ … }}` and, once a file
   is picked, substitutes a synthetic `var:<name>` href and registers the bytes
   under it — so resolution never depends on what the placeholder renders to.
 
-Drop files on the zone, paste them, or use the per-item fields; a font goes to
+Every upload has three routes, because a file picker is not always usable — a
+browser driven by automation swallows the dialog, for one: drop on the zone or on
+the row itself, paste (⌘/Ctrl-V), or the per-item field.  a font goes to
 the database, an image is matched to a pending href by file name when it matches
 and to the first one still waiting otherwise. Uploads are kept in a page-level
 map and handed to every parse, so they survive edits and re-renders — unlike

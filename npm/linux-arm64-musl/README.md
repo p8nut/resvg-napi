@@ -1,0 +1,92 @@
+# resvg-napi
+
+Node.js bindings for [resvg](https://github.com/linebender/resvg) 0.48, generated
+from the upstream Rust sources.
+
+```js
+import { Resvg, FontDatabase, renderAsync } from 'resvg-napi'
+
+const doc = new Resvg(svg, { dpi: 192, fontFamily: 'DejaVu Sans' })
+doc.renderPng({ width: 1200, background: '#fff' })      // Buffer
+doc.renderRaw({ crop: doc.absLayerBoundingBox() })      // RGBA8, trimmed
+await renderAsync(svg, options, { width: 1200 })        // off the event loop
+```
+
+## How this package is built
+
+`build.rs` parses the sources of `usvg`, `resvg`, `fontdb`, `tiny-skia-path` and
+`strict-num` with `syn`, and emits `src/lib.rs` with `quote`. Everything that
+describes upstream — types, names, signatures, doc comments, even bounds such as
+the precision clamp read out of usvg's `POW_VEC` — is derived. The hand-written
+part is the API shape: what a `Pixmap` becomes, how images and fonts are
+resolved, what runs on a worker thread.
+
+`src/lib.rs`, `index.js` and `index.d.ts` are generated *and* committed, and the
+generator is deterministic: CI regenerates them and fails on any diff.
+
+To build against a checkout instead of the crates.io cache:
+
+```bash
+USVG_SRC_DIR=/path/to/resvg/crates/usvg/src cargo build --release
+```
+
+## Platforms
+
+| | x64 | arm64 |
+|---|---|---|
+| Linux (glibc) | ✅ | ✅ |
+| Linux (musl) | ✅ | ✅ |
+| macOS | ✅ | ✅ |
+| Windows (MSVC) | ✅ | ✅ |
+| WASI (`wasm32-wasip1-threads`) | ✅ | — |
+
+The dependency tree is pure Rust — `fontconfig` support comes from
+`fontconfig-parser`, not the C library — so every target cross-compiles without
+a system SDK.
+
+The WASI build is the same generated bindings on emnapi instead of node-api, and
+it is complete: rendering, `toString`, bounding boxes, the node walk, `renderAsync`
+(threads via `wasm32-wasip1-threads`) and even filesystem image resolution all
+work. One difference: `loadSystemFonts()` finds 0 faces inside the sandbox, so
+fonts must be supplied with `loadFontData(buffer)`.
+
+Adding a target is one line in `package.json` under `napi.targets`, plus a row in
+the CI matrix; then `npm run create-npm-dirs`.
+
+## Browser demo
+
+```bash
+npm run demo      # builds the wasm, bundles the loaders, serves on :8787
+```
+
+![demo](demo/screenshot.png)
+
+The page parses the SVG first and **asks for the fonts the document needs**:
+`pendingFonts()` gives the named families the database is missing, and a text
+element with no font loaded gets its own prompt (a generic `font-family` never
+appears as a named family). Drop a `.ttf` in and it re-analyses.
+
+Three browser-specific things the demo has to handle, all visible in
+`demo/index.html`:
+
+- **COOP + COEP headers.** The wasm is built for `wasm32-wasip1-threads`, so it
+  wants a shared memory, so it needs `SharedArrayBuffer`, so the page must be
+  cross-origin isolated. `demo/serve.mjs` sets both headers.
+- **A `Buffer` polyfill.** napi's `Buffer` return type is Node's Buffer and
+  emnapi looks it up on `globalThis`. A 6-line `Uint8Array` subclass is enough —
+  but its `from` must accept a `SharedArrayBuffer`, or every buffer comes back
+  empty.
+- **Copy out of shared memory.** `Blob`, `fetch` bodies and `postMessage` all
+  refuse views backed by a `SharedArrayBuffer`; `new Uint8Array(buf)` copies.
+
+## Scripts
+
+```
+npm run build        # napi build --platform --release
+npm test             # 9 test files, native + typings
+npm run typecheck    # tsc --strict over index.d.ts and demo.mts
+```
+
+## Licence
+
+Apache-2.0 OR MIT, matching resvg.

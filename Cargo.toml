@@ -1,0 +1,28 @@
+[package]
+name = "resvg-napi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# napi v3: the runtime crate and the derive crate are versioned SEPARATELY.
+napi = { version = "3.12", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
+napi-derive = "3.6"
+# resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.
+resvg = "0.48.1"
+# resvg's own CSS colour parser, same version it uses internally.
+svgtypes = "0.16.1"
+
+[build-dependencies]
+napi-build = "2.4"
+syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[profile.release]
+lto = true
+strip = "symbols"

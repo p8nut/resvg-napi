@@ -1,0 +1,22 @@
+{
+  "name": "resvg-napi-darwin-x64",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "resvg-napi.darwin-x64.node",
+  "files": [
+    "resvg-napi.darwin-x64.node"
+  ],
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/resvg-napi.git"
+  },
+  "os": [
+    "darwin"
+  ]
+}

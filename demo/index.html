@@ -1,0 +1,227 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>resvg-napi — WASI demo</title>
+<style>
+  :root { color-scheme: light dark; --line: color-mix(in oklab, currentColor 15%, transparent); }
+  body { margin: 0; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+         display: grid; grid-template-columns: minmax(320px, 30rem) 1fr; height: 100vh; }
+  section { padding: 1.25rem; overflow: auto; }
+  section + section { border-left: 1px solid var(--line); }
+  h1 { font-size: 1rem; margin: 0 0 1rem; font-weight: 650; }
+  h1 small { font-weight: 400; opacity: .6; }
+  #wanted { border: 1px solid #b4530955; background: #b4530911;
+            border-radius: 6px; padding: .6rem .9rem; margin: .75rem 0; }
+  #wanted p { margin: 0 0 .4rem; font-weight: 600; }
+  #wanted ul { margin: 0; padding-left: 1.1rem; }
+  #wanted li { font: 12px/1.6 ui-monospace, monospace; }
+  #wanted li.ok { opacity: .55; text-decoration: line-through; }
+  textarea { width: 100%; height: 14rem; font: 12px/1.5 ui-monospace, monospace;
+             padding: .6rem; border: 1px solid var(--line); border-radius: 6px;
+             background: transparent; color: inherit; resize: vertical; }
+  .row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; margin: .75rem 0; }
+  label { display: grid; gap: .25rem; font-size: 12px; opacity: .8; }
+  label.inline { display: flex; align-items: center; gap: .4rem; }
+  textarea { overflow: auto; }
+  input[type=number], input[type=text] { width: 7rem; padding: .35rem .5rem; border-radius: 6px;
+    border: 1px solid var(--line); background: transparent; color: inherit; font: inherit; }
+  button { padding: .45rem .9rem; border-radius: 6px; border: 1px solid var(--line);
+           background: color-mix(in oklab, currentColor 8%, transparent); color: inherit;
+           font: inherit; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #out { max-width: 100%; border: 1px solid var(--line); border-radius: 6px;
+         background: repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0/16px 16px; }
+  pre { font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap;
+        background: color-mix(in oklab, currentColor 6%, transparent);
+        padding: .6rem .75rem; border-radius: 6px; }
+  .warn { color: #b45309; }
+</style>
+
+<section>
+  <h1>resvg-napi <small>— same generated bindings, running as WASI wasm</small></h1>
+
+  <textarea id="svg" spellcheck="false" autocomplete="off"></textarea>
+
+  <div class="row">
+    <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
+    <label>width (px) <input id="width" type="number" placeholder="auto" min="1"></label>
+    <label>background <input id="bg" type="text" value="" placeholder="transparent"></label>
+    <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
+  </div>
+
+  <div class="row">
+    <button id="render" disabled>Render</button>
+    <label>add font <input id="font" type="file" accept=".ttf,.otf,.ttc" multiple></label>
+  </div>
+
+  <div id="wanted" hidden>
+    <p id="wantedMsg" class="warn"></p>
+    <ul id="wantedList"></ul>
+  </div>
+
+  <pre id="log">loading wasm…</pre>
+</section>
+
+<section>
+  <img id="out" alt="rendered output">
+  <pre id="info"></pre>
+</section>
+
+<script type="module">
+  // napi's `Buffer` return type is Node's Buffer, and emnapi looks it up on
+  // globalThis -- browsers have no such thing. Node's Buffer is a Uint8Array
+  // subclass, and emnapi only touches `from`, `alloc` and `isBuffer`, so this
+  // is enough. Installed before the wasm module is imported.
+  class BufferPolyfill extends Uint8Array {
+    static from(src, offset, length) {
+      // With wasm threads the module's memory is a SharedArrayBuffer, not an
+      // ArrayBuffer -- missing that case yields empty views.
+      const isBuf = src instanceof ArrayBuffer
+        || (typeof SharedArrayBuffer !== 'undefined' && src instanceof SharedArrayBuffer);
+      return isBuf
+        ? new BufferPolyfill(src, offset, length)
+        : new BufferPolyfill(Uint8Array.from(src));
+    }
+    static alloc(size) { return new BufferPolyfill(size); }
+    static isBuffer(value) { return value instanceof BufferPolyfill; }
+  }
+  globalThis.Buffer ??= BufferPolyfill;
+
+  const $ = (id) => document.getElementById(id);
+  const log = (msg) => { $('log').textContent = msg; };
+
+  $('svg').value = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="3"/></filter>
+  </defs>
+  <rect x="12" y="12" width="216" height="96" rx="14" fill="url(#g)"/>
+  <circle cx="196" cy="34" r="16" fill="#fff" opacity=".35" filter="url(#blur)"/>
+  <text x="28" y="72" font-family="sans-serif" font-size="30" fill="#fff">resvg</text>
+</svg>`;
+
+  let mod, fonts;
+  try {
+    if (!globalThis.crossOriginIsolated) {
+      log('⚠ not cross-origin isolated: SharedArrayBuffer is unavailable, so the threaded '
+        + 'wasm cannot start. Serve this page with serve.mjs (COOP + COEP).');
+      throw new Error('not isolated');
+    }
+    mod = await import('./resvg.js');
+    fonts = new mod.FontDatabase();
+    $('render').disabled = false;
+    // Handy for poking at the API from the devtools console.
+    globalThis.resvg = { mod, fonts };
+    log(`wasm ready — ${Object.keys(mod).length} exports. `
+      + `loadSystemFonts() finds ${fonts.len()} faces in the sandbox, so text needs a font file.`);
+    analyse();
+  } catch (e) {
+    if (e.message !== 'not isolated') log(`failed to load wasm: ${e.message}`);
+  }
+
+  // Parse once with the current database to find out what the document is
+  // missing: `pendingFonts()` lists named families absent from it, and a look at
+  // the source tells us whether there is any text at all (a generic
+  // `font-family` never shows up as a named family).
+  function analyse() {
+    let doc;
+    try {
+      doc = new mod.Resvg($('svg').value, defaults(), fonts);
+    } catch {
+      $('wanted').hidden = true;
+      return;
+    }
+    const missing = doc.pendingFonts();
+    // Not `doc.toString({preserveText:true})`: with no font at all usvg drops the
+    // text node at parse time, so the parsed tree cannot tell us text was there.
+    // The source can.
+    const hasText = /<text[\s>]/.test($('svg').value);
+    const noFonts = fonts.len() === 0;
+
+    if (!missing.length && !(hasText && noFonts)) {
+      $('wanted').hidden = true;
+      return;
+    }
+    $('wanted').hidden = false;
+    $('wantedMsg').textContent = missing.length
+      ? `This SVG asks for ${missing.length} font famil${missing.length > 1 ? 'ies' : 'y'} `
+        + `the database does not have. Add the file(s) above:`
+      : 'This SVG has text but no font is loaded — WASI has no system fonts. '
+        + 'Add any font file above.';
+    $('wantedList').innerHTML = '';
+    for (const name of missing.length ? missing : ['(any font, for generic families)']) {
+      const li = document.createElement('li');
+      li.textContent = name;
+      $('wantedList').append(li);
+    }
+  }
+
+  // Function declaration, not a const arrow: `analyse()` runs from the init
+  // block above, before this point in the module body.
+  function defaults() {
+    const first = fonts.len() ? fonts.faces()[0].families[0] : undefined;
+    return first ? { fontFamily: first } : undefined;
+  }
+
+  $('font').addEventListener('change', async (ev) => {
+    const loaded = [];
+    for (const file of ev.target.files) {
+      fonts.loadFontData(new Uint8Array(await file.arrayBuffer()));
+      loaded.push(file.name);
+    }
+    // fontdb resolves by *family*, not by PostScript name, and the generic
+    // families still point at fontdb's defaults -- which this database does not
+    // have. Aim them at the first loaded family.
+    const family = fonts.faces()[0].families[0];
+    for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
+                       'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
+    log(`loaded ${loaded.join(', ')} — ${fonts.len()} face(s): `
+      + fonts.faces().map((f) => f.families[0]).join(', ')
+      + `; generic families now resolve to ${family}`);
+    analyse();
+  });
+
+  $('svg').addEventListener('input', () => analyse());
+
+  $('render').addEventListener('click', () => {
+    const t0 = performance.now();
+    try {
+      const doc = new mod.Resvg($('svg').value, defaults(), fonts);
+      const params = {
+        scale: Number($('scale').value) || 1,
+        width: $('width').value ? Number($('width').value) : undefined,
+        background: $('bg').value || undefined,
+        crop: $('crop').checked ? doc.absLayerBoundingBox() : undefined,
+      };
+      const png = doc.renderPng(params);
+      const ms = (performance.now() - t0).toFixed(1);
+
+      // The buffer is a view over the wasm module's shared memory, and Blob
+      // refuses shared views -- so copy out first. Same reason applies to
+      // fetch bodies, postMessage and canvas data.
+      const bytes = new Uint8Array(png);
+      $('out').src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+      $('info').textContent = [
+        `viewport        ${doc.width} × ${doc.height}`,
+        `content bbox    ${fmt(doc.absLayerBoundingBox())}`,
+        `geometry bbox   ${fmt(doc.absBoundingBox())}`,
+        `png             ${png.length.toLocaleString()} bytes in ${ms} ms`,
+        `text nodes      ${doc.hasTextNodes()}   defs: ${doc.hasDefsNodes()}`,
+        `pending fonts   ${JSON.stringify(doc.pendingFonts())}`,
+        `fonts loaded    ${fonts.faces().map((f) => f.families[0]).join(', ') || 'none'}`,
+        `pending images  ${JSON.stringify(doc.pendingImages())}`,
+        `gradients       ${doc.linearGradients().map((g) => g.id()).join(', ') || '—'}`,
+        `filters         ${doc.filters().map((f) => f.id()).join(', ') || '—'}`,
+        `top-level nodes ${doc.children().map((n) => `${n.kind}#${n.id() || '?'}`).join('  ')}`,
+      ].join('\n');
+      log(`rendered in ${ms} ms`);
+    } catch (e) {
+      $('info').textContent = '';
+      log(`error: ${e.message}`);
+    }
+  });
+
+  const fmt = (b) => b ? `${b.x} ${b.y} ${b.width} × ${b.height}` : 'none';
+</script>

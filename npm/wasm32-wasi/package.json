@@ -1,0 +1,29 @@
+{
+  "name": "resvg-napi-wasm32-wasi",
+  "version": "0.1.0",
+  "main": "resvg-napi.wasi.cjs",
+  "files": [
+    "resvg-napi.wasm32-wasi.wasm",
+    "resvg-napi.wasi.cjs",
+    "resvg-napi.wasi.d.cts",
+    "resvg-napi.wasi-browser.js",
+    "wasi-worker.mjs",
+    "wasi-worker-browser.mjs"
+  ],
+  "license": "Apache-2.0 OR MIT",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=23.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/resvg-napi.git"
+  },
+  "types": "resvg-napi.wasi.d.cts",
+  "browser": "resvg-napi.wasi-browser.js",
+  "type": "module",
+  "dependencies": {
+    "@napi-rs/wasm-runtime": "~1.2.3",
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2"
+  }
+}

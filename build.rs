@@ -1344,6 +1344,219 @@ fn map_methods(
 // 2. signature guards: fail the build loudly if upstream changed shape
 // ---------------------------------------------------------------------------
 
+/// One async twin to generate: a Send-safe core the template marked with
+/// `#[async_twin(js_method, JsType)]`.
+struct Twin {
+    target: syn::Type,
+    core: syn::Ident,
+    /// JS name of the sync method that calls this core, for the doc comment.
+    sibling: Option<String>,
+    public: syn::Ident,
+    js: syn::Ident,
+    params: Vec<(syn::Ident, syn::Type)>,
+    output: syn::Type,
+}
+
+/// Collects the marked cores and *removes* the marker, which is not a real
+/// attribute: rustc would reject it. Reading the signature is enough to write
+/// the twin, so nothing about it is declared twice.
+fn async_twins(file: &mut syn::File) -> Vec<Twin> {
+    let mut twins = Vec::new();
+    for item in &mut file.items {
+        let Item::Impl(imp) = item else { continue };
+        if imp.trait_.is_some() {
+            continue;
+        }
+        // The sync sibling of a core is the `#[napi]` method whose body calls it:
+        // `render_png` calls `png_bytes`. Found here so the generated doc can
+        // name what a reader recognises, instead of the private core.
+        let siblings: Vec<(String, String)> = imp
+            .items
+            .iter()
+            .filter_map(|it| {
+                let ImplItem::Fn(f) = it else { return None };
+                let body = quote!(#f).to_string();
+                let js = f
+                    .attrs
+                    .iter()
+                    .find(|a| a.path().is_ident("napi"))
+                    .and_then(|a| {
+                        let text = quote!(#a).to_string();
+                        text.split("js_name = \"")
+                            .nth(1)
+                            .and_then(|r| r.split('"').next())
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()));
+                Some((body, js))
+            })
+            .collect();
+        for it in &mut imp.items {
+            let ImplItem::Fn(f) = it else { continue };
+            let Some(pos) = f
+                .attrs
+                .iter()
+                .position(|a| a.path().is_ident("async_twin"))
+            else {
+                continue;
+            };
+            let attr = f.attrs.remove(pos);
+            let args: Vec<syn::Ident> = attr
+                .parse_args_with(|input: &syn::parse::ParseBuffer| {
+                    syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::parse_terminated(
+                        input,
+                    )
+                })
+                .unwrap_or_else(|e| panic!("#[async_twin(js_method, JsType)]: {e}"))
+                .into_iter()
+                .collect();
+            let [public, js] = args.as_slice() else {
+                panic!("#[async_twin] takes the JS method name and its JS type")
+            };
+            let params = f
+                .sig
+                .inputs
+                .iter()
+                .filter_map(|a| match a {
+                    syn::FnArg::Typed(t) => match &*t.pat {
+                        syn::Pat::Ident(p) => Some((p.ident.clone(), (*t.ty).clone())),
+                        _ => panic!("async twin cores take plain named arguments"),
+                    },
+                    syn::FnArg::Receiver(_) => None,
+                })
+                .collect();
+            let ReturnType::Type(_, ret) = &f.sig.output else {
+                panic!("an async twin core returns Result<T>")
+            };
+            let output = result_inner(ret)
+                .unwrap_or_else(|| panic!("{}: expected Result<T>", f.sig.ident));
+            let needle = format!("self . {} (", f.sig.ident);
+            let sibling = siblings
+                .iter()
+                .find(|(body, _)| body.contains(&needle))
+                .map(|(_, js)| js.clone());
+            twins.push(Twin {
+                target: (*imp.self_ty).clone(),
+                core: f.sig.ident.clone(),
+                sibling,
+                public: public.clone(),
+                js: js.clone(),
+                params,
+                output,
+            });
+        }
+    }
+    twins
+}
+
+/// `Result<T>` -> `T`.
+fn result_inner(ty: &Type) -> Option<Type> {
+    let Type::Path(p) = ty else { return None };
+    let seg = p.path.segments.last()?;
+    if seg.ident != "Result" {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return None;
+    };
+    args.args.iter().find_map(|a| match a {
+        syn::GenericArgument::Type(t) => Some(t.clone()),
+        _ => None,
+    })
+}
+
+/// The ceremony: a `Task` type per core, the public `#[napi]` method that
+/// schedules it, and the `AbortSignal` plumbing. Written once, applied by rule.
+fn emit_twins(twins: &[Twin]) -> TokenStream {
+    let mut out = TokenStream::new();
+    for t in twins {
+        // `Resvg` + `png_bytes` -> `ResvgPngBytesTask`, keeping the target's own
+        // casing: lowercasing it first produced `SvgnodePngBytesTask`.
+        let task = format_ident!("{}{}Task", ty_str(&t.target), heck_camel(&t.core.to_string()));
+        let (names, types): (Vec<_>, Vec<_>) = t.params.iter().cloned().unzip();
+        let core = &t.core;
+        let public = &t.public;
+        let target = &t.target;
+        let output = &t.output;
+        let js = &t.js;
+        // `string` in TypeScript, but `String` in Rust.
+        let ts = if js == "String" {
+            "string".to_string()
+        } else {
+            js.to_string()
+        };
+        let ts_return = format!("Promise<{ts}>");
+        let doc = match &t.sibling {
+            Some(js) => format!(
+                " `{js}` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."
+            ),
+            None => " Runs on a worker thread; a queued call is dropped when the signal fires."
+                .to_string(),
+        };
+        out.extend(quote! {
+            #[doc = #doc]
+            pub struct #task {
+                recv: #target,
+                #(#names: #types,)*
+            }
+
+            impl Task for #task {
+                type Output = #output;
+                type JsValue = <#output as IntoJs>::Js;
+
+                fn compute(&mut self) -> Result<Self::Output> {
+                    self.recv.#core(#(self.#names.clone()),*)
+                }
+
+                fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
+                    Ok(out.into_js())
+                }
+            }
+
+            #[napi]
+            impl #target {
+                #[doc = #doc]
+                #[napi(ts_return_type = #ts_return)]
+                pub fn #public(
+                    &self,
+                    #(#names: #types,)*
+                    signal: Option<AbortSignal>,
+                ) -> AsyncTask<#task> {
+                    AsyncTask::with_optional_signal(
+                        #task { recv: self.clone(), #(#names,)* },
+                        signal,
+                    )
+                }
+            }
+        });
+    }
+    out
+}
+
+/// `render_png` -> `renderPng`, the name napi gives it in JS.
+fn lower_camel(s: &str) -> String {
+    let camel = heck_camel(s);
+    let mut c = camel.chars();
+    match c.next() {
+        Some(f) => f.to_lowercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
+}
+
+/// `resvg_png_bytes` -> `ResvgPngBytes`.
+fn heck_camel(s: &str) -> String {
+    s.split('_')
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let mut c = p.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
 /// Method names the emitter template defines itself, per target type, read off
 /// the template rather than listed by hand: `impl Resvg { pub fn children }`
 /// means the `children` upstream method is covered, and a rule can say so.
@@ -1835,6 +2048,39 @@ fn main() {
 
         type ImageMap = std::collections::HashMap<String, std::sync::Arc<Vec<u8>>>;
 
+        #[doc = " The Send half of a result, and its JS half."]
+        #[doc = ""]
+        #[doc = " `Buffer` holds a reference into the JS heap, so it is not `Send` and"]
+        #[doc = " cannot be built on a worker thread. Every async twin therefore computes"]
+        #[doc = " one of these and converts on the main thread, in `Task::resolve`."]
+        pub trait IntoJs {
+            type Js;
+            fn into_js(self) -> Self::Js;
+        }
+        impl IntoJs for Vec<u8> {
+            type Js = Buffer;
+            fn into_js(self) -> Buffer {
+                Buffer::from(self)
+            }
+        }
+        impl IntoJs for String {
+            type Js = String;
+            fn into_js(self) -> String {
+                self
+            }
+        }
+        impl IntoJs for (u32, u32, Vec<u8>) {
+            type Js = RawImage;
+            fn into_js(self) -> RawImage {
+                let (width, height, data) = self;
+                RawImage {
+                    width,
+                    height,
+                    data: Buffer::from(data),
+                }
+            }
+        }
+
         #[doc = " Hrefs no resolver could satisfy during the last parse."]
         #[derive(Default, Clone)]
         struct Misses(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
@@ -2157,7 +2403,9 @@ fn main() {
         #[doc = " Anything that owns a content group: the document, or a def such as a"]
         #[doc = " pattern, a mask or a clip path. The generator implements it for every"]
         #[doc = " wrapped type that has a `root() -> &Group`."]
-        pub trait HasRoot {
+        #[doc = " Send + Sync: a node reached through a def keeps its owner alive, and"]
+        #[doc = " an async twin carries that owner to a worker thread."]
+        pub trait HasRoot: Send + Sync {
             fn group(&self) -> &usvg::Group;
         }
 
@@ -2226,6 +2474,7 @@ fn main() {
         #[doc = " keeps the tree alive plus the child-index path instead, and re-resolves"]
         #[doc = " on each call -- safe because a parsed tree is immutable."]
         #[napi]
+        #[derive(Clone)]
         pub struct SvgNode {
             #[doc = " The document, when there is one: a node reached through a def has"]
             #[doc = " no document context, so the def tables are out of reach from it."]
@@ -2332,10 +2581,16 @@ fn main() {
                     .map(Mask::wrap))
             }
 
+            #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
+            #[async_twin(render_png_async, Buffer)]
+            fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
+                render_node_png(self.node()?, &params.unwrap_or_default())
+            }
+
             #[doc = " Renders this element alone, sized to its own extent."]
             #[napi]
             pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-                render_node_png(self.node()?, &params.unwrap_or_default())
+                self.png_bytes(params).map(IntoJs::into_js)
             }
 
             #node_methods
@@ -2343,10 +2598,15 @@ fn main() {
 
         #[doc = " A parsed SVG, ready to be rendered any number of times."]
         #[napi]
+        #[doc = ""]
+        #[doc = " `Clone` because an async twin captures the receiver: every field is"]
+        #[doc = " behind an `Arc` or cheap to copy, so the clone is a refcount bump and"]
+        #[doc = " the worker thread never touches the JS heap."]
+        #[derive(Clone)]
         pub struct Resvg {
             tree: std::sync::Arc<usvg::Tree>,
             #[doc = " Source kept verbatim: resolving an image means re-parsing."]
-            svg: Vec<u8>,
+            svg: std::sync::Arc<Vec<u8>>,
             options: RenderOptions,
             fonts: std::sync::Arc<usvg::fontdb::Database>,
             images: ImageMap,
@@ -2381,7 +2641,7 @@ fn main() {
                     Self::build(&svg, &options, fonts.clone(), &images)?;
                 Ok(Self {
                     tree: std::sync::Arc::new(tree),
-                    svg,
+                    svg: std::sync::Arc::new(svg),
                     options,
                     fonts,
                     images,
@@ -2430,41 +2690,19 @@ fn main() {
                 self.tree.size().height() as f64
             }
 
-            #[doc = " Renders to a PNG buffer."]
-            #[napi]
-            pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-                let pixmap = self.draw(params.unwrap_or_default())?;
-                pixmap
+            #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
+            #[doc = " on a worker thread."]
+            #[async_twin(render_png_async, Buffer)]
+            fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
+                self.draw(params.unwrap_or_default())?
                     .encode_png()
-                    .map(Buffer::from)
                     .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
             }
 
-            #[doc = " Renders to a PNG buffer on a worker thread. Rasterising and PNG"]
-            #[doc = " encoding both happen off the event loop."]
-            #[napi(ts_return_type = "Promise<Buffer>")]
-            pub fn render_png_async(
-                &self,
-                params: Option<RenderParams>,
-                signal: Option<AbortSignal>,
-            ) -> AsyncTask<PngTask> {
-                AsyncTask::with_optional_signal(
-                    PngTask { tree: self.tree.clone(), params: params.unwrap_or_default() },
-                    signal,
-                )
-            }
-
-            #[doc = " Renders to raw RGBA8 pixels on a worker thread."]
-            #[napi(ts_return_type = "Promise<RawImage>")]
-            pub fn render_raw_async(
-                &self,
-                params: Option<RenderParams>,
-                signal: Option<AbortSignal>,
-            ) -> AsyncTask<RawTask> {
-                AsyncTask::with_optional_signal(
-                    RawTask { tree: self.tree.clone(), params: params.unwrap_or_default() },
-                    signal,
-                )
+            #[doc = " Renders to a PNG buffer."]
+            #[napi]
+            pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
+                self.png_bytes(params).map(IntoJs::into_js)
             }
 
             #[doc = " Parses on a worker thread. Same arguments as the constructor, and the"]
@@ -2518,6 +2756,16 @@ fn main() {
                 id: String,
                 params: Option<RenderParams>,
             ) -> Result<Buffer> {
+                self.node_png_bytes(id, params).map(IntoJs::into_js)
+            }
+
+            #[doc = " The Send half of `renderNodePng`."]
+            #[async_twin(render_node_png_async, Buffer)]
+            fn node_png_bytes(
+                &self,
+                id: String,
+                params: Option<RenderParams>,
+            ) -> Result<Vec<u8>> {
                 let node = self
                     .tree
                     .node_by_id(&id)
@@ -2555,6 +2803,12 @@ fn main() {
             #[doc = " Text is converted to paths unless `preserveText` is set."]
             #[napi(js_name = "toString")]
             pub fn to_svg_string(&self, options: Option<WriteOptions>) -> Result<String> {
+                self.svg_text(options)
+            }
+
+            #[doc = " Serialising a large tree is not free; this is the half a twin runs."]
+            #[async_twin(to_string_async, String)]
+            fn svg_text(&self, options: Option<WriteOptions>) -> Result<String> {
                 let opt = options.unwrap_or_default().to_usvg();
                 let tree = &self.tree;
                 // Numbers come from JS and the writer indexes a few tables
@@ -2566,16 +2820,18 @@ fn main() {
                 .map_err(|_| Error::from_reason("usvg panicked while writing the SVG"))
             }
 
+            #[doc = " Rasterise only: width, height and the demultiplied pixels, all Send."]
+            #[async_twin(render_raw_async, RawImage)]
+            fn raw_pixels(&self, params: Option<RenderParams>) -> Result<(u32, u32, Vec<u8>)> {
+                let pixmap = self.draw(params.unwrap_or_default())?;
+                let (width, height) = (pixmap.width(), pixmap.height());
+                Ok((width, height, pixmap.take_demultiplied()))
+            }
+
             #[doc = " Renders to raw RGBA8 pixels."]
             #[napi]
             pub fn render_raw(&self, params: Option<RenderParams>) -> Result<RawImage> {
-                let pixmap = self.draw(params.unwrap_or_default())?;
-                let (width, height) = (pixmap.width(), pixmap.height());
-                Ok(RawImage {
-                    width,
-                    height,
-                    data: Buffer::from(pixmap.take_demultiplied()),
-                })
+                self.raw_pixels(params).map(IntoJs::into_js)
             }
         }
 
@@ -2651,7 +2907,7 @@ fn main() {
         }
 
         #[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
-        fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Buffer> {
+        fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
                 let bbox = node_extent(node)
                     .ok_or_else(|| Error::from_reason("element has no visible size"))?;
                 // resvg::render_node renders the node's *local* geometry but
@@ -2691,7 +2947,6 @@ fn main() {
                 .ok_or_else(|| Error::from_reason("element is empty"))?;
                 pixmap
                     .encode_png()
-                    .map(Buffer::from)
                     .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
         }
 
@@ -2709,49 +2964,8 @@ fn main() {
             }
         }
 
-        #[doc = " Rasterise + PNG encode on a libuv worker thread."]
-        pub struct PngTask {
-            tree: std::sync::Arc<usvg::Tree>,
-            params: RenderParams,
-        }
-
-        impl Task for PngTask {
-            type Output = Vec<u8>;
-            type JsValue = Buffer;
-
-            fn compute(&mut self) -> Result<Self::Output> {
-                draw(&self.tree, &self.params)?
-                    .encode_png()
-                    .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
-            }
-
-            fn resolve(&mut self, _: napi::Env, png: Self::Output) -> Result<Self::JsValue> {
-                Ok(Buffer::from(png))
-            }
-        }
-
-        #[doc = " Rasterise on a libuv worker thread, no encoding."]
-        pub struct RawTask {
-            tree: std::sync::Arc<usvg::Tree>,
-            params: RenderParams,
-        }
-
-        impl Task for RawTask {
-            type Output = (u32, u32, Vec<u8>);
-            type JsValue = RawImage;
-
-            fn compute(&mut self) -> Result<Self::Output> {
-                let pixmap = draw(&self.tree, &self.params)?;
-                let (w, h) = (pixmap.width(), pixmap.height());
-                Ok((w, h, pixmap.take_demultiplied()))
-            }
-
-            fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-                let (width, height, data) = out;
-                Ok(RawImage { width, height, data: Buffer::from(data) })
-            }
-        }
-
+        
+        
         #[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
         pub struct ParseTask {
             svg: Vec<u8>,
@@ -2772,7 +2986,7 @@ fn main() {
                 let (tree, pending_images, pending_fonts) = out;
                 Ok(Resvg {
                     tree: std::sync::Arc::new(tree),
-                    svg: std::mem::take(&mut self.svg),
+                    svg: std::sync::Arc::new(std::mem::take(&mut self.svg)),
                     options: self.options.clone(),
                     fonts: self.fonts.clone(),
                     images: std::mem::take(&mut self.images),
@@ -2861,7 +3075,27 @@ fn main() {
         }
     }
 
-    let code = template(fontdb_methods, tree_methods, group_methods, node_methods);
+    let mut code = template(fontdb_methods, tree_methods, group_methods, node_methods);
+
+    // Async twins: the template marks a Send-safe core, the rule writes the
+    // ceremony. The marker is stripped on the way out -- rustc has never heard
+    // of it.
+    {
+        let mut file: syn::File =
+            syn::parse2(code.clone()).expect("the emitter template is not valid Rust");
+        let twins = async_twins(&mut file);
+        for t in &twins {
+            println!(
+                "cargo::warning=async twin generated: {}::{} -> {} (Promise<{}>)",
+                ty_str(&t.target),
+                t.core,
+                t.public,
+                t.js
+            );
+        }
+        let ceremony = emit_twins(&twins);
+        code = quote! { #file #ceremony };
+    }
 
     // Nothing above prevents a future upstream method from colliding with a
     // name the template already uses: rustc would say so, from inside a

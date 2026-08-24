@@ -38,6 +38,38 @@ Four guards run before emission — `resvg::render`'s full signature,
 of generating something plausible. Additions need no guard: a new `Options`
 field or enum variant appears in the bindings, and in TypeScript, on its own.
 
+Async is derived too. A method that belongs on a worker thread is marked once,
+where it is defined:
+
+```rust
+#[async_twin(render_png_async, Buffer)]
+fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> { … }
+```
+
+and the generator writes the rest from the signature: the `Task` type, the
+`AbortSignal` wiring, the public `#[napi]` method and its
+`Promise<Buffer>` return type, plus a doc comment that names the sync sibling it
+found by looking for the method that calls the core. Five twins come out of five
+marks — `renderPngAsync`, `renderRawAsync`, `renderNodePngAsync`,
+`toStringAsync`, and `SvgNode.renderPngAsync` — where two of them used to be
+~25 lines of ceremony each and the other three did not exist.
+
+The mark carries the two things a rule cannot know: *whether* the thread hop is
+worth it, and what the result looks like in JS. Everything else is read off the
+core. The core exists because `Buffer` holds a JS handle and is not `Send`: it
+returns `Vec<u8>`, `String` or `(u32, u32, Vec<u8>)`, and a three-impl `IntoJs`
+trait converts on the main thread in `Task::resolve`. Adding a fourth output
+shape means adding one impl, not touching the rule.
+
+Two things about `AbortSignal` that the tests had to learn the hard way: napi
+listens for the abort *event*, so a signal that is already aborted when the task
+is scheduled is ignored; and `Task::compute` is not interruptible, so abort
+drops a *queued* task and never stops a running one. `test-async.mjs` therefore
+occupies the single-thread pool with a blocker before it aborts anything.
+
+`Resvg.parseAsync` and the free `renderAsync` stay hand-written: they have no
+receiver to capture — they build the object — so they do not share the shape.
+
 Two hand-written lists remain, and both are decisions a rule cannot make: four
 method names skipped as noise (`isolate`, `should_isolate`, `id`, `subroots`)
 and eight renames (`from_data` → the constructor, `node_by_id` → `node`,

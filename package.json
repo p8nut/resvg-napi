@@ -1,10 +1,26 @@
 {
   "name": "resvg-napi",
   "version": "0.1.0",
+  "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",
+  "keywords": [
+    "svg",
+    "png",
+    "render",
+    "rasterize",
+    "resvg",
+    "usvg",
+    "tiny-skia",
+    "napi-rs",
+    "wasm",
+    "text-measurement",
+    "fontdb"
+  ],
   "main": "index.js",
   "scripts": {
     "build": "napi build --platform --release",
-    "test": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && node test-logs.mjs && node test-fit.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs && npm run test:examples",
+    "test": "npm run test:node && npm run test:examples",
+    "test:wasi": "NAPI_RS_NATIVE_LIBRARY_PATH=./resvg-napi.wasi.cjs npm run test:node",
+    "test:node": "node test.mjs && node test-images.mjs && node test-fonts.mjs && node test-output.mjs && node test-bbox.mjs && node test-nodes.mjs && node test-defs.mjs && node test-logs.mjs && node test-fit.mjs && UV_THREADPOOL_SIZE=1 node test-async.mjs",
     "test:examples": "node demo/render.mjs examples/roster.svg && node demo/render.mjs examples/badge-sheet.svg && node demo/render.mjs examples/photo-card.svg && node demo/render.mjs examples/sheet.svg --lang fr",
     "typecheck": "tsc",
     "build:debug": "napi build --platform",
@@ -44,6 +60,8 @@
     "index.d.ts",
     "browser.js",
     "README.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
     "resvg-napi.wasi.cjs",
     "resvg-napi.wasi.d.cts",
     "resvg-napi.wasi-browser.js",
@@ -74,5 +92,9 @@
     "@emnapi/runtime": "1.11.2",
     "@napi-rs/wasm-runtime": "1.2.3"
   },
-  "browser": "browser.js"
+  "browser": "browser.js",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

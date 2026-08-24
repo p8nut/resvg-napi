@@ -1,7 +1,18 @@
 // BBox (generated from `impl Group` / `impl Tree`), crop, and per-element render.
 import assert from 'node:assert/strict';
+import { testFonts, skip } from './test-support.mjs';
 import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('./index.js');
+const { Resvg, FontDatabase } = createRequire(import.meta.url)('./index.js');
+// Fonts are not a given: WASI has none, so the database is explicit and the
+// family is whatever this environment actually holds.
+const fontsFound = testFonts(FontDatabase);
+if (!fontsFound) {
+  skip('bbox + crop', 'no font in this environment');
+  process.exit(0);
+}
+const { db, family } = fontsFound;
+const opts = { fontFamily: family };
+
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200">
   <g transform="translate(50 20)">
@@ -38,7 +49,7 @@ assert.equal(r.hasDefsNodes(), false);
 assert.equal(r.hasChildren(), true);
 assert.equal(blurred.hasDefsNodes(), true, 'the filter lives in defs');
 const texty = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><text x="2" y="15">hi</text></svg>',
-  { fontFamily: 'DejaVu Sans' });
+  opts, db);
 assert.equal(texty.hasTextNodes(), true);
 
 // 4. crop trims the viewport, and sizing then applies to the crop

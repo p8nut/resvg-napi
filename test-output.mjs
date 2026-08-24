@@ -1,7 +1,18 @@
 // background (RenderParams) and toString (WriteOptions, AST-mapped).
 import assert from 'node:assert/strict';
+import { testFonts, skip } from './test-support.mjs';
 import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('./index.js');
+const { Resvg, FontDatabase } = createRequire(import.meta.url)('./index.js');
+// Fonts are not a given: WASI has none, so the database is explicit and the
+// family is whatever this environment actually holds.
+const fontsFound = testFonts(FontDatabase);
+if (!fontsFound) {
+  skip('output shapes', 'no font in this environment');
+  process.exit(0);
+}
+const { db, family } = fontsFound;
+const opts = { fontFamily: family };
+
 
 const px = (r, p) => [...r.renderRaw(p).data.subarray(0, 4)];
 const near = (got, want, tol = 2) =>
@@ -34,9 +45,9 @@ assert.ok((await new Resvg(blank).renderPngAsync({ background: 'teal' })).length
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="30">
   <defs><linearGradient id="grad"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient></defs>
   <rect x="1.23456789" width="58" height="28" fill="url(#grad)"/>
-  <text x="5" y="20" font-family="DejaVu Sans" font-size="10">hi</text>
+  <text x="5" y="20" font-family="${family}" font-size="10">hi</text>
 </svg>`;
-const doc = new Resvg(svg, { fontFamily: 'DejaVu Sans' });
+const doc = new Resvg(svg, opts, db);
 
 // 6. usvg-simplified output: text became paths
 const out = doc.toString();
@@ -58,7 +69,7 @@ assert.equal(doc.toString({ coordinatesPrecision: 999 }), doc.toString({ coordin
 assert.notEqual(doc.toString({ transformsPrecision: 300 }), doc.toString({ transformsPrecision: 2 }));
 
 // 9. round trip: the output re-parses to the same pixels
-const again = new Resvg(doc.toString(), { fontFamily: 'DejaVu Sans' });
+const again = new Resvg(doc.toString(), opts, db);
 assert.deepEqual([...again.renderRaw().data], [...doc.renderRaw().data], 'lossless round trip');
 
 console.log('ok — background + toString: all checks passed');

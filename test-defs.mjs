@@ -1,7 +1,18 @@
 // Generated wrapper classes over usvg's Arc-held definitions.
 import assert from 'node:assert/strict';
+import { testFonts, skip } from './test-support.mjs';
 import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('./index.js');
+const { Resvg, FontDatabase } = createRequire(import.meta.url)('./index.js');
+// Fonts are not a given: WASI has none, so the database is explicit and the
+// family is whatever this environment actually holds.
+const fontsFound = testFonts(FontDatabase);
+if (!fontsFound) {
+  skip('definition classes', 'no font in this environment');
+  process.exit(0);
+}
+const { db, family } = fontsFound;
+const opts = { fontFamily: family };
+
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
   <defs>
@@ -18,7 +29,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
   <rect x="45" width="20" height="40" fill="url(#rg)" mask="url(#mk)"/>
   <rect x="70" width="25" height="40" fill="url(#pt)" filter="url(#ft)"/>
 </svg>`;
-const r = new Resvg(svg, { fontFamily: 'DejaVu Sans' });
+const r = new Resvg(svg, opts, db);
 
 // 1. the defs tables are reachable as class instances
 assert.deepEqual(r.linearGradients().map((g) => g.id()), ['lg']);
@@ -76,12 +87,12 @@ assert.deepEqual(Object.values(inside[0].absBoundingBox()), [2, 2, 6, 6]);
 assert.equal(inside[0].clipPath(), null, 'no document context through a def');
 
 // 7. font bytes, keyed by PostScript name
-const db = r.fontdb();
-const face = db.faces()[0];
-const bytes = db.faceData(face.postScriptName);
+const resolved = r.fontdb();
+const face = resolved.faces()[0];
+const bytes = resolved.faceData(face.postScriptName);
 assert.ok(bytes.length > 1000);
 assert.match(bytes.subarray(0, 4).toString('hex'), /^(4f54544f|00010000|74727565|74746366)$/, 'sfnt magic');
-assert.equal(db.faceData('Nope-Regular'), null);
+assert.equal(resolved.faceData('Nope-Regular'), null);
 
 // 8. the font database a parse actually resolved
 assert.ok(r.fontdb().len() > 0, 'resolved fontdb reachable from the tree');
@@ -90,9 +101,6 @@ console.log('ok — generated definition classes + value objects: all checks pas
 
 // --- FontFace: the value class that unlocked the ID-gated fontdb methods ------
 {
-  const { FontDatabase } = createRequire(import.meta.url)('./index.js');
-  const db = new FontDatabase();
-  db.loadSystemFonts();
   const before = db.len();
 
   // 9. faces() hands out class instances, not plain objects
@@ -108,11 +116,10 @@ console.log('ok — generated definition classes + value objects: all checks pas
 
   // 10. a FontFace stands in for the opaque fontdb ID
   assert.equal(db.face(face).postScriptName, face.postScriptName, 'round trip through face()');
-  db.removeFace(face);
-  assert.equal(db.len(), before - 1, 'removeFace took the id from the class');
-  assert.equal(db.face(face), null, 'and it is gone');
 
-  // 11. query: a CSS-ish request resolves to a face
+  // 11. query: a CSS-ish request resolves to a face. Before the removal below,
+  // because a database with a single face has nothing left to match afterwards
+  // -- which is exactly the WASI case, where the only face is the loaded file.
   const hit = db.query([face.families[0]], 400, false);
   assert.ok(hit && hit.postScriptName.length > 0);
   assert.ok(db.query(['sans-serif']), 'generic families are understood');
@@ -121,5 +128,10 @@ console.log('ok — generated definition classes + value objects: all checks pas
   // 12. bytes still reachable, keyed by PostScript name
   const data = db.faceData(hit.postScriptName);
   assert.match(data.subarray(0, 4).toString('hex'), /^(4f54544f|00010000|74727565|74746366)$/);
+
+  // 13. removal, by the same class: the id never leaves Rust
+  db.removeFace(face);
+  assert.equal(db.len(), before - 1, 'removeFace took the id from the class');
+  assert.equal(db.face(face), null, 'and it is gone');
 }
 console.log('ok — FontFace + strict objects: all checks passed');

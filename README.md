@@ -22,7 +22,30 @@ part is the API shape: what a `Pixmap` becomes, how images and fonts are
 resolved, what runs on a worker thread.
 
 `src/lib.rs`, `index.js` and `index.d.ts` are generated *and* committed, and the
-generator is deterministic: CI regenerates them and fails on any diff.
+generator is deterministic: CI regenerates them and fails on any diff. A
+version bump is therefore readable as a diff: moving between resvg 0.47 and
+0.48.1 — usvg, fontdb and tiny-skia along with it — changes five lines of
+`src/lib.rs`, all of them doc comments, and the test suite passes untouched.
+What that diff cannot show is behaviour: the same bump moves 390 pixels of
+`photo-card.png`, all inside the colour emoji. The examples are there to catch
+that half.
+
+The generator does not take upstream's word for anything it templates against.
+Four guards run before emission — `resvg::render`'s full signature,
+`Tree::from_data`, `Tree::to_string`, and the fields of `ImageHrefResolver` and
+`FontResolver` — so a rename fails the build with
+`usvg::ImageHrefResolver::resolve_string disappeared; update build.rs` instead
+of generating something plausible. Additions need no guard: a new `Options`
+field or enum variant appears in the bindings, and in TypeScript, on its own.
+
+Two hand-written lists remain, and both are decisions a rule cannot make: four
+method names skipped as noise (`isolate`, `should_isolate`, `id`, `subroots`)
+and eight renames (`from_data` → the constructor, `node_by_id` → `node`,
+`to_string` → `to_svg_string`, because Rust already has `Display::to_string`).
+Everything else about what the template covers is read *off the template*: it is
+built once with no generated methods, parsed with `syn`, and its own method
+names become the "covered" set. A stale rename fails the build; so does a method
+emitted twice.
 
 To build against a checkout instead of the crates.io cache:
 

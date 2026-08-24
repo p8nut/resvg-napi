@@ -1344,6 +1344,45 @@ fn map_methods(
 // 2. signature guards: fail the build loudly if upstream changed shape
 // ---------------------------------------------------------------------------
 
+/// Method names the emitter template defines itself, per target type, read off
+/// the template rather than listed by hand: `impl Resvg { pub fn children }`
+/// means the `children` upstream method is covered, and a rule can say so.
+fn template_fns(code: &TokenStream) -> BTreeMap<String, Vec<String>> {
+    let file: syn::File = syn::parse2(code.clone())
+        .expect("the emitter template is not valid Rust on its own");
+    // A Vec, not a Set: the duplicate check below needs the repeats.
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for item in &file.items {
+        let Item::Impl(imp) = item else { continue };
+        if imp.trait_.is_some() {
+            continue; // trait impls are plumbing, not API
+        }
+        let target = ty_str(&imp.self_ty);
+        let names = out.entry(target).or_default();
+        for it in &imp.items {
+            if let ImplItem::Fn(f) = it {
+                names.push(f.sig.ident.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Upstream names the template exposes under a *different* one. A rule cannot
+/// find these -- the rename is the decision -- so they are declared, and
+/// checked: a stale entry fails the build instead of rotting in a log line.
+const RENAMED: &[(&str, &str)] = &[
+    ("from_data", "new"),
+    ("from_str", "new"),
+    ("from_xmltree", "new"),
+    ("from_data_nested", "new"),
+    ("node_by_id", "node"),
+    // `to_string` in Rust would collide with `Display::to_string`
+    ("to_string", "to_svg_string"),
+    ("root", "children"),
+    ("with_face_data", "face_data"),
+];
+
 fn assert_free_fn(files: &[syn::File], name: &str, want: &[&str]) {
     let f = files
         .iter()
@@ -1654,41 +1693,29 @@ fn main() {
         receiver: TokenStream,
         skip: &'a [&'a str],
         prologue: Option<&'a TokenStream>,
-        // Names the emitter template already exposes under another shape, so the
-        // skip log stays a to-do list instead of noise.
-        covered: &'a [&'a str],
     }
     let passes = [
         Pass { label: "fontdb::Database", target: "FontDatabase", files: &fontdb_files,
-               ty: "Database", receiver: quote!(self.inner), skip: &[], prologue: None,
-               covered: &["new", "with_face_data"] },
+               ty: "Database", receiver: quote!(self.inner), skip: &[], prologue: None },
         Pass { label: "usvg::Tree", target: "Resvg", files: &usvg_files, ty: "Tree",
-               receiver: quote!(self.tree), skip: &[], prologue: None,
-               covered: &["from_data", "from_str", "from_xmltree", "from_data_nested",
-                          "root", "node_by_id", "to_string"] },
+               receiver: quote!(self.tree), skip: &[], prologue: None },
         Pass { label: "usvg::Group", target: "Resvg", files: &usvg_files, ty: "Group",
                receiver: quote!(self.tree.root()), skip: &["isolate", "should_isolate", "id"],
-               prologue: None, covered: &["children", "clip_path", "mask"] },
+               prologue: None },
         Pass { label: "usvg::Node", target: "SvgNode", files: &usvg_files, ty: "Node",
-               receiver: quote!(__n), skip: &["subroots"], prologue: Some(&node_prologue),
-               covered: &["children", "clip_path", "mask", "abs_layer_bounding_box"] },
+               receiver: quote!(__n), skip: &["subroots"], prologue: Some(&node_prologue) },
     ];
 
     let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
     let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    // Reported once the template exists: whether a skipped method is "covered"
+    // is a question about the template, which is built further down.
+    let mut skips: Vec<(&str, Vec<String>)> = Vec::new();
     for p in &passes {
         let names = taken.entry(p.target).or_default();
         let (code, skipped) =
             map_methods(p.files, p.ty, &vocab, &p.receiver, p.skip, p.prologue, false, names);
-        for s in skipped {
-            let name = s.split(' ').next().unwrap_or_default();
-            let verb = if p.covered.contains(&name) {
-                "covered by the template, not generated"
-            } else {
-                "not exposed"
-            };
-            println!("cargo::warning={} method {verb}: {s}", p.label);
-        }
+        skips.push((p.label, skipped));
         generated.insert(p.ty, code);
     }
     // Prune: an object type nothing returns is dead TS surface. Start from the
@@ -1761,7 +1788,13 @@ fn main() {
 
     // NOTE: no inner attributes (`#![..]` / `//!`) here -- the file is pulled in
     // with `include!`, which only accepts items.
-    let code = quote! {
+    // The template is a closure so it can be built twice: once empty, to read the
+    // method names it defines itself, and once for real. Nothing below lists
+    // those names by hand.
+    let template = |fontdb_methods: &TokenStream,
+                    tree_methods: &TokenStream,
+                    group_methods: &TokenStream,
+                    node_methods: &TokenStream| quote! {
         use napi::bindgen_prelude::*;
         use napi_derive::napi;
         use resvg::{tiny_skia, usvg};
@@ -2802,6 +2835,47 @@ fn main() {
             )
         }
     };
+    // What the template covers is derived from the template: build it once with
+    // no generated methods, and read its own method names off it.
+    let empty = TokenStream::new();
+    let hand = template_fns(&template(&empty, &empty, &empty, &empty));
+    let defined: BTreeSet<&String> = hand.values().flatten().collect();
+    for (from, to) in RENAMED {
+        assert!(
+            defined.iter().any(|n| n.as_str() == *to),
+            "RENAMED says `{from}` is covered by `{to}`, but the template defines no `{to}`"
+        );
+    }
+    for (label, skipped) in &skips {
+        for s in skipped {
+            let name = s.split(' ').next().unwrap_or_default();
+            let renamed = RENAMED.iter().find(|(from, _)| *from == name);
+            let verb = match renamed {
+                Some((_, to)) => format!("covered by the template as `{to}`"),
+                None if defined.iter().any(|n| n.as_str() == name) => {
+                    "covered by the template, not generated".to_string()
+                }
+                None => "not exposed".to_string(),
+            };
+            println!("cargo::warning={label} method {verb}: {s}");
+        }
+    }
+
+    let code = template(fontdb_methods, tree_methods, group_methods, node_methods);
+
+    // Nothing above prevents a future upstream method from colliding with a
+    // name the template already uses: rustc would say so, from inside a
+    // generated file. Say it here instead.
+    for (target, names) in template_fns(&code) {
+        let mut seen: BTreeSet<&String> = BTreeSet::new();
+        for n in &names {
+            assert!(
+                seen.insert(n),
+                "{target}::{n} is emitted twice: the template defines it and a \
+                 pass generated it too. Add it to RENAMED, or skip it in the pass."
+            );
+        }
+    }
 
     const HEADER: &str = concat!(
         "// @generated by build.rs from the resvg/usvg/fontdb sources. DO NOT EDIT.\n",

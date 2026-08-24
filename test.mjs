@@ -1,6 +1,7 @@
 // Smoke check: fails loudly if the generated bindings break.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { testFonts, skip } from './test-support.mjs';
 const { Resvg, FontDatabase, ShapeRendering } = createRequire(import.meta.url)('./index.js');
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
@@ -38,13 +39,15 @@ const r2 = new Resvg(Buffer.from(svg), {
 assert.equal(r2.width, 100);
 
 // 5. opaque fontdb class
-const db = new FontDatabase();
-assert.equal(db.len(), 0);
-db.loadSystemFonts();
-db.setSansSerifFamily('DejaVu Sans');
-assert.ok(db.len() > 0, 'system fonts loaded');
-assert.ok(new Resvg(svg, { fontFamily: 'DejaVu Sans' }, db).renderPng().length > 0);
-assert.throws(() => db.loadFontFile('/nope.ttf'), /No such file|nope/);
+assert.equal(new FontDatabase().len(), 0, 'a fresh database is empty');
+const fonts = testFonts(FontDatabase);
+if (fonts) {
+  assert.ok(fonts.db.len() > 0);
+  assert.ok(new Resvg(svg, { fontFamily: fonts.family }, fonts.db).renderPng().length > 0);
+  assert.throws(() => fonts.db.loadFontFile('/nope.ttf'), /No such file|nope/);
+} else {
+  skip('text rendering', 'no font in this environment');
+}
 
 // 6. errors surface as JS exceptions
 assert.throws(() => new Resvg('<svg'), /invalid SVG/);

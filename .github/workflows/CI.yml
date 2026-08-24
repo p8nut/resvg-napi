@@ -79,6 +79,13 @@ jobs:
             console.log('wasm renders:', png.length, 'bytes');
           "
 
+      # The whole suite against the wasm build, not just a smoke test: the
+      # binding is the same generated code, but the environment is not -- WASI
+      # has no system fonts, and every test had to stop assuming it did.
+      - name: Test suite on wasm
+        if: matrix.target == 'wasm32-wasip1-threads'
+        run: npm run test:wasi
+
       - uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.target }}
@@ -107,6 +114,9 @@ jobs:
         with:
           name: bindings-${{ matrix.target }}
       - run: npm test
+      # index.d.ts is generated, so a type regression is a build product
+      # regression: cheap to catch here.
+      - run: npm run typecheck
 
   publish:
     name: publish

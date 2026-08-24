@@ -317,10 +317,22 @@ Three things the demo has to handle, all visible in
 ## Scripts
 
 ```
-npm run build        # napi build --platform --release
-npm test             # 11 test files, native + typings, plus both examples
-npm run typecheck    # tsc --strict over index.d.ts and demo.mts
+npm run build         # napi build --platform --release
+npm test              # the suite on the native binding, then the four examples
+npm run test:wasi     # the same suite against the wasm build (POSIX shells)
+npm run test:examples # renders demo/examples/*.svg headlessly
+npm run typecheck     # tsc --strict over index.d.ts and demo.mts
+npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```
+
+`test:wasi` points `index.js` at `resvg-napi.wasi.cjs` through
+`NAPI_RS_NATIVE_LIBRARY_PATH`, so the same eleven files exercise the wasm
+build. That run is why nothing in the suite assumes an installed font: WASI has
+no font directories, and `loadSystemFonts()` finds nothing there. Tests take
+the database and the family name from `test-support.mjs`, which falls back to a
+font file (`RESVG_TEST_FONT`, or a few well-known paths) and skips loudly when
+there is none. The env-var prefix is POSIX-shell syntax; on Windows use
+`npm test`, which CI does too.
 
 ## Licence
 

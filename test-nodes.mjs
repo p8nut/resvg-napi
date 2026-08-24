@@ -1,7 +1,18 @@
 // SvgNode: read-only handles on inner elements (Arc<Tree> + index path).
 import assert from 'node:assert/strict';
+import { testFonts, skip } from './test-support.mjs';
 import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('./index.js');
+const { Resvg, FontDatabase } = createRequire(import.meta.url)('./index.js');
+// Fonts are not a given: WASI has none, so the database is explicit and the
+// family is whatever this environment actually holds.
+const fontsFound = testFonts(FontDatabase);
+if (!fontsFound) {
+  skip('node wrappers', 'no font in this environment');
+  process.exit(0);
+}
+const { db, family } = fontsFound;
+const opts = { fontFamily: family };
+
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
   <filter id="f"><feGaussianBlur stdDeviation="5"/></filter>
@@ -59,7 +70,7 @@ assert.equal(clipped.node('plain').clipPath(), null, 'a path is not a clipped gr
 
 // 8. text nodes are reachable too
 const t = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="60" height="30"><text id="t" x="2" y="20" font-size="12">hi</text></svg>',
-  { fontFamily: 'DejaVu Sans' });
+  opts, db);
 assert.equal(t.node('t').kind, 'text');
 assert.ok(t.node('t').extent().width > 0);
 

@@ -284,7 +284,13 @@ export declare class RadialGradient {
   stops(): Array<Stop>
 }
 
-/** A parsed SVG, ready to be rendered any number of times. */
+/**
+ * A parsed SVG, ready to be rendered any number of times.
+ *
+ * `Clone` because an async twin captures the receiver: every field is
+ * behind an `Arc` or cheap to copy, so the clone is a refcount bump and
+ * the worker thread never touches the JS heap.
+ */
 export declare class Resvg {
   constructor(svg: string | Buffer, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Buffer> | undefined | null)
   /**
@@ -309,13 +315,6 @@ export declare class Resvg {
   get height(): number
   /** Renders to a PNG buffer. */
   renderPng(params?: RenderParams | undefined | null): Buffer
-  /**
-   * Renders to a PNG buffer on a worker thread. Rasterising and PNG
-   * encoding both happen off the event loop.
-   */
-  renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
-  /** Renders to raw RGBA8 pixels on a worker thread. */
-  renderRawAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<RawImage>
   /**
    * Parses on a worker thread. Same arguments as the constructor, and the
    * resolved instance still reports `pendingImages` / `pendingFonts`.
@@ -463,6 +462,18 @@ export declare class Resvg {
   toString(options?: WriteOptions | undefined | null): string
   /** Renders to raw RGBA8 pixels. */
   renderRaw(params?: RenderParams | undefined | null): RawImage
+  /** `renderPng` on a worker thread: the work leaves the event loop, and a
+  queued call is dropped when the signal fires. */
+  renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
+  /** `renderNodePng` on a worker thread: the work leaves the event loop, and a
+  queued call is dropped when the signal fires. */
+  renderNodePngAsync(id: string, params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
+  /** `toString` on a worker thread: the work leaves the event loop, and a
+  queued call is dropped when the signal fires. */
+  toStringAsync(options?: WriteOptions | undefined | null, signal?: AbortSignal | undefined | null): Promise<string>
+  /** `renderRaw` on a worker thread: the work leaves the event loop, and a
+  queued call is dropped when the signal fires. */
+  renderRawAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<RawImage>
 }
 
 /**
@@ -525,6 +536,9 @@ export declare class SvgNode {
    * See [`Group::layer_bounding_box`] for details.
    */
   absLayerBoundingBox(): BBox | null
+  /** `renderPng` on a worker thread: the work leaves the event loop, and a
+  queued call is dropped when the signal fires. */
+  renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
 }
 
 /** An alignment baseline property. */

@@ -844,6 +844,38 @@ impl RenderOptions {
     }
 }
 type ImageMap = std::collections::HashMap<String, std::sync::Arc<Vec<u8>>>;
+#[doc = " The Send half of a result, and its JS half."]
+#[doc = ""]
+#[doc = " `Buffer` holds a reference into the JS heap, so it is not `Send` and"]
+#[doc = " cannot be built on a worker thread. Every async twin therefore computes"]
+#[doc = " one of these and converts on the main thread, in `Task::resolve`."]
+pub trait IntoJs {
+    type Js;
+    fn into_js(self) -> Self::Js;
+}
+impl IntoJs for Vec<u8> {
+    type Js = Buffer;
+    fn into_js(self) -> Buffer {
+        Buffer::from(self)
+    }
+}
+impl IntoJs for String {
+    type Js = String;
+    fn into_js(self) -> String {
+        self
+    }
+}
+impl IntoJs for (u32, u32, Vec<u8>) {
+    type Js = RawImage;
+    fn into_js(self) -> RawImage {
+        let (width, height, data) = self;
+        RawImage {
+            width,
+            height,
+            data: Buffer::from(data),
+        }
+    }
+}
 #[doc = " Hrefs no resolver could satisfy during the last parse."]
 #[derive(Default, Clone)]
 struct Misses(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
@@ -1725,7 +1757,9 @@ pub fn take_logs() -> Vec<String> {
 #[doc = " Anything that owns a content group: the document, or a def such as a"]
 #[doc = " pattern, a mask or a clip path. The generator implements it for every"]
 #[doc = " wrapped type that has a `root() -> &Group`."]
-pub trait HasRoot {
+#[doc = " Send + Sync: a node reached through a def keeps its owner alive, and"]
+#[doc = " an async twin carries that owner to a worker thread."]
+pub trait HasRoot: Send + Sync {
     fn group(&self) -> &usvg::Group;
 }
 #[doc = " The strict policy drops `FaceInfo::families` -- it is a"]
@@ -1792,6 +1826,7 @@ fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<u32>) -> Option<Ve
 #[doc = " keeps the tree alive plus the child-index path instead, and re-resolves"]
 #[doc = " on each call -- safe because a parsed tree is immutable."]
 #[napi]
+#[derive(Clone)]
 pub struct SvgNode {
     #[doc = " The document, when there is one: a node reached through a def has"]
     #[doc = " no document context, so the def tables are out of reach from it."]
@@ -1893,10 +1928,14 @@ impl SvgNode {
             .cloned()
             .map(Mask::wrap))
     }
+    #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
+    fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
+        render_node_png(self.node()?, &params.unwrap_or_default())
+    }
     #[doc = " Renders this element alone, sized to its own extent."]
     #[napi]
     pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-        render_node_png(self.node()?, &params.unwrap_or_default())
+        self.png_bytes(params).map(IntoJs::into_js)
     }
     #[doc = " Returns node's ID."]
     #[napi]
@@ -1950,10 +1989,15 @@ impl SvgNode {
 }
 #[doc = " A parsed SVG, ready to be rendered any number of times."]
 #[napi]
+#[doc = ""]
+#[doc = " `Clone` because an async twin captures the receiver: every field is"]
+#[doc = " behind an `Arc` or cheap to copy, so the clone is a refcount bump and"]
+#[doc = " the worker thread never touches the JS heap."]
+#[derive(Clone)]
 pub struct Resvg {
     tree: std::sync::Arc<usvg::Tree>,
     #[doc = " Source kept verbatim: resolving an image means re-parsing."]
-    svg: Vec<u8>,
+    svg: std::sync::Arc<Vec<u8>>,
     options: RenderOptions,
     fonts: std::sync::Arc<usvg::fontdb::Database>,
     images: ImageMap,
@@ -1987,7 +2031,7 @@ impl Resvg {
             Self::build(&svg, &options, fonts.clone(), &images)?;
         Ok(Self {
             tree: std::sync::Arc::new(tree),
-            svg,
+            svg: std::sync::Arc::new(svg),
             options,
             fonts,
             images,
@@ -2030,45 +2074,17 @@ impl Resvg {
     pub fn height(&self) -> f64 {
         self.tree.size().height() as f64
     }
+    #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
+    #[doc = " on a worker thread."]
+    fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
+        self.draw(params.unwrap_or_default())?
+            .encode_png()
+            .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+    }
     #[doc = " Renders to a PNG buffer."]
     #[napi]
     pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-        let pixmap = self.draw(params.unwrap_or_default())?;
-        pixmap
-            .encode_png()
-            .map(Buffer::from)
-            .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
-    }
-    #[doc = " Renders to a PNG buffer on a worker thread. Rasterising and PNG"]
-    #[doc = " encoding both happen off the event loop."]
-    #[napi(ts_return_type = "Promise<Buffer>")]
-    pub fn render_png_async(
-        &self,
-        params: Option<RenderParams>,
-        signal: Option<AbortSignal>,
-    ) -> AsyncTask<PngTask> {
-        AsyncTask::with_optional_signal(
-            PngTask {
-                tree: self.tree.clone(),
-                params: params.unwrap_or_default(),
-            },
-            signal,
-        )
-    }
-    #[doc = " Renders to raw RGBA8 pixels on a worker thread."]
-    #[napi(ts_return_type = "Promise<RawImage>")]
-    pub fn render_raw_async(
-        &self,
-        params: Option<RenderParams>,
-        signal: Option<AbortSignal>,
-    ) -> AsyncTask<RawTask> {
-        AsyncTask::with_optional_signal(
-            RawTask {
-                tree: self.tree.clone(),
-                params: params.unwrap_or_default(),
-            },
-            signal,
-        )
+        self.png_bytes(params).map(IntoJs::into_js)
     }
     #[doc = " Parses on a worker thread. Same arguments as the constructor, and the"]
     #[doc = " resolved instance still reports `pendingImages` / `pendingFonts`."]
@@ -2115,6 +2131,10 @@ impl Resvg {
     #[doc = " out of a sprite sheet."]
     #[napi]
     pub fn render_node_png(&self, id: String, params: Option<RenderParams>) -> Result<Buffer> {
+        self.node_png_bytes(id, params).map(IntoJs::into_js)
+    }
+    #[doc = " The Send half of `renderNodePng`."]
+    fn node_png_bytes(&self, id: String, params: Option<RenderParams>) -> Result<Vec<u8>> {
         let node = self
             .tree
             .node_by_id(&id)
@@ -2333,6 +2353,10 @@ impl Resvg {
     #[doc = " Text is converted to paths unless `preserveText` is set."]
     #[napi(js_name = "toString")]
     pub fn to_svg_string(&self, options: Option<WriteOptions>) -> Result<String> {
+        self.svg_text(options)
+    }
+    #[doc = " Serialising a large tree is not free; this is the half a twin runs."]
+    fn svg_text(&self, options: Option<WriteOptions>) -> Result<String> {
         let opt = options.unwrap_or_default().to_usvg();
         let tree = &self.tree;
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2340,16 +2364,16 @@ impl Resvg {
         }))
         .map_err(|_| Error::from_reason("usvg panicked while writing the SVG"))
     }
+    #[doc = " Rasterise only: width, height and the demultiplied pixels, all Send."]
+    fn raw_pixels(&self, params: Option<RenderParams>) -> Result<(u32, u32, Vec<u8>)> {
+        let pixmap = self.draw(params.unwrap_or_default())?;
+        let (width, height) = (pixmap.width(), pixmap.height());
+        Ok((width, height, pixmap.take_demultiplied()))
+    }
     #[doc = " Renders to raw RGBA8 pixels."]
     #[napi]
     pub fn render_raw(&self, params: Option<RenderParams>) -> Result<RawImage> {
-        let pixmap = self.draw(params.unwrap_or_default())?;
-        let (width, height) = (pixmap.width(), pixmap.height());
-        Ok(RawImage {
-            width,
-            height,
-            data: Buffer::from(pixmap.take_demultiplied()),
-        })
+        self.raw_pixels(params).map(IntoJs::into_js)
     }
 }
 impl Resvg {
@@ -2415,7 +2439,7 @@ fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     Ok(pixmap)
 }
 #[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
-fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Buffer> {
+fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
     let bbox =
         node_extent(node).ok_or_else(|| Error::from_reason("element has no visible size"))?;
     let inner = node
@@ -2454,7 +2478,6 @@ fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Buffer> {
     .ok_or_else(|| Error::from_reason("element is empty"))?;
     pixmap
         .encode_png()
-        .map(Buffer::from)
         .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
 }
 #[doc = " Rendered extent of a node."]
@@ -2468,45 +2491,6 @@ fn node_extent(node: &usvg::Node) -> Option<usvg::NonZeroRect> {
         usvg::Node::Path(p) => p.abs_stroke_bounding_box().to_non_zero_rect(),
         usvg::Node::Text(t) => t.abs_stroke_bounding_box().to_non_zero_rect(),
         usvg::Node::Image(i) => i.abs_bounding_box().to_non_zero_rect(),
-    }
-}
-#[doc = " Rasterise + PNG encode on a libuv worker thread."]
-pub struct PngTask {
-    tree: std::sync::Arc<usvg::Tree>,
-    params: RenderParams,
-}
-impl Task for PngTask {
-    type Output = Vec<u8>;
-    type JsValue = Buffer;
-    fn compute(&mut self) -> Result<Self::Output> {
-        draw(&self.tree, &self.params)?
-            .encode_png()
-            .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
-    }
-    fn resolve(&mut self, _: napi::Env, png: Self::Output) -> Result<Self::JsValue> {
-        Ok(Buffer::from(png))
-    }
-}
-#[doc = " Rasterise on a libuv worker thread, no encoding."]
-pub struct RawTask {
-    tree: std::sync::Arc<usvg::Tree>,
-    params: RenderParams,
-}
-impl Task for RawTask {
-    type Output = (u32, u32, Vec<u8>);
-    type JsValue = RawImage;
-    fn compute(&mut self) -> Result<Self::Output> {
-        let pixmap = draw(&self.tree, &self.params)?;
-        let (w, h) = (pixmap.width(), pixmap.height());
-        Ok((w, h, pixmap.take_demultiplied()))
-    }
-    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-        let (width, height, data) = out;
-        Ok(RawImage {
-            width,
-            height,
-            data: Buffer::from(data),
-        })
     }
 }
 #[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
@@ -2526,7 +2510,7 @@ impl Task for ParseTask {
         let (tree, pending_images, pending_fonts) = out;
         Ok(Resvg {
             tree: std::sync::Arc::new(tree),
-            svg: std::mem::take(&mut self.svg),
+            svg: std::sync::Arc::new(std::mem::take(&mut self.svg)),
             options: self.options.clone(),
             fonts: self.fonts.clone(),
             images: std::mem::take(&mut self.images),
@@ -2578,4 +2562,173 @@ pub fn render_async(
         },
         signal,
     )
+}
+#[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+pub struct SvgNodePngBytesTask {
+    recv: SvgNode,
+    params: Option<RenderParams>,
+}
+impl Task for SvgNodePngBytesTask {
+    type Output = Vec<u8>;
+    type JsValue = <Vec<u8> as IntoJs>::Js;
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.recv.png_bytes(self.params.clone())
+    }
+    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out.into_js())
+    }
+}
+#[napi]
+impl SvgNode {
+    #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+    #[napi(ts_return_type = "Promise<Buffer>")]
+    pub fn render_png_async(
+        &self,
+        params: Option<RenderParams>,
+        signal: Option<AbortSignal>,
+    ) -> AsyncTask<SvgNodePngBytesTask> {
+        AsyncTask::with_optional_signal(
+            SvgNodePngBytesTask {
+                recv: self.clone(),
+                params,
+            },
+            signal,
+        )
+    }
+}
+#[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+pub struct ResvgPngBytesTask {
+    recv: Resvg,
+    params: Option<RenderParams>,
+}
+impl Task for ResvgPngBytesTask {
+    type Output = Vec<u8>;
+    type JsValue = <Vec<u8> as IntoJs>::Js;
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.recv.png_bytes(self.params.clone())
+    }
+    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out.into_js())
+    }
+}
+#[napi]
+impl Resvg {
+    #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+    #[napi(ts_return_type = "Promise<Buffer>")]
+    pub fn render_png_async(
+        &self,
+        params: Option<RenderParams>,
+        signal: Option<AbortSignal>,
+    ) -> AsyncTask<ResvgPngBytesTask> {
+        AsyncTask::with_optional_signal(
+            ResvgPngBytesTask {
+                recv: self.clone(),
+                params,
+            },
+            signal,
+        )
+    }
+}
+#[doc = " `renderNodePng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+pub struct ResvgNodePngBytesTask {
+    recv: Resvg,
+    id: String,
+    params: Option<RenderParams>,
+}
+impl Task for ResvgNodePngBytesTask {
+    type Output = Vec<u8>;
+    type JsValue = <Vec<u8> as IntoJs>::Js;
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.recv
+            .node_png_bytes(self.id.clone(), self.params.clone())
+    }
+    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out.into_js())
+    }
+}
+#[napi]
+impl Resvg {
+    #[doc = " `renderNodePng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+    #[napi(ts_return_type = "Promise<Buffer>")]
+    pub fn render_node_png_async(
+        &self,
+        id: String,
+        params: Option<RenderParams>,
+        signal: Option<AbortSignal>,
+    ) -> AsyncTask<ResvgNodePngBytesTask> {
+        AsyncTask::with_optional_signal(
+            ResvgNodePngBytesTask {
+                recv: self.clone(),
+                id,
+                params,
+            },
+            signal,
+        )
+    }
+}
+#[doc = " `toString` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+pub struct ResvgSvgTextTask {
+    recv: Resvg,
+    options: Option<WriteOptions>,
+}
+impl Task for ResvgSvgTextTask {
+    type Output = String;
+    type JsValue = <String as IntoJs>::Js;
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.recv.svg_text(self.options.clone())
+    }
+    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out.into_js())
+    }
+}
+#[napi]
+impl Resvg {
+    #[doc = " `toString` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+    #[napi(ts_return_type = "Promise<string>")]
+    pub fn to_string_async(
+        &self,
+        options: Option<WriteOptions>,
+        signal: Option<AbortSignal>,
+    ) -> AsyncTask<ResvgSvgTextTask> {
+        AsyncTask::with_optional_signal(
+            ResvgSvgTextTask {
+                recv: self.clone(),
+                options,
+            },
+            signal,
+        )
+    }
+}
+#[doc = " `renderRaw` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+pub struct ResvgRawPixelsTask {
+    recv: Resvg,
+    params: Option<RenderParams>,
+}
+impl Task for ResvgRawPixelsTask {
+    type Output = (u32, u32, Vec<u8>);
+    type JsValue = <(u32, u32, Vec<u8>) as IntoJs>::Js;
+    fn compute(&mut self) -> Result<Self::Output> {
+        self.recv.raw_pixels(self.params.clone())
+    }
+    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out.into_js())
+    }
+}
+#[napi]
+impl Resvg {
+    #[doc = " `renderRaw` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
+    #[napi(ts_return_type = "Promise<RawImage>")]
+    pub fn render_raw_async(
+        &self,
+        params: Option<RenderParams>,
+        signal: Option<AbortSignal>,
+    ) -> AsyncTask<ResvgRawPixelsTask> {
+        AsyncTask::with_optional_signal(
+            ResvgRawPixelsTask {
+                recv: self.clone(),
+                params,
+            },
+            signal,
+        )
+    }
 }

@@ -1659,355 +1659,46 @@ fn assert_tree_ctor(files: &[syn::File], name: &str) {
 // 4. emission
 // ---------------------------------------------------------------------------
 
-fn main() {
-    napi_build::setup();
-    println!("cargo::rerun-if-changed=build.rs");
-    // The generated file is also an *input* to watch: if someone deletes or
-    // stubs src/lib.rs, the script must re-run and regenerate it.
-    println!("cargo::rerun-if-changed=src/lib.rs");
-    println!("cargo::rerun-if-env-changed=RESVG_NAPI_EMIT_SRC");
+/// The fragments the passes produce. Grouped so `template` keeps a short
+/// signature: these are the same on both of its calls, while the four method
+/// lists are not.
+struct Fragments<'a> {
+    enums: TokenStream,
+    object_code: TokenStream,
+    wrapper_code: TokenStream,
+    decls: Vec<&'a TokenStream>,
+    assigns: Vec<&'a TokenStream>,
+    write_decls: Vec<&'a TokenStream>,
+    write_assigns: Vec<&'a TokenStream>,
+}
 
-    let locked = locked_versions();
-    let usvg = locate("usvg", "parser/options.rs", &locked);
-    let resvg = locate("resvg", "lib.rs", &locked);
-    let fontdb = locate("fontdb", "lib.rs", &locked);
-    println!("cargo::warning=usvg sources: {}", usvg.display());
-
-    // Whole crates, no per-file list: the `impl` blocks we wrap are spread over
-    // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
-    let usvg_parsed = parse_crate(&usvg);
-    let usvg_files: Vec<syn::File> = usvg_parsed.iter().map(|(_, f)| f.clone()).collect();
-    let modules = upstream_modules(&usvg_parsed, &public_modules(&usvg_files));
-    // Only the crate root for free functions: a module-level `pub fn` elsewhere
-    // is not crate-public (resvg has an internal `render(&Image, ...)`).
-    let resvg_root = vec![parse(&resvg.join("lib.rs"))];
-    let fontdb_files: Vec<syn::File> =
-        parse_crate(&fontdb).into_iter().map(|(_, f)| f).collect();
-
-    // Guards first: no point generating against a moved API.
-    assert_free_fn(
-        &resvg_root,
-        "render",
-        &[
-            "&usvg::Tree",
-            "tiny_skia::Transform",
-            "&muttiny_skia::PixmapMut",
-        ],
-    );
-    assert_tree_ctor(&usvg_files, "from_data");
-    assert_tree_ctor(&usvg_files, "to_string");
-    assert_struct_fields(
-        &usvg_files,
-        "ImageHrefResolver",
-        &["resolve_data", "resolve_string"],
-    );
-    assert_struct_fields(&usvg_files, "FontResolver", &["select_font", "select_fallback"]);
-
-    // POW_VEC has N entries, so the highest usable precision is N - 1.
-    let precision_max = (static_array_len(&usvg_files, "POW_VEC") - 1) as u32;
-    println!("cargo::warning=usvg precision clamp derived from POW_VEC: {precision_max}");
-
-    // Enums to mirror = named by a config field OR by a return of a wrapped impl.
-    let mut referenced = struct_field_types(&usvg_files, "Options");
-    referenced.extend(struct_field_types(&usvg_files, "WriteOptions"));
-    referenced.extend(returned_types(&usvg_files, &[]));
-    referenced.extend(returned_types(&fontdb_files, &[]));
-
-    // Object candidates: a *collection* of values wants a value type, whereas a
-    // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
-    // make Stop/FaceInfo objects, while `&Group` stays a handle question.
-    let object_seeds: BTreeSet<String> = referenced
-        .iter()
-        .filter_map(|t| {
-            let b = t.trim_start_matches('&');
-            if let Some(inner) = b.strip_prefix("[").and_then(|s| s.strip_suffix("]")) {
-                return Some(inner.trim_start_matches('&').to_string());
-            }
-            if let Some(rest) = b.strip_prefix("implIterator<Item=") {
-                return Some(rest.split('>').next()?.trim_start_matches('&').to_string());
-            }
-            None
-        })
-        .collect();
-
-    let mut vocab = Vocab::default();
-    let extra: Vec<syn::File> = ["tiny-skia-path", "strict-num"]
-        .iter()
-        .flat_map(|c| parse_crate(&locate(c, "lib.rs", &locked)))
-        .map(|(_, f)| f)
-        .collect();
-    for set in [&usvg_files, &fontdb_files, &extra] {
-        vocab.scalars.extend(f32_newtypes(set));
-        vocab.aliases.extend(type_aliases(set));
-    }
-    println!(
-        "cargo::warning=vocabulary derived: {} f32 newtypes, {} type aliases",
-        vocab.scalars.len(),
-        vocab.aliases.len()
-    );
-
-    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules);
-    vocab.enums = enum_names.clone();
-    for set in [&usvg_files, &fontdb_files] {
-        vocab.ints.extend(int_newtypes(set));
-    }
-
-    // Fixpoint over object types: a generated object can reference another
-    // (`Stop` holds a `Color`).
-    let mut object_todo: std::collections::VecDeque<String> =
-        object_seeds.into_iter().collect();
-    let mut object_done: BTreeSet<String> = BTreeSet::new();
-    let mut object_root: BTreeMap<String, TokenStream> = BTreeMap::new();
-    // Phase 1: discover. Generation is only used here to learn what a type
-    // reaches; the code is thrown away because the registry is still growing.
-    while let Some(t) = object_todo.pop_front() {
-        if !object_done.insert(t.clone()) || object_done.len() > 64 {
-            continue;
-        }
-        if vocab.enums.contains(&t) || vocab.scalars.contains(&t) || vocab.ints.contains(&t) {
-            continue;
-        }
-        let (source, root) = if struct_fields_opt(&usvg_files, &t).is_some() {
-            (&usvg_files, quote!(usvg))
-        } else if struct_fields_opt(&fontdb_files, &t).is_some() {
-            (&fontdb_files, quote!(usvg::fontdb))
-        } else {
-            println!("cargo::warning=object {t} skipped: not a public struct");
-            continue;
-        };
-        vocab.objects.insert(t.clone());
-        object_root.insert(t.clone(), root.clone());
-        let (members, dropped, reached) = data_members(source, &t, &vocab);
-        if members.is_empty() {
-            vocab.objects.remove(&t);
-            object_root.remove(&t);
-            println!("cargo::warning=data type {t} skipped: nothing mappable on it");
-            continue;
-        }
-        // A dropped member whose type is itself a public struct is a candidate:
-        // that is how `Stop` reaches `Color`.
-        for d in &dropped {
-            let raw = d.split(": ").nth(1).unwrap_or_default();
-            let bare = raw
-                .trim_start_matches('&')
-                .trim_start_matches("Option<")
-                .trim_start_matches("Vec<")
-                .trim_end_matches('>')
-                .trim_start_matches('&')
-                .rsplit("::")
-                .next()
-                .unwrap_or_default()
-                .to_string();
-            if !bare.is_empty() && !object_done.contains(&bare) {
-                object_todo.push_back(bare);
-            }
-        }
-        object_todo.extend(reached.into_iter().filter(|x| !object_done.contains(x)));
-    }
-    // Phase 2: build the code for every candidate, but keep it aside: only the
-    // ones an exposed method can actually hand out are worth emitting.
-    // Phase 2, with the registry complete: strict mapping becomes an object,
-    // partial mapping becomes a read-only class. Deciding this in phase 1 got it
-    // wrong, because a nested type may not have been discovered yet.
-    let mut object_parts: BTreeMap<String, TokenStream> = BTreeMap::new();
-    for t in vocab.objects.clone() {
-        let source = if struct_fields_opt(&usvg_files, &t).is_some() {
-            &usvg_files
-        } else {
-            &fontdb_files
-        };
-        let root = object_root[&t].clone();
-        let (code, dropped, _) = object_struct(source, &t, &vocab, &modules, &root);
-        if code.is_empty() {
-            vocab.objects.remove(&t);
-            let (vcode, _, _) = value_class(source, &t, &vocab, &modules, &root);
-            if vcode.is_empty() {
-                continue;
-            }
-            vocab.values.insert(t.clone());
-            object_parts.insert(t.clone(), vcode);
-            println!(
-                "cargo::warning={t}: partial mapping, emitted as read-only class {}",
-                value_class_ident(&t)
-            );
-            for d in dropped {
-                println!("cargo::warning={t} member not exposed: {d}");
-            }
-        } else {
-            object_parts.insert(t.clone(), code);
-        }
-    }
-
-    let (fields, skipped_fields) = map_struct(&usvg_files, "Options", &vocab, precision_max);
-    let (write_fields, skipped_write) =
-        map_struct(&usvg_files, "WriteOptions", &vocab, precision_max);
-
-    // Fixpoint: start from the handle types the wrapped impls return, generate a
-    // class for each, then follow the handles *those* classes return. The type
-    // graph is finite; the cap is only a runaway guard.
-    const RESERVED: [&str; 8] = [
-        "Resvg", "SvgNode", "BBox", "Matrix", "Dimensions", "RawImage", "RenderOptions",
-        "RenderParams",
-    ];
-    let handles_of = |set: &BTreeSet<String>| -> BTreeSet<String> {
-        set.iter()
-            .filter_map(|t| match vocab.classify(t) {
-                Some(Js::Handle(x)) | Some(Js::HandleList(x)) => Some(x),
-                _ => None,
-            })
-            .collect()
-    };
-    let mut todo: Vec<String> = handles_of(&referenced).into_iter().collect();
-    let mut done: BTreeSet<String> = BTreeSet::new();
-    let mut wrapper_code = TokenStream::new();
-    while let Some(t) = todo.pop() {
-        if !done.insert(t.clone()) || done.len() > 24 {
-            continue;
-        }
-        let name = wrapper_ident(&t).to_string();
-        if RESERVED.contains(&name.as_str()) {
-            println!("cargo::warning=handle {t} skipped: name {name} is taken");
-            continue;
-        }
-        // `fontdb::Database` maps onto the hand-written FontDatabase class.
-        if t == "fontdb::Database" {
-            continue;
-        }
-        let (code, skipped, reached) = wrapper_class(&usvg_files, &t, &vocab, &modules);
-        if code.is_empty() {
-            println!("cargo::warning=handle {t} skipped: nothing mappable on it");
-        } else {
-            wrapper_code.extend(code);
-        }
-        for s in skipped {
-            // `root()` is served by the generated `children()` view above.
-            let verb = if s.starts_with("root ") {
-                "covered by the content view"
-            } else {
-                "not exposed"
-            };
-            println!("cargo::warning=usvg::{t} method {verb}: {s}");
-        }
-        todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
-    }
-    println!(
-        "cargo::warning=wrapper classes generated: {}",
-        done.iter().cloned().collect::<Vec<_>>().join(", ")
-    );
-
-    // One declarative table instead of four call sites: adding a wrapped
-    // `impl` block is a single row.
-    let node_prologue = quote!(let __n = self.node()?;);
-    struct Pass<'a> {
-        label: &'a str,
-        target: &'a str,
-        files: &'a [syn::File],
-        ty: &'a str,
-        receiver: TokenStream,
-        skip: &'a [&'a str],
-        prologue: Option<&'a TokenStream>,
-    }
-    let passes = [
-        Pass { label: "fontdb::Database", target: "FontDatabase", files: &fontdb_files,
-               ty: "Database", receiver: quote!(self.inner), skip: &[], prologue: None },
-        Pass { label: "usvg::Tree", target: "Resvg", files: &usvg_files, ty: "Tree",
-               receiver: quote!(self.tree), skip: &[], prologue: None },
-        Pass { label: "usvg::Group", target: "Resvg", files: &usvg_files, ty: "Group",
-               receiver: quote!(self.tree.root()), skip: &["isolate", "should_isolate", "id"],
-               prologue: None },
-        Pass { label: "usvg::Node", target: "SvgNode", files: &usvg_files, ty: "Node",
-               receiver: quote!(__n), skip: &["subroots"], prologue: Some(&node_prologue) },
-    ];
-
-    let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
-    let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
-    // Reported once the template exists: whether a skipped method is "covered"
-    // is a question about the template, which is built further down.
-    let mut skips: Vec<(&str, Vec<String>)> = Vec::new();
-    for p in &passes {
-        let names = taken.entry(p.target).or_default();
-        let (code, skipped) =
-            map_methods(p.files, p.ty, &vocab, &p.receiver, p.skip, p.prologue, false, names);
-        skips.push((p.label, skipped));
-        generated.insert(p.ty, code);
-    }
-    // Prune: an object type nothing returns is dead TS surface. Start from the
-    // generated method bodies, then follow objects nested in kept objects.
-    let mentions = |code: &TokenStream, name: &str| -> bool {
-        format!(" {} ", code.to_string()).contains(&format!(" {name} "))
-    };
-    let mut kept: BTreeSet<String> = BTreeSet::new();
-    let all_data: BTreeSet<String> =
-        vocab.objects.union(&vocab.values).cloned().collect();
-    for name in all_data.clone() {
-        // A value class is referenced under its JS name, not the Rust one.
-        let js = value_class_ident(&name).to_string();
-        let used = generated
-            .values()
-            .any(|c| mentions(c, &name) || mentions(c, &js))
-            || mentions(&wrapper_code, &name)
-            || mentions(&wrapper_code, &js);
-        if used {
-            kept.insert(name);
-        }
-    }
-    loop {
-        let mut added = false;
-        for name in all_data.clone() {
-            if kept.contains(&name) {
-                continue;
-            }
-            if kept
-                .iter()
-                .any(|k| object_parts.get(k).is_some_and(|c| mentions(c, &name)))
-            {
-                kept.insert(name);
-                added = true;
-            }
-        }
-        if !added {
-            break;
-        }
-    }
-    let dropped: Vec<String> = all_data.difference(&kept).cloned().collect();
-    if !dropped.is_empty() {
-        println!("cargo::warning=object types pruned as unreachable: {}", dropped.join(", "));
-    }
-    let object_code: TokenStream = kept
-        .iter()
-        .filter_map(|k| object_parts.get(k).cloned())
-        .collect();
-    println!(
-        "cargo::warning=data types emitted: {}",
-        kept.iter().cloned().collect::<Vec<_>>().join(", ")
-    );
-
-    let fontdb_methods = &generated["Database"];
-    let tree_methods = &generated["Tree"];
-    let group_methods = &generated["Group"];
-    let node_methods = &generated["Node"];
-
-    for s in skipped_fields {
-        println!("cargo::warning=usvg::Options field not exposed: {s}");
-    }
-    for s in skipped_write {
-        println!("cargo::warning=usvg::WriteOptions field not exposed: {s}");
-    }
-
-    let decls: Vec<_> = fields.iter().map(|f| &f.decl).collect();
-    let assigns: Vec<_> = fields.iter().map(|f| &f.assign).collect();
-    let write_decls: Vec<_> = write_fields.iter().map(|f| &f.decl).collect();
-    let write_assigns: Vec<_> = write_fields.iter().map(|f| &f.assign).collect();
-
-    // NOTE: no inner attributes (`#![..]` / `//!`) here -- the file is pulled in
-    // with `include!`, which only accepts items.
-    // The template is a closure so it can be built twice: once empty, to read the
-    // method names it defines itself, and once for real. Nothing below lists
-    // those names by hand.
-    let template = |fontdb_methods: &TokenStream,
-                    tree_methods: &TokenStream,
-                    group_methods: &TokenStream,
-                    node_methods: &TokenStream| quote! {
+/// The hand-written half of the binding: everything the passes cannot derive.
+///
+/// Called twice. Once with empty method lists, so `template_fns` can read the
+/// method names it defines off the template itself -- nothing lists them by
+/// hand -- and once for real.
+///
+/// NOTE: no inner attributes (`#![..]` / `//!`) in the body: the file is pulled
+/// in with `include!`, which only accepts items.
+fn template(
+    f: &Fragments,
+    fontdb_methods: &TokenStream,
+    tree_methods: &TokenStream,
+    group_methods: &TokenStream,
+    node_methods: &TokenStream,
+) -> TokenStream {
+    // Destructured by name so the body below is unchanged from when it was a
+    // closure capturing these from `main`.
+    let Fragments {
+        enums,
+        object_code,
+        wrapper_code,
+        decls,
+        assigns,
+        write_decls,
+        write_assigns,
+    } = f;
+    quote! {
         use napi::bindgen_prelude::*;
         use napi_derive::napi;
         use resvg::{tiny_skia, usvg};
@@ -3048,11 +2739,365 @@ fn main() {
                 signal,
             )
         }
+    }
+}
+
+fn main() {
+    napi_build::setup();
+    println!("cargo::rerun-if-changed=build.rs");
+    // The generated file is also an *input* to watch: if someone deletes or
+    // stubs src/lib.rs, the script must re-run and regenerate it.
+    println!("cargo::rerun-if-changed=src/lib.rs");
+    println!("cargo::rerun-if-env-changed=RESVG_NAPI_EMIT_SRC");
+
+    let locked = locked_versions();
+    let usvg = locate("usvg", "parser/options.rs", &locked);
+    let resvg = locate("resvg", "lib.rs", &locked);
+    let fontdb = locate("fontdb", "lib.rs", &locked);
+    println!("cargo::warning=usvg sources: {}", usvg.display());
+
+    // Whole crates, no per-file list: the `impl` blocks we wrap are spread over
+    // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
+    let usvg_parsed = parse_crate(&usvg);
+    let usvg_files: Vec<syn::File> = usvg_parsed.iter().map(|(_, f)| f.clone()).collect();
+    let modules = upstream_modules(&usvg_parsed, &public_modules(&usvg_files));
+    // Only the crate root for free functions: a module-level `pub fn` elsewhere
+    // is not crate-public (resvg has an internal `render(&Image, ...)`).
+    let resvg_root = vec![parse(&resvg.join("lib.rs"))];
+    let fontdb_files: Vec<syn::File> =
+        parse_crate(&fontdb).into_iter().map(|(_, f)| f).collect();
+
+    // Guards first: no point generating against a moved API.
+    assert_free_fn(
+        &resvg_root,
+        "render",
+        &[
+            "&usvg::Tree",
+            "tiny_skia::Transform",
+            "&muttiny_skia::PixmapMut",
+        ],
+    );
+    assert_tree_ctor(&usvg_files, "from_data");
+    assert_tree_ctor(&usvg_files, "to_string");
+    assert_struct_fields(
+        &usvg_files,
+        "ImageHrefResolver",
+        &["resolve_data", "resolve_string"],
+    );
+    assert_struct_fields(&usvg_files, "FontResolver", &["select_font", "select_fallback"]);
+
+    // POW_VEC has N entries, so the highest usable precision is N - 1.
+    let precision_max = (static_array_len(&usvg_files, "POW_VEC") - 1) as u32;
+    println!("cargo::warning=usvg precision clamp derived from POW_VEC: {precision_max}");
+
+    // Enums to mirror = named by a config field OR by a return of a wrapped impl.
+    let mut referenced = struct_field_types(&usvg_files, "Options");
+    referenced.extend(struct_field_types(&usvg_files, "WriteOptions"));
+    referenced.extend(returned_types(&usvg_files, &[]));
+    referenced.extend(returned_types(&fontdb_files, &[]));
+
+    // Object candidates: a *collection* of values wants a value type, whereas a
+    // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
+    // make Stop/FaceInfo objects, while `&Group` stays a handle question.
+    let object_seeds: BTreeSet<String> = referenced
+        .iter()
+        .filter_map(|t| {
+            let b = t.trim_start_matches('&');
+            if let Some(inner) = b.strip_prefix("[").and_then(|s| s.strip_suffix("]")) {
+                return Some(inner.trim_start_matches('&').to_string());
+            }
+            if let Some(rest) = b.strip_prefix("implIterator<Item=") {
+                return Some(rest.split('>').next()?.trim_start_matches('&').to_string());
+            }
+            None
+        })
+        .collect();
+
+    let mut vocab = Vocab::default();
+    let extra: Vec<syn::File> = ["tiny-skia-path", "strict-num"]
+        .iter()
+        .flat_map(|c| parse_crate(&locate(c, "lib.rs", &locked)))
+        .map(|(_, f)| f)
+        .collect();
+    for set in [&usvg_files, &fontdb_files, &extra] {
+        vocab.scalars.extend(f32_newtypes(set));
+        vocab.aliases.extend(type_aliases(set));
+    }
+    println!(
+        "cargo::warning=vocabulary derived: {} f32 newtypes, {} type aliases",
+        vocab.scalars.len(),
+        vocab.aliases.len()
+    );
+
+    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules);
+    vocab.enums = enum_names.clone();
+    for set in [&usvg_files, &fontdb_files] {
+        vocab.ints.extend(int_newtypes(set));
+    }
+
+    // Fixpoint over object types: a generated object can reference another
+    // (`Stop` holds a `Color`).
+    let mut object_todo: std::collections::VecDeque<String> =
+        object_seeds.into_iter().collect();
+    let mut object_done: BTreeSet<String> = BTreeSet::new();
+    let mut object_root: BTreeMap<String, TokenStream> = BTreeMap::new();
+    // Phase 1: discover. Generation is only used here to learn what a type
+    // reaches; the code is thrown away because the registry is still growing.
+    while let Some(t) = object_todo.pop_front() {
+        if !object_done.insert(t.clone()) || object_done.len() > 64 {
+            continue;
+        }
+        if vocab.enums.contains(&t) || vocab.scalars.contains(&t) || vocab.ints.contains(&t) {
+            continue;
+        }
+        let (source, root) = if struct_fields_opt(&usvg_files, &t).is_some() {
+            (&usvg_files, quote!(usvg))
+        } else if struct_fields_opt(&fontdb_files, &t).is_some() {
+            (&fontdb_files, quote!(usvg::fontdb))
+        } else {
+            println!("cargo::warning=object {t} skipped: not a public struct");
+            continue;
+        };
+        vocab.objects.insert(t.clone());
+        object_root.insert(t.clone(), root.clone());
+        let (members, dropped, reached) = data_members(source, &t, &vocab);
+        if members.is_empty() {
+            vocab.objects.remove(&t);
+            object_root.remove(&t);
+            println!("cargo::warning=data type {t} skipped: nothing mappable on it");
+            continue;
+        }
+        // A dropped member whose type is itself a public struct is a candidate:
+        // that is how `Stop` reaches `Color`.
+        for d in &dropped {
+            let raw = d.split(": ").nth(1).unwrap_or_default();
+            let bare = raw
+                .trim_start_matches('&')
+                .trim_start_matches("Option<")
+                .trim_start_matches("Vec<")
+                .trim_end_matches('>')
+                .trim_start_matches('&')
+                .rsplit("::")
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            if !bare.is_empty() && !object_done.contains(&bare) {
+                object_todo.push_back(bare);
+            }
+        }
+        object_todo.extend(reached.into_iter().filter(|x| !object_done.contains(x)));
+    }
+    // Phase 2: build the code for every candidate, but keep it aside: only the
+    // ones an exposed method can actually hand out are worth emitting.
+    // Phase 2, with the registry complete: strict mapping becomes an object,
+    // partial mapping becomes a read-only class. Deciding this in phase 1 got it
+    // wrong, because a nested type may not have been discovered yet.
+    let mut object_parts: BTreeMap<String, TokenStream> = BTreeMap::new();
+    for t in vocab.objects.clone() {
+        let source = if struct_fields_opt(&usvg_files, &t).is_some() {
+            &usvg_files
+        } else {
+            &fontdb_files
+        };
+        let root = object_root[&t].clone();
+        let (code, dropped, _) = object_struct(source, &t, &vocab, &modules, &root);
+        if code.is_empty() {
+            vocab.objects.remove(&t);
+            let (vcode, _, _) = value_class(source, &t, &vocab, &modules, &root);
+            if vcode.is_empty() {
+                continue;
+            }
+            vocab.values.insert(t.clone());
+            object_parts.insert(t.clone(), vcode);
+            println!(
+                "cargo::warning={t}: partial mapping, emitted as read-only class {}",
+                value_class_ident(&t)
+            );
+            for d in dropped {
+                println!("cargo::warning={t} member not exposed: {d}");
+            }
+        } else {
+            object_parts.insert(t.clone(), code);
+        }
+    }
+
+    let (fields, skipped_fields) = map_struct(&usvg_files, "Options", &vocab, precision_max);
+    let (write_fields, skipped_write) =
+        map_struct(&usvg_files, "WriteOptions", &vocab, precision_max);
+
+    // Fixpoint: start from the handle types the wrapped impls return, generate a
+    // class for each, then follow the handles *those* classes return. The type
+    // graph is finite; the cap is only a runaway guard.
+    const RESERVED: [&str; 8] = [
+        "Resvg", "SvgNode", "BBox", "Matrix", "Dimensions", "RawImage", "RenderOptions",
+        "RenderParams",
+    ];
+    let handles_of = |set: &BTreeSet<String>| -> BTreeSet<String> {
+        set.iter()
+            .filter_map(|t| match vocab.classify(t) {
+                Some(Js::Handle(x)) | Some(Js::HandleList(x)) => Some(x),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut todo: Vec<String> = handles_of(&referenced).into_iter().collect();
+    let mut done: BTreeSet<String> = BTreeSet::new();
+    let mut wrapper_code = TokenStream::new();
+    while let Some(t) = todo.pop() {
+        if !done.insert(t.clone()) || done.len() > 24 {
+            continue;
+        }
+        let name = wrapper_ident(&t).to_string();
+        if RESERVED.contains(&name.as_str()) {
+            println!("cargo::warning=handle {t} skipped: name {name} is taken");
+            continue;
+        }
+        // `fontdb::Database` maps onto the hand-written FontDatabase class.
+        if t == "fontdb::Database" {
+            continue;
+        }
+        let (code, skipped, reached) = wrapper_class(&usvg_files, &t, &vocab, &modules);
+        if code.is_empty() {
+            println!("cargo::warning=handle {t} skipped: nothing mappable on it");
+        } else {
+            wrapper_code.extend(code);
+        }
+        for s in skipped {
+            // `root()` is served by the generated `children()` view above.
+            let verb = if s.starts_with("root ") {
+                "covered by the content view"
+            } else {
+                "not exposed"
+            };
+            println!("cargo::warning=usvg::{t} method {verb}: {s}");
+        }
+        todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
+    }
+    println!(
+        "cargo::warning=wrapper classes generated: {}",
+        done.iter().cloned().collect::<Vec<_>>().join(", ")
+    );
+
+    // One declarative table instead of four call sites: adding a wrapped
+    // `impl` block is a single row.
+    let node_prologue = quote!(let __n = self.node()?;);
+    struct Pass<'a> {
+        label: &'a str,
+        target: &'a str,
+        files: &'a [syn::File],
+        ty: &'a str,
+        receiver: TokenStream,
+        skip: &'a [&'a str],
+        prologue: Option<&'a TokenStream>,
+    }
+    let passes = [
+        Pass { label: "fontdb::Database", target: "FontDatabase", files: &fontdb_files,
+               ty: "Database", receiver: quote!(self.inner), skip: &[], prologue: None },
+        Pass { label: "usvg::Tree", target: "Resvg", files: &usvg_files, ty: "Tree",
+               receiver: quote!(self.tree), skip: &[], prologue: None },
+        Pass { label: "usvg::Group", target: "Resvg", files: &usvg_files, ty: "Group",
+               receiver: quote!(self.tree.root()), skip: &["isolate", "should_isolate", "id"],
+               prologue: None },
+        Pass { label: "usvg::Node", target: "SvgNode", files: &usvg_files, ty: "Node",
+               receiver: quote!(__n), skip: &["subroots"], prologue: Some(&node_prologue) },
+    ];
+
+    let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
+    let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
+    // Reported once the template exists: whether a skipped method is "covered"
+    // is a question about the template, which is built further down.
+    let mut skips: Vec<(&str, Vec<String>)> = Vec::new();
+    for p in &passes {
+        let names = taken.entry(p.target).or_default();
+        let (code, skipped) =
+            map_methods(p.files, p.ty, &vocab, &p.receiver, p.skip, p.prologue, false, names);
+        skips.push((p.label, skipped));
+        generated.insert(p.ty, code);
+    }
+    // Prune: an object type nothing returns is dead TS surface. Start from the
+    // generated method bodies, then follow objects nested in kept objects.
+    let mentions = |code: &TokenStream, name: &str| -> bool {
+        format!(" {} ", code.to_string()).contains(&format!(" {name} "))
+    };
+    let mut kept: BTreeSet<String> = BTreeSet::new();
+    let all_data: BTreeSet<String> =
+        vocab.objects.union(&vocab.values).cloned().collect();
+    for name in all_data.clone() {
+        // A value class is referenced under its JS name, not the Rust one.
+        let js = value_class_ident(&name).to_string();
+        let used = generated
+            .values()
+            .any(|c| mentions(c, &name) || mentions(c, &js))
+            || mentions(&wrapper_code, &name)
+            || mentions(&wrapper_code, &js);
+        if used {
+            kept.insert(name);
+        }
+    }
+    loop {
+        let mut added = false;
+        for name in all_data.clone() {
+            if kept.contains(&name) {
+                continue;
+            }
+            if kept
+                .iter()
+                .any(|k| object_parts.get(k).is_some_and(|c| mentions(c, &name)))
+            {
+                kept.insert(name);
+                added = true;
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    let dropped: Vec<String> = all_data.difference(&kept).cloned().collect();
+    if !dropped.is_empty() {
+        println!("cargo::warning=object types pruned as unreachable: {}", dropped.join(", "));
+    }
+    let object_code: TokenStream = kept
+        .iter()
+        .filter_map(|k| object_parts.get(k).cloned())
+        .collect();
+    println!(
+        "cargo::warning=data types emitted: {}",
+        kept.iter().cloned().collect::<Vec<_>>().join(", ")
+    );
+
+    let fontdb_methods = &generated["Database"];
+    let tree_methods = &generated["Tree"];
+    let group_methods = &generated["Group"];
+    let node_methods = &generated["Node"];
+
+    for s in skipped_fields {
+        println!("cargo::warning=usvg::Options field not exposed: {s}");
+    }
+    for s in skipped_write {
+        println!("cargo::warning=usvg::WriteOptions field not exposed: {s}");
+    }
+
+    let decls: Vec<_> = fields.iter().map(|f| &f.decl).collect();
+    let assigns: Vec<_> = fields.iter().map(|f| &f.assign).collect();
+    let write_decls: Vec<_> = write_fields.iter().map(|f| &f.decl).collect();
+    let write_assigns: Vec<_> = write_fields.iter().map(|f| &f.assign).collect();
+
+
+    // Everything the passes above produced, in one value: `template` is called
+    // twice and only the method lists differ between the two.
+    let fragments = Fragments {
+        enums,
+        object_code,
+        wrapper_code,
+        decls,
+        assigns,
+        write_decls,
+        write_assigns,
     };
     // What the template covers is derived from the template: build it once with
     // no generated methods, and read its own method names off it.
     let empty = TokenStream::new();
-    let hand = template_fns(&template(&empty, &empty, &empty, &empty));
+    let hand = template_fns(&template(&fragments, &empty, &empty, &empty, &empty));
     let defined: BTreeSet<&String> = hand.values().flatten().collect();
     for (from, to) in RENAMED {
         assert!(
@@ -3075,7 +3120,8 @@ fn main() {
         }
     }
 
-    let mut code = template(fontdb_methods, tree_methods, group_methods, node_methods);
+    let mut code =
+        template(&fragments, fontdb_methods, tree_methods, group_methods, node_methods);
 
     // Async twins: the template marks a Send-safe core, the rule writes the
     // ceremony. The marker is stripped on the way out -- rustc has never heard

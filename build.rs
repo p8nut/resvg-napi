@@ -224,6 +224,17 @@ enum Js {
     OptValue(String),
     // A tuple newtype over an integer, e.g. `Weight(pub u16)`.
     IntNewtype(String),
+    // `&[f32]` / `Vec<f32>`, e.g. a dash pattern.
+    F32List,
+    // `[u8; 4]`: an OpenType axis tag, four ASCII bytes -- `b"wght"`. A string
+    // on the JS side, which is how every font tool spells it.
+    Tag4,
+    // `tiny_skia_path::Path`: outside usvg, and a verb/point stream rather than
+    // a struct, so the template flattens it into segments.
+    PathData,
+    // `usvg::Paint`: an enum carrying a payload, so it has no derivable shape.
+    // The template splits it into a discriminated union; `paint_js` converts.
+    Paint,
 }
 
 /// Everything the classifier needs to know about the upstream crates, all of it
@@ -321,6 +332,7 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
         "Option<String>" => Js::OptStr,
         "Option<std::path::PathBuf>" | "Option<PathBuf>" => Js::OptPath,
         "Vec<String>" => Js::StrList,
+        "Vec<f32>" | "&[f32]" | "[f32]" | "Vec<f64>" | "&[f64]" | "[f64]" => Js::F32List,
         "Vec<u8>" | "&[u8]" => Js::Bytes,
         "Size" | "usvg::Size" => Js::Size,
         // geometry newtypes over four f32 with public accessors
@@ -335,6 +347,12 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
             Js::Handle(s[5..s.len() - 1].to_string())
         }
         s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
+        // Payload enums have no derivable mapping, but this one has a
+        // hand-written union in the template. Before the plain-enum arm: Paint
+        // must not be mistaken for a unit enum.
+        "Paint" | "&Paint" | "usvg::Paint" | "&usvg::Paint" => Js::Paint,
+        "tiny_skia_path::Path" | "&tiny_skia_path::Path" => Js::PathData,
+        "[u8;4]" | "&[u8;4]" | "[u8; 4]" => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
         other if scalars.contains(other) => Js::Scalar,
         _ => return None,
@@ -653,6 +671,12 @@ fn map_struct(
             | Some(Js::Count)
             | Some(Js::TryUnit)
             | Some(Js::Matrix)
+            // Read-only: a paint is something a document has, never something
+            // a render option sets.
+            | Some(Js::Paint)
+            | Some(Js::PathData)
+            | Some(Js::Tag4)
+            | Some(Js::F32List)
             | Some(Js::Handle(_))
             | Some(Js::HandleList(_))
             | Some(Js::Object(_))
@@ -880,7 +904,16 @@ fn data_members(
     let mut skipped = Vec::new();
     let mut reached = BTreeSet::new();
 
+    // Conversions, not data: `Stroke::to_tiny_skia` hands the caller a
+    // tiny-skia value to draw with. Counting it as an unmapped member would
+    // demote Stroke to a read-only class, and any object holding one -- `Path`
+    // -- would then carry a field napi cannot round-trip.
+    const NOT_DATA: [&str; 1] = ["to_tiny_skia"];
+
     let mut push = |name: &str, ty_s: &str, access: TokenStream| {
+        if NOT_DATA.contains(&name) {
+            return;
+        }
         let id = format_ident!("{}", name);
         let (jsty, value) = match vocab.classify(ty_s) {
             Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(#access as f64)),
@@ -892,6 +925,19 @@ fn data_members(
             Some(Js::IntNewtype(_)) => (quote!(u32), quote!(#access.0 as u32)),
             Some(Js::Bbox) => (quote!(BBox), quote!(BBox::from(#access))),
             Some(Js::Matrix) => (quote!(Matrix), quote!(Matrix::from(#access))),
+            Some(Js::F32List) => (
+                quote!(Vec<f64>),
+                quote!(#access.iter().map(|v| *v as f64).collect()),
+            ),
+            Some(Js::Tag4) => (
+                quote!(String),
+                quote!(String::from_utf8_lossy(&#access).into_owned()),
+            ),
+            Some(Js::PathData) => (quote!(Vec<PathSegment>), quote!(path_segments(#access))),
+            Some(Js::Paint) => (
+                quote!(Either<ColorPaint, PaintServer>),
+                quote!(paint_js(#access)),
+            ),
             Some(Js::Enum) => {
                 let e = format_ident!("{}", vocab.resolve(ty_s));
                 (quote!(#e), quote!(#e::from(#access)))
@@ -939,6 +985,16 @@ fn data_members(
                             id,
                             jsty: quote!(Option<f64>),
                             value: quote!(#access.map(|x| x.get() as f64)),
+                        });
+                        return;
+                    }
+                    Some((_, Js::F32List)) => {
+                        out.push(Member {
+                            id,
+                            jsty: quote!(Option<Vec<f64>>),
+                            value: quote!(
+                                #access.map(|v| v.iter().map(|x| *x as f64).collect())
+                            ),
                         });
                         return;
                     }
@@ -1837,6 +1893,25 @@ struct Fragments<'a> {
     write_assigns: Vec<&'a TokenStream>,
 }
 
+impl Fragments<'_> {
+    /// Every fragment empty, for probing the template's own body. What the
+    /// pruner needs from it -- which generated types it names -- is written in
+    /// the template itself, never in what gets interpolated, so the fragments
+    /// can be blank. Same double-build trick `template_fns` uses to read the
+    /// method names off it.
+    fn probe() -> Fragments<'static> {
+        Fragments {
+            enums: TokenStream::new(),
+            object_code: TokenStream::new(),
+            wrapper_code: TokenStream::new(),
+            decls: Vec::new(),
+            assigns: Vec::new(),
+            write_decls: Vec::new(),
+            write_assigns: Vec::new(),
+        }
+    }
+}
+
 /// The hand-written half of the binding: everything the passes cannot derive.
 ///
 /// Called twice. Once with empty method lists, so `template_fns` can read the
@@ -2329,6 +2404,7 @@ fn template(
 
         #[doc = " `Paint::Color`: a colour resolved by the parser."]
         #[napi(object)]
+        #[derive(Clone)]
         pub struct ColorPaint {
             #[doc = " Discriminant. Narrow on this."]
             #[napi(ts_type = "'color'")]
@@ -2344,11 +2420,47 @@ fn template(
         #[doc = " element that references it, so handing out a copy per element would"]
         #[doc = " misrepresent the document."]
         #[napi(object)]
+        #[derive(Clone)]
         pub struct PaintServer {
             #[doc = " Discriminant. Narrow on this."]
             #[napi(ts_type = "'linearGradient' | 'radialGradient' | 'pattern'")]
             pub r#type: String,
             pub id: String,
+        }
+
+        #[doc = " One command of a path outline, in the document's own units."]
+        #[doc = ""]
+        #[doc = " `points` holds x,y pairs, and how many depends on `type`: one point"]
+        #[doc = " for `moveTo` and `lineTo`, two for `quadTo` (control, end), three"]
+        #[doc = " for `cubicTo` (two controls, end), none for `close`."]
+        #[doc = ""]
+        #[doc = " A flat list rather than a variant per command: a path can carry"]
+        #[doc = " thousands of segments, and one tagged object each is already the"]
+        #[doc = " expensive part."]
+        #[napi(object)]
+        #[derive(Clone)]
+        pub struct PathSegment {
+            #[napi(ts_type = "'moveTo' | 'lineTo' | 'quadTo' | 'cubicTo' | 'close'")]
+            pub r#type: String,
+            pub points: Vec<f64>,
+        }
+
+        #[doc = " tiny-skia stores a path as a verb stream, not a struct, so there is"]
+        #[doc = " nothing for the mapper to walk -- hence this by hand."]
+        fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
+            let seg = |kind: &str, pts: &[tiny_skia::Point]| PathSegment {
+                r#type: kind.to_string(),
+                points: pts.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect(),
+            };
+            p.segments()
+                .map(|s| match s {
+                    tiny_skia::PathSegment::MoveTo(a) => seg("moveTo", &[a]),
+                    tiny_skia::PathSegment::LineTo(a) => seg("lineTo", &[a]),
+                    tiny_skia::PathSegment::QuadTo(a, b) => seg("quadTo", &[a, b]),
+                    tiny_skia::PathSegment::CubicTo(a, b, c) => seg("cubicTo", &[a, b, c]),
+                    tiny_skia::PathSegment::Close => seg("close", &[]),
+                })
+                .collect()
         }
 
         #[doc = " `usvg::Paint` is an enum carrying a payload, which napi cannot map on"]
@@ -2410,24 +2522,19 @@ fn template(
                 })
             }
 
-            #[doc = " Fill paint of a shape, or null: for a node that is not a path, and"]
-            #[doc = " for a path the document leaves unfilled."]
+            #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
+            #[doc = " Null for a group, an image or a text node."]
             #[doc = ""]
-            #[doc = " Reached from the node rather than through a `Path` class: the paint"]
-            #[doc = " is the useful half, and it needs no class to hand it over."]
-            #[napi]
-            pub fn fill_paint(&self) -> Result<Option<Either<ColorPaint, PaintServer>>> {
+            #[doc = " This is what makes `Fill`, `Stroke` and `Path` reachable at all: the"]
+            #[doc = " mapper prunes any generated type no exposed method hands out."]
+            // napi maps a Rust type *named* `Path` to `string` in the .d.ts --
+            // it is reading the name, not the type, and colliding with
+            // std::path::PathBuf. The runtime is right either way; this fixes
+            // only what gets written into the declarations.
+            #[napi(ts_return_type = "Path | null")]
+            pub fn path(&self) -> Result<Option<Path>> {
                 Ok(match self.node()? {
-                    usvg::Node::Path(p) => p.fill().map(|f| paint_js(f.paint())),
-                    _ => None,
-                })
-            }
-
-            #[doc = " Stroke paint of a shape, or null. Same shape as `fillPaint`."]
-            #[napi]
-            pub fn stroke_paint(&self) -> Result<Option<Either<ColorPaint, PaintServer>>> {
-                Ok(match self.node()? {
-                    usvg::Node::Path(p) => p.stroke().map(|s| paint_js(s.paint())),
+                    usvg::Node::Path(p) => Some(Path::from(&**p)),
                     _ => None,
                 })
             }
@@ -3297,6 +3404,10 @@ fn main() {
     let mentions = |code: &TokenStream, name: &str| -> bool {
         format!(" {code} ").contains(&format!(" {name} "))
     };
+    // The template hands out types as well -- `SvgNode::path` returns `Path` --
+    // and none of that is visible from the passes. Probe it once, empty.
+    let nothing = TokenStream::new();
+    let probe = template(&Fragments::probe(), &nothing, &nothing, &nothing, &nothing);
     let mut kept: BTreeSet<String> = BTreeSet::new();
     let all_data: BTreeSet<String> = vocab.objects.union(&vocab.values).cloned().collect();
     for name in all_data.clone() {
@@ -3306,7 +3417,9 @@ fn main() {
             .values()
             .any(|c| mentions(c, &name) || mentions(c, &js))
             || mentions(&wrapper_code, &name)
-            || mentions(&wrapper_code, &js);
+            || mentions(&wrapper_code, &js)
+            || mentions(&probe, &name)
+            || mentions(&probe, &js);
         if used {
             kept.insert(name);
         }

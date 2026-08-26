@@ -39,7 +39,8 @@
     "emnapi": "1.11.2",
     "esbuild": "^0.25.12",
     "liquidjs": "^10.29.0",
-    "qrcode-generator": "^2.0.4"
+    "qrcode-generator": "^2.0.4",
+    "typescript": "^6.0.3"
   },
   "napi": {
     "binaryName": "resvg-napi",
@@ -75,7 +76,7 @@
   "license": "Apache-2.0 OR MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/resvg-napi.git"
+    "url": "git+https://github.com/p8nut/resvg-napi.git"
   },
   "optionalDependencies": {
     "resvg-napi-darwin-arm64": "0.1.0",

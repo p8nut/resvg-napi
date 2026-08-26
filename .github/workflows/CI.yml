@@ -5,6 +5,10 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  schedule:
+    # Mondays, 07:00 UTC -- asks upstream whether the Cargo.toml pins can go.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -136,6 +140,10 @@ jobs:
       # index.d.ts is generated, so a type regression is a build product
       # regression: cheap to catch here.
       - run: npm run typecheck
+      # Offline: covers the decision in scripts/check-pins.mjs, including the
+      # path where it reports the pins as obsolete. The networked half runs on
+      # a schedule in the `pins` job.
+      - run: npm run check:pins:selftest
 
   publish:
     name: publish
@@ -166,3 +174,18 @@ jobs:
           for dir in npm/*/; do npm publish "$dir" --access public --provenance; done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Fails when the Rust pins in Cargo.toml are no longer needed: either emnapi
+  # shipped a stable 2.x, or napi-build stopped hard-exporting the emnapi 2
+  # symbols. A red scheduled run is the signal to upgrade -- nothing else
+  # watches for it.
+  pins:
+    name: pins still needed
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:pins

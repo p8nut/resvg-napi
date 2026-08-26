@@ -8,13 +8,30 @@
   "files": [
     "resvg-napi.linux-arm64-musl.node"
   ],
+  "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",
+  "keywords": [
+    "svg",
+    "png",
+    "render",
+    "rasterize",
+    "resvg",
+    "usvg",
+    "tiny-skia",
+    "napi-rs",
+    "wasm",
+    "text-measurement",
+    "fontdb"
+  ],
   "license": "Apache-2.0 OR MIT",
   "engines": {
     "node": ">= 18"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/resvg-napi.git"
+    "url": "git+https://github.com/p8nut/resvg-napi.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "os": [
     "linux"

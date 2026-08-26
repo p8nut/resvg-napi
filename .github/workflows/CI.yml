@@ -5,6 +5,10 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  schedule:
+    # Mondays, 07:00 UTC -- asks upstream whether the Cargo.toml pins can go.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -26,10 +30,10 @@ jobs:
             build_args: --use-napi-cross
           - target: x86_64-unknown-linux-musl
             host: ubuntu-latest
-            build_args: --use-cross
+            build_args: -x
           - target: aarch64-unknown-linux-musl
             host: ubuntu-latest
-            build_args: --use-cross
+            build_args: -x
           - target: aarch64-apple-darwin
             host: macos-latest
           - target: x86_64-apple-darwin
@@ -47,8 +51,8 @@ jobs:
               resvg-napi.wasi.d.cts
               wasi-worker*.mjs
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
@@ -63,6 +67,30 @@ jobs:
       # mismatch; `npm install` tolerates an unresolvable *optional* dep.
       # Switch back once 0.1.0 is on the registry.
       - run: npm install
+      # musl cross-compiles through zig (`-x`). The previous `--use-cross`
+      # needed a `cross` binary that no step ever installed, so both musl
+      # targets died on `spawn cross ENOENT`; upstream also calls --use-cross
+      # legacy and not recommended.
+      #
+      # Installed by hand rather than through mlugg/setup-zig, which declares
+      # `using: node20` on both its latest tag and main and so trips the Node
+      # 20 deprecation with no version to move to. A plain `run:` has no Node
+      # runtime to deprecate, drops a third-party action from the supply
+      # chain, and pins the compiler: that action defaults to `latest`, so the
+      # musl link was floating on whatever Zig shipped most recently.
+      # Both musl targets cross-compile from an x86_64 host, so one tarball.
+      - name: Install zig
+        if: contains(matrix.target, 'musl')
+        env:
+          ZIG_VERSION: 0.16.0
+          ZIG_SHA256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+        run: |
+          set -euo pipefail
+          dir="zig-x86_64-linux-$ZIG_VERSION"
+          curl -fsSL -o zig.tar.xz "https://ziglang.org/download/$ZIG_VERSION/$dir.tar.xz"
+          echo "$ZIG_SHA256  zig.tar.xz" | sha256sum -c -
+          tar -xJf zig.tar.xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$dir" >> "$GITHUB_PATH"
       - name: Build
         run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
 
@@ -98,7 +126,9 @@ jobs:
         if: matrix.target == 'wasm32-wasip1-threads'
         run: npm run test:wasi
 
-      - uses: actions/upload-artifact@v4
+      # upload v7 / download v8 are the matched pair: v8 stopped unzipping
+      # blindly and reads Content-Type instead, to support v7's direct uploads.
+      - uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.target }}
           path: ${{ matrix.artifact_path || '*.node' }}
@@ -117,18 +147,22 @@ jobs:
           - { target: aarch64-apple-darwin, host: macos-latest, node: 22 }
           - { target: x86_64-pc-windows-msvc, host: windows-latest, node: 22 }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       - run: npm install  # not `npm ci` -- see the build job
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.target }}
       - run: npm test
       # index.d.ts is generated, so a type regression is a build product
       # regression: cheap to catch here.
       - run: npm run typecheck
+      # Offline: covers the decision in scripts/check-pins.mjs, including the
+      # path where it reports the pins as obsolete. The networked half runs on
+      # a schedule in the `pins` job.
+      - run: npm run check:pins:selftest
 
   publish:
     name: publish
@@ -139,13 +173,13 @@ jobs:
       contents: read
       id-token: write # npm provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm install  # not `npm ci` -- see the build job
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       # Sorts each *.node into its npm/<platform>/ package, then rewrites the
@@ -159,3 +193,18 @@ jobs:
           for dir in npm/*/; do npm publish "$dir" --access public --provenance; done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Fails when the Rust pins in Cargo.toml are no longer needed: either emnapi
+  # shipped a stable 2.x, or napi-build stopped hard-exporting the emnapi 2
+  # symbols. A red scheduled run is the signal to upgrade -- nothing else
+  # watches for it.
+  pins:
+    name: pins still needed
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm run check:pins

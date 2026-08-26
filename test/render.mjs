@@ -44,7 +44,17 @@ const fonts = testFonts(FontDatabase);
 if (fonts) {
   assert.ok(fonts.db.len() > 0);
   assert.ok(new Resvg(svg, { fontFamily: fonts.family }, fonts.db).renderPng().length > 0);
-  assert.throws(() => fonts.db.loadFontFile('/nope.ttf'), /No such file|nope/);
+  // Neither half of this message is portable. Three environments, three
+  // answers for the same ENOENT:
+  //
+  //   linux native   No such file or directory (os error 2)
+  //   windows native The system cannot find the file specified. (os error 2)
+  //   wasm32-wasip1  No such file or directory (os error 44)
+  //
+  // The text differs, and so does the number -- wasi-libc numbers ENOENT 44.
+  // What holds everywhere is that the failure came from the OS rather than
+  // from the font parser, which is all this check is for.
+  assert.throws(() => fonts.db.loadFontFile('/nope.ttf'), /os error \d+/);
 } else {
   skip('text rendering', 'no font in this environment');
 }

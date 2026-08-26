@@ -10,11 +10,15 @@
 import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { Liquid } from 'liquidjs';
 import { registerSvgFilters, referencedPartials } from './svg-filters.mjs';
 import { qrSvg } from './liquid-entry.mjs';
 
-const here = dirname(new URL(import.meta.url).pathname);
+// fileURLToPath, not `.pathname`: on Windows the latter yields
+// `/D:/a/...`, and join() then builds `\D:\a\...` -- a leading separator
+// before the drive letter, which resolves to nothing.
+const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(join(here, '..', 'index.js'));
 const mod = require(join(here, '..', 'index.js'));
 

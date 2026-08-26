@@ -5,8 +5,9 @@
 import { createServer } from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('.', import.meta.url).pathname;
+const root = fileURLToPath(new URL('.', import.meta.url));  // see render.mjs
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',

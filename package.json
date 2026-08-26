@@ -20,7 +20,7 @@
     "build": "napi build --platform --release",
     "test": "npm run test:node && npm run test:examples",
     "test:wasi": "NAPI_RS_NATIVE_LIBRARY_PATH=./resvg-napi.wasi.cjs npm run test:node",
-    "test:node": "UV_THREADPOOL_SIZE=1 node --test",
+    "test:node": "node --test",
     "test:examples": "node demo/render.mjs examples/roster.svg && node demo/render.mjs examples/badge-sheet.svg && node demo/render.mjs examples/photo-card.svg && node demo/render.mjs examples/sheet.svg --lang fr",
     "typecheck": "tsc",
     "build:debug": "napi build --platform",
@@ -28,7 +28,9 @@
     "create-npm-dirs": "napi create-npm-dirs",
     "prepublishOnly": "napi pre-publish -t npm",
     "version": "napi version",
-    "demo": "napi build --platform --release --target wasm32-wasip1-threads && cp resvg-napi.wasm32-wasi.wasm demo/ && esbuild resvg-napi.wasi-browser.js --bundle --format=esm --outfile=demo/resvg.js && esbuild wasi-worker-browser.mjs --bundle --format=esm --outfile=demo/wasi-worker-browser.mjs && esbuild demo/liquid-entry.mjs --bundle --format=esm --outfile=demo/liquid.js && node demo/serve.mjs"
+    "demo": "napi build --platform --release --target wasm32-wasip1-threads && cp resvg-napi.wasm32-wasi.wasm demo/ && esbuild resvg-napi.wasi-browser.js --bundle --format=esm --outfile=demo/resvg.js && esbuild wasi-worker-browser.mjs --bundle --format=esm --outfile=demo/wasi-worker-browser.mjs && esbuild demo/liquid-entry.mjs --bundle --format=esm --outfile=demo/liquid.js && node demo/serve.mjs",
+    "check:pins": "node scripts/check-pins.mjs",
+    "check:pins:selftest": "node scripts/check-pins.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {

@@ -2,8 +2,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { testFonts, testFontFile, skip } from './test-support.mjs';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('./index.js');
+import { testFonts, testFontFile, skip } from './support.mjs';
+const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 
 const text = (family) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">
   <text x="10" y="40" font-family="${family}" font-size="24">Bonjour</text>

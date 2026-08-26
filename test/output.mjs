@@ -1,8 +1,8 @@
 // background (RenderParams) and toString (WriteOptions, AST-mapped).
 import assert from 'node:assert/strict';
-import { testFonts, skip } from './test-support.mjs';
+import { testFonts, skip } from './support.mjs';
 import { createRequire } from 'node:module';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('./index.js');
+const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
 const fontsFound = testFonts(FontDatabase);

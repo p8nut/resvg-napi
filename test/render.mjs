@@ -1,8 +1,8 @@
 // Smoke check: fails loudly if the generated bindings break.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { testFonts, skip } from './test-support.mjs';
-const { Resvg, FontDatabase, ShapeRendering } = createRequire(import.meta.url)('./index.js');
+import { testFonts, skip } from './support.mjs';
+const { Resvg, FontDatabase, ShapeRendering } = createRequire(import.meta.url)('../index.js');
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
   <rect width="100" height="50" fill="#3b82f6"/>

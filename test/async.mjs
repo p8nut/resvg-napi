@@ -2,7 +2,7 @@
 // Run with UV_THREADPOOL_SIZE=1 so the abort case is deterministic.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-const { Resvg, renderAsync } = createRequire(import.meta.url)('./index.js');
+const { Resvg, renderAsync } = createRequire(import.meta.url)('../index.js');
 
 const isPng = (b) => b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 

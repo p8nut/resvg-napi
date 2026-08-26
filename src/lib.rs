@@ -1331,6 +1331,101 @@ impl FontFace {
         v.monospaced.clone()
     }
 }
+#[doc = " Plain view of a `Fill`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Fill {
+    pub paint: Either<ColorPaint, PaintServer>,
+    pub opacity: f64,
+    pub rule: FillRule,
+}
+impl From<&usvg::Fill> for Fill {
+    fn from(v: &usvg::Fill) -> Self {
+        Self {
+            paint: paint_js(v.paint()),
+            opacity: v.opacity().get() as f64,
+            rule: FillRule::from(v.rule()),
+        }
+    }
+}
+#[doc = " Read-only view of a `Font`."]
+#[napi]
+pub struct Font {
+    inner: usvg::Font,
+}
+impl Font {
+    fn wrap(inner: usvg::Font) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl Font {
+    #[napi(getter)]
+    pub fn style(&self) -> FontStyle {
+        let v = &self.inner;
+        FontStyle::from(v.style())
+    }
+    #[napi(getter)]
+    pub fn stretch(&self) -> FontStretch {
+        let v = &self.inner;
+        FontStretch::from(v.stretch())
+    }
+    #[napi(getter)]
+    pub fn variations(&self) -> Vec<FontVariation> {
+        let v = &self.inner;
+        v.variations().iter().map(FontVariation::from).collect()
+    }
+}
+#[doc = " Plain view of a `FontVariation`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct FontVariation {
+    pub tag: String,
+    pub value: f64,
+}
+impl From<&usvg::FontVariation> for FontVariation {
+    fn from(v: &usvg::FontVariation) -> Self {
+        Self {
+            tag: String::from_utf8_lossy(&v.tag.clone()).into_owned(),
+            value: v.value.clone() as f64,
+        }
+    }
+}
+#[doc = " Plain view of a `Path`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Path {
+    pub id: String,
+    pub is_visible: bool,
+    pub fill: Option<Fill>,
+    pub stroke: Option<Stroke>,
+    pub paint_order: PaintOrder,
+    pub rendering_mode: ShapeRendering,
+    pub data: Vec<PathSegment>,
+    pub abs_transform: Matrix,
+    pub bounding_box: BBox,
+    pub abs_bounding_box: BBox,
+    pub stroke_bounding_box: BBox,
+    pub abs_stroke_bounding_box: BBox,
+}
+impl From<&usvg::Path> for Path {
+    fn from(v: &usvg::Path) -> Self {
+        Self {
+            id: v.id().to_string(),
+            is_visible: v.is_visible(),
+            fill: v.fill().map(Fill::from),
+            stroke: v.stroke().map(Stroke::from),
+            paint_order: PaintOrder::from(v.paint_order()),
+            rendering_mode: ShapeRendering::from(v.rendering_mode()),
+            data: path_segments(v.data()),
+            abs_transform: Matrix::from(v.abs_transform()),
+            bounding_box: BBox::from(v.bounding_box()),
+            abs_bounding_box: BBox::from(v.abs_bounding_box()),
+            stroke_bounding_box: BBox::from(v.stroke_bounding_box()),
+            abs_stroke_bounding_box: BBox::from(v.abs_stroke_bounding_box()),
+        }
+    }
+}
 #[doc = " Read-only view of a `Primitive`."]
 #[napi]
 pub struct Primitive {
@@ -1373,6 +1468,33 @@ impl From<&usvg::Stop> for Stop {
             offset: v.offset().get() as f64,
             color: Color::from(&v.color()),
             opacity: v.opacity().get() as f64,
+        }
+    }
+}
+#[doc = " Plain view of a `Stroke`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Stroke {
+    pub paint: Either<ColorPaint, PaintServer>,
+    pub dasharray: Option<Vec<f64>>,
+    pub dashoffset: f64,
+    pub miterlimit: f64,
+    pub opacity: f64,
+    pub width: f64,
+    pub linecap: LineCap,
+    pub linejoin: LineJoin,
+}
+impl From<&usvg::Stroke> for Stroke {
+    fn from(v: &usvg::Stroke) -> Self {
+        Self {
+            paint: paint_js(v.paint()),
+            dasharray: v.dasharray().map(|v| v.iter().map(|x| *x as f64).collect()),
+            dashoffset: v.dashoffset() as f64,
+            miterlimit: v.miterlimit().get() as f64,
+            opacity: v.opacity().get() as f64,
+            width: v.width().get() as f64,
+            linecap: LineCap::from(v.linecap()),
+            linejoin: LineJoin::from(v.linejoin()),
         }
     }
 }
@@ -1826,6 +1948,7 @@ fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<u32>) -> Option<Ve
 }
 #[doc = " `Paint::Color`: a colour resolved by the parser."]
 #[napi(object)]
+#[derive(Clone)]
 pub struct ColorPaint {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(ts_type = "'color'")]
@@ -1840,11 +1963,45 @@ pub struct ColorPaint {
 #[doc = " element that references it, so handing out a copy per element would"]
 #[doc = " misrepresent the document."]
 #[napi(object)]
+#[derive(Clone)]
 pub struct PaintServer {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(ts_type = "'linearGradient' | 'radialGradient' | 'pattern'")]
     pub r#type: String,
     pub id: String,
+}
+#[doc = " One command of a path outline, in the document's own units."]
+#[doc = ""]
+#[doc = " `points` holds x,y pairs, and how many depends on `type`: one point"]
+#[doc = " for `moveTo` and `lineTo`, two for `quadTo` (control, end), three"]
+#[doc = " for `cubicTo` (two controls, end), none for `close`."]
+#[doc = ""]
+#[doc = " A flat list rather than a variant per command: a path can carry"]
+#[doc = " thousands of segments, and one tagged object each is already the"]
+#[doc = " expensive part."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct PathSegment {
+    #[napi(ts_type = "'moveTo' | 'lineTo' | 'quadTo' | 'cubicTo' | 'close'")]
+    pub r#type: String,
+    pub points: Vec<f64>,
+}
+#[doc = " tiny-skia stores a path as a verb stream, not a struct, so there is"]
+#[doc = " nothing for the mapper to walk -- hence this by hand."]
+fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
+    let seg = |kind: &str, pts: &[tiny_skia::Point]| PathSegment {
+        r#type: kind.to_string(),
+        points: pts.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect(),
+    };
+    p.segments()
+        .map(|s| match s {
+            tiny_skia::PathSegment::MoveTo(a) => seg("moveTo", &[a]),
+            tiny_skia::PathSegment::LineTo(a) => seg("lineTo", &[a]),
+            tiny_skia::PathSegment::QuadTo(a, b) => seg("quadTo", &[a, b]),
+            tiny_skia::PathSegment::CubicTo(a, b, c) => seg("cubicTo", &[a, b, c]),
+            tiny_skia::PathSegment::Close => seg("close", &[]),
+        })
+        .collect()
 }
 #[doc = " `usvg::Paint` is an enum carrying a payload, which napi cannot map on"]
 #[doc = " its own -- hence the hand-written split into a discriminated union."]
@@ -1906,23 +2063,15 @@ impl SvgNode {
             usvg::Node::Text(_) => NodeKind::Text,
         })
     }
-    #[doc = " Fill paint of a shape, or null: for a node that is not a path, and"]
-    #[doc = " for a path the document leaves unfilled."]
+    #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
+    #[doc = " Null for a group, an image or a text node."]
     #[doc = ""]
-    #[doc = " Reached from the node rather than through a `Path` class: the paint"]
-    #[doc = " is the useful half, and it needs no class to hand it over."]
-    #[napi]
-    pub fn fill_paint(&self) -> Result<Option<Either<ColorPaint, PaintServer>>> {
+    #[doc = " This is what makes `Fill`, `Stroke` and `Path` reachable at all: the"]
+    #[doc = " mapper prunes any generated type no exposed method hands out."]
+    #[napi(ts_return_type = "Path | null")]
+    pub fn path(&self) -> Result<Option<Path>> {
         Ok(match self.node()? {
-            usvg::Node::Path(p) => p.fill().map(|f| paint_js(f.paint())),
-            _ => None,
-        })
-    }
-    #[doc = " Stroke paint of a shape, or null. Same shape as `fillPaint`."]
-    #[napi]
-    pub fn stroke_paint(&self) -> Result<Option<Either<ColorPaint, PaintServer>>> {
-        Ok(match self.node()? {
-            usvg::Node::Path(p) => p.stroke().map(|s| paint_js(s.paint())),
+            usvg::Node::Path(p) => Some(Path::from(&**p)),
             _ => None,
         })
     }

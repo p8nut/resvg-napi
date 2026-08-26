@@ -486,6 +486,16 @@ export declare class Resvg {
 export declare class SvgNode {
   /** `group`, `path`, `image` or `text`. */
   get kind(): NodeKind
+  /**
+   * Fill paint of a shape, or null: for a node that is not a path, and
+   * for a path the document leaves unfilled.
+   *
+   * Reached from the node rather than through a `Path` class: the paint
+   * is the useful half, and it needs no class to hand it over.
+   */
+  fillPaint(): ColorPaint | PaintServer | null
+  /** Stroke paint of a shape, or null. Same shape as `fillPaint`. */
+  strokePaint(): ColorPaint | PaintServer | null
   /** Direct children. Empty for anything that is not a group. */
   children(): Array<SvgNode>
   /**
@@ -612,6 +622,13 @@ export declare const enum ColorChannel {
 export declare const enum ColorInterpolation {
   SRGB = 'srgb',
   LinearRGB = 'linearRgb'
+}
+
+/** `Paint::Color`: a colour resolved by the parser. */
+export interface ColorPaint {
+  /** Discriminant. Narrow on this. */
+  type: 'color'
+  color: Color
 }
 
 /** A width/height pair in SVG user units. */
@@ -768,6 +785,21 @@ export declare const enum NodeKind {
 export declare const enum PaintOrder {
   FillAndStroke = 'fillAndStroke',
   StrokeAndFill = 'strokeAndFill'
+}
+
+/**
+ * A paint server -- gradient or pattern -- named by id, the way the
+ * document itself refers to one with `url(#id)`. Resolve it through
+ * `linearGradients()`, `radialGradients()` or `patterns()`.
+ *
+ * An id rather than the object: a paint server is shared by every
+ * element that references it, so handing out a copy per element would
+ * misrepresent the document.
+ */
+export interface PaintServer {
+  /** Discriminant. Narrow on this. */
+  type: 'linearGradient' | 'radialGradient' | 'pattern'
+  id: string
 }
 
 /** Un-premultiplied RGBA8 pixels, row-major, no padding. */

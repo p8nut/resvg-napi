@@ -8,5 +8,5 @@
     "noEmit": true,
     "skipLibCheck": false
   },
-  "include": ["demo.mts", "index.d.ts"]
+  "include": ["types.mts", "index.d.ts"]
 }

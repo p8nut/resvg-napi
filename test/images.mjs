@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('./index.js');
+const { Resvg } = createRequire(import.meta.url)('../index.js');
 
 // a 20x20 red PNG, produced by our own renderer
 const red = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').renderPng();

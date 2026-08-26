@@ -2,7 +2,7 @@
 // `log` crate, and nothing consumed it before.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-const { Resvg, setLogLevel, takeLogs } = createRequire(import.meta.url)('./index.js');
+const { Resvg, setLogLevel, takeLogs } = createRequire(import.meta.url)('../index.js');
 
 const messy = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="50" height="50">
   <rect width="10" height="10" fill="notacolour"/>

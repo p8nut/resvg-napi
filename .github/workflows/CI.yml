@@ -26,10 +26,10 @@ jobs:
             build_args: --use-napi-cross
           - target: x86_64-unknown-linux-musl
             host: ubuntu-latest
-            build_args: --use-cross
+            build_args: -x
           - target: aarch64-unknown-linux-musl
             host: ubuntu-latest
-            build_args: --use-cross
+            build_args: -x
           - target: aarch64-apple-darwin
             host: macos-latest
           - target: x86_64-apple-darwin
@@ -63,6 +63,13 @@ jobs:
       # mismatch; `npm install` tolerates an unresolvable *optional* dep.
       # Switch back once 0.1.0 is on the registry.
       - run: npm install
+      # musl cross-compiles through zig (`-x`). The previous `--use-cross`
+      # needed a `cross` binary that no step ever installed, so both musl
+      # targets died on `spawn cross ENOENT`; upstream also calls --use-cross
+      # legacy and not recommended.
+      - name: Install zig
+        if: contains(matrix.target, 'musl')
+        uses: mlugg/setup-zig@v2
       - name: Build
         run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
 

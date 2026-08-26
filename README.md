@@ -167,7 +167,7 @@ document cannot grow it without end.
 npm run demo      # builds the wasm, bundles the loaders, serves on :8787
 ```
 
-![the proof bench](demo/screenshot.png)
+![the proof bench](demo/assets/screenshot.png)
 
 The page is laid out as a prepress proof: a slug line of job metadata, crop
 corners, and the render framed by registration marks with tick rules measuring
@@ -198,7 +198,7 @@ editor has a column per field, a control per type — checkbox for a boolean,
 number field for a number — and add/remove per row. The value underneath stays a
 JSON array, and the raw JSON is one disclosure away.
 
-![the variables panel and the node list](demo/array-editor.png)
+![the variables panel and the node list](demo/assets/array-editor.png)
 
 `demo/examples/roster.svg` is a worked example: a table whose rows come from an
 array of objects. Its data lives in `roster.json` next to it, which the example

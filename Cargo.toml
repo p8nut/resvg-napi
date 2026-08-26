@@ -11,8 +11,21 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # napi v3: the runtime crate and the derive crate are versioned SEPARATELY.
-napi = { version = "3.12", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
-napi-derive = "3.6"
+# Pinned to the 2026-07-21 release set, one wave behind upstream, to stay on a
+# stable emnapi. The 2026-07-28 wave -- napi 3.12.0, napi-build 2.4.0,
+# napi-derive 3.6.1 -- switched the wasm link to the emnapi 2 ABI: napi-build
+# emits a hard `--export=emnapi_create_env` (plus _delete_env), symbols that
+# exist only in emnapi 2 archives, which are 2.0.0-alpha with no announced
+# stable date. rust-lld 1.95 silently dropped the unsatisfiable export; 1.98
+# makes it an error, so the wasm target stops building.
+#
+# napi-derive-backend must stay at 6.0.0 too -- 6.1.1 began emitting
+# NativeBorrowScope, which only exists in napi 3.12. It is transitive, so it
+# cannot be named here: Cargo.lock is what holds it. `cargo update` will
+# release it and break the wasm build. `npm run check:pins` says when these
+# pins can go.
+napi = { version = "=3.11.0", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
+napi-derive = "=3.6.0"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.
 resvg = "0.48.1"
 # resvg's own CSS colour parser, same version it uses internally.
@@ -22,7 +35,7 @@ svgtypes = "0.16.1"
 log = "0.4"
 
 [build-dependencies]
-napi-build = "2.4"
+napi-build = "=2.3.2"
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
 quote = "1.0"
 proc-macro2 = "1.0"

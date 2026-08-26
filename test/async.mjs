@@ -2,6 +2,22 @@
 // Run with UV_THREADPOOL_SIZE=1 so the abort case is deterministic.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+
+// UV_THREADPOOL_SIZE has to be set before the process starts, so re-exec once
+// when it is not. It cannot live in the npm script: `VAR=1 cmd` is POSIX
+// syntax and npm runs scripts through cmd.exe on Windows, where it fails with
+// `'UV_THREADPOOL_SIZE' is not recognized`. Keeping it here also scopes it to
+// the one file that needs it instead of the whole suite.
+if (process.env.UV_THREADPOOL_SIZE !== '1') {
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url'); // import.meta.filename is Node 20+
+  const { status } = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
+    stdio: 'inherit',
+    env: { ...process.env, UV_THREADPOOL_SIZE: '1' },
+  });
+  process.exit(status ?? 1);
+}
+
 const { Resvg, renderAsync } = createRequire(import.meta.url)('../index.js');
 
 const isPng = (b) => b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));

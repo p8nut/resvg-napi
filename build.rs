@@ -2327,6 +2327,48 @@ fn template(
             None
         }
 
+        #[doc = " `Paint::Color`: a colour resolved by the parser."]
+        #[napi(object)]
+        pub struct ColorPaint {
+            #[doc = " Discriminant. Narrow on this."]
+            #[napi(ts_type = "'color'")]
+            pub r#type: String,
+            pub color: Color,
+        }
+
+        #[doc = " A paint server -- gradient or pattern -- named by id, the way the"]
+        #[doc = " document itself refers to one with `url(#id)`. Resolve it through"]
+        #[doc = " `linearGradients()`, `radialGradients()` or `patterns()`."]
+        #[doc = ""]
+        #[doc = " An id rather than the object: a paint server is shared by every"]
+        #[doc = " element that references it, so handing out a copy per element would"]
+        #[doc = " misrepresent the document."]
+        #[napi(object)]
+        pub struct PaintServer {
+            #[doc = " Discriminant. Narrow on this."]
+            #[napi(ts_type = "'linearGradient' | 'radialGradient' | 'pattern'")]
+            pub r#type: String,
+            pub id: String,
+        }
+
+        #[doc = " `usvg::Paint` is an enum carrying a payload, which napi cannot map on"]
+        #[doc = " its own -- hence the hand-written split into a discriminated union."]
+        fn paint_js(p: &usvg::Paint) -> Either<ColorPaint, PaintServer> {
+            let server = |kind: &str, id: &str| {
+                Either::B(PaintServer { r#type: kind.to_string(), id: id.to_string() })
+            };
+            match p {
+                usvg::Paint::Color(c) => Either::A(ColorPaint {
+                    r#type: "color".to_string(),
+                    color: Color::from(c),
+                }),
+                // id() reaches BaseGradient through Deref for both gradients.
+                usvg::Paint::LinearGradient(g) => server("linearGradient", g.id()),
+                usvg::Paint::RadialGradient(g) => server("radialGradient", g.id()),
+                usvg::Paint::Pattern(p) => server("pattern", p.id()),
+            }
+        }
+
         #[doc = " A read-only handle on one element of the parsed tree."]
         #[doc = ""]
         #[doc = " usvg stores nodes as `Box`, not `Arc`, so a handle cannot own one. It"]
@@ -2365,6 +2407,28 @@ fn template(
                     usvg::Node::Path(_) => NodeKind::Path,
                     usvg::Node::Image(_) => NodeKind::Image,
                     usvg::Node::Text(_) => NodeKind::Text,
+                })
+            }
+
+            #[doc = " Fill paint of a shape, or null: for a node that is not a path, and"]
+            #[doc = " for a path the document leaves unfilled."]
+            #[doc = ""]
+            #[doc = " Reached from the node rather than through a `Path` class: the paint"]
+            #[doc = " is the useful half, and it needs no class to hand it over."]
+            #[napi]
+            pub fn fill_paint(&self) -> Result<Option<Either<ColorPaint, PaintServer>>> {
+                Ok(match self.node()? {
+                    usvg::Node::Path(p) => p.fill().map(|f| paint_js(f.paint())),
+                    _ => None,
+                })
+            }
+
+            #[doc = " Stroke paint of a shape, or null. Same shape as `fillPaint`."]
+            #[napi]
+            pub fn stroke_paint(&self) -> Result<Option<Either<ColorPaint, PaintServer>>> {
+                Ok(match self.node()? {
+                    usvg::Node::Path(p) => p.stroke().map(|s| paint_js(s.paint())),
+                    _ => None,
                 })
             }
 

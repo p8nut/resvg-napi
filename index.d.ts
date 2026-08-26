@@ -38,6 +38,13 @@ export declare class Filter {
   primitives(): Array<Primitive>
 }
 
+/** Read-only view of a `Font`. */
+export declare class Font {
+  get style(): FontStyle
+  get stretch(): FontStretch
+  get variations(): Array<FontVariation>
+}
+
 /** Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form). */
 export declare class FontDatabase {
   /**
@@ -487,15 +494,13 @@ export declare class SvgNode {
   /** `group`, `path`, `image` or `text`. */
   get kind(): NodeKind
   /**
-   * Fill paint of a shape, or null: for a node that is not a path, and
-   * for a path the document leaves unfilled.
+   * The shape of a path node: geometry, fill, stroke, paint order.
+   * Null for a group, an image or a text node.
    *
-   * Reached from the node rather than through a `Path` class: the paint
-   * is the useful half, and it needs no class to hand it over.
+   * This is what makes `Fill`, `Stroke` and `Path` reachable at all: the
+   * mapper prunes any generated type no exposed method hands out.
    */
-  fillPaint(): ColorPaint | PaintServer | null
-  /** Stroke paint of a shape, or null. Same shape as `fillPaint`. */
-  strokePaint(): ColorPaint | PaintServer | null
+  path(): Path | null
   /** Direct children. Empty for anything that is not a group. */
   children(): Array<SvgNode>
   /**
@@ -660,6 +665,13 @@ export declare const enum EdgeMode {
   Wrap = 'wrap'
 }
 
+/** Plain view of a `Fill`. */
+export interface Fill {
+  paint: ColorPaint | PaintServer
+  opacity: number
+  rule: FillRule
+}
+
 /**
  * A fill rule.
  *
@@ -699,6 +711,12 @@ export declare const enum FontStyle {
   Normal = 'normal',
   Italic = 'italic',
   Oblique = 'oblique'
+}
+
+/** Plain view of a `FontVariation`. */
+export interface FontVariation {
+  tag: string
+  value: number
 }
 
 /**
@@ -800,6 +818,38 @@ export interface PaintServer {
   /** Discriminant. Narrow on this. */
   type: 'linearGradient' | 'radialGradient' | 'pattern'
   id: string
+}
+
+/** Plain view of a `Path`. */
+export interface Path {
+  id: string
+  isVisible: boolean
+  fill?: Fill
+  stroke?: Stroke
+  paintOrder: PaintOrder
+  renderingMode: ShapeRendering
+  data: Array<PathSegment>
+  absTransform: Matrix
+  boundingBox: BBox
+  absBoundingBox: BBox
+  strokeBoundingBox: BBox
+  absStrokeBoundingBox: BBox
+}
+
+/**
+ * One command of a path outline, in the document's own units.
+ *
+ * `points` holds x,y pairs, and how many depends on `type`: one point
+ * for `moveTo` and `lineTo`, two for `quadTo` (control, end), three
+ * for `cubicTo` (two controls, end), none for `close`.
+ *
+ * A flat list rather than a variant per command: a path can carry
+ * thousands of segments, and one tagged object each is already the
+ * expensive part.
+ */
+export interface PathSegment {
+  type: 'moveTo' | 'lineTo' | 'quadTo' | 'cubicTo' | 'close'
+  points: Array<number>
 }
 
 /** Un-premultiplied RGBA8 pixels, row-major, no padding. */
@@ -967,6 +1017,18 @@ export interface Stop {
   offset: number
   color: Color
   opacity: number
+}
+
+/** Plain view of a `Stroke`. */
+export interface Stroke {
+  paint: ColorPaint | PaintServer
+  dasharray?: Array<number>
+  dashoffset: number
+  miterlimit: number
+  opacity: number
+  width: number
+  linecap: LineCap
+  linejoin: LineJoin
 }
 
 /** Drains the messages collected since the last call. */

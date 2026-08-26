@@ -603,6 +603,7 @@ try {
 export default __napiModule.exports
 export const ClipPath = __napiModule.exports.ClipPath
 export const Filter = __napiModule.exports.Filter
+export const Font = __napiModule.exports.Font
 export const FontDatabase = __napiModule.exports.FontDatabase
 export const FontFace = __napiModule.exports.FontFace
 export const LinearGradient = __napiModule.exports.LinearGradient

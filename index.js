@@ -702,6 +702,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.ClipPath = nativeBinding.ClipPath
 module.exports.Filter = nativeBinding.Filter
+module.exports.Font = nativeBinding.Font
 module.exports.FontDatabase = nativeBinding.FontDatabase
 module.exports.FontFace = nativeBinding.FontFace
 module.exports.LinearGradient = nativeBinding.LinearGradient

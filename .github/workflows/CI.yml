@@ -57,7 +57,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - run: npm ci
+      # `npm install`, not `npm ci`: package.json declares the nine
+      # resvg-napi-<platform> optionalDependencies, and nothing is published
+      # yet, so they cannot be in the lock file. `npm ci` refuses on that
+      # mismatch; `npm install` tolerates an unresolvable *optional* dep.
+      # Switch back once 0.1.0 is on the registry.
+      - run: npm install
       - name: Build
         run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
 
@@ -67,6 +72,13 @@ jobs:
       - name: Generated bindings are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: git diff --exit-code -- src/lib.rs index.d.ts index.js
+
+      # The WASI loader shims are generated and committed too, but only the
+      # wasm build emits them (they are this job's upload-artifact payload
+      # below), so the linux-gnu job above cannot see them drift.
+      - name: Generated WASI shims are up to date
+        if: matrix.target == 'wasm32-wasip1-threads'
+        run: git diff --exit-code -- resvg-napi.wasi.cjs resvg-napi.wasi.d.cts resvg-napi.wasi-browser.js wasi-worker.mjs wasi-worker-browser.mjs
 
       - name: WASI smoke test
         if: matrix.target == 'wasm32-wasip1-threads'
@@ -109,7 +121,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm ci
+      - run: npm install  # not `npm ci` -- see the build job
       - uses: actions/download-artifact@v4
         with:
           name: bindings-${{ matrix.target }}
@@ -132,7 +144,7 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - run: npm ci
+      - run: npm install  # not `npm ci` -- see the build job
       - uses: actions/download-artifact@v4
         with:
           path: artifacts

@@ -91,6 +91,14 @@ jobs:
           echo "$ZIG_SHA256  zig.tar.xz" | sha256sum -c -
           tar -xJf zig.tar.xz -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$dir" >> "$GITHUB_PATH"
+      # One target only: the toolchain and the cache are already warm here, and
+      # nothing in this repo is target-specific enough to lint nine times.
+      - name: Lint
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          cargo fmt --check
+          cargo clippy --release --all-targets -- -D warnings
+
       - name: Build
         run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
 
@@ -100,6 +108,20 @@ jobs:
       - name: Generated bindings are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: git diff --exit-code -- src/lib.rs index.d.ts index.js
+
+      # The codegen's report -- what it derived, and what it left alone with the
+      # reason -- is off by default so it stops burying real warnings. Printed
+      # here so a usvg bump that changes the derived surface is still visible in
+      # a log, on one target rather than nine.
+      - name: Codegen report
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        env:
+          RESVG_NAPI_CODEGEN_LOG: '1'
+        run: |
+          touch build.rs
+          cargo build --release 2>&1 \
+            | grep '^warning: resvg-napi@' \
+            | sed 's/^warning: resvg-napi@[^ ]*: //'
 
       # The WASI loader shims are generated and committed too, but only the
       # wasm build emits them (they are this job's upload-artifact payload

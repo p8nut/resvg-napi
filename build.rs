@@ -16,6 +16,18 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Fields, ImplItem, Item, ReturnType, Type, Visibility};
 
+/// The codegen's own report: what it derived from upstream, and what it left
+/// alone with the reason. Cargo gives a build script no channel but
+/// `cargo::warning`, so this competes with real warnings -- clippy's four were
+/// buried under 101 lines of it. Off unless asked for.
+macro_rules! report {
+    ($($arg:tt)*) => {
+        if env::var_os("RESVG_NAPI_CODEGEN_LOG").is_some() {
+            println!("cargo::warning={}", format!($($arg)*));
+        }
+    };
+}
+
 // ---------------------------------------------------------------------------
 // 1. source discovery
 // ---------------------------------------------------------------------------
@@ -40,7 +52,7 @@ fn locked_versions() -> BTreeMap<String, String> {
                 let v = v.trim_matches('"').to_string();
                 let better = out
                     .get(&n)
-                    .map_or(true, |old: &String| semver_key(&v) > semver_key(old));
+                    .is_none_or(|old: &String| semver_key(&v) > semver_key(old));
                 if better {
                     out.insert(n, v);
                 }
@@ -51,7 +63,9 @@ fn locked_versions() -> BTreeMap<String, String> {
 }
 
 fn semver_key(v: &str) -> (u64, u64, u64) {
-    let mut it = v.split(['.', '-', '+']).map(|p| p.parse::<u64>().unwrap_or(0));
+    let mut it = v
+        .split(['.', '-', '+'])
+        .map(|p| p.parse::<u64>().unwrap_or(0));
     (
         it.next().unwrap_or(0),
         it.next().unwrap_or(0),
@@ -68,7 +82,10 @@ fn cargo_home() -> PathBuf {
 /// `$CARGO_HOME/registry/src/<any-index>/<pkg>-<version>/src`
 fn registry_src(pkg: &str, want: Option<&str>) -> Option<PathBuf> {
     let mut best: Option<((u64, u64, u64), PathBuf)> = None;
-    for index in fs::read_dir(cargo_home().join("registry/src")).ok()?.flatten() {
+    for index in fs::read_dir(cargo_home().join("registry/src"))
+        .ok()?
+        .flatten()
+    {
         let Ok(entries) = fs::read_dir(index.path()) else {
             continue;
         };
@@ -86,7 +103,7 @@ fn registry_src(pkg: &str, want: Option<&str>) -> Option<PathBuf> {
                 return Some(src);
             }
             let key = semver_key(ver);
-            if best.as_ref().map_or(true, |(b, _)| key > *b) {
+            if best.as_ref().is_none_or(|(b, _)| key > *b) {
                 best = Some((key, src));
             }
         }
@@ -156,12 +173,7 @@ struct Field {
     assign: TokenStream, // `if let Some(v) = ... { o.name = ... }`
 }
 
-fn field(
-    ident: &syn::Ident,
-    doc: &[TokenStream],
-    jsty: TokenStream,
-    assign: TokenStream,
-) -> Field {
+fn field(ident: &syn::Ident, doc: &[TokenStream], jsty: TokenStream, assign: TokenStream) -> Field {
     Field {
         decl: quote! { #(#doc)* pub #ident: Option<#jsty>, },
         assign,
@@ -179,9 +191,22 @@ fn field(
 /// only to returns and "Vec<String>" only to fields.
 #[derive(Clone, PartialEq, Debug)]
 enum Js {
-    F32, F64, U32, U8, Bool, Count,
-    Str, OptStr, OptPath, StrList, Bytes,
-    Size, Bbox, OptBbox, TryUnit, Enum,
+    F32,
+    F64,
+    U32,
+    U8,
+    Bool,
+    Count,
+    Str,
+    OptStr,
+    OptPath,
+    StrList,
+    Bytes,
+    Size,
+    Bbox,
+    OptBbox,
+    TryUnit,
+    Enum,
     Matrix,
     // A newtype over f32 with a `get(&self) -> f32`, e.g. `Opacity`.
     Scalar,
@@ -234,13 +259,12 @@ impl Vocab {
         if self.ints.contains(&t) {
             return Some(Js::IntNewtype(t));
         }
-        classify_object(&t, &self.objects)
-            .or_else(|| match classify_object(&t, &self.values) {
-                Some(Js::Object(x)) => Some(Js::Value(x)),
-                Some(Js::ObjectList(x)) => Some(Js::ValueList(x)),
-                Some(Js::OptObject(x)) => Some(Js::OptValue(x)),
-                _ => None,
-            })
+        classify_object(&t, &self.objects).or_else(|| match classify_object(&t, &self.values) {
+            Some(Js::Object(x)) => Some(Js::Value(x)),
+            Some(Js::ObjectList(x)) => Some(Js::ValueList(x)),
+            Some(Js::OptObject(x)) => Some(Js::OptValue(x)),
+            _ => None,
+        })
     }
 }
 
@@ -250,9 +274,7 @@ fn type_aliases(files: &[syn::File]) -> BTreeMap<String, String> {
         .iter()
         .flat_map(|f| &f.items)
         .filter_map(|i| match i {
-            Item::Type(t) if is_pub(&t.vis) => {
-                Some((t.ident.to_string(), ty_str(&t.ty)))
-            }
+            Item::Type(t) if is_pub(&t.vis) => Some((t.ident.to_string(), ty_str(&t.ty))),
             _ => None,
         })
         .collect()
@@ -262,7 +284,9 @@ fn type_aliases(files: &[syn::File]) -> BTreeMap<String, String> {
 /// vocabulary (newtypes, aliases) rather than wrap.
 fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
@@ -275,7 +299,13 @@ fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
     let mut files = Vec::new();
     walk(dir, &mut files);
     files.sort();
-    files.into_iter().map(|p| { let f = parse(&p); (p, f) }).collect()
+    files
+        .into_iter()
+        .map(|p| {
+            let f = parse(&p);
+            (p, f)
+        })
+        .collect()
 }
 
 fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>) -> Option<Js> {
@@ -304,9 +334,7 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
         s if s.starts_with("&Arc<") && s.ends_with('>') => {
             Js::Handle(s[5..s.len() - 1].to_string())
         }
-        s if s.starts_with("Arc<") && s.ends_with('>') => {
-            Js::Handle(s[4..s.len() - 1].to_string())
-        }
+        s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
         other if known_enums.contains(other) => Js::Enum,
         other if scalars.contains(other) => Js::Scalar,
         _ => return None,
@@ -361,7 +389,10 @@ fn int_newtypes(files: &[syn::File]) -> BTreeSet<String> {
             if u.unnamed.len() == 1 {
                 let f = &u.unnamed[0];
                 if is_pub(&f.vis)
-                    && matches!(ty_str(&f.ty).as_str(), "u8" | "u16" | "u32" | "i32" | "usize")
+                    && matches!(
+                        ty_str(&f.ty).as_str(),
+                        "u8" | "u16" | "u32" | "i32" | "usize"
+                    )
                 {
                     out.insert(s.ident.to_string());
                 }
@@ -498,41 +529,89 @@ fn map_struct(
 
         // Every field becomes optional so JS can pass a partial object.
         let mapped = match vocab.classify(&ty) {
-            Some(Js::F32) => Some(field(&ident, &doc, quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = v as f32; } })),
-            Some(Js::F64) => Some(field(&ident, &doc, quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = v; } })),
-            Some(Js::U32) => Some(field(&ident, &doc, quote!(u32),
-                quote! { if let Some(v) = self.#ident { o.#ident = v; } })),
+            Some(Js::F32) => Some(field(
+                &ident,
+                &doc,
+                quote!(f64),
+                quote! { if let Some(v) = self.#ident { o.#ident = v as f32; } },
+            )),
+            Some(Js::F64) => Some(field(
+                &ident,
+                &doc,
+                quote!(f64),
+                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
+            )),
+            Some(Js::U32) => Some(field(
+                &ident,
+                &doc,
+                quote!(u32),
+                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
+            )),
             Some(Js::U8) => {
                 // A `*_precision` field indexes usvg's POW_VEC without a bounds
                 // check, so clamp it to that table's length. Any other u8 just
                 // saturates instead of wrapping.
-                let max = if name.ends_with("_precision") { precision_max } else { u8::MAX as u32 };
-                Some(field(&ident, &doc, quote!(u32),
-                    quote! { if let Some(v) = self.#ident { o.#ident = v.min(#max) as u8; } }))
+                let max = if name.ends_with("_precision") {
+                    precision_max
+                } else {
+                    u8::MAX as u32
+                };
+                Some(field(
+                    &ident,
+                    &doc,
+                    quote!(u32),
+                    quote! { if let Some(v) = self.#ident { o.#ident = v.min(#max) as u8; } },
+                ))
             }
-            Some(Js::Bool) => Some(field(&ident, &doc, quote!(bool),
-                quote! { if let Some(v) = self.#ident { o.#ident = v; } })),
-            Some(Js::Str) => Some(field(&ident, &doc, quote!(String),
-                quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } })),
-            Some(Js::OptStr) => Some(field(&ident, &doc, quote!(String),
-                quote! { o.#ident = self.#ident.clone(); })),
-            Some(Js::OptPath) => Some(field(&ident, &doc, quote!(String),
-                quote! { o.#ident = self.#ident.as_deref().map(std::path::PathBuf::from); })),
-            Some(Js::StrList) => Some(field(&ident, &doc, quote!(Vec<String>),
-                quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } })),
-            Some(Js::Bbox) | Some(Js::OptBbox) => Some(field(&ident, &doc, quote!(BBox),
+            Some(Js::Bool) => Some(field(
+                &ident,
+                &doc,
+                quote!(bool),
+                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
+            )),
+            Some(Js::Str) => Some(field(
+                &ident,
+                &doc,
+                quote!(String),
+                quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } },
+            )),
+            Some(Js::OptStr) => Some(field(
+                &ident,
+                &doc,
+                quote!(String),
+                quote! { o.#ident = self.#ident.clone(); },
+            )),
+            Some(Js::OptPath) => Some(field(
+                &ident,
+                &doc,
+                quote!(String),
+                quote! { o.#ident = self.#ident.as_deref().map(std::path::PathBuf::from); },
+            )),
+            Some(Js::StrList) => Some(field(
+                &ident,
+                &doc,
+                quote!(Vec<String>),
+                quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } },
+            )),
+            Some(Js::Bbox) | Some(Js::OptBbox) => Some(field(
+                &ident,
+                &doc,
+                quote!(BBox),
                 quote! { if let Some(v) = self.#ident {
                     if let Some(r) = usvg::NonZeroRect::from_xywh(
                         v.x as f32, v.y as f32, v.width as f32, v.height as f32) {
                         o.#ident = r;
                     }
-                } })),
+                } },
+            )),
             Some(Js::Enum) => {
                 let e = format_ident!("{}", vocab.resolve(&ty));
-                Some(field(&ident, &doc, quote!(#e),
-                    quote! { if let Some(v) = self.#ident { o.#ident = v.into(); } }))
+                Some(field(
+                    &ident,
+                    &doc,
+                    quote!(#e),
+                    quote! { if let Some(v) = self.#ident { o.#ident = v.into(); } },
+                ))
             }
             // Size is opaque with a fallible constructor: flatten to a pair.
             Some(Js::Size) => {
@@ -554,18 +633,35 @@ fn map_struct(
                 continue;
             }
             // Vocabulary entries that only mean something on a method signature.
-            Some(Js::Scalar) => Some(field(&ident, &doc, quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = (v as f32).into(); } })),
+            Some(Js::Scalar) => Some(field(
+                &ident,
+                &doc,
+                quote!(f64),
+                quote! { if let Some(v) = self.#ident { o.#ident = (v as f32).into(); } },
+            )),
             // Handles are class instances: they belong on a method, not in a
             // plain JSON object.
-            Some(Js::IntNewtype(_)) => Some(field(&ident, &doc, quote!(u32),
-                quote! { if let Some(v) = self.#ident { o.#ident.0 = v as _; } })),
+            Some(Js::IntNewtype(_)) => Some(field(
+                &ident,
+                &doc,
+                quote!(u32),
+                quote! { if let Some(v) = self.#ident { o.#ident.0 = v as _; } },
+            )),
             // Class instances and nested objects belong on methods, not in a
             // flat config object.
-            Some(Js::Bytes) | Some(Js::Count) | Some(Js::TryUnit) | Some(Js::Matrix)
-            | Some(Js::Handle(_)) | Some(Js::HandleList(_)) | Some(Js::Object(_))
-            | Some(Js::ObjectList(_)) | Some(Js::Value(_)) | Some(Js::ValueList(_)) | Some(Js::OptObject(_))
-            | Some(Js::OptValue(_)) | None => None,
+            Some(Js::Bytes)
+            | Some(Js::Count)
+            | Some(Js::TryUnit)
+            | Some(Js::Matrix)
+            | Some(Js::Handle(_))
+            | Some(Js::HandleList(_))
+            | Some(Js::Object(_))
+            | Some(Js::ObjectList(_))
+            | Some(Js::Value(_))
+            | Some(Js::ValueList(_))
+            | Some(Js::OptObject(_))
+            | Some(Js::OptValue(_))
+            | None => None,
         };
 
         if let Some(m) = mapped {
@@ -616,8 +712,15 @@ fn upstream_modules(
 ) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for (path, file) in parsed {
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-        let prefix = if modules.contains(stem) { stem.to_string() } else { String::new() };
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        let prefix = if modules.contains(stem) {
+            stem.to_string()
+        } else {
+            String::new()
+        };
         for item in &file.items {
             let name = match item {
                 Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
@@ -631,7 +734,11 @@ fn upstream_modules(
 }
 
 /// `usvg::filter::EdgeMode` or `usvg::BlendMode`, as appropriate.
-fn upstream_path(name: &str, modules: &BTreeMap<String, String>, root: &TokenStream) -> TokenStream {
+fn upstream_path(
+    name: &str,
+    modules: &BTreeMap<String, String>,
+    root: &TokenStream,
+) -> TokenStream {
     let ident = format_ident!("{}", name);
     match modules.get(name) {
         Some(m) if !m.is_empty() => {
@@ -642,7 +749,11 @@ fn upstream_path(name: &str, modules: &BTreeMap<String, String>, root: &TokenStr
     }
 }
 
-fn map_enums(files: &[syn::File], wanted: &BTreeSet<String>, modules: &BTreeMap<String, String>) -> (BTreeSet<String>, TokenStream) {
+fn map_enums(
+    files: &[syn::File],
+    wanted: &BTreeSet<String>,
+    modules: &BTreeMap<String, String>,
+) -> (BTreeSet<String>, TokenStream) {
     let mut names = BTreeSet::new();
     let mut code = TokenStream::new();
 
@@ -788,13 +899,20 @@ fn data_members(
             Some(Js::Object(t)) => {
                 let o = format_ident!("{}", t);
                 reached.insert(t.clone());
-                let arg = if ty_s.starts_with('&') { quote!(#access) } else { quote!(&#access) };
+                let arg = if ty_s.starts_with('&') {
+                    quote!(#access)
+                } else {
+                    quote!(&#access)
+                };
                 (quote!(#o), quote!(#o::from(#arg)))
             }
             Some(Js::ObjectList(t)) => {
                 let o = format_ident!("{}", t);
                 reached.insert(t.clone());
-                (quote!(Vec<#o>), quote!(#access.iter().map(#o::from).collect()))
+                (
+                    quote!(Vec<#o>),
+                    quote!(#access.iter().map(#o::from).collect()),
+                )
             }
             _ => {
                 // `Option<T>` where T maps stays optional on the JS side.
@@ -804,7 +922,10 @@ fn data_members(
                     .and_then(|s| s.strip_suffix('>'));
                 let is_ref = raw.is_some_and(|s| s.starts_with('&'));
                 let inner = raw.map(|s| s.trim_start_matches('&').to_string());
-                match inner.as_deref().and_then(|i| vocab.classify(i).map(|j| (i, j))) {
+                match inner
+                    .as_deref()
+                    .and_then(|i| vocab.classify(i).map(|j| (i, j)))
+                {
                     Some((_, Js::F32)) | Some((_, Js::F64)) => {
                         out.push(Member {
                             id,
@@ -829,7 +950,11 @@ fn data_members(
                         } else {
                             quote!(#access.map(|x| #o::from(&x)))
                         };
-                        out.push(Member { id, jsty: quote!(Option<#o>), value });
+                        out.push(Member {
+                            id,
+                            jsty: quote!(Option<#o>),
+                            value,
+                        });
                         return;
                     }
                     _ => {
@@ -853,7 +978,9 @@ fn data_members(
             if !is_pub(&f.vis) || f.sig.inputs.len() != 1 {
                 continue;
             }
-            let ReturnType::Type(_, o) = &f.sig.output else { continue };
+            let ReturnType::Type(_, o) = &f.sig.output else {
+                continue;
+            };
             let id = &f.sig.ident;
             has_accessors = true;
             push(&id.to_string(), &ty_str(o), quote!(v.#id()));
@@ -968,12 +1095,15 @@ fn value_class_ident(ty: &str) -> proc_macro2::Ident {
     format_ident!("{}", if ty == "FaceInfo" { "FontFace" } else { ty })
 }
 
-
 /// JS class name for an Arc-held usvg definition: `filter::Filter` -> `Filter`.
 fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
     let last = ty.rsplit("::").next().unwrap_or(ty);
     // `fontdb::Database` already has a hand-written class.
-    let name = if ty == "fontdb::Database" { "FontDatabase" } else { last };
+    let name = if ty == "fontdb::Database" {
+        "FontDatabase"
+    } else {
+        last
+    };
     format_ident!("{}", name)
 }
 
@@ -1003,16 +1133,19 @@ fn wrapper_class(
     let mut methods = TokenStream::new();
     let mut skipped = Vec::new();
     let mut current = Some(ty.rsplit("::").next().unwrap_or(ty).to_string());
+    let inner = quote!(self.inner);
     for _ in 0..4 {
         let Some(t) = current.take() else { break };
         let (code, sk) = map_methods(
-            files,
-            &t,
+            &MethodPass {
+                files,
+                ty: &t,
+                receiver: &inner,
+                skip: &[],
+                prologue: None,
+                readonly: true,
+            },
             vocab,
-            &quote!(self.inner),
-            &[],
-            None,
-            true,
             &mut taken,
         );
         methods.extend(code);
@@ -1037,7 +1170,8 @@ fn wrapper_class(
     let owns_group = files.iter().flat_map(|f| &f.items).any(|i| {
         let Item::Impl(imp) = i else { return false };
         imp.trait_.is_none()
-            && ty_str(&imp.self_ty).rsplit("::").next() == Some(ty.rsplit("::").next().unwrap_or(ty))
+            && ty_str(&imp.self_ty).rsplit("::").next()
+                == Some(ty.rsplit("::").next().unwrap_or(ty))
             && imp.items.iter().any(|it| match it {
                 ImplItem::Fn(f) => {
                     is_pub(&f.vis)
@@ -1094,21 +1228,39 @@ fn wrapper_class(
     (code, skipped, reached)
 }
 
-fn map_methods(
-    files: &[syn::File],
-    ty: &str,
-    vocab: &Vocab,
-    receiver: &TokenStream,
-    skip: &[&str],
-    // Emitted before the call; when set, every wrapper returns `Result<_>` so a
-    // receiver that has to be looked up first can fail cleanly.
-    prologue: Option<&TokenStream>,
-    // An `Arc` receiver cannot hand out `&mut`, so drop mutating methods.
+/// What one mapping pass reads: which sources, which upstream type, how the
+/// wrapper reaches its receiver, and what to leave alone. A struct because the
+/// `Pass` table in `main` already carries these, and unpacking it into
+/// positional arguments was how this grew to eight of them.
+struct MethodPass<'a> {
+    files: &'a [syn::File],
+    ty: &'a str,
+    receiver: &'a TokenStream,
+    skip: &'a [&'a str],
+    /// Emitted before the call; when set, every wrapper returns `Result<_>` so a
+    /// receiver that has to be looked up first can fail cleanly.
+    prologue: Option<&'a TokenStream>,
+    /// An `Arc` receiver cannot hand out `&mut`, so drop mutating methods.
     readonly: bool,
+}
+
+fn map_methods(
+    m: &MethodPass,
+    vocab: &Vocab,
     // Method names already emitted on the target class: two passes can land on
     // the same `impl` block (`Tree::filters` and `Group::filters` both do).
     taken: &mut BTreeSet<String>,
 ) -> (TokenStream, Vec<String>) {
+    // Destructured by name so the body below is unchanged from when these were
+    // eight parameters.
+    let MethodPass {
+        files,
+        ty,
+        receiver,
+        skip,
+        prologue,
+        readonly,
+    } = *m;
     let mut code = TokenStream::new();
     let mut skipped = Vec::new();
 
@@ -1245,7 +1397,11 @@ fn map_methods(
                 skipped.push(format!("{name} (needs &mut self)"));
                 continue;
             }
-            let recv = if mutable { quote!(&mut self) } else { quote!(&self) };
+            let recv = if mutable {
+                quote!(&mut self)
+            } else {
+                quote!(&self)
+            };
             let doc = docs(&f.attrs);
             let call = quote!(#receiver.#ident(#(#fwd),*));
 
@@ -1265,11 +1421,19 @@ fn map_methods(
                 }
                 Ret::ObjectList(ref t) => {
                     let o = format_ident!("{}", t);
-                    (quote!(Vec<#o>), quote!(#call.into_iter().map(#o::from).collect()), false)
+                    (
+                        quote!(Vec<#o>),
+                        quote!(#call.into_iter().map(#o::from).collect()),
+                        false,
+                    )
                 }
                 Ret::OptObject(ref t) => {
                     let o = format_ident!("{}", t);
-                    (quote!(Option<#o>), quote!(#call.map(|x| #o::from(x))), false)
+                    (
+                        quote!(Option<#o>),
+                        quote!(#call.map(|x| #o::from(x))),
+                        false,
+                    )
                 }
                 Ret::OptValue(ref t) => {
                     let w = value_class_ident(t);
@@ -1336,7 +1500,6 @@ fn map_methods(
         }
     }
 
-
     (code, skipped)
 }
 
@@ -1393,11 +1556,7 @@ fn async_twins(file: &mut syn::File) -> Vec<Twin> {
             .collect();
         for it in &mut imp.items {
             let ImplItem::Fn(f) = it else { continue };
-            let Some(pos) = f
-                .attrs
-                .iter()
-                .position(|a| a.path().is_ident("async_twin"))
-            else {
+            let Some(pos) = f.attrs.iter().position(|a| a.path().is_ident("async_twin")) else {
                 continue;
             };
             let attr = f.attrs.remove(pos);
@@ -1428,8 +1587,8 @@ fn async_twins(file: &mut syn::File) -> Vec<Twin> {
             let ReturnType::Type(_, ret) = &f.sig.output else {
                 panic!("an async twin core returns Result<T>")
             };
-            let output = result_inner(ret)
-                .unwrap_or_else(|| panic!("{}: expected Result<T>", f.sig.ident));
+            let output =
+                result_inner(ret).unwrap_or_else(|| panic!("{}: expected Result<T>", f.sig.ident));
             let needle = format!("self . {} (", f.sig.ident);
             let sibling = siblings
                 .iter()
@@ -1472,7 +1631,11 @@ fn emit_twins(twins: &[Twin]) -> TokenStream {
     for t in twins {
         // `Resvg` + `png_bytes` -> `ResvgPngBytesTask`, keeping the target's own
         // casing: lowercasing it first produced `SvgnodePngBytesTask`.
-        let task = format_ident!("{}{}Task", ty_str(&t.target), heck_camel(&t.core.to_string()));
+        let task = format_ident!(
+            "{}{}Task",
+            ty_str(&t.target),
+            heck_camel(&t.core.to_string())
+        );
         let (names, types): (Vec<_>, Vec<_>) = t.params.iter().cloned().unzip();
         let core = &t.core;
         let public = &t.public;
@@ -1561,8 +1724,8 @@ fn heck_camel(s: &str) -> String {
 /// the template rather than listed by hand: `impl Resvg { pub fn children }`
 /// means the `children` upstream method is covered, and a rule can say so.
 fn template_fns(code: &TokenStream) -> BTreeMap<String, Vec<String>> {
-    let file: syn::File = syn::parse2(code.clone())
-        .expect("the emitter template is not valid Rust on its own");
+    let file: syn::File =
+        syn::parse2(code.clone()).expect("the emitter template is not valid Rust on its own");
     // A Vec, not a Set: the duplicate check below needs the repeats.
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for item in &file.items {
@@ -1636,7 +1799,10 @@ fn assert_struct_fields(files: &[syn::File], ty: &str, want: &[&str]) {
     };
     for w in want {
         assert!(
-            named.named.iter().any(|f| f.ident.as_ref().is_some_and(|i| i == w)),
+            named
+                .named
+                .iter()
+                .any(|f| f.ident.as_ref().is_some_and(|i| i == w)),
             "usvg::{ty}::{w} disappeared; update build.rs"
         );
     }
@@ -1645,11 +1811,10 @@ fn assert_struct_fields(files: &[syn::File], ty: &str, want: &[&str]) {
 fn assert_tree_ctor(files: &[syn::File], name: &str) {
     let found = files.iter().flat_map(|f| &f.items).any(|i| match i {
         // upstream writes `impl crate::Tree`, so compare the last path segment
-        Item::Impl(imp) if ty_str(&imp.self_ty).rsplit("::").next() == Some("Tree") => {
-            imp.items.iter().any(|it| {
-                matches!(it, ImplItem::Fn(f) if f.sig.ident == name && is_pub(&f.vis))
-            })
-        }
+        Item::Impl(imp) if ty_str(&imp.self_ty).rsplit("::").next() == Some("Tree") => imp
+            .items
+            .iter()
+            .any(|it| matches!(it, ImplItem::Fn(f) if f.sig.ident == name && is_pub(&f.vis))),
         _ => false,
     });
     assert!(found, "usvg: `Tree::{name}` disappeared");
@@ -1794,7 +1959,10 @@ fn template(
                         return Some(kind);
                     }
                     // 3. give up, but tell JS about it
-                    misses.0.lock().unwrap().push(href.to_string());
+                    // Poison-tolerant: this mutex only accumulates
+                    // diagnostics, so a panic elsewhere must not take the
+                    // render down with it.
+                    misses.0.lock().unwrap_or_else(|e| e.into_inner()).push(href.to_string());
                     None
                 }),
             }
@@ -2008,7 +2176,7 @@ fn template(
                                 f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
                             });
                             if !known {
-                                let mut seen = misses.0.lock().unwrap();
+                                let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
                                 if !seen.iter().any(|s| s == name) {
                                     seen.push(name.clone());
                                 }
@@ -2543,8 +2711,8 @@ fn template(
                     .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
                 Ok((
                     tree,
-                    std::mem::take(&mut *missing_images.0.lock().unwrap()),
-                    std::mem::take(&mut *missing_fonts.0.lock().unwrap()),
+                    std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())),
+                    std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())),
                 ))
             }
 
@@ -2655,8 +2823,8 @@ fn template(
             }
         }
 
-        
-        
+
+
         #[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
         pub struct ParseTask {
             svg: Vec<u8>,
@@ -2749,12 +2917,13 @@ fn main() {
     // stubs src/lib.rs, the script must re-run and regenerate it.
     println!("cargo::rerun-if-changed=src/lib.rs");
     println!("cargo::rerun-if-env-changed=RESVG_NAPI_EMIT_SRC");
+    println!("cargo::rerun-if-env-changed=RESVG_NAPI_CODEGEN_LOG");
 
     let locked = locked_versions();
     let usvg = locate("usvg", "parser/options.rs", &locked);
     let resvg = locate("resvg", "lib.rs", &locked);
     let fontdb = locate("fontdb", "lib.rs", &locked);
-    println!("cargo::warning=usvg sources: {}", usvg.display());
+    report!("usvg sources: {}", usvg.display());
 
     // Whole crates, no per-file list: the `impl` blocks we wrap are spread over
     // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
@@ -2764,8 +2933,7 @@ fn main() {
     // Only the crate root for free functions: a module-level `pub fn` elsewhere
     // is not crate-public (resvg has an internal `render(&Image, ...)`).
     let resvg_root = vec![parse(&resvg.join("lib.rs"))];
-    let fontdb_files: Vec<syn::File> =
-        parse_crate(&fontdb).into_iter().map(|(_, f)| f).collect();
+    let fontdb_files: Vec<syn::File> = parse_crate(&fontdb).into_iter().map(|(_, f)| f).collect();
 
     // Guards first: no point generating against a moved API.
     assert_free_fn(
@@ -2784,11 +2952,15 @@ fn main() {
         "ImageHrefResolver",
         &["resolve_data", "resolve_string"],
     );
-    assert_struct_fields(&usvg_files, "FontResolver", &["select_font", "select_fallback"]);
+    assert_struct_fields(
+        &usvg_files,
+        "FontResolver",
+        &["select_font", "select_fallback"],
+    );
 
     // POW_VEC has N entries, so the highest usable precision is N - 1.
     let precision_max = (static_array_len(&usvg_files, "POW_VEC") - 1) as u32;
-    println!("cargo::warning=usvg precision clamp derived from POW_VEC: {precision_max}");
+    report!("usvg precision clamp derived from POW_VEC: {precision_max}");
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
     let mut referenced = struct_field_types(&usvg_files, "Options");
@@ -2823,8 +2995,8 @@ fn main() {
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
     }
-    println!(
-        "cargo::warning=vocabulary derived: {} f32 newtypes, {} type aliases",
+    report!(
+        "vocabulary derived: {} f32 newtypes, {} type aliases",
         vocab.scalars.len(),
         vocab.aliases.len()
     );
@@ -2837,8 +3009,7 @@ fn main() {
 
     // Fixpoint over object types: a generated object can reference another
     // (`Stop` holds a `Color`).
-    let mut object_todo: std::collections::VecDeque<String> =
-        object_seeds.into_iter().collect();
+    let mut object_todo: std::collections::VecDeque<String> = object_seeds.into_iter().collect();
     let mut object_done: BTreeSet<String> = BTreeSet::new();
     let mut object_root: BTreeMap<String, TokenStream> = BTreeMap::new();
     // Phase 1: discover. Generation is only used here to learn what a type
@@ -2855,7 +3026,7 @@ fn main() {
         } else if struct_fields_opt(&fontdb_files, &t).is_some() {
             (&fontdb_files, quote!(usvg::fontdb))
         } else {
-            println!("cargo::warning=object {t} skipped: not a public struct");
+            report!("object {t} skipped: not a public struct");
             continue;
         };
         vocab.objects.insert(t.clone());
@@ -2864,7 +3035,7 @@ fn main() {
         if members.is_empty() {
             vocab.objects.remove(&t);
             object_root.remove(&t);
-            println!("cargo::warning=data type {t} skipped: nothing mappable on it");
+            report!("data type {t} skipped: nothing mappable on it");
             continue;
         }
         // A dropped member whose type is itself a public struct is a candidate:
@@ -2909,12 +3080,12 @@ fn main() {
             }
             vocab.values.insert(t.clone());
             object_parts.insert(t.clone(), vcode);
-            println!(
-                "cargo::warning={t}: partial mapping, emitted as read-only class {}",
+            report!(
+                "{t}: partial mapping, emitted as read-only class {}",
                 value_class_ident(&t)
             );
             for d in dropped {
-                println!("cargo::warning={t} member not exposed: {d}");
+                report!("{t} member not exposed: {d}");
             }
         } else {
             object_parts.insert(t.clone(), code);
@@ -2929,7 +3100,13 @@ fn main() {
     // class for each, then follow the handles *those* classes return. The type
     // graph is finite; the cap is only a runaway guard.
     const RESERVED: [&str; 8] = [
-        "Resvg", "SvgNode", "BBox", "Matrix", "Dimensions", "RawImage", "RenderOptions",
+        "Resvg",
+        "SvgNode",
+        "BBox",
+        "Matrix",
+        "Dimensions",
+        "RawImage",
+        "RenderOptions",
         "RenderParams",
     ];
     let handles_of = |set: &BTreeSet<String>| -> BTreeSet<String> {
@@ -2949,7 +3126,7 @@ fn main() {
         }
         let name = wrapper_ident(&t).to_string();
         if RESERVED.contains(&name.as_str()) {
-            println!("cargo::warning=handle {t} skipped: name {name} is taken");
+            report!("handle {t} skipped: name {name} is taken");
             continue;
         }
         // `fontdb::Database` maps onto the hand-written FontDatabase class.
@@ -2958,7 +3135,7 @@ fn main() {
         }
         let (code, skipped, reached) = wrapper_class(&usvg_files, &t, &vocab, &modules);
         if code.is_empty() {
-            println!("cargo::warning=handle {t} skipped: nothing mappable on it");
+            report!("handle {t} skipped: nothing mappable on it");
         } else {
             wrapper_code.extend(code);
         }
@@ -2969,12 +3146,12 @@ fn main() {
             } else {
                 "not exposed"
             };
-            println!("cargo::warning=usvg::{t} method {verb}: {s}");
+            report!("usvg::{t} method {verb}: {s}");
         }
         todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
     }
-    println!(
-        "cargo::warning=wrapper classes generated: {}",
+    report!(
+        "wrapper classes generated: {}",
         done.iter().cloned().collect::<Vec<_>>().join(", ")
     );
 
@@ -2991,15 +3168,42 @@ fn main() {
         prologue: Option<&'a TokenStream>,
     }
     let passes = [
-        Pass { label: "fontdb::Database", target: "FontDatabase", files: &fontdb_files,
-               ty: "Database", receiver: quote!(self.inner), skip: &[], prologue: None },
-        Pass { label: "usvg::Tree", target: "Resvg", files: &usvg_files, ty: "Tree",
-               receiver: quote!(self.tree), skip: &[], prologue: None },
-        Pass { label: "usvg::Group", target: "Resvg", files: &usvg_files, ty: "Group",
-               receiver: quote!(self.tree.root()), skip: &["isolate", "should_isolate", "id"],
-               prologue: None },
-        Pass { label: "usvg::Node", target: "SvgNode", files: &usvg_files, ty: "Node",
-               receiver: quote!(__n), skip: &["subroots"], prologue: Some(&node_prologue) },
+        Pass {
+            label: "fontdb::Database",
+            target: "FontDatabase",
+            files: &fontdb_files,
+            ty: "Database",
+            receiver: quote!(self.inner),
+            skip: &[],
+            prologue: None,
+        },
+        Pass {
+            label: "usvg::Tree",
+            target: "Resvg",
+            files: &usvg_files,
+            ty: "Tree",
+            receiver: quote!(self.tree),
+            skip: &[],
+            prologue: None,
+        },
+        Pass {
+            label: "usvg::Group",
+            target: "Resvg",
+            files: &usvg_files,
+            ty: "Group",
+            receiver: quote!(self.tree.root()),
+            skip: &["isolate", "should_isolate", "id"],
+            prologue: None,
+        },
+        Pass {
+            label: "usvg::Node",
+            target: "SvgNode",
+            files: &usvg_files,
+            ty: "Node",
+            receiver: quote!(__n),
+            skip: &["subroots"],
+            prologue: Some(&node_prologue),
+        },
     ];
 
     let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
@@ -3009,19 +3213,28 @@ fn main() {
     let mut skips: Vec<(&str, Vec<String>)> = Vec::new();
     for p in &passes {
         let names = taken.entry(p.target).or_default();
-        let (code, skipped) =
-            map_methods(p.files, p.ty, &vocab, &p.receiver, p.skip, p.prologue, false, names);
+        let (code, skipped) = map_methods(
+            &MethodPass {
+                files: p.files,
+                ty: p.ty,
+                receiver: &p.receiver,
+                skip: p.skip,
+                prologue: p.prologue,
+                readonly: false,
+            },
+            &vocab,
+            names,
+        );
         skips.push((p.label, skipped));
         generated.insert(p.ty, code);
     }
     // Prune: an object type nothing returns is dead TS surface. Start from the
     // generated method bodies, then follow objects nested in kept objects.
     let mentions = |code: &TokenStream, name: &str| -> bool {
-        format!(" {} ", code.to_string()).contains(&format!(" {name} "))
+        format!(" {code} ").contains(&format!(" {name} "))
     };
     let mut kept: BTreeSet<String> = BTreeSet::new();
-    let all_data: BTreeSet<String> =
-        vocab.objects.union(&vocab.values).cloned().collect();
+    let all_data: BTreeSet<String> = vocab.objects.union(&vocab.values).cloned().collect();
     for name in all_data.clone() {
         // A value class is referenced under its JS name, not the Rust one.
         let js = value_class_ident(&name).to_string();
@@ -3054,14 +3267,14 @@ fn main() {
     }
     let dropped: Vec<String> = all_data.difference(&kept).cloned().collect();
     if !dropped.is_empty() {
-        println!("cargo::warning=object types pruned as unreachable: {}", dropped.join(", "));
+        report!("object types pruned as unreachable: {}", dropped.join(", "));
     }
     let object_code: TokenStream = kept
         .iter()
         .filter_map(|k| object_parts.get(k).cloned())
         .collect();
-    println!(
-        "cargo::warning=data types emitted: {}",
+    report!(
+        "data types emitted: {}",
         kept.iter().cloned().collect::<Vec<_>>().join(", ")
     );
 
@@ -3071,17 +3284,16 @@ fn main() {
     let node_methods = &generated["Node"];
 
     for s in skipped_fields {
-        println!("cargo::warning=usvg::Options field not exposed: {s}");
+        report!("usvg::Options field not exposed: {s}");
     }
     for s in skipped_write {
-        println!("cargo::warning=usvg::WriteOptions field not exposed: {s}");
+        report!("usvg::WriteOptions field not exposed: {s}");
     }
 
     let decls: Vec<_> = fields.iter().map(|f| &f.decl).collect();
     let assigns: Vec<_> = fields.iter().map(|f| &f.assign).collect();
     let write_decls: Vec<_> = write_fields.iter().map(|f| &f.decl).collect();
     let write_assigns: Vec<_> = write_fields.iter().map(|f| &f.assign).collect();
-
 
     // Everything the passes above produced, in one value: `template` is called
     // twice and only the method lists differ between the two.
@@ -3116,12 +3328,17 @@ fn main() {
                 }
                 None => "not exposed".to_string(),
             };
-            println!("cargo::warning={label} method {verb}: {s}");
+            report!("{label} method {verb}: {s}");
         }
     }
 
-    let mut code =
-        template(&fragments, fontdb_methods, tree_methods, group_methods, node_methods);
+    let mut code = template(
+        &fragments,
+        fontdb_methods,
+        tree_methods,
+        group_methods,
+        node_methods,
+    );
 
     // Async twins: the template marks a Send-safe core, the rule writes the
     // ceremony. The marker is stripped on the way out -- rustc has never heard
@@ -3131,8 +3348,8 @@ fn main() {
             syn::parse2(code.clone()).expect("the emitter template is not valid Rust");
         let twins = async_twins(&mut file);
         for t in &twins {
-            println!(
-                "cargo::warning=async twin generated: {}::{} -> {} (Promise<{}>)",
+            report!(
+                "async twin generated: {}::{} -> {} (Promise<{}>)",
                 ty_str(&t.target),
                 t.core,
                 t.public,

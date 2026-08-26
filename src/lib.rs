@@ -894,7 +894,11 @@ fn href_resolver(images: ImageMap, misses: Misses) -> usvg::ImageHrefResolver<'s
             if let Some(kind) = from_disk(href, opts) {
                 return Some(kind);
             }
-            misses.0.lock().unwrap().push(href.to_string());
+            misses
+                .0
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(href.to_string());
             None
         }),
     }
@@ -1265,7 +1269,7 @@ fn font_resolver(misses: Misses) -> usvg::FontResolver<'static> {
                         .faces()
                         .any(|f| f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)));
                     if !known {
-                        let mut seen = misses.0.lock().unwrap();
+                        let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
                         if !seen.iter().any(|s| s == name) {
                             seen.push(name.clone());
                         }
@@ -2392,8 +2396,8 @@ impl Resvg {
             .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
         Ok((
             tree,
-            std::mem::take(&mut *missing_images.0.lock().unwrap()),
-            std::mem::take(&mut *missing_fonts.0.lock().unwrap()),
+            std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())),
+            std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())),
         ))
     }
     fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {

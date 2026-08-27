@@ -90,6 +90,8 @@
            border-color: var(--plate); }
   button:hover:not(:disabled) { background: var(--plate); color: var(--proof); }
   button:disabled { opacity: .4; cursor: default; }
+  button.grab { padding: .1rem .45rem; font: 700 9px var(--mono); margin-left: .5rem;
+                text-transform: uppercase; letter-spacing: .08em; vertical-align: 1px; }
 
   /* The proof: registration marks and a tick rule around the output. */
   .frame { position: relative; padding: 18px 0 0 18px; }
@@ -328,6 +330,8 @@
           <b>Drop fonts, images, fragments</b>
           <span>fonts, images, and .liquid or .svg fragments</span>
         </div>
+          <label>fetch a font <input id="fontName" type="text"
+                 placeholder="Lobster · fontawesome · https://…/any.ttf"></label>
       </section>
     </div>
 
@@ -1182,6 +1186,15 @@
         : ['(any font, for the generic families)']).map((name) => {
           const li = document.createElement('li');
           li.textContent = name;
+          // The name in this row is exactly what the resolver takes.
+          if (missingFonts.length) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'grab';
+            b.textContent = 'fetch';
+            b.addEventListener('click', () => fetchInto(name, b));
+            li.append(b);
+          }
           return li;
         }));
     }
@@ -1319,6 +1332,79 @@
     analyse();
     render();
   }
+
+  // Fonts by name, without a file to drop.
+  //
+  // Google's CSS API is no use here: it negotiates on User-Agent and serves a
+  // browser WOFF2, which ttf-parser -- under fontdb, under usvg -- does not
+  // read. The original TTFs live in the google/fonts repo instead, and jsDelivr
+  // serves them with `access-control-allow-origin: *`, which is what lets them
+  // through the COEP the wasm threads force on this page.
+  //
+  // The file name is not derivable: `Lobster-Regular.ttf`, but
+  // `Roboto[wdth,wght].ttf` with the variable axes spelled into the name. So
+  // the directory has to be listed, and that is the one GitHub API call --
+  // capped at 60 an hour per address, hence once per family and never per
+  // render.
+  const FA = 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/webfonts/';
+  const GF = 'https://cdn.jsdelivr.net/gh/google/fonts@main/';
+
+  async function grab(url, name) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
+    // A File, so the whole existing drop path handles it -- database, family
+    // setters, re-render -- with nothing duplicated here.
+    return new File([await r.arrayBuffer()], name);
+  }
+
+  async function fetchFonts(query) {
+    const q = query.trim();
+    if (!q) return [];
+    if (/^https?:\/\//i.test(q)) return [await grab(q, q.split('/').pop().split('?')[0])];
+    // Font Awesome is three faces, and the glyphs are in the private use area:
+    // write them as &#xf005; and this is the font that has them.
+    if (/^(fa|font\s*awesome)$/i.test(q)) {
+      return Promise.all(['fa-solid-900', 'fa-brands-400', 'fa-regular-400']
+        .map((n) => grab(`${FA}${n}.ttf`, `${n}.ttf`)));
+    }
+    const slug = q.toLowerCase().replace(/\s+/g, '');
+    for (const lic of ['ofl', 'apache', 'ufl']) {
+      const r = await fetch(`https://api.github.com/repos/google/fonts/contents/${lic}/${slug}`);
+      if (r.status === 403) {
+        throw new Error('GitHub rate limit reached (60/hour) — drop the file instead');
+      }
+      if (!r.ok) continue;
+      const files = (await r.json()).filter((f) => /\.(ttf|otf)$/i.test(f.name));
+      // Upright before italic, then the shortest name: `Roboto[wdth,wght]` over
+      // `Roboto-Italic[wdth,wght]`, and `Lobster-Regular` when that is all there
+      // is. A variable font covers every weight the document may ask for.
+      const pick = files.filter((f) => !/italic/i.test(f.name))
+        .sort((a, b) => a.name.length - b.name.length)[0] ?? files[0];
+      if (!pick) break;
+      return [await grab(`${GF}${lic}/${slug}/${encodeURIComponent(pick.name)}`, pick.name)];
+    }
+    throw new Error(`"${q}" is not a family in google/fonts`);
+  }
+
+  async function fetchInto(query, button) {
+    const label = button?.textContent;
+    if (button) { button.disabled = true; button.textContent = '…'; }
+    try {
+      const files = await fetchFonts(query);
+      if (files.length) await accept(files);
+    } catch (e) {
+      report('error', 'fonts', e.message);
+    } finally {
+      if (button) { button.disabled = false; button.textContent = label; }
+    }
+  }
+
+  $('fontName').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    fetchInto(ev.target.value);
+    ev.target.value = '';
+  });
 
   const drop = $('drop');
   for (const type of ['dragenter', 'dragover']) {

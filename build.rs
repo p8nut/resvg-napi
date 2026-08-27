@@ -403,7 +403,15 @@ fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
 /// Payload enums, found by shape. Skips any with a variant carrying more than
 /// one field or named fields: those have no single obvious `value`, and saying
 /// so in the report beats guessing.
-fn payload_enums(files: &[syn::File]) -> BTreeMap<String, PayloadEnum> {
+fn payload_enums(
+    files: &[syn::File],
+    // The module these files contribute to, and the names usvg defines twice.
+    // `filter::Kind::Image(Image)` means `filter::Image`, and nothing in the
+    // type string says so -- the variant is written unqualified because it is
+    // in the same module.
+    module: &str,
+    dups: &BTreeSet<String>,
+) -> BTreeMap<String, PayloadEnum> {
     let mut out = BTreeMap::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Enum(e) = item else { continue };
@@ -417,7 +425,10 @@ fn payload_enums(files: &[syn::File]) -> BTreeMap<String, PayloadEnum> {
                 Fields::Unit => variants.push((v.ident.to_string(), None)),
                 Fields::Unnamed(f) if f.unnamed.len() == 1 => {
                     usable = true;
-                    let ty = ty_str(&f.unnamed[0].ty);
+                    let mut ty = ty_str(&f.unnamed[0].ty);
+                    if !module.is_empty() && dups.contains(&ty) {
+                        ty = format!("{module}::{ty}");
+                    }
                     variants.push((v.ident.to_string(), Some(ty)));
                 }
                 // more than one field, or named ones: no single `value`
@@ -503,11 +514,11 @@ fn payload_enum_code(
                 (quote!(#e), quote!(#e::from(*v)))
             }
             Some(Js::Object(t)) => {
-                let o = format_ident!("{}", t);
+                let o = data_ident(&t);
                 (quote!(#o), quote!(#o::from(v)))
             }
             Some(Js::Value(t)) => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 (quote!(#c), quote!(#c::wrap(v.clone())))
             }
             // An Arc-held definition is shared by every element referencing it,
@@ -567,6 +578,9 @@ fn payload_enum_code(
 /// derived: enums worth mirroring, `f32` newtypes, and `pub type` aliases.
 #[derive(Default)]
 struct Vocab {
+    /// Every public struct name upstream, so a payload that names one the
+    /// registry dropped can be told from a payload that is not a struct at all.
+    structs: BTreeSet<String>,
     /// Types that can be named by an id, for an `Arc<T>` payload.
     with_id: BTreeSet<String>,
     /// Upstream enums carrying payloads, by name. Syntactic, so populated with
@@ -1121,6 +1135,12 @@ fn upstream_path(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> TokenStream {
+    // A qualified key says its own module, and says it correctly: the map below
+    // is keyed by bare name and cannot hold two `Image`s.
+    if let Some((m, n)) = name.rsplit_once("::") {
+        let (m, n) = (format_ident!("{}", m), format_ident!("{}", n));
+        return quote!(#root::#m::#n);
+    }
     let ident = format_ident!("{}", name);
     match modules.get(name) {
         Some(m) if !m.is_empty() => {
@@ -1298,12 +1318,12 @@ fn data_members(
             // A value class owns its upstream value, so a nested one is cloned
             // into its `wrap`.
             Some(Js::Value(t)) if nested_values => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 reached.insert(t.clone());
                 (quote!(#c), quote!(#c::wrap(#access.clone())))
             }
             Some(Js::ValueList(t)) if nested_values => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Vec<#c>),
@@ -1311,7 +1331,7 @@ fn data_members(
                 )
             }
             Some(Js::OptValue(t)) if nested_values => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Option<#c>),
@@ -1346,7 +1366,7 @@ fn data_members(
                 (quote!(#e), quote!(#e::from(#access)))
             }
             Some(Js::Object(t)) => {
-                let o = format_ident!("{}", t);
+                let o = data_ident(&t);
                 reached.insert(t.clone());
                 let arg = if ty_s.starts_with('&') {
                     quote!(#access)
@@ -1356,7 +1376,7 @@ fn data_members(
                 (quote!(#o), quote!(#o::from(#arg)))
             }
             Some(Js::ObjectList(t)) => {
-                let o = format_ident!("{}", t);
+                let o = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Vec<#o>),
@@ -1468,7 +1488,7 @@ fn object_struct(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
-    let (members, skipped, reached) = data_members(files, ty, vocab, false);
+    let (members, skipped, reached) = data_members(files, bare(ty), vocab, false);
     if members.is_empty() || !skipped.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
@@ -1511,11 +1531,11 @@ fn value_class(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
-    let (members, skipped, reached) = data_members(files, ty, vocab, true);
+    let (members, skipped, reached) = data_members(files, bare(ty), vocab, true);
     if members.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
-    let name = value_class_ident(ty);
+    let name = data_ident(ty);
     let up = upstream_path(ty, modules, root);
     let getters = members.iter().map(|m| {
         let (id, t, e) = (&m.id, &m.jsty, &m.value);
@@ -1550,7 +1570,42 @@ fn value_class(
 }
 
 /// Naming decision: `FaceInfo` reads as `FontFace` on the JS side.
-fn value_class_ident(ty: &str) -> proc_macro2::Ident {
+/// The upstream name inside a registry key: `filter::Image` -> `Image`.
+///
+/// A key carries the module so that two types of the same name stay distinct;
+/// every lookup into the sources wants the name alone.
+fn bare(key: &str) -> &str {
+    key.rsplit_once("::").map(|(_, n)| n).unwrap_or(key)
+}
+
+/// The JS name of a data type, whatever its registry key.
+///
+/// One function owns this because the naming has three rules and they were
+/// spread over eighteen call sites, only some of which knew about the rename:
+/// `Js::Object` built the ident with a bare `format_ident!` while `Js::Value`
+/// went through here, so an object called `FaceInfo` would have been emitted
+/// under that name. It only worked because FaceInfo maps partially.
+///
+/// A key can be module-qualified. usvg defines `Image` twice -- `tree/filter.rs`
+/// and `tree/mod.rs` -- so the two cannot share a bare key without the path
+/// resolving to one and the members to the other.
+fn data_ident(ty: &str) -> proc_macro2::Ident {
+    if let Some((module, name)) = ty.rsplit_once("::") {
+        let head = module.rsplit("::").next().unwrap_or(module);
+        let mut camel = String::new();
+        let mut up = true;
+        for c in head.chars() {
+            if c == '_' {
+                up = true;
+            } else if up {
+                camel.extend(c.to_uppercase());
+                up = false;
+            } else {
+                camel.push(c);
+            }
+        }
+        return format_ident!("{camel}{name}");
+    }
     format_ident!("{}", if ty == "FaceInfo" { "FontFace" } else { ty })
 }
 
@@ -1875,11 +1930,11 @@ fn map_methods(
                 Ret::Num => (quote!(f64), quote!(#call as f64), false),
                 Ret::IntNewtype => (quote!(u32), quote!(#call.0 as u32), false),
                 Ret::Object(ref t) => {
-                    let o = format_ident!("{}", t);
+                    let o = data_ident(t);
                     (quote!(#o), quote!(#o::from(#call)), false)
                 }
                 Ret::ObjectList(ref t) => {
-                    let o = format_ident!("{}", t);
+                    let o = data_ident(t);
                     (
                         quote!(Vec<#o>),
                         quote!(#call.into_iter().map(#o::from).collect()),
@@ -1887,7 +1942,7 @@ fn map_methods(
                     )
                 }
                 Ret::OptObject(ref t) => {
-                    let o = format_ident!("{}", t);
+                    let o = data_ident(t);
                     (
                         quote!(Option<#o>),
                         quote!(#call.map(|x| #o::from(x))),
@@ -1895,7 +1950,7 @@ fn map_methods(
                     )
                 }
                 Ret::OptValue(ref t) => {
-                    let w = value_class_ident(t);
+                    let w = data_ident(t);
                     (
                         quote!(Option<#w>),
                         quote!(#call.map(|x| #w::wrap(x.clone()))),
@@ -1903,11 +1958,11 @@ fn map_methods(
                     )
                 }
                 Ret::Value(ref t) => {
-                    let w = value_class_ident(t);
+                    let w = data_ident(t);
                     (quote!(#w), quote!(#w::wrap(#call.clone())), false)
                 }
                 Ret::ValueList(ref t) => {
-                    let w = value_class_ident(t);
+                    let w = data_ident(t);
                     (
                         quote!(Vec<#w>),
                         // `into_iter` covers both a slice of values and an
@@ -3520,7 +3575,50 @@ fn main() {
     // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
     let usvg_parsed = parse_crate(&usvg);
     let usvg_files: Vec<syn::File> = usvg_parsed.iter().map(|(_, f)| f.clone()).collect();
-    let modules = upstream_modules(&usvg_parsed, &public_modules(&usvg_files));
+    let public = public_modules(&usvg_files);
+    let modules = upstream_modules(&usvg_parsed, &public);
+    // usvg files grouped by the module they contribute to. A bare-name lookup
+    // over the whole crate takes whichever file was parsed first, which is how
+    // `filter::Image` came back with `usvg::Image`'s methods; a qualified key
+    // resolves against its own module instead.
+    let mut by_module: BTreeMap<String, Vec<syn::File>> = BTreeMap::new();
+    for (path, file) in &usvg_parsed {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let m = if public.contains(&stem) {
+            stem
+        } else {
+            String::new()
+        };
+        by_module.entry(m).or_default().push(file.clone());
+    }
+    // Public names usvg defines twice. Exactly one today, `Image`, and the
+    // report says so rather than leaving it to be rediscovered.
+    let dups: BTreeSet<String> = {
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        for f in &usvg_files {
+            for item in &f.items {
+                if let Item::Struct(st) = item {
+                    if is_pub(&st.vis) {
+                        *seen.entry(st.ident.to_string()).or_default() += 1;
+                    }
+                }
+            }
+        }
+        seen.into_iter()
+            .filter(|(_, n)| *n > 1)
+            .map(|(k, _)| k)
+            .collect()
+    };
+    if !dups.is_empty() {
+        report!(
+            "names usvg defines twice, keyed by module: {}",
+            dups.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
+    }
     // Only the crate root for free functions: a module-level `pub fn` elsewhere
     // is not crate-public (resvg has an internal `render(&Image, ...)`).
     let resvg_root = vec![parse(&resvg.join("lib.rs"))];
@@ -3605,8 +3703,24 @@ fn main() {
     for set in [&usvg_files, &fontdb_files, &extra] {
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
-        vocab.payload.extend(payload_enums(set));
+        vocab.payload.extend(payload_enums(set, "", &dups));
+        for item in set.iter().flat_map(|f| &f.items) {
+            if let Item::Struct(st) = item {
+                if is_pub(&st.vis) {
+                    vocab.structs.insert(st.ident.to_string());
+                }
+            }
+        }
         vocab.with_id.extend(types_with_id(set));
+    }
+    // Rescanned per module so an ambiguous payload gets its module: the pass
+    // above keyed everything bare, which is right for the crates that have no
+    // duplicate and wrong for the one that does.
+    for (m, files) in &by_module {
+        if m.is_empty() {
+            continue;
+        }
+        vocab.payload.extend(payload_enums(files, m, &dups));
     }
     report!(
         "payload enums found: {}",
@@ -3643,9 +3757,12 @@ fn main() {
         if vocab.enums.contains(&t) || vocab.scalars.contains(&t) || vocab.ints.contains(&t) {
             continue;
         }
-        let (source, root) = if struct_fields_opt(&usvg_files, &t).is_some() {
+        let scoped = t.rsplit_once("::").and_then(|(m, _)| by_module.get(m));
+        let (source, root) = if let Some(files) = scoped {
+            (files, quote!(usvg))
+        } else if struct_fields_opt(&usvg_files, bare(&t)).is_some() {
             (&usvg_files, quote!(usvg))
-        } else if struct_fields_opt(&fontdb_files, &t).is_some() {
+        } else if struct_fields_opt(&fontdb_files, bare(&t)).is_some() {
             (&fontdb_files, quote!(usvg::fontdb))
         } else {
             report!("object {t} skipped: not a public struct");
@@ -3695,7 +3812,12 @@ fn main() {
     // lands in `skipped`, and `object_struct` refuses any type with a skipped
     // member.
     let source_of = |t: &str| -> &[syn::File] {
-        if struct_fields_opt(&usvg_files, t).is_some() {
+        if let Some((m, _)) = t.rsplit_once("::") {
+            if let Some(files) = by_module.get(m) {
+                return files;
+            }
+        }
+        if struct_fields_opt(&usvg_files, bare(t)).is_some() {
             &usvg_files
         } else {
             &fontdb_files
@@ -3748,7 +3870,7 @@ fn main() {
         object_parts.insert(t.clone(), vcode);
         report!(
             "{t}: partial mapping, emitted as read-only class {}",
-            value_class_ident(t)
+            data_ident(t)
         );
         for d in dropped {
             report!("{t} member not exposed: {d}");
@@ -3902,7 +4024,7 @@ fn main() {
     let all_data: BTreeSet<String> = vocab.objects.union(&vocab.values).cloned().collect();
     for name in all_data.clone() {
         // A value class is referenced under its JS name, not the Rust one.
-        let js = value_class_ident(&name).to_string();
+        let js = data_ident(&name).to_string();
         let used = generated
             .values()
             .any(|c| mentions(c, &name) || mentions(c, &js))

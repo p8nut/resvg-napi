@@ -29,6 +29,7 @@ fontdb::Database method not exposed: family_name (arg: &'aFamily)
 fontdb::Database method not exposed: load_font_source (arg: Source)
 fontdb::Database method not exposed: make_shared_face_data (returns Option<(std::sync::Arc<dynAsRef<[u8]>+Send+Sync>,u32)>)
 fontdb::Database method not exposed: push_face_info (arg: FaceInfo)
+names usvg defines twice, keyed by module: Image
 object (String,Language) skipped: not a public struct
 object Arc<ClipPath> skipped: not a public struct
 object Arc<LinearGradient> skipped: not a public struct

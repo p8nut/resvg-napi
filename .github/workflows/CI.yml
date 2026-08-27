@@ -5,10 +5,26 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+    # Markdown and the licence cannot break a build. This skips the whole
+    # workflow rather than gating a job, so there is nothing to pay for -- but
+    # it also means no check reports at all, which would deadlock a required
+    # check if main is ever protected.
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE*'
   schedule:
     # Mondays, 07:00 UTC -- asks upstream whether the Cargo.toml pins can go.
     - cron: '0 7 * * 1'
   workflow_dispatch:
+
+# A second push to a branch makes the first run's answer worthless, but it kept
+# running to the end all the same -- nine build targets and four test matrices
+# of it. Cancel only for pull_request: a superseded main or tag run may already
+# be publishing, and killing that mid-way is how you get a half-published
+# release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always

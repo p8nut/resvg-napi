@@ -70,14 +70,14 @@ if (shape) {
   if (paint) {
     if (paint.type === 'color') {
       // only the colour branch has `color`
-      const { red, green, blue }: Color = paint.color;
+      const { red, green, blue }: Color = paint.value;
       console.log(`fill rgb(${red} ${green} ${blue})`);
     } else {
       // and only the server branch has `id`, with the kind narrowed too
       const kind: 'linearGradient' | 'radialGradient' | 'pattern' = paint.type;
       console.log(`fill is a ${kind} named ${paint.id}`);
     }
-    // @ts-expect-error a colour has no id, and the compiler must say so
+    // @ts-expect-error a colour carries a value, not an id
     paint.id?.toString();
   }
 

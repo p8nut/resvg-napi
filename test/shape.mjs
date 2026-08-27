@@ -40,7 +40,7 @@ const shape = (id) => doc.node(id).path();
 {
   const { fill } = shape('tri');
   assert.equal(fill.paint.type, 'color');
-  assert.deepEqual(fill.paint.color, { red: 56, green: 189, blue: 248 });
+  assert.deepEqual(fill.paint.value, { red: 56, green: 189, blue: 248 });
   assert.equal(fill.opacity, 1);
   assert.equal(fill.rule, 'nonZero');
 }
@@ -49,7 +49,7 @@ const shape = (id) => doc.node(id).path();
 {
   const { stroke } = shape('tri');
   assert.equal(stroke.paint.type, 'color');
-  assert.deepEqual(stroke.paint.color, { red: 0, green: 128, blue: 128 });
+  assert.deepEqual(stroke.paint.value, { red: 0, green: 128, blue: 128 });
   assert.equal(stroke.width, 3);
   assert.deepEqual(stroke.dasharray, [4, 2]);
   assert.equal(stroke.dashoffset, 1);
@@ -62,7 +62,7 @@ const shape = (id) => doc.node(id).path();
   const g = shape('grad-filled').fill.paint;
   assert.equal(g.type, 'linearGradient');
   assert.equal(g.id, 'grad');
-  assert.equal(g.color, undefined, 'a server carries no colour');
+  assert.equal(g.value, undefined, 'a server carries no value, only an id');
   assert.ok(doc.linearGradients().some((x) => x.id() === g.id), 'id resolves in defs');
 
   const p = shape('pat-filled').fill.paint;
@@ -76,7 +76,7 @@ const shape = (id) => doc.node(id).path();
 {
   const { paint } = shape('one-stop-filled').fill;
   assert.equal(paint.type, 'color', 'one stop collapses to a colour');
-  assert.deepEqual(paint.color, { red: 0, green: 255, blue: 0 });
+  assert.deepEqual(paint.value, { red: 0, green: 255, blue: 0 });
 }
 
 // 6. absent is absent: no fill, no stroke, and not a shape at all

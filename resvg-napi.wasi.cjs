@@ -1,4 +1,4 @@
-// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","Font","FontDatabase","FontFace","LinearGradient","Mask","Pattern","Primitive","RadialGradient","Resvg","SvgNode","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
+// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","Font","FontDatabase","FontFace","LinearGradient","Mask","Pattern","Primitive","RadialGradient","Resvg","SvgNode","Text","TextChunk","TextSpan","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
 /* eslint-disable */
 /* prettier-ignore */
 
@@ -933,6 +933,9 @@ module.exports.Primitive = __napiModule.exports.Primitive
 module.exports.RadialGradient = __napiModule.exports.RadialGradient
 module.exports.Resvg = __napiModule.exports.Resvg
 module.exports.SvgNode = __napiModule.exports.SvgNode
+module.exports.Text = __napiModule.exports.Text
+module.exports.TextChunk = __napiModule.exports.TextChunk
+module.exports.TextSpan = __napiModule.exports.TextSpan
 module.exports.AlignmentBaseline = __napiModule.exports.AlignmentBaseline
 module.exports.BlendMode = __napiModule.exports.BlendMode
 module.exports.ColorChannel = __napiModule.exports.ColorChannel

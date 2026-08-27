@@ -42,6 +42,7 @@ export declare class Filter {
 export declare class Font {
   get style(): FontStyle
   get stretch(): FontStretch
+  get weight(): number
   get variations(): Array<FontVariation>
 }
 
@@ -494,6 +495,14 @@ export declare class SvgNode {
   /** `group`, `path`, `image` or `text`. */
   get kind(): NodeKind
   /**
+   * The laid-out content of a text node: chunks, spans, resolved
+   * fonts. Null for anything that is not text.
+   *
+   * Its presence is what makes the text types map at all -- a node
+   * payload is not a collection, so nothing else nominates them.
+   */
+  text(): Text | null
+  /**
    * The shape of a path node: geometry, fill, stroke, paint order.
    * Null for a group, an image or a text node.
    *
@@ -556,6 +565,55 @@ export declare class SvgNode {
   renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
 }
 
+/** Read-only view of a `Text`. */
+export declare class Text {
+  get id(): string
+  get renderingMode(): TextRendering
+  get dx(): Array<number>
+  get dy(): Array<number>
+  get rotate(): Array<number>
+  get writingMode(): WritingMode
+  get chunks(): Array<TextChunk>
+  get absTransform(): Matrix
+  get boundingBox(): BBox
+  get absBoundingBox(): BBox
+  get strokeBoundingBox(): BBox
+  get absStrokeBoundingBox(): BBox
+  get layouted(): Array<Span>
+}
+
+/** Read-only view of a `TextChunk`. */
+export declare class TextChunk {
+  get x(): number | null
+  get y(): number | null
+  get anchor(): TextAnchor
+  get spans(): Array<TextSpan>
+  get textFlow(): TextFlowPlain | TextFlowPath
+  get text(): string
+}
+
+/** Read-only view of a `TextSpan`. */
+export declare class TextSpan {
+  get start(): number
+  get end(): number
+  get fill(): Fill | null
+  get stroke(): Stroke | null
+  get paintOrder(): PaintOrder
+  get font(): Font
+  get fontSize(): number
+  get smallCaps(): boolean
+  get applyKerning(): boolean
+  get fontOpticalSizing(): FontOpticalSizing
+  get dominantBaseline(): DominantBaseline
+  get alignmentBaseline(): AlignmentBaseline
+  get baselineShift(): Array<BaselineShiftPlain | BaselineShiftNumber>
+  get isVisible(): boolean
+  get letterSpacing(): number
+  get wordSpacing(): number
+  get textLength(): number | null
+  get lengthAdjust(): LengthAdjust
+}
+
 /** An alignment baseline property. */
 export declare const enum AlignmentBaseline {
   Auto = 'auto',
@@ -570,6 +628,19 @@ export declare const enum AlignmentBaseline {
   Alphabetic = 'alphabetic',
   Hanging = 'hanging',
   Mathematical = 'mathematical'
+}
+
+/** `BaselineShift::Number`. */
+export interface BaselineShiftNumber {
+  /** Discriminant. Narrow on this. */
+  type: 'number'
+  value: number
+}
+
+/** The payload-free variants of `BaselineShift`. */
+export interface BaselineShiftPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'baseline' | 'subscript' | 'superscript'
 }
 
 /** A rectangle in SVG user units. */
@@ -629,13 +700,6 @@ export declare const enum ColorInterpolation {
   LinearRGB = 'linearRgb'
 }
 
-/** `Paint::Color`: a colour resolved by the parser. */
-export interface ColorPaint {
-  /** Discriminant. Narrow on this. */
-  type: 'color'
-  color: Color
-}
-
 /** A width/height pair in SVG user units. */
 export interface Dimensions {
   width: number
@@ -667,7 +731,7 @@ export declare const enum EdgeMode {
 
 /** Plain view of a `Fill`. */
 export interface Fill {
-  paint: ColorPaint | PaintServer
+  paint: PaintColor | PaintLinearGradient | PaintRadialGradient | PaintPattern
   opacity: number
   rule: FillRule
 }
@@ -792,6 +856,20 @@ export declare const enum NodeKind {
   Text = 'text'
 }
 
+/** `Paint::Color`. */
+export interface PaintColor {
+  /** Discriminant. Narrow on this. */
+  type: 'color'
+  value: Color
+}
+
+/** Id of the `LinearGradient` this refers to. */
+export interface PaintLinearGradient {
+  /** Discriminant. Narrow on this. */
+  type: 'linearGradient'
+  id: string
+}
+
 /**
  * Representation of the [`paint-order`] property.
  *
@@ -805,18 +883,17 @@ export declare const enum PaintOrder {
   StrokeAndFill = 'strokeAndFill'
 }
 
-/**
- * A paint server -- gradient or pattern -- named by id, the way the
- * document itself refers to one with `url(#id)`. Resolve it through
- * `linearGradients()`, `radialGradients()` or `patterns()`.
- *
- * An id rather than the object: a paint server is shared by every
- * element that references it, so handing out a copy per element would
- * misrepresent the document.
- */
-export interface PaintServer {
+/** Id of the `Pattern` this refers to. */
+export interface PaintPattern {
   /** Discriminant. Narrow on this. */
-  type: 'linearGradient' | 'radialGradient' | 'pattern'
+  type: 'pattern'
+  id: string
+}
+
+/** Id of the `RadialGradient` this refers to. */
+export interface PaintRadialGradient {
+  /** Discriminant. Narrow on this. */
+  type: 'radialGradient'
   id: string
 }
 
@@ -850,6 +927,15 @@ export interface Path {
 export interface PathSegment {
   type: 'moveTo' | 'lineTo' | 'quadTo' | 'cubicTo' | 'close'
   points: Array<number>
+}
+
+/** Plain view of a `PositionedGlyph`. */
+export interface PositionedGlyph {
+  fontSize: number
+  transform: Matrix
+  outlineTransform: Matrix
+  svgTransform: Matrix
+  colrTransform: Matrix
 }
 
 /** Un-premultiplied RGBA8 pixels, row-major, no padding. */
@@ -1001,6 +1087,21 @@ export declare const enum ShapeRendering {
   GeometricPrecision = 'geometricPrecision'
 }
 
+/** Plain view of a `Span`. */
+export interface Span {
+  fill?: Fill
+  stroke?: Stroke
+  paintOrder: PaintOrder
+  fontSize: number
+  variations: Array<FontVariation>
+  fontOpticalSizing: FontOpticalSizing
+  visible: boolean
+  positionedGlyphs: Array<PositionedGlyph>
+  underline?: string
+  overline?: string
+  lineThrough?: string
+}
+
 /**
  * A spread method.
  *
@@ -1021,7 +1122,7 @@ export interface Stop {
 
 /** Plain view of a `Stroke`. */
 export interface Stroke {
-  paint: ColorPaint | PaintServer
+  paint: PaintColor | PaintLinearGradient | PaintRadialGradient | PaintPattern
   dasharray?: Array<number>
   dashoffset: number
   miterlimit: number
@@ -1039,6 +1140,19 @@ export declare const enum TextAnchor {
   Start = 'start',
   Middle = 'middle',
   End = 'end'
+}
+
+/** Id of the `TextPath` this refers to. */
+export interface TextFlowPath {
+  /** Discriminant. Narrow on this. */
+  type: 'path'
+  id: string
+}
+
+/** The payload-free variants of `TextFlow`. */
+export interface TextFlowPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'linear'
 }
 
 /**

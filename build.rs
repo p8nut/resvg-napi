@@ -3229,37 +3229,77 @@ fn main() {
         }
         object_todo.extend(reached.into_iter().filter(|x| !object_done.contains(x)));
     }
-    // Phase 2: build the code for every candidate, but keep it aside: only the
-    // ones an exposed method can actually hand out are worth emitting.
     // Phase 2, with the registry complete: strict mapping becomes an object,
     // partial mapping becomes a read-only class. Deciding this in phase 1 got it
     // wrong, because a nested type may not have been discovered yet.
-    let mut object_parts: BTreeMap<String, TokenStream> = BTreeMap::new();
-    for t in vocab.objects.clone() {
-        let source = if struct_fields_opt(&usvg_files, &t).is_some() {
+    //
+    // Settled to a fixpoint *before* anything is emitted. A read-only class
+    // cannot be a field of an object -- napi needs Clone and FromNapiValue,
+    // which a class has neither of -- so demoting one type forces every type
+    // holding it down as well. Deciding and emitting in one pass got that
+    // wrong in registry order: `Path` sorts before `Stroke`, so Path was built
+    // holding `Option<Stroke>` as an object field, and Stroke was demoted a
+    // moment later. The cascade itself is automatic: `classify` maps a demoted
+    // type to `Js::Value`, `data_members` has no field mapping for one, so it
+    // lands in `skipped`, and `object_struct` refuses any type with a skipped
+    // member.
+    let source_of = |t: &str| -> &[syn::File] {
+        if struct_fields_opt(&usvg_files, t).is_some() {
             &usvg_files
         } else {
             &fontdb_files
-        };
-        let root = object_root[&t].clone();
-        let (code, dropped, _) = object_struct(source, &t, &vocab, &modules, &root);
-        if code.is_empty() {
+        }
+    };
+    let mut dropped_members: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    loop {
+        let demote: Vec<(String, Vec<String>)> = vocab
+            .objects
+            .iter()
+            .filter_map(|t| {
+                let (code, dropped, _) =
+                    object_struct(source_of(t), t, &vocab, &modules, &object_root[t]);
+                code.is_empty().then(|| (t.clone(), dropped))
+            })
+            .collect();
+        if demote.is_empty() {
+            break;
+        }
+        for (t, dropped) in demote {
             vocab.objects.remove(&t);
-            let (vcode, _, _) = value_class(source, &t, &vocab, &modules, &root);
-            if vcode.is_empty() {
-                continue;
+            let (vcode, _, _) = value_class(source_of(&t), &t, &vocab, &modules, &object_root[&t]);
+            if !vcode.is_empty() {
+                vocab.values.insert(t.clone());
+                dropped_members.insert(t, dropped);
             }
-            vocab.values.insert(t.clone());
-            object_parts.insert(t.clone(), vcode);
-            report!(
-                "{t}: partial mapping, emitted as read-only class {}",
-                value_class_ident(&t)
-            );
-            for d in dropped {
-                report!("{t} member not exposed: {d}");
-            }
-        } else {
-            object_parts.insert(t.clone(), code);
+        }
+    }
+
+    let mut object_parts: BTreeMap<String, TokenStream> = BTreeMap::new();
+    for t in &vocab.objects {
+        let (code, dropped, _) = object_struct(source_of(t), t, &vocab, &modules, &object_root[t]);
+        // The invariant the fixpoint above exists to establish, checked rather
+        // than trusted: anything still classed as an object maps in full. A
+        // type left here with unmapped members would be emitted as
+        // `#[napi(object)]` carrying a field napi cannot round-trip, and the
+        // failure would land in the generated crate -- a confusing place to
+        // read it. Decide-and-emit in one pass breaks exactly this.
+        assert!(
+            !code.is_empty(),
+            "{t} is still an object candidate but maps only partially ({}). \
+             The object/value fixpoint did not settle before emission.",
+            dropped.join(", ")
+        );
+        object_parts.insert(t.clone(), code);
+    }
+    for t in &vocab.values {
+        let (vcode, _, _) = value_class(source_of(t), t, &vocab, &modules, &object_root[t]);
+        object_parts.insert(t.clone(), vcode);
+        report!(
+            "{t}: partial mapping, emitted as read-only class {}",
+            value_class_ident(t)
+        );
+        for d in dropped_members.get(t).into_iter().flatten() {
+            report!("{t} member not exposed: {d}");
         }
     }
 

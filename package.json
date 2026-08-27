@@ -30,7 +30,9 @@
     "version": "napi version",
     "demo": "napi build --platform --release --target wasm32-wasip1-threads && cp resvg-napi.wasm32-wasi.wasm demo/ && esbuild resvg-napi.wasi-browser.js --bundle --format=esm --outfile=demo/resvg.js && esbuild wasi-worker-browser.mjs --bundle --format=esm --outfile=demo/wasi-worker-browser.mjs && esbuild demo/liquid-entry.mjs --bundle --format=esm --outfile=demo/liquid.js && node demo/serve.mjs",
     "check:pins": "node scripts/check-pins.mjs",
-    "check:pins:selftest": "node scripts/check-pins.mjs --selftest"
+    "check:pins:selftest": "node scripts/check-pins.mjs --selftest",
+    "check:package": "node scripts/check-package.mjs",
+    "check:package:selftest": "node scripts/check-package.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {

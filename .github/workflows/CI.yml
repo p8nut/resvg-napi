@@ -193,6 +193,8 @@ jobs:
       - run: npm run check:pins:selftest
       - run: npm run check:package:selftest
       - run: npm run report:selftest
+      - run: npm run conformance:selftest
+      - run: npm run check:resvg:selftest
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform
@@ -219,6 +221,30 @@ jobs:
       # publish job does.
       - run: npx napi artifacts -d artifacts --npm-dir npm
       - run: npm run check:package
+
+  # resvg's own corpus, rendered through this binding: 1715 SVGs against the
+  # reference PNGs upstream asserts on, with the 20 fonts it ships, at the
+  # settings its harness uses. Fifteen seconds including the fetch.
+  #
+  # This is the half a diff cannot show. `src/lib.rs` moving five doc-comment
+  # lines on a resvg bump says nothing about whether the pixels changed.
+  conformance:
+    name: resvg conformance
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install  # not `npm ci` -- see the build job
+      - uses: actions/download-artifact@v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+      # Pinned to the tag matching Cargo.toml's resvg: a reference PNG is only a
+      # reference for the version that produced it.
+      - run: npm run conformance:fetch
+      - run: npm run conformance
 
   publish:
     name: publish

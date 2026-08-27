@@ -5,7 +5,7 @@
 //!   1. source discovery  (env override -> git submodule -> cargo registry)
 //!   2. AST extraction    (usvg::Options, its enums, fontdb::Database, resvg::render)
 //!   3. type mapping      (Rust -> napi/JS)
-//!   4. code emission     ($OUT_DIR/bindings.rs, optionally src/generated.rs)
+//!   4. code emission     (src/lib.rs, plus a staging copy at $OUT_DIR/bindings.rs)
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;

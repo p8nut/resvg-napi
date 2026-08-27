@@ -27,6 +27,9 @@ const SNAPSHOT = 'codegen-report.txt';
 export function normalise(stderr) {
   return stderr
     .split('\n')
+    // Belt as well as braces: the spawn forces colour off, but a line that
+    // arrives decorated anyway must not be dropped on the floor.
+    .map((l) => l.replace(/\u001b\[[0-9;]*m/g, ''))
     .filter((l) => l.startsWith('warning: resvg-napi@'))
     .map((l) => l.replace(/^warning: resvg-napi@[^ ]* /, ''))
     .map((l) => l.replace(/(usvg sources: ).*[/\\]([^/\\]+)[/\\]src$/, '$1$2'))
@@ -53,7 +56,10 @@ function generate() {
   // spawnSync, not execFileSync: the report rides on stderr, and execFileSync
   // only hands stderr back when the command *fails*.
   const r = spawnSync('cargo', ['build', '--release'], {
-    env: { ...process.env, RESVG_NAPI_CODEGEN_LOG: '1' },
+    // CARGO_TERM_COLOR=always is set in CI, and cargo then prefixes every line
+    // with escape codes -- which is why the shell version of this step matched
+    // nothing there and printed nothing, silently, for as long as it existed.
+    env: { ...process.env, RESVG_NAPI_CODEGEN_LOG: '1', CARGO_TERM_COLOR: 'never' },
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
   });
@@ -88,13 +94,19 @@ async function selftest() {
   assert.deepEqual(compare('a\nb\n', 'a\n'), { gone: ['b'], fresh: [] });
   assert.deepEqual(compare('a\n', 'a\nc\n'), { gone: [], fresh: ['c'] });
 
+  // a colour-decorated line still counts -- the failure this script hit on CI
+  assert.equal(
+    normalise('\u001b[1m\u001b[33mwarning\u001b[0m\u001b[1m: resvg-napi@0.1.0: coloured\u001b[0m'),
+    'coloured\n',
+  );
+
   // a Windows path reduces the same way
   assert.match(
     normalise('warning: resvg-napi@0.1.0: usvg sources: C:\\c\\registry\\src\\i\\usvg-1.0.0\\src'),
     /usvg sources: usvg-1\.0\.0/,
   );
 
-  console.log('ok — codegen-report: 7 checks passed');
+  console.log('ok — codegen-report: 8 checks passed');
 }
 
 async function main() {

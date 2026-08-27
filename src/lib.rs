@@ -1426,6 +1426,27 @@ impl From<&usvg::Path> for Path {
         }
     }
 }
+#[doc = " Plain view of a `PositionedGlyph`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct PositionedGlyph {
+    pub font_size: f64,
+    pub transform: Matrix,
+    pub outline_transform: Matrix,
+    pub svg_transform: Matrix,
+    pub colr_transform: Matrix,
+}
+impl From<&usvg::layout::PositionedGlyph> for PositionedGlyph {
+    fn from(v: &usvg::layout::PositionedGlyph) -> Self {
+        Self {
+            font_size: v.font_size() as f64,
+            transform: Matrix::from(v.transform()),
+            outline_transform: Matrix::from(v.outline_transform()),
+            svg_transform: Matrix::from(v.svg_transform()),
+            colr_transform: Matrix::from(v.colr_transform()),
+        }
+    }
+}
 #[doc = " Read-only view of a `Primitive`."]
 #[napi]
 pub struct Primitive {
@@ -1452,6 +1473,49 @@ impl Primitive {
     pub fn result(&self) -> String {
         let v = &self.inner;
         v.result().to_string()
+    }
+}
+#[doc = " Plain view of a `Span`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Span {
+    pub fill: Option<Fill>,
+    pub stroke: Option<Stroke>,
+    pub paint_order: PaintOrder,
+    pub font_size: f64,
+    pub variations: Vec<FontVariation>,
+    pub font_optical_sizing: FontOpticalSizing,
+    pub visible: bool,
+    pub positioned_glyphs: Vec<PositionedGlyph>,
+    pub underline: Option<Path>,
+    pub overline: Option<Path>,
+    pub line_through: Option<Path>,
+}
+impl From<&usvg::layout::Span> for Span {
+    fn from(v: &usvg::layout::Span) -> Self {
+        Self {
+            fill: v.fill.clone().map(|x| Fill::from(&x)),
+            stroke: v.stroke.clone().map(|x| Stroke::from(&x)),
+            paint_order: PaintOrder::from(v.paint_order.clone()),
+            font_size: v.font_size.clone().get() as f64,
+            variations: v
+                .variations
+                .clone()
+                .iter()
+                .map(FontVariation::from)
+                .collect(),
+            font_optical_sizing: FontOpticalSizing::from(v.font_optical_sizing.clone()),
+            visible: v.visible.clone(),
+            positioned_glyphs: v
+                .positioned_glyphs
+                .clone()
+                .iter()
+                .map(PositionedGlyph::from)
+                .collect(),
+            underline: v.underline.clone().map(|x| Path::from(&x)),
+            overline: v.overline.clone().map(|x| Path::from(&x)),
+            line_through: v.line_through.clone().map(|x| Path::from(&x)),
+        }
     }
 }
 #[doc = " Plain view of a `Stop`."]
@@ -1496,6 +1560,220 @@ impl From<&usvg::Stroke> for Stroke {
             linecap: LineCap::from(v.linecap()),
             linejoin: LineJoin::from(v.linejoin()),
         }
+    }
+}
+#[doc = " Read-only view of a `Text`."]
+#[napi]
+pub struct Text {
+    inner: usvg::Text,
+}
+impl Text {
+    fn wrap(inner: usvg::Text) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl Text {
+    #[napi(getter)]
+    pub fn id(&self) -> String {
+        let v = &self.inner;
+        v.id().to_string()
+    }
+    #[napi(getter)]
+    pub fn rendering_mode(&self) -> TextRendering {
+        let v = &self.inner;
+        TextRendering::from(v.rendering_mode())
+    }
+    #[napi(getter)]
+    pub fn dx(&self) -> Vec<f64> {
+        let v = &self.inner;
+        v.dx().iter().map(|v| *v as f64).collect()
+    }
+    #[napi(getter)]
+    pub fn dy(&self) -> Vec<f64> {
+        let v = &self.inner;
+        v.dy().iter().map(|v| *v as f64).collect()
+    }
+    #[napi(getter)]
+    pub fn rotate(&self) -> Vec<f64> {
+        let v = &self.inner;
+        v.rotate().iter().map(|v| *v as f64).collect()
+    }
+    #[napi(getter)]
+    pub fn writing_mode(&self) -> WritingMode {
+        let v = &self.inner;
+        WritingMode::from(v.writing_mode())
+    }
+    #[napi(getter)]
+    pub fn chunks(&self) -> Vec<TextChunk> {
+        let v = &self.inner;
+        v.chunks().iter().cloned().map(TextChunk::wrap).collect()
+    }
+    #[napi(getter)]
+    pub fn abs_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.abs_transform())
+    }
+    #[napi(getter)]
+    pub fn bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.bounding_box())
+    }
+    #[napi(getter)]
+    pub fn abs_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.abs_bounding_box())
+    }
+    #[napi(getter)]
+    pub fn stroke_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.stroke_bounding_box())
+    }
+    #[napi(getter)]
+    pub fn abs_stroke_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.abs_stroke_bounding_box())
+    }
+    #[napi(getter)]
+    pub fn layouted(&self) -> Vec<Span> {
+        let v = &self.inner;
+        v.layouted().iter().map(Span::from).collect()
+    }
+}
+#[doc = " Read-only view of a `TextChunk`."]
+#[napi]
+pub struct TextChunk {
+    inner: usvg::TextChunk,
+}
+impl TextChunk {
+    fn wrap(inner: usvg::TextChunk) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl TextChunk {
+    #[napi(getter)]
+    pub fn x(&self) -> Option<f64> {
+        let v = &self.inner;
+        v.x().map(|x| x as f64)
+    }
+    #[napi(getter)]
+    pub fn y(&self) -> Option<f64> {
+        let v = &self.inner;
+        v.y().map(|x| x as f64)
+    }
+    #[napi(getter)]
+    pub fn anchor(&self) -> TextAnchor {
+        let v = &self.inner;
+        TextAnchor::from(v.anchor())
+    }
+    #[napi(getter)]
+    pub fn spans(&self) -> Vec<TextSpan> {
+        let v = &self.inner;
+        v.spans().iter().cloned().map(TextSpan::wrap).collect()
+    }
+    #[napi(getter)]
+    pub fn text(&self) -> String {
+        let v = &self.inner;
+        v.text().to_string()
+    }
+}
+#[doc = " Read-only view of a `TextSpan`."]
+#[napi]
+pub struct TextSpan {
+    inner: usvg::TextSpan,
+}
+impl TextSpan {
+    fn wrap(inner: usvg::TextSpan) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl TextSpan {
+    #[napi(getter)]
+    pub fn start(&self) -> u32 {
+        let v = &self.inner;
+        v.start() as u32
+    }
+    #[napi(getter)]
+    pub fn end(&self) -> u32 {
+        let v = &self.inner;
+        v.end() as u32
+    }
+    #[napi(getter)]
+    pub fn fill(&self) -> Option<Fill> {
+        let v = &self.inner;
+        v.fill().map(Fill::from)
+    }
+    #[napi(getter)]
+    pub fn stroke(&self) -> Option<Stroke> {
+        let v = &self.inner;
+        v.stroke().map(Stroke::from)
+    }
+    #[napi(getter)]
+    pub fn paint_order(&self) -> PaintOrder {
+        let v = &self.inner;
+        PaintOrder::from(v.paint_order())
+    }
+    #[napi(getter)]
+    pub fn font(&self) -> Font {
+        let v = &self.inner;
+        Font::wrap(v.font().clone())
+    }
+    #[napi(getter)]
+    pub fn font_size(&self) -> f64 {
+        let v = &self.inner;
+        v.font_size().get() as f64
+    }
+    #[napi(getter)]
+    pub fn small_caps(&self) -> bool {
+        let v = &self.inner;
+        v.small_caps()
+    }
+    #[napi(getter)]
+    pub fn apply_kerning(&self) -> bool {
+        let v = &self.inner;
+        v.apply_kerning()
+    }
+    #[napi(getter)]
+    pub fn font_optical_sizing(&self) -> FontOpticalSizing {
+        let v = &self.inner;
+        FontOpticalSizing::from(v.font_optical_sizing())
+    }
+    #[napi(getter)]
+    pub fn dominant_baseline(&self) -> DominantBaseline {
+        let v = &self.inner;
+        DominantBaseline::from(v.dominant_baseline())
+    }
+    #[napi(getter)]
+    pub fn alignment_baseline(&self) -> AlignmentBaseline {
+        let v = &self.inner;
+        AlignmentBaseline::from(v.alignment_baseline())
+    }
+    #[napi(getter)]
+    pub fn is_visible(&self) -> bool {
+        let v = &self.inner;
+        v.is_visible()
+    }
+    #[napi(getter)]
+    pub fn letter_spacing(&self) -> f64 {
+        let v = &self.inner;
+        v.letter_spacing() as f64
+    }
+    #[napi(getter)]
+    pub fn word_spacing(&self) -> f64 {
+        let v = &self.inner;
+        v.word_spacing() as f64
+    }
+    #[napi(getter)]
+    pub fn text_length(&self) -> Option<f64> {
+        let v = &self.inner;
+        v.text_length().map(|x| x as f64)
+    }
+    #[napi(getter)]
+    pub fn length_adjust(&self) -> LengthAdjust {
+        let v = &self.inner;
+        LengthAdjust::from(v.length_adjust())
     }
 }
 #[doc = " Read-only handle on a `usvg::filter::Filter`."]
@@ -2061,6 +2339,18 @@ impl SvgNode {
             usvg::Node::Path(_) => NodeKind::Path,
             usvg::Node::Image(_) => NodeKind::Image,
             usvg::Node::Text(_) => NodeKind::Text,
+        })
+    }
+    #[doc = " The laid-out content of a text node: chunks, spans, resolved"]
+    #[doc = " fonts. Null for anything that is not text."]
+    #[doc = ""]
+    #[doc = " Its presence is what makes the text types map at all -- a node"]
+    #[doc = " payload is not a collection, so nothing else nominates them."]
+    #[napi]
+    pub fn text(&self) -> Result<Option<Text>> {
+        Ok(match self.node()? {
+            usvg::Node::Text(t) => Some(Text::wrap((**t).clone())),
+            _ => None,
         })
     }
     #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]

@@ -8,11 +8,11 @@ Generated from the upstream Rust sources, so the TypeScript surface is usvg's
 own, names and doc comments included.
 
 ```bash
-npm install resvg-napi
+npm install @p8nut/resvg-napi
 ```
 
 ```js
-import { Resvg, FontDatabase, renderAsync } from 'resvg-napi'
+import { Resvg, FontDatabase, renderAsync } from '@p8nut/resvg-napi'
 
 const doc = new Resvg(svg, { dpi: 192, fontFamily: 'DejaVu Sans' })
 doc.renderPng({ width: 1200, background: '#fff' })      // Buffer
@@ -110,7 +110,7 @@ constraint from the source, measures the rendered text with
 templates use by hand):
 
 ```js
-import { fitTextWidths } from 'resvg-napi/fit.mjs'
+import { fitTextWidths } from '@p8nut/resvg-napi/fit.mjs'
 
 const { svg, adjustments, problems } = fitTextWidths(source,
   (s) => new Resvg(s, { fontFamily }, fonts))
@@ -141,7 +141,7 @@ unparsable values, skipped shapes, unmatched font families, images that could no
 be read. Nothing consumes that by default, so those messages used to vanish:
 
 ```js
-import { setLogLevel, takeLogs, Resvg } from 'resvg-napi'
+import { setLogLevel, takeLogs, Resvg } from '@p8nut/resvg-napi'
 
 setLogLevel('warn')            // off | error | warn | info | debug | trace
 new Resvg(svg).renderPng()

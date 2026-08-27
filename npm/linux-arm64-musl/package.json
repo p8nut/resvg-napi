@@ -1,5 +1,5 @@
 {
-  "name": "resvg-napi-linux-arm64-musl",
+  "name": "@p8nut/resvg-napi-linux-arm64-musl",
   "version": "0.1.0",
   "cpu": [
     "arm64"

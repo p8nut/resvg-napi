@@ -5,6 +5,11 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+    # `labeled` is not a default type, and without it the `full-matrix` label
+    # would be an escape hatch that never fires: applying it produces an event
+    # this workflow does not listen for, and a re-run replays the old payload
+    # with no label on it.
+    types: [opened, synchronize, reopened, labeled]
     # Markdown and the licence cannot break a build. This skips the whole
     # workflow rather than gating a job, so there is nothing to pay for -- but
     # it also means no check reports at all, which would deadlock a required

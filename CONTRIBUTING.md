@@ -121,3 +121,12 @@ RESVG_NAPI_CODEGEN_LOG=1 cargo build --release
 
 That report is the first place to look when a member is missing from the
 TypeScript surface: it says which member, and why.
+
+It is snapshotted in `codegen-report.txt`, and CI fails on a diff -- the same
+treatment the generated bindings get, because the README points at that report
+as the answer to "why is this member missing". After a change that moves the
+derived surface on purpose:
+
+```bash
+npm run report -- -w
+```

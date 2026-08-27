@@ -233,16 +233,19 @@ jobs:
         with:
           node-version: 22
       - run: npm install  # not `npm ci` -- see the build job
+      # `napi artifacts` walks package.json's napi.targets and wants a binary for
+      # every one of the thirteen, so it errors outright on a slim run's two --
+      # this is not a check being lenient, it is a step that cannot run at all.
+      # `--root-only` needs no artifacts: the root tarball holds no platform
+      # binary, and the files[] entries npm drops in silence are what it checks.
       - uses: actions/download-artifact@v8
+        if: needs.plan.outputs.full == 'true'
         with:
           path: artifacts
       # Sorts each *.node into its npm/<platform>/ package, exactly as the
       # publish job does.
-      - run: npx napi artifacts -d artifacts --npm-dir npm
-      # A slim run has two of the thirteen binaries, so the per-platform half of
-      # this check would report eleven absences that are not faults. The root
-      # package -- the files[] entries npm drops in silence -- is checked either
-      # way, and that is the half worth having on a pull request.
+      - if: needs.plan.outputs.full == 'true'
+        run: npx napi artifacts -d artifacts --npm-dir npm
       - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
 
   # resvg's own corpus, rendered through this binding: 1715 SVGs against the

@@ -1281,6 +1281,23 @@ fn font_resolver(misses: Misses) -> usvg::FontResolver<'static> {
         select_fallback: usvg::FontResolver::default_fallback_selector(),
     }
 }
+#[doc = " Plain view of a `Blend`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Blend {
+    pub input1: Either<InputPlain, InputReference>,
+    pub input2: Either<InputPlain, InputReference>,
+    pub mode: BlendMode,
+}
+impl From<&usvg::filter::Blend> for Blend {
+    fn from(v: &usvg::filter::Blend) -> Self {
+        Self {
+            input1: input_to_js(v.input1()),
+            input2: input_to_js(v.input2()),
+            mode: BlendMode::from(v.mode()),
+        }
+    }
+}
 #[doc = " Plain view of a `Color`."]
 #[napi(object)]
 #[derive(Clone)]
@@ -1295,6 +1312,214 @@ impl From<&usvg::Color> for Color {
             red: v.red.clone() as u32,
             green: v.green.clone() as u32,
             blue: v.blue.clone() as u32,
+        }
+    }
+}
+#[doc = " Plain view of a `ColorMatrix`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ColorMatrix {
+    pub input: Either<InputPlain, InputReference>,
+    pub kind: Either4<
+        ColorMatrixKindPlain,
+        ColorMatrixKindMatrix,
+        ColorMatrixKindSaturate,
+        ColorMatrixKindHueRotate,
+    >,
+}
+impl From<&usvg::filter::ColorMatrix> for ColorMatrix {
+    fn from(v: &usvg::filter::ColorMatrix) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            kind: color_matrix_kind_to_js(v.kind()),
+        }
+    }
+}
+#[doc = " Plain view of a `ComponentTransfer`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ComponentTransfer {
+    pub input: Either<InputPlain, InputReference>,
+    pub func_r: Either5<
+        TransferFunctionPlain,
+        TransferFunctionTable,
+        TransferFunctionDiscrete,
+        TransferFunctionLinear,
+        TransferFunctionGamma,
+    >,
+    pub func_g: Either5<
+        TransferFunctionPlain,
+        TransferFunctionTable,
+        TransferFunctionDiscrete,
+        TransferFunctionLinear,
+        TransferFunctionGamma,
+    >,
+    pub func_b: Either5<
+        TransferFunctionPlain,
+        TransferFunctionTable,
+        TransferFunctionDiscrete,
+        TransferFunctionLinear,
+        TransferFunctionGamma,
+    >,
+    pub func_a: Either5<
+        TransferFunctionPlain,
+        TransferFunctionTable,
+        TransferFunctionDiscrete,
+        TransferFunctionLinear,
+        TransferFunctionGamma,
+    >,
+}
+impl From<&usvg::filter::ComponentTransfer> for ComponentTransfer {
+    fn from(v: &usvg::filter::ComponentTransfer) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            func_r: transfer_function_to_js(v.func_r()),
+            func_g: transfer_function_to_js(v.func_g()),
+            func_b: transfer_function_to_js(v.func_b()),
+            func_a: transfer_function_to_js(v.func_a()),
+        }
+    }
+}
+#[doc = " Plain view of a `Composite`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Composite {
+    pub input1: Either<InputPlain, InputReference>,
+    pub input2: Either<InputPlain, InputReference>,
+    pub operator: Either<CompositeOperatorPlain, CompositeOperatorArithmetic>,
+}
+impl From<&usvg::filter::Composite> for Composite {
+    fn from(v: &usvg::filter::Composite) -> Self {
+        Self {
+            input1: input_to_js(v.input1()),
+            input2: input_to_js(v.input2()),
+            operator: composite_operator_to_js(&v.operator()),
+        }
+    }
+}
+#[doc = " Plain view of a `ConvolveMatrix`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ConvolveMatrix {
+    pub input: Either<InputPlain, InputReference>,
+    pub matrix: ConvolveMatrixData,
+    pub divisor: f64,
+    pub bias: f64,
+    pub edge_mode: EdgeMode,
+    pub preserve_alpha: bool,
+}
+impl From<&usvg::filter::ConvolveMatrix> for ConvolveMatrix {
+    fn from(v: &usvg::filter::ConvolveMatrix) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            matrix: ConvolveMatrixData::from(v.matrix()),
+            divisor: v.divisor().get() as f64,
+            bias: v.bias() as f64,
+            edge_mode: EdgeMode::from(v.edge_mode()),
+            preserve_alpha: v.preserve_alpha(),
+        }
+    }
+}
+#[doc = " Plain view of a `ConvolveMatrixData`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ConvolveMatrixData {
+    pub target_x: u32,
+    pub target_y: u32,
+    pub columns: u32,
+    pub rows: u32,
+    pub data: Vec<f64>,
+}
+impl From<&usvg::filter::ConvolveMatrixData> for ConvolveMatrixData {
+    fn from(v: &usvg::filter::ConvolveMatrixData) -> Self {
+        Self {
+            target_x: v.target_x() as u32,
+            target_y: v.target_y() as u32,
+            columns: v.columns() as u32,
+            rows: v.rows() as u32,
+            data: v.data().iter().map(|v| *v as f64).collect(),
+        }
+    }
+}
+#[doc = " Plain view of a `DiffuseLighting`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct DiffuseLighting {
+    pub input: Either<InputPlain, InputReference>,
+    pub surface_scale: f64,
+    pub diffuse_constant: f64,
+    pub lighting_color: Color,
+    pub light_source: Either3<LightSourceDistantLight, LightSourcePointLight, LightSourceSpotLight>,
+}
+impl From<&usvg::filter::DiffuseLighting> for DiffuseLighting {
+    fn from(v: &usvg::filter::DiffuseLighting) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            surface_scale: v.surface_scale() as f64,
+            diffuse_constant: v.diffuse_constant() as f64,
+            lighting_color: Color::from(&v.lighting_color()),
+            light_source: light_source_to_js(&v.light_source()),
+        }
+    }
+}
+#[doc = " Plain view of a `DisplacementMap`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct DisplacementMap {
+    pub input1: Either<InputPlain, InputReference>,
+    pub input2: Either<InputPlain, InputReference>,
+    pub scale: f64,
+    pub x_channel_selector: ColorChannel,
+    pub y_channel_selector: ColorChannel,
+}
+impl From<&usvg::filter::DisplacementMap> for DisplacementMap {
+    fn from(v: &usvg::filter::DisplacementMap) -> Self {
+        Self {
+            input1: input_to_js(v.input1()),
+            input2: input_to_js(v.input2()),
+            scale: v.scale() as f64,
+            x_channel_selector: ColorChannel::from(v.x_channel_selector()),
+            y_channel_selector: ColorChannel::from(v.y_channel_selector()),
+        }
+    }
+}
+#[doc = " Plain view of a `DistantLight`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct DistantLight {
+    pub azimuth: f64,
+    pub elevation: f64,
+}
+impl From<&usvg::filter::DistantLight> for DistantLight {
+    fn from(v: &usvg::filter::DistantLight) -> Self {
+        Self {
+            azimuth: v.azimuth.clone() as f64,
+            elevation: v.elevation.clone() as f64,
+        }
+    }
+}
+#[doc = " Plain view of a `DropShadow`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct DropShadow {
+    pub input: Either<InputPlain, InputReference>,
+    pub dx: f64,
+    pub dy: f64,
+    pub std_dev_x: f64,
+    pub std_dev_y: f64,
+    pub color: Color,
+    pub opacity: f64,
+}
+impl From<&usvg::filter::DropShadow> for DropShadow {
+    fn from(v: &usvg::filter::DropShadow) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            dx: v.dx() as f64,
+            dy: v.dy() as f64,
+            std_dev_x: v.std_dev_x().get() as f64,
+            std_dev_y: v.std_dev_y().get() as f64,
+            color: Color::from(&v.color()),
+            opacity: v.opacity().get() as f64,
         }
     }
 }
@@ -1348,6 +1573,21 @@ impl From<&usvg::Fill> for Fill {
         }
     }
 }
+#[doc = " Plain view of a `Flood`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Flood {
+    pub color: Color,
+    pub opacity: f64,
+}
+impl From<&usvg::filter::Flood> for Flood {
+    fn from(v: &usvg::filter::Flood) -> Self {
+        Self {
+            color: Color::from(&v.color()),
+            opacity: v.opacity().get() as f64,
+        }
+    }
+}
 #[doc = " Read-only view of a `Font`."]
 #[napi]
 pub struct Font {
@@ -1396,6 +1636,72 @@ impl From<&usvg::FontVariation> for FontVariation {
         }
     }
 }
+#[doc = " Plain view of a `GaussianBlur`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct GaussianBlur {
+    pub input: Either<InputPlain, InputReference>,
+    pub std_dev_x: f64,
+    pub std_dev_y: f64,
+}
+impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
+    fn from(v: &usvg::filter::GaussianBlur) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            std_dev_x: v.std_dev_x().get() as f64,
+            std_dev_y: v.std_dev_y().get() as f64,
+        }
+    }
+}
+#[doc = " Plain view of a `Merge`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Merge {
+    pub inputs: Vec<Either<InputPlain, InputReference>>,
+}
+impl From<&usvg::filter::Merge> for Merge {
+    fn from(v: &usvg::filter::Merge) -> Self {
+        Self {
+            inputs: v.inputs().iter().map(input_to_js).collect(),
+        }
+    }
+}
+#[doc = " Plain view of a `Morphology`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Morphology {
+    pub input: Either<InputPlain, InputReference>,
+    pub operator: MorphologyOperator,
+    pub radius_x: f64,
+    pub radius_y: f64,
+}
+impl From<&usvg::filter::Morphology> for Morphology {
+    fn from(v: &usvg::filter::Morphology) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            operator: MorphologyOperator::from(v.operator()),
+            radius_x: v.radius_x().get() as f64,
+            radius_y: v.radius_y().get() as f64,
+        }
+    }
+}
+#[doc = " Plain view of a `Offset`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Offset {
+    pub input: Either<InputPlain, InputReference>,
+    pub dx: f64,
+    pub dy: f64,
+}
+impl From<&usvg::filter::Offset> for Offset {
+    fn from(v: &usvg::filter::Offset) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            dx: v.dx() as f64,
+            dy: v.dy() as f64,
+        }
+    }
+}
 #[doc = " Plain view of a `Path`."]
 #[napi(object)]
 #[derive(Clone)]
@@ -1431,6 +1737,23 @@ impl From<&usvg::Path> for Path {
         }
     }
 }
+#[doc = " Plain view of a `PointLight`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct PointLight {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+impl From<&usvg::filter::PointLight> for PointLight {
+    fn from(v: &usvg::filter::PointLight) -> Self {
+        Self {
+            x: v.x.clone() as f64,
+            y: v.y.clone() as f64,
+            z: v.z.clone() as f64,
+        }
+    }
+}
 #[doc = " Plain view of a `PositionedGlyph`."]
 #[napi(object)]
 #[derive(Clone)]
@@ -1452,32 +1775,41 @@ impl From<&usvg::layout::PositionedGlyph> for PositionedGlyph {
         }
     }
 }
-#[doc = " Read-only view of a `Primitive`."]
-#[napi]
+#[doc = " Plain view of a `Primitive`."]
+#[napi(object)]
+#[derive(Clone)]
 pub struct Primitive {
-    inner: usvg::filter::Primitive,
+    pub rect: BBox,
+    pub color_interpolation: ColorInterpolation,
+    pub result: String,
+    pub kind: Either17<
+        KindBlend,
+        KindColorMatrix,
+        KindComponentTransfer,
+        KindComposite,
+        KindConvolveMatrix,
+        KindDiffuseLighting,
+        KindDisplacementMap,
+        KindDropShadow,
+        KindFlood,
+        KindGaussianBlur,
+        KindImage,
+        KindMerge,
+        KindMorphology,
+        KindOffset,
+        KindSpecularLighting,
+        KindTile,
+        KindTurbulence,
+    >,
 }
-impl Primitive {
-    fn wrap(inner: usvg::filter::Primitive) -> Self {
-        Self { inner }
-    }
-}
-#[napi]
-impl Primitive {
-    #[napi(getter)]
-    pub fn rect(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.rect())
-    }
-    #[napi(getter)]
-    pub fn color_interpolation(&self) -> ColorInterpolation {
-        let v = &self.inner;
-        ColorInterpolation::from(v.color_interpolation())
-    }
-    #[napi(getter)]
-    pub fn result(&self) -> String {
-        let v = &self.inner;
-        v.result().to_string()
+impl From<&usvg::filter::Primitive> for Primitive {
+    fn from(v: &usvg::filter::Primitive) -> Self {
+        Self {
+            rect: BBox::from(v.rect()),
+            color_interpolation: ColorInterpolation::from(v.color_interpolation()),
+            result: v.result().to_string(),
+            kind: kind_to_js(v.kind()),
+        }
     }
 }
 #[doc = " Plain view of a `Span`."]
@@ -1520,6 +1852,56 @@ impl From<&usvg::layout::Span> for Span {
             underline: v.underline.clone().map(|x| Path::from(&x)),
             overline: v.overline.clone().map(|x| Path::from(&x)),
             line_through: v.line_through.clone().map(|x| Path::from(&x)),
+        }
+    }
+}
+#[doc = " Plain view of a `SpecularLighting`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct SpecularLighting {
+    pub input: Either<InputPlain, InputReference>,
+    pub surface_scale: f64,
+    pub specular_constant: f64,
+    pub specular_exponent: f64,
+    pub lighting_color: Color,
+    pub light_source: Either3<LightSourceDistantLight, LightSourcePointLight, LightSourceSpotLight>,
+}
+impl From<&usvg::filter::SpecularLighting> for SpecularLighting {
+    fn from(v: &usvg::filter::SpecularLighting) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+            surface_scale: v.surface_scale() as f64,
+            specular_constant: v.specular_constant() as f64,
+            specular_exponent: v.specular_exponent() as f64,
+            lighting_color: Color::from(&v.lighting_color()),
+            light_source: light_source_to_js(&v.light_source()),
+        }
+    }
+}
+#[doc = " Plain view of a `SpotLight`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct SpotLight {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub points_at_x: f64,
+    pub points_at_y: f64,
+    pub points_at_z: f64,
+    pub specular_exponent: f64,
+    pub limiting_cone_angle: Option<f64>,
+}
+impl From<&usvg::filter::SpotLight> for SpotLight {
+    fn from(v: &usvg::filter::SpotLight) -> Self {
+        Self {
+            x: v.x.clone() as f64,
+            y: v.y.clone() as f64,
+            z: v.z.clone() as f64,
+            points_at_x: v.points_at_x.clone() as f64,
+            points_at_y: v.points_at_y.clone() as f64,
+            points_at_z: v.points_at_z.clone() as f64,
+            specular_exponent: v.specular_exponent.clone().get() as f64,
+            limiting_cone_angle: v.limiting_cone_angle.clone().map(|x| x as f64),
         }
     }
 }
@@ -1794,6 +2176,42 @@ impl TextSpan {
         LengthAdjust::from(v.length_adjust())
     }
 }
+#[doc = " Plain view of a `Tile`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Tile {
+    pub input: Either<InputPlain, InputReference>,
+}
+impl From<&usvg::filter::Tile> for Tile {
+    fn from(v: &usvg::filter::Tile) -> Self {
+        Self {
+            input: input_to_js(v.input()),
+        }
+    }
+}
+#[doc = " Plain view of a `Turbulence`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct Turbulence {
+    pub base_frequency_x: f64,
+    pub base_frequency_y: f64,
+    pub num_octaves: u32,
+    pub seed: i32,
+    pub stitch_tiles: bool,
+    pub kind: TurbulenceKind,
+}
+impl From<&usvg::filter::Turbulence> for Turbulence {
+    fn from(v: &usvg::filter::Turbulence) -> Self {
+        Self {
+            base_frequency_x: v.base_frequency_x().get() as f64,
+            base_frequency_y: v.base_frequency_y().get() as f64,
+            num_octaves: v.num_octaves() as u32,
+            seed: v.seed(),
+            stitch_tiles: v.stitch_tiles(),
+            kind: TurbulenceKind::from(v.kind()),
+        }
+    }
+}
 #[doc = " The payload-free variants of `BaselineShift`."]
 #[napi(object)]
 #[derive(Clone)]
@@ -1830,6 +2248,436 @@ fn baseline_shift_to_js(
         }),
     }
 }
+#[doc = " The payload-free variants of `ColorMatrixKind`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ColorMatrixKindPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'luminanceToAlpha'")]
+    pub r#type: String,
+}
+#[doc = " `ColorMatrixKind::Matrix`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ColorMatrixKindMatrix {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'matrix'")]
+    pub r#type: String,
+    pub value: Vec<f64>,
+}
+#[doc = " `ColorMatrixKind::Saturate`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ColorMatrixKindSaturate {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'saturate'")]
+    pub r#type: String,
+    pub value: f64,
+}
+#[doc = " `ColorMatrixKind::HueRotate`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ColorMatrixKindHueRotate {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'hueRotate'")]
+    pub r#type: String,
+    pub value: f64,
+}
+fn color_matrix_kind_to_js(
+    v: &usvg::filter::ColorMatrixKind,
+) -> Either4<
+    ColorMatrixKindPlain,
+    ColorMatrixKindMatrix,
+    ColorMatrixKindSaturate,
+    ColorMatrixKindHueRotate,
+> {
+    match v {
+        usvg::filter::ColorMatrixKind::LuminanceToAlpha => Either4::A(ColorMatrixKindPlain {
+            r#type: "luminanceToAlpha".to_string(),
+        }),
+        usvg::filter::ColorMatrixKind::Matrix(v) => Either4::B(ColorMatrixKindMatrix {
+            r#type: "matrix".to_string(),
+            value: v.iter().map(|x| *x as f64).collect(),
+        }),
+        usvg::filter::ColorMatrixKind::Saturate(v) => Either4::C(ColorMatrixKindSaturate {
+            r#type: "saturate".to_string(),
+            value: v.get() as f64,
+        }),
+        usvg::filter::ColorMatrixKind::HueRotate(v) => Either4::D(ColorMatrixKindHueRotate {
+            r#type: "hueRotate".to_string(),
+            value: *v as f64,
+        }),
+    }
+}
+#[doc = " The payload-free variants of `CompositeOperator`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct CompositeOperatorPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'over' | 'in' | 'out' | 'atop' | 'xor'")]
+    pub r#type: String,
+}
+#[doc = " `CompositeOperator::Arithmetic`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct CompositeOperatorArithmetic {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'arithmetic'")]
+    pub r#type: String,
+    pub k1: f64,
+    pub k2: f64,
+    pub k3: f64,
+    pub k4: f64,
+}
+fn composite_operator_to_js(
+    v: &usvg::filter::CompositeOperator,
+) -> Either<CompositeOperatorPlain, CompositeOperatorArithmetic> {
+    match v {
+        usvg::filter::CompositeOperator::Over => Either::A(CompositeOperatorPlain {
+            r#type: "over".to_string(),
+        }),
+        usvg::filter::CompositeOperator::In => Either::A(CompositeOperatorPlain {
+            r#type: "in".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Out => Either::A(CompositeOperatorPlain {
+            r#type: "out".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Atop => Either::A(CompositeOperatorPlain {
+            r#type: "atop".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Xor => Either::A(CompositeOperatorPlain {
+            r#type: "xor".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Arithmetic { k1, k2, k3, k4 } => {
+            Either::B(CompositeOperatorArithmetic {
+                r#type: "arithmetic".to_string(),
+                k1: *k1 as f64,
+                k2: *k2 as f64,
+                k3: *k3 as f64,
+                k4: *k4 as f64,
+            })
+        }
+    }
+}
+#[doc = " The payload-free variants of `Input`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct InputPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'sourceGraphic' | 'sourceAlpha'")]
+    pub r#type: String,
+}
+#[doc = " `Input::Reference`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct InputReference {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'reference'")]
+    pub r#type: String,
+    pub value: String,
+}
+fn input_to_js(v: &usvg::filter::Input) -> Either<InputPlain, InputReference> {
+    match v {
+        usvg::filter::Input::SourceGraphic => Either::A(InputPlain {
+            r#type: "sourceGraphic".to_string(),
+        }),
+        usvg::filter::Input::SourceAlpha => Either::A(InputPlain {
+            r#type: "sourceAlpha".to_string(),
+        }),
+        usvg::filter::Input::Reference(v) => Either::B(InputReference {
+            r#type: "reference".to_string(),
+            value: v.to_string(),
+        }),
+    }
+}
+#[doc = " `Kind::Blend`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindBlend {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'blend'")]
+    pub r#type: String,
+    pub value: Blend,
+}
+#[doc = " `Kind::ColorMatrix`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindColorMatrix {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'colorMatrix'")]
+    pub r#type: String,
+    pub value: ColorMatrix,
+}
+#[doc = " `Kind::ComponentTransfer`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindComponentTransfer {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'componentTransfer'")]
+    pub r#type: String,
+    pub value: ComponentTransfer,
+}
+#[doc = " `Kind::Composite`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindComposite {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'composite'")]
+    pub r#type: String,
+    pub value: Composite,
+}
+#[doc = " `Kind::ConvolveMatrix`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindConvolveMatrix {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'convolveMatrix'")]
+    pub r#type: String,
+    pub value: ConvolveMatrix,
+}
+#[doc = " `Kind::DiffuseLighting`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindDiffuseLighting {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'diffuseLighting'")]
+    pub r#type: String,
+    pub value: DiffuseLighting,
+}
+#[doc = " `Kind::DisplacementMap`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindDisplacementMap {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'displacementMap'")]
+    pub r#type: String,
+    pub value: DisplacementMap,
+}
+#[doc = " `Kind::DropShadow`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindDropShadow {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'dropShadow'")]
+    pub r#type: String,
+    pub value: DropShadow,
+}
+#[doc = " `Kind::Flood`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindFlood {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'flood'")]
+    pub r#type: String,
+    pub value: Flood,
+}
+#[doc = " `Kind::GaussianBlur`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindGaussianBlur {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'gaussianBlur'")]
+    pub r#type: String,
+    pub value: GaussianBlur,
+}
+#[doc = " `Kind::Image`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindImage {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'image'")]
+    pub r#type: String,
+}
+#[doc = " `Kind::Merge`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindMerge {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'merge'")]
+    pub r#type: String,
+    pub value: Merge,
+}
+#[doc = " `Kind::Morphology`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindMorphology {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'morphology'")]
+    pub r#type: String,
+    pub value: Morphology,
+}
+#[doc = " `Kind::Offset`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindOffset {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'offset'")]
+    pub r#type: String,
+    pub value: Offset,
+}
+#[doc = " `Kind::SpecularLighting`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindSpecularLighting {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'specularLighting'")]
+    pub r#type: String,
+    pub value: SpecularLighting,
+}
+#[doc = " `Kind::Tile`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindTile {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'tile'")]
+    pub r#type: String,
+    pub value: Tile,
+}
+#[doc = " `Kind::Turbulence`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct KindTurbulence {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'turbulence'")]
+    pub r#type: String,
+    pub value: Turbulence,
+}
+fn kind_to_js(
+    v: &usvg::filter::Kind,
+) -> Either17<
+    KindBlend,
+    KindColorMatrix,
+    KindComponentTransfer,
+    KindComposite,
+    KindConvolveMatrix,
+    KindDiffuseLighting,
+    KindDisplacementMap,
+    KindDropShadow,
+    KindFlood,
+    KindGaussianBlur,
+    KindImage,
+    KindMerge,
+    KindMorphology,
+    KindOffset,
+    KindSpecularLighting,
+    KindTile,
+    KindTurbulence,
+> {
+    match v {
+        usvg::filter::Kind::Blend(v) => Either17::A(KindBlend {
+            r#type: "blend".to_string(),
+            value: Blend::from(v),
+        }),
+        usvg::filter::Kind::ColorMatrix(v) => Either17::B(KindColorMatrix {
+            r#type: "colorMatrix".to_string(),
+            value: ColorMatrix::from(v),
+        }),
+        usvg::filter::Kind::ComponentTransfer(v) => Either17::C(KindComponentTransfer {
+            r#type: "componentTransfer".to_string(),
+            value: ComponentTransfer::from(v),
+        }),
+        usvg::filter::Kind::Composite(v) => Either17::D(KindComposite {
+            r#type: "composite".to_string(),
+            value: Composite::from(v),
+        }),
+        usvg::filter::Kind::ConvolveMatrix(v) => Either17::E(KindConvolveMatrix {
+            r#type: "convolveMatrix".to_string(),
+            value: ConvolveMatrix::from(v),
+        }),
+        usvg::filter::Kind::DiffuseLighting(v) => Either17::F(KindDiffuseLighting {
+            r#type: "diffuseLighting".to_string(),
+            value: DiffuseLighting::from(v),
+        }),
+        usvg::filter::Kind::DisplacementMap(v) => Either17::G(KindDisplacementMap {
+            r#type: "displacementMap".to_string(),
+            value: DisplacementMap::from(v),
+        }),
+        usvg::filter::Kind::DropShadow(v) => Either17::H(KindDropShadow {
+            r#type: "dropShadow".to_string(),
+            value: DropShadow::from(v),
+        }),
+        usvg::filter::Kind::Flood(v) => Either17::I(KindFlood {
+            r#type: "flood".to_string(),
+            value: Flood::from(v),
+        }),
+        usvg::filter::Kind::GaussianBlur(v) => Either17::J(KindGaussianBlur {
+            r#type: "gaussianBlur".to_string(),
+            value: GaussianBlur::from(v),
+        }),
+        usvg::filter::Kind::Image(_) => Either17::K(KindImage {
+            r#type: "image".to_string(),
+        }),
+        usvg::filter::Kind::Merge(v) => Either17::L(KindMerge {
+            r#type: "merge".to_string(),
+            value: Merge::from(v),
+        }),
+        usvg::filter::Kind::Morphology(v) => Either17::M(KindMorphology {
+            r#type: "morphology".to_string(),
+            value: Morphology::from(v),
+        }),
+        usvg::filter::Kind::Offset(v) => Either17::N(KindOffset {
+            r#type: "offset".to_string(),
+            value: Offset::from(v),
+        }),
+        usvg::filter::Kind::SpecularLighting(v) => Either17::O(KindSpecularLighting {
+            r#type: "specularLighting".to_string(),
+            value: SpecularLighting::from(v),
+        }),
+        usvg::filter::Kind::Tile(v) => Either17::P(KindTile {
+            r#type: "tile".to_string(),
+            value: Tile::from(v),
+        }),
+        usvg::filter::Kind::Turbulence(v) => Either17::Q(KindTurbulence {
+            r#type: "turbulence".to_string(),
+            value: Turbulence::from(v),
+        }),
+    }
+}
+#[doc = " `LightSource::DistantLight`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct LightSourceDistantLight {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'distantLight'")]
+    pub r#type: String,
+    pub value: DistantLight,
+}
+#[doc = " `LightSource::PointLight`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct LightSourcePointLight {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'pointLight'")]
+    pub r#type: String,
+    pub value: PointLight,
+}
+#[doc = " `LightSource::SpotLight`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct LightSourceSpotLight {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'spotLight'")]
+    pub r#type: String,
+    pub value: SpotLight,
+}
+fn light_source_to_js(
+    v: &usvg::filter::LightSource,
+) -> Either3<LightSourceDistantLight, LightSourcePointLight, LightSourceSpotLight> {
+    match v {
+        usvg::filter::LightSource::DistantLight(v) => Either3::A(LightSourceDistantLight {
+            r#type: "distantLight".to_string(),
+            value: DistantLight::from(v),
+        }),
+        usvg::filter::LightSource::PointLight(v) => Either3::B(LightSourcePointLight {
+            r#type: "pointLight".to_string(),
+            value: PointLight::from(v),
+        }),
+        usvg::filter::LightSource::SpotLight(v) => Either3::C(LightSourceSpotLight {
+            r#type: "spotLight".to_string(),
+            value: SpotLight::from(v),
+        }),
+    }
+}
 #[doc = " `Paint::Color`."]
 #[napi(object)]
 #[derive(Clone)]
@@ -1839,7 +2687,7 @@ pub struct PaintColor {
     pub r#type: String,
     pub value: Color,
 }
-#[doc = " Id of the `LinearGradient` this refers to."]
+#[doc = " `Paint::LinearGradient`."]
 #[napi(object)]
 #[derive(Clone)]
 pub struct PaintLinearGradient {
@@ -1848,7 +2696,7 @@ pub struct PaintLinearGradient {
     pub r#type: String,
     pub id: String,
 }
-#[doc = " Id of the `RadialGradient` this refers to."]
+#[doc = " `Paint::RadialGradient`."]
 #[napi(object)]
 #[derive(Clone)]
 pub struct PaintRadialGradient {
@@ -1857,7 +2705,7 @@ pub struct PaintRadialGradient {
     pub r#type: String,
     pub id: String,
 }
-#[doc = " Id of the `Pattern` this refers to."]
+#[doc = " `Paint::Pattern`."]
 #[napi(object)]
 #[derive(Clone)]
 pub struct PaintPattern {
@@ -1896,7 +2744,7 @@ pub struct TextFlowPlain {
     #[napi(ts_type = "'linear'")]
     pub r#type: String,
 }
-#[doc = " Id of the `TextPath` this refers to."]
+#[doc = " `TextFlow::Path`."]
 #[napi(object)]
 #[derive(Clone)]
 pub struct TextFlowPath {
@@ -1913,6 +2761,93 @@ fn text_flow_to_js(v: &usvg::TextFlow) -> Either<TextFlowPlain, TextFlowPath> {
         usvg::TextFlow::Path(v) => Either::B(TextFlowPath {
             r#type: "path".to_string(),
             id: v.id().to_string(),
+        }),
+    }
+}
+#[doc = " The payload-free variants of `TransferFunction`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TransferFunctionPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'identity'")]
+    pub r#type: String,
+}
+#[doc = " `TransferFunction::Table`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TransferFunctionTable {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'table'")]
+    pub r#type: String,
+    pub value: Vec<f64>,
+}
+#[doc = " `TransferFunction::Discrete`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TransferFunctionDiscrete {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'discrete'")]
+    pub r#type: String,
+    pub value: Vec<f64>,
+}
+#[doc = " `TransferFunction::Linear`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TransferFunctionLinear {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'linear'")]
+    pub r#type: String,
+    pub slope: f64,
+    pub intercept: f64,
+}
+#[doc = " `TransferFunction::Gamma`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TransferFunctionGamma {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'gamma'")]
+    pub r#type: String,
+    pub amplitude: f64,
+    pub exponent: f64,
+    pub offset: f64,
+}
+fn transfer_function_to_js(
+    v: &usvg::filter::TransferFunction,
+) -> Either5<
+    TransferFunctionPlain,
+    TransferFunctionTable,
+    TransferFunctionDiscrete,
+    TransferFunctionLinear,
+    TransferFunctionGamma,
+> {
+    match v {
+        usvg::filter::TransferFunction::Identity => Either5::A(TransferFunctionPlain {
+            r#type: "identity".to_string(),
+        }),
+        usvg::filter::TransferFunction::Table(v) => Either5::B(TransferFunctionTable {
+            r#type: "table".to_string(),
+            value: v.iter().map(|x| *x as f64).collect(),
+        }),
+        usvg::filter::TransferFunction::Discrete(v) => Either5::C(TransferFunctionDiscrete {
+            r#type: "discrete".to_string(),
+            value: v.iter().map(|x| *x as f64).collect(),
+        }),
+        usvg::filter::TransferFunction::Linear { slope, intercept } => {
+            Either5::D(TransferFunctionLinear {
+                r#type: "linear".to_string(),
+                slope: *slope as f64,
+                intercept: *intercept as f64,
+            })
+        }
+        usvg::filter::TransferFunction::Gamma {
+            amplitude,
+            exponent,
+            offset,
+        } => Either5::E(TransferFunctionGamma {
+            r#type: "gamma".to_string(),
+            amplitude: *amplitude as f64,
+            exponent: *exponent as f64,
+            offset: *offset as f64,
         }),
     }
 }
@@ -1949,7 +2884,7 @@ impl Filter {
         self.inner
             .primitives()
             .into_iter()
-            .map(|x| Primitive::wrap(x.clone()))
+            .map(Primitive::from)
             .collect()
     }
 }

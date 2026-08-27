@@ -49,7 +49,7 @@ assert.equal(doc.node('notext').text(), null, 'a rect is not text');
   assert.deepEqual([loud.start, loud.end], [5, 9]);
   assert.equal(plain.fontSize, 12);
   assert.equal(loud.fontSize, 18);
-  assert.deepEqual(loud.fill.paint.color, { red: 0, green: 128, blue: 128 });
+  assert.deepEqual(loud.fill.paint.value, { red: 0, green: 128, blue: 128 });
 }
 
 // 4. `layouted` is the resolved side: positioned glyphs, one per character here
@@ -62,10 +62,24 @@ assert.equal(doc.node('notext').text(), null, 'a rect is not text');
     'one glyph per character for this string');
 }
 
-// 5. the fill reaches through to the paint union, same shape as a path's
+// 5. baselineShift is a derived discriminated union: usvg's BaselineShift is a
+//    payload enum, and the generator now emits one union per such enum rather
+//    than dropping the member. The unit variants share a struct, the one that
+//    carries a value gets its own.
+{
+  const span = text('one').chunks[0].spans[0];
+  assert.ok(Array.isArray(span.baselineShift));
+  for (const b of span.baselineShift) {
+    assert.match(b.type, /^(baseline|subscript|superscript|number)$/);
+    // only the number variant carries a value
+    assert.equal('value' in b, b.type === 'number');
+  }
+}
+
+// 6. the fill reaches through to the paint union, same shape as a path's
 assert.equal(text('one').chunks[0].spans[0].fill.paint.type, 'color');
 
-// 6. the boxes agree with what SvgNode reports, so text() is a view of the same
+// 7. the boxes agree with what SvgNode reports, so text() is a view of the same
 //    node rather than a second source of truth
 assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
 

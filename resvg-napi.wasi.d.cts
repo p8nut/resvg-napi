@@ -42,6 +42,7 @@ export declare class Filter {
 export declare class Font {
   get style(): FontStyle
   get stretch(): FontStretch
+  get weight(): number
   get variations(): Array<FontVariation>
 }
 
@@ -587,6 +588,7 @@ export declare class TextChunk {
   get y(): number | null
   get anchor(): TextAnchor
   get spans(): Array<TextSpan>
+  get textFlow(): TextFlowPlain | TextFlowPath
   get text(): string
 }
 
@@ -604,6 +606,7 @@ export declare class TextSpan {
   get fontOpticalSizing(): FontOpticalSizing
   get dominantBaseline(): DominantBaseline
   get alignmentBaseline(): AlignmentBaseline
+  get baselineShift(): Array<BaselineShiftPlain | BaselineShiftNumber>
   get isVisible(): boolean
   get letterSpacing(): number
   get wordSpacing(): number
@@ -625,6 +628,19 @@ export declare const enum AlignmentBaseline {
   Alphabetic = 'alphabetic',
   Hanging = 'hanging',
   Mathematical = 'mathematical'
+}
+
+/** `BaselineShift::Number`. */
+export interface BaselineShiftNumber {
+  /** Discriminant. Narrow on this. */
+  type: 'number'
+  value: number
+}
+
+/** The payload-free variants of `BaselineShift`. */
+export interface BaselineShiftPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'baseline' | 'subscript' | 'superscript'
 }
 
 /** A rectangle in SVG user units. */
@@ -684,13 +700,6 @@ export declare const enum ColorInterpolation {
   LinearRGB = 'linearRgb'
 }
 
-/** `Paint::Color`: a colour resolved by the parser. */
-export interface ColorPaint {
-  /** Discriminant. Narrow on this. */
-  type: 'color'
-  color: Color
-}
-
 /** A width/height pair in SVG user units. */
 export interface Dimensions {
   width: number
@@ -722,7 +731,7 @@ export declare const enum EdgeMode {
 
 /** Plain view of a `Fill`. */
 export interface Fill {
-  paint: ColorPaint | PaintServer
+  paint: PaintColor | PaintLinearGradient | PaintRadialGradient | PaintPattern
   opacity: number
   rule: FillRule
 }
@@ -847,6 +856,20 @@ export declare const enum NodeKind {
   Text = 'text'
 }
 
+/** `Paint::Color`. */
+export interface PaintColor {
+  /** Discriminant. Narrow on this. */
+  type: 'color'
+  value: Color
+}
+
+/** Id of the `LinearGradient` this refers to. */
+export interface PaintLinearGradient {
+  /** Discriminant. Narrow on this. */
+  type: 'linearGradient'
+  id: string
+}
+
 /**
  * Representation of the [`paint-order`] property.
  *
@@ -860,18 +883,17 @@ export declare const enum PaintOrder {
   StrokeAndFill = 'strokeAndFill'
 }
 
-/**
- * A paint server -- gradient or pattern -- named by id, the way the
- * document itself refers to one with `url(#id)`. Resolve it through
- * `linearGradients()`, `radialGradients()` or `patterns()`.
- *
- * An id rather than the object: a paint server is shared by every
- * element that references it, so handing out a copy per element would
- * misrepresent the document.
- */
-export interface PaintServer {
+/** Id of the `Pattern` this refers to. */
+export interface PaintPattern {
   /** Discriminant. Narrow on this. */
-  type: 'linearGradient' | 'radialGradient' | 'pattern'
+  type: 'pattern'
+  id: string
+}
+
+/** Id of the `RadialGradient` this refers to. */
+export interface PaintRadialGradient {
+  /** Discriminant. Narrow on this. */
+  type: 'radialGradient'
   id: string
 }
 
@@ -1100,7 +1122,7 @@ export interface Stop {
 
 /** Plain view of a `Stroke`. */
 export interface Stroke {
-  paint: ColorPaint | PaintServer
+  paint: PaintColor | PaintLinearGradient | PaintRadialGradient | PaintPattern
   dasharray?: Array<number>
   dashoffset: number
   miterlimit: number
@@ -1118,6 +1140,19 @@ export declare const enum TextAnchor {
   Start = 'start',
   Middle = 'middle',
   End = 'end'
+}
+
+/** Id of the `TextPath` this refers to. */
+export interface TextFlowPath {
+  /** Discriminant. Narrow on this. */
+  type: 'path'
+  id: string
+}
+
+/** The payload-free variants of `TextFlow`. */
+export interface TextFlowPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'linear'
 }
 
 /**

@@ -37,7 +37,9 @@
     "report:selftest": "node scripts/codegen-report.mjs --selftest",
     "conformance": "node scripts/conformance.mjs",
     "conformance:selftest": "node scripts/conformance.mjs --selftest && node scripts/conformance-fetch.mjs --selftest",
-    "conformance:fetch": "node scripts/conformance-fetch.mjs"
+    "conformance:fetch": "node scripts/conformance-fetch.mjs",
+    "check:resvg": "node scripts/check-resvg.mjs",
+    "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {

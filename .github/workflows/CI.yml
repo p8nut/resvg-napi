@@ -194,6 +194,7 @@ jobs:
       - run: npm run check:package:selftest
       - run: npm run report:selftest
       - run: npm run conformance:selftest
+      - run: npm run check:resvg:selftest
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform

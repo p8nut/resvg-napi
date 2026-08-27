@@ -9,3 +9,4 @@ demo/wasi-worker-browser.mjs
 demo/liquid.js
 demo/DejaVuSans.ttf
 demo/examples/*.png
+conformance/resvg/

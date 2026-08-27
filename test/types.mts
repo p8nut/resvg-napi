@@ -10,7 +10,7 @@ import {
   type Color,
   type Path,
   type PathSegment,
-} from './index.js';
+} from '../index.js';
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80">
   <rect width="240" height="80" rx="12" fill="#0f172a"/>

@@ -226,6 +226,8 @@ enum Js {
     IntNewtype(String),
     // `&[f32]` / `Vec<f32>`, e.g. a dash pattern.
     F32List,
+    // `i32`, which napi maps to a JS number directly. A turbulence seed.
+    I32,
     // `u16`, widened to u32 on the JS side: a font weight, an axis count.
     U16,
     // `[u8; 4]`: an OpenType axis tag, four ASCII bytes -- `b"wght"`. A string
@@ -246,10 +248,22 @@ enum Js {
 ///
 /// Everything here is syntactic, so it is known before the object registry is:
 /// the payload *types* are classified later, when the structs are emitted.
+/// What one variant of a payload enum carries.
+#[derive(Clone)]
+enum Payload {
+    /// `Identity` -- nothing but its discriminant.
+    None,
+    /// `Table(Vec<f32>)` -- one unnamed field, exposed as `value`.
+    Value(String),
+    /// `Linear { slope: f32, intercept: f32 }` -- named fields, exposed under
+    /// their own names, which is a better shape than wrapping them in `value`.
+    Fields(Vec<(String, String)>),
+}
+
 #[derive(Clone)]
 struct PayloadEnum {
-    /// Variant name and, when it carries one, its single field's type.
-    variants: Vec<(String, Option<String>)>,
+    /// Variant name and what it carries.
+    variants: Vec<(String, Payload)>,
 }
 
 impl PayloadEnum {
@@ -262,7 +276,7 @@ impl PayloadEnum {
     fn unit_ident(&self, enum_name: &str) -> Option<proc_macro2::Ident> {
         self.variants
             .iter()
-            .any(|(_, p)| p.is_none())
+            .any(|(_, p)| matches!(p, Payload::None))
             .then(|| format_ident!("{enum_name}Plain"))
     }
 }
@@ -274,7 +288,7 @@ impl PayloadEnum {
         v.extend(
             self.variants
                 .iter()
-                .filter(|(_, p)| p.is_some())
+                .filter(|(_, p)| !matches!(p, Payload::None))
                 .map(|(n, _)| self.variant_ident(name, n)),
         );
         v
@@ -321,34 +335,64 @@ impl PayloadEnum {
     /// rather than silently dropped: a usvg upgrade adding a mappable payload
     /// should show up as a union appearing, not as a mystery.
     fn payload_blocker(&self, vocab: &Vocab) -> Option<String> {
-        self.variants
-            .iter()
-            .filter_map(|(n, p)| p.as_ref().map(|p| (n, p)))
-            .find_map(|(n, p)| {
-                if let Some(Js::Handle(t)) = vocab.classify(p) {
-                    return (!vocab.with_id.contains(&t))
-                        .then(|| format!("{n} carries {p}, and {t} has no id() to name it by"));
-                }
-                let ok = !vocab.payload.contains_key(&vocab.resolve(p))
-                    && matches!(
-                        vocab.classify(p),
-                        Some(
-                            Js::Str
-                                | Js::F32
-                                | Js::F64
-                                | Js::U32
-                                | Js::U8
-                                | Js::U16
-                                | Js::F32List
-                                | Js::Scalar
-                                | Js::Bool
-                                | Js::Enum
-                                | Js::Object(_)
-                                | Js::Value(_)
-                        )
-                    );
-                (!ok).then(|| format!("{n} carries {p}, which does not map to a field"))
+        /// Whether one carried type can be a field of an `#[napi(object)]`.
+        fn field_of(vocab: &Vocab, p: &str) -> Result<(), String> {
+            if let Some(Js::Handle(t)) = vocab.classify(p) {
+                return if vocab.with_id.contains(&t) {
+                    Ok(())
+                } else {
+                    Err(format!("{t} has no id() to name it by"))
+                };
+            }
+            // A payload that is itself a payload enum would recurse through
+            // `classify`; not a shape usvg uses.
+            if vocab.payload.contains_key(&vocab.resolve(p)) {
+                return Err("it is itself a payload enum".into());
+            }
+            // A payload naming a public struct the registry dropped carries nothing
+            // mappable: `filter::Image` has one method, `root() -> &Group`, and a
+            // Group is a handle question. The variant keeps its discriminant and
+            // loses its value, because there is no value to give it. Not the same
+            // as a shape we cannot map -- `Arc<Vec<u8>>` still blocks, or image
+            // bytes would vanish without a word.
+            if vocab.classify(p).is_none() && vocab.structs.contains(bare(p)) {
+                return Ok(());
+            }
+            match vocab.classify(p) {
+                Some(
+                    Js::Str
+                    | Js::F32
+                    | Js::F64
+                    | Js::U32
+                    | Js::U8
+                    | Js::U16
+                    | Js::I32
+                    | Js::F32List
+                    | Js::Scalar
+                    | Js::Bool
+                    | Js::Enum
+                    | Js::Object(_),
+                ) => Ok(()),
+                // A read-only class is not a field: napi needs Clone and
+                // FromNapiValue of one, and a class has neither.
+                Some(Js::Value(t)) => Err(format!("{t} maps only partially")),
+                other => Err(format!("it maps to {other:?}")),
+            }
+        }
+
+        self.variants.iter().find_map(|(n, p)| {
+            let carried: Vec<(Option<&str>, &String)> = match p {
+                Payload::None => Vec::new(),
+                Payload::Value(t) => vec![(None, t)],
+                Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
+            };
+            carried.into_iter().find_map(|(field, t)| {
+                field_of(vocab, t).err().map(|why| match field {
+                    Some(f) => format!("{n}.{f} carries {t}, and {why}"),
+                    None => format!("{n} carries {t}, and {why}"),
+                })
             })
+        })
     }
 
     fn conv_ident(&self, name: &str) -> proc_macro2::Ident {
@@ -403,24 +447,54 @@ fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
 /// Payload enums, found by shape. Skips any with a variant carrying more than
 /// one field or named fields: those have no single obvious `value`, and saying
 /// so in the report beats guessing.
-fn payload_enums(files: &[syn::File]) -> BTreeMap<String, PayloadEnum> {
+fn payload_enums(
+    files: &[syn::File],
+    // The module these files contribute to, and the names usvg defines twice.
+    // `filter::Kind::Image(Image)` means `filter::Image`, and nothing in the
+    // type string says so -- the variant is written unqualified because it is
+    // in the same module.
+    module: &str,
+    dups: &BTreeSet<String>,
+) -> BTreeMap<String, PayloadEnum> {
     let mut out = BTreeMap::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Enum(e) = item else { continue };
         if !is_pub(&e.vis) {
             continue;
         }
+        let qualify = |t: String| {
+            if !module.is_empty() && dups.contains(&t) {
+                format!("{module}::{t}")
+            } else {
+                t
+            }
+        };
         let mut variants = Vec::new();
         let mut usable = false;
         for v in &e.variants {
             match &v.fields {
-                Fields::Unit => variants.push((v.ident.to_string(), None)),
+                Fields::Unit => variants.push((v.ident.to_string(), Payload::None)),
                 Fields::Unnamed(f) if f.unnamed.len() == 1 => {
                     usable = true;
-                    let ty = ty_str(&f.unnamed[0].ty);
-                    variants.push((v.ident.to_string(), Some(ty)));
+                    let ty = qualify(ty_str(&f.unnamed[0].ty));
+                    variants.push((v.ident.to_string(), Payload::Value(ty)));
                 }
-                // more than one field, or named ones: no single `value`
+                Fields::Named(f) => {
+                    usable = true;
+                    let fields = f
+                        .named
+                        .iter()
+                        .filter(|x| is_pub(&x.vis) || true)
+                        .filter_map(|x| {
+                            x.ident
+                                .as_ref()
+                                .map(|i| (i.to_string(), qualify(ty_str(&x.ty))))
+                        })
+                        .collect();
+                    variants.push((v.ident.to_string(), Payload::Fields(fields)));
+                }
+                // A tuple of more than one field has no name to give either
+                // half, so there is nothing honest to call them.
                 _ => {
                     usable = false;
                     break;
@@ -432,6 +506,46 @@ fn payload_enums(files: &[syn::File]) -> BTreeMap<String, PayloadEnum> {
         }
     }
     out
+}
+
+/// One carried type as an object field: its JS type, and how to convert the
+/// binding `access` into it. None when it cannot be a field at all --
+/// `payload_blocker` is the authority on *whether*, this is the *how*.
+fn carried_field(
+    vocab: &Vocab,
+    ty: &str,
+    access: &TokenStream,
+) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
+    Some(match vocab.classify(ty) {
+        Some(Js::Str) => (None, quote!(String), quote!(#access.to_string())),
+        Some(Js::F32) | Some(Js::F64) => (None, quote!(f64), quote!(*#access as f64)),
+        Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => {
+            (None, quote!(u32), quote!(*#access as u32))
+        }
+        Some(Js::I32) => (None, quote!(i32), quote!(*#access)),
+        Some(Js::F32List) => (
+            None,
+            quote!(Vec<f64>),
+            quote!(#access.iter().map(|x| *x as f64).collect()),
+        ),
+        Some(Js::Scalar) => (None, quote!(f64), quote!(#access.get() as f64)),
+        Some(Js::Bool) => (None, quote!(bool), quote!(*#access)),
+        Some(Js::Enum) => {
+            let e = format_ident!("{}", vocab.resolve(ty));
+            (None, quote!(#e), quote!(#e::from(*#access)))
+        }
+        Some(Js::Object(t)) => {
+            let o = data_ident(&t);
+            (None, quote!(#o), quote!(#o::from(#access)))
+        }
+        // An Arc-held definition is shared by every element referencing it, so
+        // it is named rather than copied -- and the field is called `id`, because
+        // it should say what it is instead of hiding behind `value`.
+        Some(Js::Handle(t)) if vocab.with_id.contains(&t) => {
+            (Some("id"), quote!(String), quote!(#access.id().to_string()))
+        }
+        _ => return None,
+    })
 }
 
 /// The union for one payload enum: a struct per payload variant, one shared
@@ -454,7 +568,7 @@ fn payload_enum_code(
         let ts = info
             .variants
             .iter()
-            .filter(|(_, p)| p.is_none())
+            .filter(|(_, p)| matches!(p, Payload::None))
             .map(|(n, _)| format!("'{}'", lower_camel(n)))
             .collect::<Vec<_>>()
             .join(" | ");
@@ -470,7 +584,11 @@ fn payload_enum_code(
             }
         });
         let arm = info.either_arm(name, 0);
-        for (n, p) in info.variants.iter().filter(|(_, p)| p.is_none()) {
+        for (n, p) in info
+            .variants
+            .iter()
+            .filter(|(_, p)| matches!(p, Payload::None))
+        {
             let _ = p;
             let vid = format_ident!("{}", n);
             let tag = lower_camel(n);
@@ -479,8 +597,10 @@ fn payload_enum_code(
         i = 1;
     }
 
-    for (n, pty) in &info.variants {
-        let Some(pty) = pty else { continue };
+    for (n, payload) in &info.variants {
+        if matches!(payload, Payload::None) {
+            continue;
+        }
         let sid = info.variant_ident(name, n);
         let vid = format_ident!("{}", n);
         let tag = lower_camel(n);
@@ -488,56 +608,48 @@ fn payload_enum_code(
         let arm = info.either_arm(name, i);
         i += 1;
 
-        let (fty, expr) = match vocab.classify(pty) {
-            Some(Js::Str) => (quote!(String), quote!(v.to_string())),
-            Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(*v as f64)),
-            Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(*v as u32)),
-            Some(Js::F32List) => (
-                quote!(Vec<f64>),
-                quote!(v.iter().map(|x| *x as f64).collect()),
-            ),
-            Some(Js::Scalar) => (quote!(f64), quote!(v.get() as f64)),
-            Some(Js::Bool) => (quote!(bool), quote!(*v)),
-            Some(Js::Enum) => {
-                let e = format_ident!("{}", vocab.resolve(pty));
-                (quote!(#e), quote!(#e::from(*v)))
+        // What the struct declares, how the arm binds it, and how each field is
+        // built. The three shapes differ only here.
+        let (decls, pattern, inits) = match payload {
+            Payload::None => unreachable!("skipped above"),
+            Payload::Value(ty) if vocab.classify(ty).is_none() => {
+                report!(
+                    "{name}::{n} carries {ty}, which has no mappable data: emitted without a value"
+                );
+                (Vec::new(), quote!(#up::#vid(_)), Vec::new())
             }
-            Some(Js::Object(t)) => {
-                let o = format_ident!("{}", t);
-                (quote!(#o), quote!(#o::from(v)))
+            Payload::Value(ty) => {
+                let access = quote!(v);
+                let Some((hint, fty, expr)) = carried_field(vocab, ty, &access) else {
+                    return Err(format!("{name}::{n} carries {ty}, which cannot be a field"));
+                };
+                let field = format_ident!("{}", hint.unwrap_or("value"));
+                (
+                    vec![quote!(pub #field: #fty,)],
+                    quote!(#up::#vid(v)),
+                    vec![quote!(#field: #expr,)],
+                )
             }
-            Some(Js::Value(t)) => {
-                let c = value_class_ident(&t);
-                (quote!(#c), quote!(#c::wrap(v.clone())))
-            }
-            // An Arc-held definition is shared by every element referencing it,
-            // so it is named rather than copied. `id` instead of `value`: the
-            // field says what it is.
-            Some(Js::Handle(t)) if vocab.with_id.contains(&t) => {
-                let doc = format!(" Id of the `{t}` this refers to.");
-                items.extend(quote! {
-                    #[doc = #doc]
-                    #[napi(object)]
-                    #[derive(Clone)]
-                    pub struct #sid {
-                        #[doc = " Discriminant. Narrow on this."]
-                        #[napi(ts_type = #ts)]
-                        pub r#type: String,
-                        pub id: String,
-                    }
-                });
-                arms.push(quote!(#up::#vid(v) => #arm(#sid {
-                    r#type: #tag.to_string(),
-                    id: v.id().to_string(),
-                }),));
-                continue;
-            }
-            other => {
-                return Err(format!(
-                    "{name}::{n} carries {pty}, which maps to {other:?} -- not something an object field can hold"
-                ));
+            Payload::Fields(fields) => {
+                let mut decls = Vec::new();
+                let mut binds = Vec::new();
+                let mut inits = Vec::new();
+                for (fname, ty) in fields {
+                    let id = format_ident!("{}", fname);
+                    let access = quote!(#id);
+                    let Some((_, fty, expr)) = carried_field(vocab, ty, &access) else {
+                        return Err(format!(
+                            "{name}::{n}.{fname} carries {ty}, which cannot be a field"
+                        ));
+                    };
+                    decls.push(quote!(pub #id: #fty,));
+                    binds.push(quote!(#id));
+                    inits.push(quote!(#id: #expr,));
+                }
+                (decls, quote!(#up::#vid { #(#binds),* }), inits)
             }
         };
+
         let doc = format!(" `{name}::{n}`.");
         items.extend(quote! {
             #[doc = #doc]
@@ -547,10 +659,13 @@ fn payload_enum_code(
                 #[doc = " Discriminant. Narrow on this."]
                 #[napi(ts_type = #ts)]
                 pub r#type: String,
-                pub value: #fty,
+                #(#decls)*
             }
         });
-        arms.push(quote!(#up::#vid(v) => #arm(#sid { r#type: #tag.to_string(), value: #expr }),));
+        arms.push(quote!(#pattern => #arm(#sid {
+            r#type: #tag.to_string(),
+            #(#inits)*
+        }),));
     }
 
     let conv = info.conv_ident(name);
@@ -567,6 +682,9 @@ fn payload_enum_code(
 /// derived: enums worth mirroring, `f32` newtypes, and `pub type` aliases.
 #[derive(Default)]
 struct Vocab {
+    /// Every public struct name upstream, so a payload that names one the
+    /// registry dropped can be told from a payload that is not a struct at all.
+    structs: BTreeSet<String>,
     /// Types that can be named by an id, for an `Arc<T>` payload.
     with_id: BTreeSet<String>,
     /// Upstream enums carrying payloads, by name. Syntactic, so populated with
@@ -684,6 +802,7 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
         "u32" => Js::U32,
         "u8" => Js::U8,
         "u16" => Js::U16,
+        "i32" => Js::I32,
         "bool" => Js::Bool,
         "usize" => Js::Count,
         "String" | "&str" => Js::Str,
@@ -790,6 +909,11 @@ fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
             ImplItem::Fn(f) => {
                 is_pub(&f.vis)
                     && f.sig.ident == "get"
+                    // The receiver and nothing else. `ConvolveMatrixData` has
+                    // `get(&self, x: u32, y: u32) -> f32` -- a matrix accessor,
+                    // not a newtype unwrapping itself -- and counting it as a
+                    // scalar made the whole type invisible to discovery.
+                    && f.sig.inputs.len() == 1
                     && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "f32")
             }
             _ => false,
@@ -1030,6 +1154,7 @@ fn map_struct(
             // Read-only: a union describes what a document holds, never what a
             // render option sets.
             | Some(Js::U16)
+            | Some(Js::I32)
             | Some(Js::PayloadEnum(_))
             | Some(Js::PayloadEnumList(_))
             | Some(Js::PathData)
@@ -1121,6 +1246,12 @@ fn upstream_path(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> TokenStream {
+    // A qualified key says its own module, and says it correctly: the map below
+    // is keyed by bare name and cannot hold two `Image`s.
+    if let Some((m, n)) = name.rsplit_once("::") {
+        let (m, n) = (format_ident!("{}", m), format_ident!("{}", n));
+        return quote!(#root::#m::#n);
+    }
     let ident = format_ident!("{}", name);
     match modules.get(name) {
         Some(m) if !m.is_empty() => {
@@ -1271,19 +1402,33 @@ fn data_members(
     // tiny-skia value to draw with. Counting it as an unmapped member would
     // demote Stroke to a read-only class, and any object holding one -- `Path`
     // -- would then carry a field napi cannot round-trip.
-    // `Text::flattened` re-enters the node tree as a group of paths -- a handle
-    // question, and following it would drag Group, and through Group every
-    // definition type, into the data registry.
-    const NOT_DATA: [&str; 2] = ["to_tiny_skia", "flattened"];
+    const NOT_DATA: [&str; 1] = ["to_tiny_skia"];
+
+    // The tree itself. Group, Node and Tree are what a handle exists for, and
+    // following one into the data registry drags every definition type behind
+    // it -- `Text::flattened` and `filter::Image::root` both hand back a Group.
+    // A type rule rather than the two member names, because the next one to
+    // return a Group should need no edit here.
+    const NOT_DATA_TYPES: [&str; 3] = NODE_TYPES;
 
     let mut push = |name: &str, ty_s: &str, access: TokenStream| {
         if NOT_DATA.contains(&name) {
+            return;
+        }
+        let peeled = ty_s
+            .trim_start_matches('&')
+            .trim_start_matches("Box<")
+            .trim_start_matches("Option<")
+            .trim_start_matches('&')
+            .trim_end_matches('>');
+        if NOT_DATA_TYPES.contains(&bare(peeled)) {
             return;
         }
         let id = format_ident!("{}", name);
         let (jsty, value) = match vocab.classify(ty_s) {
             Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(#access as f64)),
             Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(#access as u32)),
+            Some(Js::I32) => (quote!(i32), quote!(#access)),
             Some(Js::Bool) => (quote!(bool), quote!(#access)),
             Some(Js::Count) => (quote!(u32), quote!(#access as u32)),
             Some(Js::Str) => (quote!(String), quote!(#access.to_string())),
@@ -1298,12 +1443,12 @@ fn data_members(
             // A value class owns its upstream value, so a nested one is cloned
             // into its `wrap`.
             Some(Js::Value(t)) if nested_values => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 reached.insert(t.clone());
                 (quote!(#c), quote!(#c::wrap(#access.clone())))
             }
             Some(Js::ValueList(t)) if nested_values => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Vec<#c>),
@@ -1311,7 +1456,7 @@ fn data_members(
                 )
             }
             Some(Js::OptValue(t)) if nested_values => {
-                let c = value_class_ident(&t);
+                let c = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Option<#c>),
@@ -1346,7 +1491,7 @@ fn data_members(
                 (quote!(#e), quote!(#e::from(#access)))
             }
             Some(Js::Object(t)) => {
-                let o = format_ident!("{}", t);
+                let o = data_ident(&t);
                 reached.insert(t.clone());
                 let arg = if ty_s.starts_with('&') {
                     quote!(#access)
@@ -1356,7 +1501,7 @@ fn data_members(
                 (quote!(#o), quote!(#o::from(#arg)))
             }
             Some(Js::ObjectList(t)) => {
-                let o = format_ident!("{}", t);
+                let o = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Vec<#o>),
@@ -1468,7 +1613,7 @@ fn object_struct(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
-    let (members, skipped, reached) = data_members(files, ty, vocab, false);
+    let (members, skipped, reached) = data_members(files, bare(ty), vocab, false);
     if members.is_empty() || !skipped.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
@@ -1511,11 +1656,11 @@ fn value_class(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
-    let (members, skipped, reached) = data_members(files, ty, vocab, true);
+    let (members, skipped, reached) = data_members(files, bare(ty), vocab, true);
     if members.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
-    let name = value_class_ident(ty);
+    let name = data_ident(ty);
     let up = upstream_path(ty, modules, root);
     let getters = members.iter().map(|m| {
         let (id, t, e) = (&m.id, &m.jsty, &m.value);
@@ -1550,7 +1695,49 @@ fn value_class(
 }
 
 /// Naming decision: `FaceInfo` reads as `FontFace` on the JS side.
-fn value_class_ident(ty: &str) -> proc_macro2::Ident {
+/// The tree itself. Group, Node and Tree are what a handle exists for, and
+/// following one into the data registry drags every definition type behind it --
+/// `Text::flattened` and `filter::Image::root` both hand back a Group, and
+/// `ImageKind` carries a Tree. Filtered both as a member and as a candidate
+/// seed, because either route reaches the same place.
+const NODE_TYPES: [&str; 3] = ["Group", "Node", "Tree"];
+
+/// The upstream name inside a registry key: `filter::Image` -> `Image`.
+///
+/// A key carries the module so that two types of the same name stay distinct;
+/// every lookup into the sources wants the name alone.
+fn bare(key: &str) -> &str {
+    key.rsplit_once("::").map(|(_, n)| n).unwrap_or(key)
+}
+
+/// The JS name of a data type, whatever its registry key.
+///
+/// One function owns this because the naming has three rules and they were
+/// spread over eighteen call sites, only some of which knew about the rename:
+/// `Js::Object` built the ident with a bare `format_ident!` while `Js::Value`
+/// went through here, so an object called `FaceInfo` would have been emitted
+/// under that name. It only worked because FaceInfo maps partially.
+///
+/// A key can be module-qualified. usvg defines `Image` twice -- `tree/filter.rs`
+/// and `tree/mod.rs` -- so the two cannot share a bare key without the path
+/// resolving to one and the members to the other.
+fn data_ident(ty: &str) -> proc_macro2::Ident {
+    if let Some((module, name)) = ty.rsplit_once("::") {
+        let head = module.rsplit("::").next().unwrap_or(module);
+        let mut camel = String::new();
+        let mut up = true;
+        for c in head.chars() {
+            if c == '_' {
+                up = true;
+            } else if up {
+                camel.extend(c.to_uppercase());
+                up = false;
+            } else {
+                camel.push(c);
+            }
+        }
+        return format_ident!("{camel}{name}");
+    }
     format_ident!("{}", if ty == "FaceInfo" { "FontFace" } else { ty })
 }
 
@@ -1875,11 +2062,11 @@ fn map_methods(
                 Ret::Num => (quote!(f64), quote!(#call as f64), false),
                 Ret::IntNewtype => (quote!(u32), quote!(#call.0 as u32), false),
                 Ret::Object(ref t) => {
-                    let o = format_ident!("{}", t);
+                    let o = data_ident(t);
                     (quote!(#o), quote!(#o::from(#call)), false)
                 }
                 Ret::ObjectList(ref t) => {
-                    let o = format_ident!("{}", t);
+                    let o = data_ident(t);
                     (
                         quote!(Vec<#o>),
                         quote!(#call.into_iter().map(#o::from).collect()),
@@ -1887,7 +2074,7 @@ fn map_methods(
                     )
                 }
                 Ret::OptObject(ref t) => {
-                    let o = format_ident!("{}", t);
+                    let o = data_ident(t);
                     (
                         quote!(Option<#o>),
                         quote!(#call.map(|x| #o::from(x))),
@@ -1895,7 +2082,7 @@ fn map_methods(
                     )
                 }
                 Ret::OptValue(ref t) => {
-                    let w = value_class_ident(t);
+                    let w = data_ident(t);
                     (
                         quote!(Option<#w>),
                         quote!(#call.map(|x| #w::wrap(x.clone()))),
@@ -1903,11 +2090,11 @@ fn map_methods(
                     )
                 }
                 Ret::Value(ref t) => {
-                    let w = value_class_ident(t);
+                    let w = data_ident(t);
                     (quote!(#w), quote!(#w::wrap(#call.clone())), false)
                 }
                 Ret::ValueList(ref t) => {
-                    let w = value_class_ident(t);
+                    let w = data_ident(t);
                     (
                         quote!(Vec<#w>),
                         // `into_iter` covers both a slice of values and an
@@ -3520,7 +3707,50 @@ fn main() {
     // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
     let usvg_parsed = parse_crate(&usvg);
     let usvg_files: Vec<syn::File> = usvg_parsed.iter().map(|(_, f)| f.clone()).collect();
-    let modules = upstream_modules(&usvg_parsed, &public_modules(&usvg_files));
+    let public = public_modules(&usvg_files);
+    let modules = upstream_modules(&usvg_parsed, &public);
+    // usvg files grouped by the module they contribute to. A bare-name lookup
+    // over the whole crate takes whichever file was parsed first, which is how
+    // `filter::Image` came back with `usvg::Image`'s methods; a qualified key
+    // resolves against its own module instead.
+    let mut by_module: BTreeMap<String, Vec<syn::File>> = BTreeMap::new();
+    for (path, file) in &usvg_parsed {
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let m = if public.contains(&stem) {
+            stem
+        } else {
+            String::new()
+        };
+        by_module.entry(m).or_default().push(file.clone());
+    }
+    // Public names usvg defines twice. Exactly one today, `Image`, and the
+    // report says so rather than leaving it to be rediscovered.
+    let dups: BTreeSet<String> = {
+        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+        for f in &usvg_files {
+            for item in &f.items {
+                if let Item::Struct(st) = item {
+                    if is_pub(&st.vis) {
+                        *seen.entry(st.ident.to_string()).or_default() += 1;
+                    }
+                }
+            }
+        }
+        seen.into_iter()
+            .filter(|(_, n)| *n > 1)
+            .map(|(k, _)| k)
+            .collect()
+    };
+    if !dups.is_empty() {
+        report!(
+            "names usvg defines twice, keyed by module: {}",
+            dups.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
+    }
     // Only the crate root for free functions: a module-level `pub fn` elsewhere
     // is not crate-public (resvg has an internal `render(&Image, ...)`).
     let resvg_root = vec![parse(&resvg.join("lib.rs"))];
@@ -3578,6 +3808,23 @@ fn main() {
             }
             None
         })
+        // Plus what a payload enum carries. `filter::Kind` names seventeen
+        // primitive structs and nothing else does. Safe now on two counts: a
+        // duplicated name is keyed by its module, and a member returning a node
+        // type no longer drags the tree in behind it.
+        .chain(
+            by_module
+                .iter()
+                .flat_map(|(m, files)| payload_enums(files, m, &dups))
+                .flat_map(|(_, p)| p.variants)
+                .flat_map(|(_, payload)| match payload {
+                    Payload::None => Vec::new(),
+                    Payload::Value(t) => vec![t],
+                    Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
+                })
+                .filter(|t| !NODE_TYPES.contains(&bare(t)))
+                .filter(|t| struct_fields_opt(&usvg_files, bare(t)).is_some()),
+        )
         // Plus whatever the template hands out itself.
         .chain(template_returns(&probe).into_iter().filter(|t| {
             // A real upstream struct, and not one already claimed as a handle:
@@ -3605,8 +3852,24 @@ fn main() {
     for set in [&usvg_files, &fontdb_files, &extra] {
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
-        vocab.payload.extend(payload_enums(set));
+        vocab.payload.extend(payload_enums(set, "", &dups));
+        for item in set.iter().flat_map(|f| &f.items) {
+            if let Item::Struct(st) = item {
+                if is_pub(&st.vis) {
+                    vocab.structs.insert(st.ident.to_string());
+                }
+            }
+        }
         vocab.with_id.extend(types_with_id(set));
+    }
+    // Rescanned per module so an ambiguous payload gets its module: the pass
+    // above keyed everything bare, which is right for the crates that have no
+    // duplicate and wrong for the one that does.
+    for (m, files) in &by_module {
+        if m.is_empty() {
+            continue;
+        }
+        vocab.payload.extend(payload_enums(files, m, &dups));
     }
     report!(
         "payload enums found: {}",
@@ -3637,15 +3900,28 @@ fn main() {
     // Phase 1: discover. Generation is only used here to learn what a type
     // reaches; the code is thrown away because the registry is still growing.
     while let Some(t) = object_todo.pop_front() {
-        if !object_done.insert(t.clone()) || object_done.len() > 64 {
+        if !object_done.insert(t.clone()) {
             continue;
         }
+        // A runaway guard, not a budget: it used to be 64 and legitimate growth
+        // reached it -- seventeen filter primitives and three light sources --
+        // after which discovery stopped and the types it had not got to yet
+        // were silently missing. Loud now, because a truncated registry looks
+        // exactly like a type that does not map.
+        assert!(
+            object_done.len() <= 512,
+            "object discovery passed 512 types at {t}: either the graph is cyclic \
+             or this bound needs raising, but it must not truncate in silence"
+        );
         if vocab.enums.contains(&t) || vocab.scalars.contains(&t) || vocab.ints.contains(&t) {
             continue;
         }
-        let (source, root) = if struct_fields_opt(&usvg_files, &t).is_some() {
+        let scoped = t.rsplit_once("::").and_then(|(m, _)| by_module.get(m));
+        let (source, root) = if let Some(files) = scoped {
+            (files, quote!(usvg))
+        } else if struct_fields_opt(&usvg_files, bare(&t)).is_some() {
             (&usvg_files, quote!(usvg))
-        } else if struct_fields_opt(&fontdb_files, &t).is_some() {
+        } else if struct_fields_opt(&fontdb_files, bare(&t)).is_some() {
             (&fontdb_files, quote!(usvg::fontdb))
         } else {
             report!("object {t} skipped: not a public struct");
@@ -3695,7 +3971,12 @@ fn main() {
     // lands in `skipped`, and `object_struct` refuses any type with a skipped
     // member.
     let source_of = |t: &str| -> &[syn::File] {
-        if struct_fields_opt(&usvg_files, t).is_some() {
+        if let Some((m, _)) = t.rsplit_once("::") {
+            if let Some(files) = by_module.get(m) {
+                return files;
+            }
+        }
+        if struct_fields_opt(&usvg_files, bare(t)).is_some() {
             &usvg_files
         } else {
             &fontdb_files
@@ -3716,9 +3997,18 @@ fn main() {
         }
         for t in demote {
             vocab.objects.remove(&t);
-            let (vcode, _, _) = value_class(source_of(&t), &t, &vocab, &modules, &object_root[&t]);
+            let (vcode, dropped, _) =
+                value_class(source_of(&t), &t, &vocab, &modules, &object_root[&t]);
             if !vcode.is_empty() {
                 vocab.values.insert(t);
+            } else {
+                // Neither an object nor a read-only class. It used to leave the
+                // registry with nothing said, which reads exactly like a type
+                // that was never a candidate.
+                report!(
+                    "{t} dropped: nothing maps, not even read-only ({})",
+                    dropped.join(", ")
+                );
             }
         }
     }
@@ -3748,7 +4038,7 @@ fn main() {
         object_parts.insert(t.clone(), vcode);
         report!(
             "{t}: partial mapping, emitted as read-only class {}",
-            value_class_ident(t)
+            data_ident(t)
         );
         for d in dropped {
             report!("{t} member not exposed: {d}");
@@ -3898,18 +4188,44 @@ fn main() {
     };
     // The template hands out types as well -- `SvgNode::path` returns `Path` --
     // and none of that is visible from the passes. Probe it once, empty.
+    // A union references its payload types, and unions are generated after this
+    // pruning -- so without this the primitives `filter::Kind` names are dropped
+    // as unreachable and the union cannot compile. Only for unions something
+    // actually calls.
+    let payload_map = vocab.payload.clone();
+    let via_payload: BTreeSet<String> = payload_map
+        .iter()
+        .filter(|(_, p)| p.payload_blocker(&vocab).is_none())
+        .filter(|(n, p)| {
+            let c = p.conv_ident(n).to_string();
+            let used = |t: &TokenStream| t.to_string().contains(&c);
+            generated.values().any(used)
+                || object_parts.values().any(used)
+                || used(&wrapper_code)
+                || used(&probe)
+        })
+        .flat_map(|(_, p)| p.variants.iter().map(|(_, x)| x.clone()))
+        .flat_map(|payload| match payload {
+            Payload::None => Vec::new(),
+            Payload::Value(t) => vec![t],
+            Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
+        })
+        .map(|t| bare(&t).to_string())
+        .collect();
+
     let mut kept: BTreeSet<String> = BTreeSet::new();
     let all_data: BTreeSet<String> = vocab.objects.union(&vocab.values).cloned().collect();
     for name in all_data.clone() {
         // A value class is referenced under its JS name, not the Rust one.
-        let js = value_class_ident(&name).to_string();
+        let js = data_ident(&name).to_string();
         let used = generated
             .values()
             .any(|c| mentions(c, &name) || mentions(c, &js))
             || mentions(&wrapper_code, &name)
             || mentions(&wrapper_code, &js)
             || mentions(&probe, &name)
-            || mentions(&probe, &js);
+            || mentions(&probe, &js)
+            || via_payload.contains(bare(&name));
         if used {
             kept.insert(name);
         }

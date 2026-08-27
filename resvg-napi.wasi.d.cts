@@ -248,13 +248,6 @@ export declare class Pattern {
   children(): Array<SvgNode>
 }
 
-/** Read-only view of a `Primitive`. */
-export declare class Primitive {
-  get rect(): BBox
-  get colorInterpolation(): ColorInterpolation
-  get result(): string
-}
-
 /** Read-only handle on a `usvg::RadialGradient`. */
 export declare class RadialGradient {
   /** `cx` coordinate. */
@@ -651,6 +644,13 @@ export interface BBox {
   height: number
 }
 
+/** Plain view of a `Blend`. */
+export interface Blend {
+  input1: InputPlain | InputReference
+  input2: InputPlain | InputReference
+  mode: BlendMode
+}
+
 /**
  * A blending mode property.
  *
@@ -700,10 +700,118 @@ export declare const enum ColorInterpolation {
   LinearRGB = 'linearRgb'
 }
 
+/** Plain view of a `ColorMatrix`. */
+export interface ColorMatrix {
+  input: InputPlain | InputReference
+  kind: ColorMatrixKindPlain | ColorMatrixKindMatrix | ColorMatrixKindSaturate | ColorMatrixKindHueRotate
+}
+
+/** `ColorMatrixKind::HueRotate`. */
+export interface ColorMatrixKindHueRotate {
+  /** Discriminant. Narrow on this. */
+  type: 'hueRotate'
+  value: number
+}
+
+/** `ColorMatrixKind::Matrix`. */
+export interface ColorMatrixKindMatrix {
+  /** Discriminant. Narrow on this. */
+  type: 'matrix'
+  value: Array<number>
+}
+
+/** The payload-free variants of `ColorMatrixKind`. */
+export interface ColorMatrixKindPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'luminanceToAlpha'
+}
+
+/** `ColorMatrixKind::Saturate`. */
+export interface ColorMatrixKindSaturate {
+  /** Discriminant. Narrow on this. */
+  type: 'saturate'
+  value: number
+}
+
+/** Plain view of a `ComponentTransfer`. */
+export interface ComponentTransfer {
+  input: InputPlain | InputReference
+  funcR: TransferFunctionPlain | TransferFunctionTable | TransferFunctionDiscrete | TransferFunctionLinear | TransferFunctionGamma
+  funcG: TransferFunctionPlain | TransferFunctionTable | TransferFunctionDiscrete | TransferFunctionLinear | TransferFunctionGamma
+  funcB: TransferFunctionPlain | TransferFunctionTable | TransferFunctionDiscrete | TransferFunctionLinear | TransferFunctionGamma
+  funcA: TransferFunctionPlain | TransferFunctionTable | TransferFunctionDiscrete | TransferFunctionLinear | TransferFunctionGamma
+}
+
+/** Plain view of a `Composite`. */
+export interface Composite {
+  input1: InputPlain | InputReference
+  input2: InputPlain | InputReference
+  operator: CompositeOperatorPlain | CompositeOperatorArithmetic
+}
+
+/** `CompositeOperator::Arithmetic`. */
+export interface CompositeOperatorArithmetic {
+  /** Discriminant. Narrow on this. */
+  type: 'arithmetic'
+  k1: number
+  k2: number
+  k3: number
+  k4: number
+}
+
+/** The payload-free variants of `CompositeOperator`. */
+export interface CompositeOperatorPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'over' | 'in' | 'out' | 'atop' | 'xor'
+}
+
+/** Plain view of a `ConvolveMatrix`. */
+export interface ConvolveMatrix {
+  input: InputPlain | InputReference
+  matrix: ConvolveMatrixData
+  divisor: number
+  bias: number
+  edgeMode: EdgeMode
+  preserveAlpha: boolean
+}
+
+/** Plain view of a `ConvolveMatrixData`. */
+export interface ConvolveMatrixData {
+  targetX: number
+  targetY: number
+  columns: number
+  rows: number
+  data: Array<number>
+}
+
+/** Plain view of a `DiffuseLighting`. */
+export interface DiffuseLighting {
+  input: InputPlain | InputReference
+  surfaceScale: number
+  diffuseConstant: number
+  lightingColor: Color
+  lightSource: LightSourceDistantLight | LightSourcePointLight | LightSourceSpotLight
+}
+
 /** A width/height pair in SVG user units. */
 export interface Dimensions {
   width: number
   height: number
+}
+
+/** Plain view of a `DisplacementMap`. */
+export interface DisplacementMap {
+  input1: InputPlain | InputReference
+  input2: InputPlain | InputReference
+  scale: number
+  xChannelSelector: ColorChannel
+  yChannelSelector: ColorChannel
+}
+
+/** Plain view of a `DistantLight`. */
+export interface DistantLight {
+  azimuth: number
+  elevation: number
 }
 
 /** A dominant baseline property. */
@@ -720,6 +828,17 @@ export declare const enum DominantBaseline {
   Middle = 'middle',
   TextAfterEdge = 'textAfterEdge',
   TextBeforeEdge = 'textBeforeEdge'
+}
+
+/** Plain view of a `DropShadow`. */
+export interface DropShadow {
+  input: InputPlain | InputReference
+  dx: number
+  dy: number
+  stdDevX: number
+  stdDevY: number
+  color: Color
+  opacity: number
 }
 
 /** An edges processing mode. */
@@ -744,6 +863,12 @@ export interface Fill {
 export declare const enum FillRule {
   NonZero = 'nonZero',
   EvenOdd = 'evenOdd'
+}
+
+/** Plain view of a `Flood`. */
+export interface Flood {
+  color: Color
+  opacity: number
 }
 
 /**
@@ -783,6 +908,13 @@ export interface FontVariation {
   value: number
 }
 
+/** Plain view of a `GaussianBlur`. */
+export interface GaussianBlur {
+  input: InputPlain | InputReference
+  stdDevX: number
+  stdDevY: number
+}
+
 /**
  * An image rendering method.
  *
@@ -797,10 +929,162 @@ export declare const enum ImageRendering {
   Pixelated = 'pixelated'
 }
 
+/** The payload-free variants of `Input`. */
+export interface InputPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'sourceGraphic' | 'sourceAlpha'
+}
+
+/** `Input::Reference`. */
+export interface InputReference {
+  /** Discriminant. Narrow on this. */
+  type: 'reference'
+  value: string
+}
+
+/** `Kind::Blend`. */
+export interface KindBlend {
+  /** Discriminant. Narrow on this. */
+  type: 'blend'
+  value: Blend
+}
+
+/** `Kind::ColorMatrix`. */
+export interface KindColorMatrix {
+  /** Discriminant. Narrow on this. */
+  type: 'colorMatrix'
+  value: ColorMatrix
+}
+
+/** `Kind::ComponentTransfer`. */
+export interface KindComponentTransfer {
+  /** Discriminant. Narrow on this. */
+  type: 'componentTransfer'
+  value: ComponentTransfer
+}
+
+/** `Kind::Composite`. */
+export interface KindComposite {
+  /** Discriminant. Narrow on this. */
+  type: 'composite'
+  value: Composite
+}
+
+/** `Kind::ConvolveMatrix`. */
+export interface KindConvolveMatrix {
+  /** Discriminant. Narrow on this. */
+  type: 'convolveMatrix'
+  value: ConvolveMatrix
+}
+
+/** `Kind::DiffuseLighting`. */
+export interface KindDiffuseLighting {
+  /** Discriminant. Narrow on this. */
+  type: 'diffuseLighting'
+  value: DiffuseLighting
+}
+
+/** `Kind::DisplacementMap`. */
+export interface KindDisplacementMap {
+  /** Discriminant. Narrow on this. */
+  type: 'displacementMap'
+  value: DisplacementMap
+}
+
+/** `Kind::DropShadow`. */
+export interface KindDropShadow {
+  /** Discriminant. Narrow on this. */
+  type: 'dropShadow'
+  value: DropShadow
+}
+
+/** `Kind::Flood`. */
+export interface KindFlood {
+  /** Discriminant. Narrow on this. */
+  type: 'flood'
+  value: Flood
+}
+
+/** `Kind::GaussianBlur`. */
+export interface KindGaussianBlur {
+  /** Discriminant. Narrow on this. */
+  type: 'gaussianBlur'
+  value: GaussianBlur
+}
+
+/** `Kind::Image`. */
+export interface KindImage {
+  /** Discriminant. Narrow on this. */
+  type: 'image'
+}
+
+/** `Kind::Merge`. */
+export interface KindMerge {
+  /** Discriminant. Narrow on this. */
+  type: 'merge'
+  value: Merge
+}
+
+/** `Kind::Morphology`. */
+export interface KindMorphology {
+  /** Discriminant. Narrow on this. */
+  type: 'morphology'
+  value: Morphology
+}
+
+/** `Kind::Offset`. */
+export interface KindOffset {
+  /** Discriminant. Narrow on this. */
+  type: 'offset'
+  value: Offset
+}
+
+/** `Kind::SpecularLighting`. */
+export interface KindSpecularLighting {
+  /** Discriminant. Narrow on this. */
+  type: 'specularLighting'
+  value: SpecularLighting
+}
+
+/** `Kind::Tile`. */
+export interface KindTile {
+  /** Discriminant. Narrow on this. */
+  type: 'tile'
+  value: Tile
+}
+
+/** `Kind::Turbulence`. */
+export interface KindTurbulence {
+  /** Discriminant. Narrow on this. */
+  type: 'turbulence'
+  value: Turbulence
+}
+
 /** A length adjust property. */
 export declare const enum LengthAdjust {
   Spacing = 'spacing',
   SpacingAndGlyphs = 'spacingAndGlyphs'
+}
+
+/** `LightSource::DistantLight`. */
+export interface LightSourceDistantLight {
+  /** Discriminant. Narrow on this. */
+  type: 'distantLight'
+  value: DistantLight
+}
+
+/** `LightSource::PointLight`. */
+export interface LightSourcePointLight {
+  /** Discriminant. Narrow on this. */
+  type: 'pointLight'
+  value: PointLight
+}
+
+/** `LightSource::SpotLight`. */
+export interface LightSourceSpotLight {
+  /** Discriminant. Narrow on this. */
+  type: 'spotLight'
+  value: SpotLight
 }
 
 /**
@@ -842,6 +1126,19 @@ export interface Matrix {
   ty: number
 }
 
+/** Plain view of a `Merge`. */
+export interface Merge {
+  inputs: Array<InputPlain | InputReference>
+}
+
+/** Plain view of a `Morphology`. */
+export interface Morphology {
+  input: InputPlain | InputReference
+  operator: MorphologyOperator
+  radiusX: number
+  radiusY: number
+}
+
 /** A morphology operation. */
 export declare const enum MorphologyOperator {
   Erode = 'erode',
@@ -856,6 +1153,13 @@ export declare const enum NodeKind {
   Text = 'text'
 }
 
+/** Plain view of a `Offset`. */
+export interface Offset {
+  input: InputPlain | InputReference
+  dx: number
+  dy: number
+}
+
 /** `Paint::Color`. */
 export interface PaintColor {
   /** Discriminant. Narrow on this. */
@@ -863,7 +1167,7 @@ export interface PaintColor {
   value: Color
 }
 
-/** Id of the `LinearGradient` this refers to. */
+/** `Paint::LinearGradient`. */
 export interface PaintLinearGradient {
   /** Discriminant. Narrow on this. */
   type: 'linearGradient'
@@ -883,14 +1187,14 @@ export declare const enum PaintOrder {
   StrokeAndFill = 'strokeAndFill'
 }
 
-/** Id of the `Pattern` this refers to. */
+/** `Paint::Pattern`. */
 export interface PaintPattern {
   /** Discriminant. Narrow on this. */
   type: 'pattern'
   id: string
 }
 
-/** Id of the `RadialGradient` this refers to. */
+/** `Paint::RadialGradient`. */
 export interface PaintRadialGradient {
   /** Discriminant. Narrow on this. */
   type: 'radialGradient'
@@ -929,6 +1233,13 @@ export interface PathSegment {
   points: Array<number>
 }
 
+/** Plain view of a `PointLight`. */
+export interface PointLight {
+  x: number
+  y: number
+  z: number
+}
+
 /** Plain view of a `PositionedGlyph`. */
 export interface PositionedGlyph {
   fontSize: number
@@ -936,6 +1247,14 @@ export interface PositionedGlyph {
   outlineTransform: Matrix
   svgTransform: Matrix
   colrTransform: Matrix
+}
+
+/** Plain view of a `Primitive`. */
+export interface Primitive {
+  rect: BBox
+  colorInterpolation: ColorInterpolation
+  result: string
+  kind: KindBlend | KindColorMatrix | KindComponentTransfer | KindComposite | KindConvolveMatrix | KindDiffuseLighting | KindDisplacementMap | KindDropShadow | KindFlood | KindGaussianBlur | KindImage | KindMerge | KindMorphology | KindOffset | KindSpecularLighting | KindTile | KindTurbulence
 }
 
 /** Un-premultiplied RGBA8 pixels, row-major, no padding. */
@@ -1102,6 +1421,28 @@ export interface Span {
   lineThrough?: string
 }
 
+/** Plain view of a `SpecularLighting`. */
+export interface SpecularLighting {
+  input: InputPlain | InputReference
+  surfaceScale: number
+  specularConstant: number
+  specularExponent: number
+  lightingColor: Color
+  lightSource: LightSourceDistantLight | LightSourcePointLight | LightSourceSpotLight
+}
+
+/** Plain view of a `SpotLight`. */
+export interface SpotLight {
+  x: number
+  y: number
+  z: number
+  pointsAtX: number
+  pointsAtY: number
+  pointsAtZ: number
+  specularExponent: number
+  limitingConeAngle?: number
+}
+
 /**
  * A spread method.
  *
@@ -1142,7 +1483,7 @@ export declare const enum TextAnchor {
   End = 'end'
 }
 
-/** Id of the `TextPath` this refers to. */
+/** `TextFlow::Path`. */
 export interface TextFlowPath {
   /** Discriminant. Narrow on this. */
   type: 'path'
@@ -1164,6 +1505,58 @@ export declare const enum TextRendering {
   OptimizeSpeed = 'optimizeSpeed',
   OptimizeLegibility = 'optimizeLegibility',
   GeometricPrecision = 'geometricPrecision'
+}
+
+/** Plain view of a `Tile`. */
+export interface Tile {
+  input: InputPlain | InputReference
+}
+
+/** `TransferFunction::Discrete`. */
+export interface TransferFunctionDiscrete {
+  /** Discriminant. Narrow on this. */
+  type: 'discrete'
+  value: Array<number>
+}
+
+/** `TransferFunction::Gamma`. */
+export interface TransferFunctionGamma {
+  /** Discriminant. Narrow on this. */
+  type: 'gamma'
+  amplitude: number
+  exponent: number
+  offset: number
+}
+
+/** `TransferFunction::Linear`. */
+export interface TransferFunctionLinear {
+  /** Discriminant. Narrow on this. */
+  type: 'linear'
+  slope: number
+  intercept: number
+}
+
+/** The payload-free variants of `TransferFunction`. */
+export interface TransferFunctionPlain {
+  /** Discriminant. Narrow on this. */
+  type: 'identity'
+}
+
+/** `TransferFunction::Table`. */
+export interface TransferFunctionTable {
+  /** Discriminant. Narrow on this. */
+  type: 'table'
+  value: Array<number>
+}
+
+/** Plain view of a `Turbulence`. */
+export interface Turbulence {
+  baseFrequencyX: number
+  baseFrequencyY: number
+  numOctaves: number
+  seed: number
+  stitchTiles: boolean
+  kind: TurbulenceKind
 }
 
 /** A turbulence kind for the `feTurbulence` filter. */

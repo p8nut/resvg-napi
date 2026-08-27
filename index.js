@@ -708,7 +708,6 @@ module.exports.FontFace = nativeBinding.FontFace
 module.exports.LinearGradient = nativeBinding.LinearGradient
 module.exports.Mask = nativeBinding.Mask
 module.exports.Pattern = nativeBinding.Pattern
-module.exports.Primitive = nativeBinding.Primitive
 module.exports.RadialGradient = nativeBinding.RadialGradient
 module.exports.Resvg = nativeBinding.Resvg
 module.exports.SvgNode = nativeBinding.SvgNode

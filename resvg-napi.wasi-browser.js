@@ -609,7 +609,6 @@ export const FontFace = __napiModule.exports.FontFace
 export const LinearGradient = __napiModule.exports.LinearGradient
 export const Mask = __napiModule.exports.Mask
 export const Pattern = __napiModule.exports.Pattern
-export const Primitive = __napiModule.exports.Primitive
 export const RadialGradient = __napiModule.exports.RadialGradient
 export const Resvg = __napiModule.exports.Resvg
 export const SvgNode = __napiModule.exports.SvgNode

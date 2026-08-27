@@ -22,6 +22,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: resvg-bump
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: never
   CARGO_INCREMENTAL: '0'

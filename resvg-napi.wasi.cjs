@@ -128,14 +128,14 @@ const __wasmDebugFilePath = __nodePath.join(__dirname, 'resvg-napi.wasm32-wasi.d
 if (__nodeFs.existsSync(__wasmDebugFilePath)) {
   __wasmFilePath = __wasmDebugFilePath
 } else if (!__nodeFs.existsSync(__wasmFilePath)) {
-  const __wasiPackageEntry = require.resolve('resvg-napi-wasm32-wasi')
+  const __wasiPackageEntry = require.resolve('@p8nut/resvg-napi-wasm32-wasi')
   const __packagedWasmFilePath = __nodePath.join(
     __nodePath.dirname(__wasiPackageEntry),
     'resvg-napi.wasm32-wasi.wasm',
   )
   if (!__nodeFs.existsSync(__packagedWasmFilePath)) {
     throw new Error(
-      'resvg-napi-wasm32-wasi is installed but is missing resvg-napi.wasm32-wasi.wasm.',
+      '@p8nut/resvg-napi-wasm32-wasi is installed but is missing resvg-napi.wasm32-wasi.wasm.',
     )
   }
   __wasmFilePath = __packagedWasmFilePath

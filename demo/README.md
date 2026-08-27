@@ -20,7 +20,9 @@ lets you supply it:
 
 - **fonts** — `pendingFonts()` gives the named families the database does not
   have; a text element with no font loaded gets its own prompt (a generic
-  `font-family` never appears as a named family).
+  `font-family` never appears as a named family). Each named family gets a
+  **fetch** button, and there is a box for one by name at any time — see
+  *Fonts without a file* below.
 - **images** — `pendingImages()` gives the hrefs neither the uploads nor the
   filesystem resolved, one file field per href, because the file/href pairing has
   to be explicit.
@@ -62,6 +64,44 @@ the database, an image is matched to a pending href by file name when it matches
 and to the first one still waiting otherwise. Uploads are kept in a page-level
 map and handed to every parse, so they survive edits and re-renders — unlike
 `resolveImage`, which only patches one instance.
+
+## Fonts without a file
+
+WASI has no system fonts, so `loadSystemFonts()` finds nothing and every glyph
+has to come from a file. Dropping one is not the only way: type a name in the
+**fetch a font** box, or press the **fetch** button on a family the document is
+missing.
+
+| you type | it gets |
+|---|---|
+| `Lobster`, `Playfair Display`, `JetBrains Mono` | that family from google/fonts |
+| `fontawesome` (or `fa`) | Font Awesome Free — solid, brands, regular |
+| `https://…/anything.ttf` | that file |
+
+The reason it does not go through the Google Fonts CSS API: that API negotiates
+on `User-Agent` and serves a browser **WOFF2**, which `ttf-parser` — under
+fontdb, under usvg — does not read. A browser cannot lie about its UA in
+`fetch`. The original TTFs live in the [google/fonts](https://github.com/google/fonts)
+repository instead, and jsDelivr serves them with
+`access-control-allow-origin: *`, which is what gets them past the COEP that the
+wasm threads force on this page. Fontsource publishes only WOFF2, so it is no
+use here either.
+
+One GitHub API call per family, because the file name is not derivable:
+`Lobster-Regular.ttf`, but `Roboto[wdth,wght].ttf` with the variable axes spelled
+into the name. The directory listing is the only thing that knows. That call is
+capped at 60 an hour per address — a miss costs three, one per licence
+directory — so it happens once per family and never per render. Upright is
+preferred over italic, then the shortest name, which lands on the variable font
+when there is one: it covers every weight the document may ask for.
+
+Font Awesome registers as `Font Awesome 6 Free` and `Font Awesome 6 Brands` (and
+answers to the version 5 names). Its glyphs sit in the private use area, so write
+them by codepoint:
+
+```svg
+<text font-family="Font Awesome 6 Free" font-size="30">&#xf005;</text>
+```
 
 ## Liquid templates
 

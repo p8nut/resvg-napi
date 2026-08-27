@@ -3370,7 +3370,7 @@ fn main() {
             .objects
             .iter()
             .filter_map(|t| {
-                let (code, dropped, _) =
+                let (code, _, _) =
                     object_struct(source_of(t), t, &vocab, &modules, &object_root[t]);
                 code.is_empty().then(|| t.clone())
             })

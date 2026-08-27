@@ -1,12 +1,21 @@
 node_modules/
 target/
+
+# cargo and napi build outputs
 *.node
 *.wasm
+
+# written by demo/render.mjs when given an explicit output path
 out.png
+
+# npm run demo: esbuild bundles, and the wasm copied next to the page
 demo/resvg.js
 demo/wasi-worker-browser.mjs
-.playwright-mcp/
 demo/liquid.js
-demo/DejaVuSans.ttf
 demo/examples/*.png
+
+# optional local font the demo picks up if it is there
+demo/DejaVuSans.ttf
+
+# npm run conformance:fetch -- upstream's corpus at the pinned tag
 conformance/resvg/

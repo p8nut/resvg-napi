@@ -34,7 +34,12 @@
     "check:package": "node scripts/check-package.mjs",
     "check:package:selftest": "node scripts/check-package.mjs --selftest",
     "report": "node scripts/codegen-report.mjs",
-    "report:selftest": "node scripts/codegen-report.mjs --selftest"
+    "report:selftest": "node scripts/codegen-report.mjs --selftest",
+    "conformance": "node scripts/conformance.mjs",
+    "conformance:selftest": "node scripts/conformance.mjs --selftest && node scripts/conformance-fetch.mjs --selftest",
+    "conformance:fetch": "node scripts/conformance-fetch.mjs",
+    "check:resvg": "node scripts/check-resvg.mjs",
+    "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {
@@ -45,6 +50,7 @@
     "emnapi": "1.11.2",
     "esbuild": "^0.25.12",
     "liquidjs": "^10.29.0",
+    "pngjs": "^7.0.0",
     "qrcode-generator": "^2.0.4",
     "typescript": "^6.0.3"
   },

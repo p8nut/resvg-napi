@@ -1,0 +1,6 @@
+# resvg conformance: files whose render differs from upstream's reference,
+# and by how many pixels. Rendered at width 300 with the corpus fonts, the
+# same settings as crates/resvg/tests/integration/main.rs.
+#
+# 0 of 1715 files differ. Regenerate: npm run conformance -- -w
+

@@ -252,7 +252,10 @@ struct Vocab {
 impl Vocab {
     /// `Opacity` -> `NormalizedF32` -> ... until it stops being an alias.
     fn resolve(&self, ty: &str) -> String {
-        let mut t = ty.to_string();
+        // `crate::FontVariation` and `FontVariation` are the same type: usvg
+        // spells some of its own members with the prefix and the rest without,
+        // and nothing downstream cares which.
+        let mut t = ty.replace("crate::", "");
         for _ in 0..8 {
             match self.aliases.get(&t) {
                 Some(next) if *next != t => t = next.clone(),
@@ -899,6 +902,11 @@ fn data_members(
     files: &[syn::File],
     ty: &str,
     vocab: &Vocab,
+    // Whether a member may itself be a read-only class. A getter can hand one
+    // back; an `#[napi(object)]` field cannot, because napi needs Clone and
+    // FromNapiValue of a field and a class has neither. So the same member is
+    // mappable for `value_class` and not for `object_struct`.
+    nested_values: bool,
 ) -> (Vec<Member>, Vec<String>, BTreeSet<String>) {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
@@ -908,7 +916,10 @@ fn data_members(
     // tiny-skia value to draw with. Counting it as an unmapped member would
     // demote Stroke to a read-only class, and any object holding one -- `Path`
     // -- would then carry a field napi cannot round-trip.
-    const NOT_DATA: [&str; 1] = ["to_tiny_skia"];
+    // `Text::flattened` re-enters the node tree as a group of paths -- a handle
+    // question, and following it would drag Group, and through Group every
+    // definition type, into the data registry.
+    const NOT_DATA: [&str; 2] = ["to_tiny_skia", "flattened"];
 
     let mut push = |name: &str, ty_s: &str, access: TokenStream| {
         if NOT_DATA.contains(&name) {
@@ -929,6 +940,29 @@ fn data_members(
                 quote!(Vec<f64>),
                 quote!(#access.iter().map(|v| *v as f64).collect()),
             ),
+            // A value class owns its upstream value, so a nested one is cloned
+            // into its `wrap`.
+            Some(Js::Value(t)) if nested_values => {
+                let c = value_class_ident(&t);
+                reached.insert(t.clone());
+                (quote!(#c), quote!(#c::wrap(#access.clone())))
+            }
+            Some(Js::ValueList(t)) if nested_values => {
+                let c = value_class_ident(&t);
+                reached.insert(t.clone());
+                (
+                    quote!(Vec<#c>),
+                    quote!(#access.iter().cloned().map(#c::wrap).collect()),
+                )
+            }
+            Some(Js::OptValue(t)) if nested_values => {
+                let c = value_class_ident(&t);
+                reached.insert(t.clone());
+                (
+                    quote!(Option<#c>),
+                    quote!(#access.map(|x| #c::wrap(x.clone()))),
+                )
+            }
             Some(Js::Tag4) => (
                 quote!(String),
                 quote!(String::from_utf8_lossy(&#access).into_owned()),
@@ -1065,7 +1099,7 @@ fn object_struct(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
-    let (members, skipped, reached) = data_members(files, ty, vocab);
+    let (members, skipped, reached) = data_members(files, ty, vocab, false);
     if members.is_empty() || !skipped.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
@@ -1108,7 +1142,7 @@ fn value_class(
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
-    let (members, skipped, reached) = data_members(files, ty, vocab);
+    let (members, skipped, reached) = data_members(files, ty, vocab, true);
     if members.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
@@ -1794,6 +1828,54 @@ fn template_fns(code: &TokenStream) -> BTreeMap<String, Vec<String>> {
         for it in &imp.items {
             if let ImplItem::Fn(f) = it {
                 names.push(f.sig.ident.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Types the template hands out, peeled of the wrappers they arrive in.
+///
+/// `SvgNode::text` returning `Option<Text>` is the only statement anywhere that
+/// `Text` should be mapped: the passes never see it, because a node payload is
+/// not a collection and only collection elements become candidates. Read off
+/// the template for the same reason `template_fns` is -- so that adding an
+/// accessor is the whole change, with no list to update beside it.
+fn template_returns(code: &TokenStream) -> BTreeSet<String> {
+    let file: syn::File =
+        syn::parse2(code.clone()).expect("the emitter template is not valid Rust on its own");
+    let mut out = BTreeSet::new();
+    for item in &file.items {
+        let Item::Impl(imp) = item else { continue };
+        if imp.trait_.is_some() {
+            continue; // trait impls are plumbing, not API
+        }
+        for it in &imp.items {
+            if let ImplItem::Fn(f) = it {
+                // Private helpers are not API: `SvgNode::node` returning
+                // `&usvg::Node` must not make Node a data candidate.
+                if !is_pub(&f.vis) {
+                    continue;
+                }
+                let ReturnType::Type(_, t) = &f.sig.output else {
+                    continue;
+                };
+                let mut name = ty_str(t);
+                // Result<Option<Text>> -> Text, in any nesting order.
+                loop {
+                    let before = name.clone();
+                    name = name.trim_start_matches('&').to_string();
+                    for w in ["Result<", "Option<", "Vec<"] {
+                        if let Some(inner) = name.strip_prefix(w).and_then(|r| r.strip_suffix('>'))
+                        {
+                            name = inner.to_string();
+                        }
+                    }
+                    if name == before {
+                        break;
+                    }
+                }
+                out.insert(name);
             }
         }
     }
@@ -2522,6 +2604,19 @@ fn template(
                 })
             }
 
+            #[doc = " The laid-out content of a text node: chunks, spans, resolved"]
+            #[doc = " fonts. Null for anything that is not text."]
+            #[doc = ""]
+            #[doc = " Its presence is what makes the text types map at all -- a node"]
+            #[doc = " payload is not a collection, so nothing else nominates them."]
+            #[napi]
+            pub fn text(&self) -> Result<Option<Text>> {
+                Ok(match self.node()? {
+                    usvg::Node::Text(t) => Some(Text::wrap((**t).clone())),
+                    _ => None,
+                })
+            }
+
             #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
             #[doc = " Null for a group, an image or a text node."]
             #[doc = ""]
@@ -3142,6 +3237,10 @@ fn main() {
     // Object candidates: a *collection* of values wants a value type, whereas a
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
     // make Stop/FaceInfo objects, while `&Group` stays a handle question.
+    // Everything asked of the template is written in its own body, so the
+    // fragments can be blank. Reused by the pruner further down.
+    let nothing = TokenStream::new();
+    let probe = template(&Fragments::probe(), &nothing, &nothing, &nothing, &nothing);
     let object_seeds: BTreeSet<String> = referenced
         .iter()
         .filter_map(|t| {
@@ -3154,6 +3253,22 @@ fn main() {
             }
             None
         })
+        // Plus whatever the template hands out itself.
+        .chain(template_returns(&probe).into_iter().filter(|t| {
+            // A real upstream struct, and not one already claimed as a handle:
+            // `clipPath()` returns the *wrapper class* ClipPath, which shares
+            // its name with usvg::ClipPath. Seeding it would emit `wrap` twice.
+            let arc_held = referenced.iter().any(|r| {
+                r.trim_start_matches('&')
+                    .trim_start_matches('[')
+                    .strip_prefix("Arc<")
+                    .and_then(|i| i.split('>').next())
+                    == Some(t.as_str())
+            });
+            !arc_held
+                && (struct_fields_opt(&usvg_files, t).is_some()
+                    || struct_fields_opt(&fontdb_files, t).is_some())
+        }))
         .collect();
 
     let mut vocab = Vocab::default();
@@ -3202,7 +3317,7 @@ fn main() {
         };
         vocab.objects.insert(t.clone());
         object_root.insert(t.clone(), root.clone());
-        let (members, dropped, reached) = data_members(source, &t, &vocab);
+        let (members, dropped, reached) = data_members(source, &t, &vocab, true);
         if members.is_empty() {
             vocab.objects.remove(&t);
             object_root.remove(&t);
@@ -3250,26 +3365,24 @@ fn main() {
             &fontdb_files
         }
     };
-    let mut dropped_members: BTreeMap<String, Vec<String>> = BTreeMap::new();
     loop {
-        let demote: Vec<(String, Vec<String>)> = vocab
+        let demote: Vec<String> = vocab
             .objects
             .iter()
             .filter_map(|t| {
                 let (code, dropped, _) =
                     object_struct(source_of(t), t, &vocab, &modules, &object_root[t]);
-                code.is_empty().then(|| (t.clone(), dropped))
+                code.is_empty().then(|| t.clone())
             })
             .collect();
         if demote.is_empty() {
             break;
         }
-        for (t, dropped) in demote {
+        for t in demote {
             vocab.objects.remove(&t);
             let (vcode, _, _) = value_class(source_of(&t), &t, &vocab, &modules, &object_root[&t]);
             if !vcode.is_empty() {
-                vocab.values.insert(t.clone());
-                dropped_members.insert(t, dropped);
+                vocab.values.insert(t);
             }
         }
     }
@@ -3292,13 +3405,16 @@ fn main() {
         object_parts.insert(t.clone(), code);
     }
     for t in &vocab.values {
-        let (vcode, _, _) = value_class(source_of(t), t, &vocab, &modules, &object_root[t]);
+        // The dropped list is the *class's* own: a getter maps members an
+        // object field cannot, so reporting the object probe's list here would
+        // name members that are in fact exposed.
+        let (vcode, dropped, _) = value_class(source_of(t), t, &vocab, &modules, &object_root[t]);
         object_parts.insert(t.clone(), vcode);
         report!(
             "{t}: partial mapping, emitted as read-only class {}",
             value_class_ident(t)
         );
-        for d in dropped_members.get(t).into_iter().flatten() {
+        for d in dropped {
             report!("{t} member not exposed: {d}");
         }
     }
@@ -3446,8 +3562,6 @@ fn main() {
     };
     // The template hands out types as well -- `SvgNode::path` returns `Path` --
     // and none of that is visible from the passes. Probe it once, empty.
-    let nothing = TokenStream::new();
-    let probe = template(&Fragments::probe(), &nothing, &nothing, &nothing, &nothing);
     let mut kept: BTreeSet<String> = BTreeSet::new();
     let all_data: BTreeSet<String> = vocab.objects.union(&vocab.values).cloned().collect();
     for name in all_data.clone() {

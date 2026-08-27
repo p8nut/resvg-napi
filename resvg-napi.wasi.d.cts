@@ -494,6 +494,14 @@ export declare class SvgNode {
   /** `group`, `path`, `image` or `text`. */
   get kind(): NodeKind
   /**
+   * The laid-out content of a text node: chunks, spans, resolved
+   * fonts. Null for anything that is not text.
+   *
+   * Its presence is what makes the text types map at all -- a node
+   * payload is not a collection, so nothing else nominates them.
+   */
+  text(): Text | null
+  /**
    * The shape of a path node: geometry, fill, stroke, paint order.
    * Null for a group, an image or a text node.
    *
@@ -554,6 +562,53 @@ export declare class SvgNode {
   /** `renderPng` on a worker thread: the work leaves the event loop, and a
   queued call is dropped when the signal fires. */
   renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
+}
+
+/** Read-only view of a `Text`. */
+export declare class Text {
+  get id(): string
+  get renderingMode(): TextRendering
+  get dx(): Array<number>
+  get dy(): Array<number>
+  get rotate(): Array<number>
+  get writingMode(): WritingMode
+  get chunks(): Array<TextChunk>
+  get absTransform(): Matrix
+  get boundingBox(): BBox
+  get absBoundingBox(): BBox
+  get strokeBoundingBox(): BBox
+  get absStrokeBoundingBox(): BBox
+  get layouted(): Array<Span>
+}
+
+/** Read-only view of a `TextChunk`. */
+export declare class TextChunk {
+  get x(): number | null
+  get y(): number | null
+  get anchor(): TextAnchor
+  get spans(): Array<TextSpan>
+  get text(): string
+}
+
+/** Read-only view of a `TextSpan`. */
+export declare class TextSpan {
+  get start(): number
+  get end(): number
+  get fill(): Fill | null
+  get stroke(): Stroke | null
+  get paintOrder(): PaintOrder
+  get font(): Font
+  get fontSize(): number
+  get smallCaps(): boolean
+  get applyKerning(): boolean
+  get fontOpticalSizing(): FontOpticalSizing
+  get dominantBaseline(): DominantBaseline
+  get alignmentBaseline(): AlignmentBaseline
+  get isVisible(): boolean
+  get letterSpacing(): number
+  get wordSpacing(): number
+  get textLength(): number | null
+  get lengthAdjust(): LengthAdjust
 }
 
 /** An alignment baseline property. */
@@ -852,6 +907,15 @@ export interface PathSegment {
   points: Array<number>
 }
 
+/** Plain view of a `PositionedGlyph`. */
+export interface PositionedGlyph {
+  fontSize: number
+  transform: Matrix
+  outlineTransform: Matrix
+  svgTransform: Matrix
+  colrTransform: Matrix
+}
+
 /** Un-premultiplied RGBA8 pixels, row-major, no padding. */
 export interface RawImage {
   width: number
@@ -999,6 +1063,21 @@ export declare const enum ShapeRendering {
   OptimizeSpeed = 'optimizeSpeed',
   CrispEdges = 'crispEdges',
   GeometricPrecision = 'geometricPrecision'
+}
+
+/** Plain view of a `Span`. */
+export interface Span {
+  fill?: Fill
+  stroke?: Stroke
+  paintOrder: PaintOrder
+  fontSize: number
+  variations: Array<FontVariation>
+  fontOpticalSizing: FontOpticalSizing
+  visible: boolean
+  positionedGlyphs: Array<PositionedGlyph>
+  underline?: string
+  overline?: string
+  lineThrough?: string
 }
 
 /**

@@ -32,7 +32,9 @@
     "check:pins": "node scripts/check-pins.mjs",
     "check:pins:selftest": "node scripts/check-pins.mjs --selftest",
     "check:package": "node scripts/check-package.mjs",
-    "check:package:selftest": "node scripts/check-package.mjs --selftest"
+    "check:package:selftest": "node scripts/check-package.mjs --selftest",
+    "report": "node scripts/codegen-report.mjs",
+    "report:selftest": "node scripts/codegen-report.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {

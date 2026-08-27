@@ -1,0 +1,83 @@
+FaceInfo member not exposed: families: Vec<(String,Language)>
+FaceInfo member not exposed: id: ID
+FaceInfo member not exposed: source: Source
+FaceInfo member not exposed: stretch: Stretch
+FaceInfo member not exposed: style: Style
+FaceInfo: partial mapping, emitted as read-only class FontFace
+Font member not exposed: families: &[FontFamily]
+Font: partial mapping, emitted as read-only class Font
+Primitive member not exposed: kind: &Kind
+Primitive: partial mapping, emitted as read-only class Primitive
+Text: partial mapping, emitted as read-only class Text
+TextChunk: partial mapping, emitted as read-only class TextChunk
+TextSpan member not exposed: decoration: &TextDecoration
+TextSpan: partial mapping, emitted as read-only class TextSpan
+async twin generated: Resvg::node_png_bytes -> render_node_png_async (Promise<Buffer>)
+async twin generated: Resvg::png_bytes -> render_png_async (Promise<Buffer>)
+async twin generated: Resvg::raw_pixels -> render_raw_async (Promise<RawImage>)
+async twin generated: Resvg::svg_text -> to_string_async (Promise<String>)
+async twin generated: SvgNode::png_bytes -> render_png_async (Promise<Buffer>)
+data type ID skipped: nothing mappable on it
+data type SvgNode skipped: nothing mappable on it
+data type TextDecoration skipped: nothing mappable on it
+data types emitted: Color, FaceInfo, Fill, Font, FontVariation, Path, PositionedGlyph, Primitive, Span, Stop, Stroke, Text, TextChunk, TextSpan
+fontdb::Database method covered by the template as `face_data`: with_face_data (arg: P)
+fontdb::Database method covered by the template, not generated: new (no receiver)
+fontdb::Database method covered by the template, not generated: query (arg: &Query)
+fontdb::Database method not exposed: face_source (returns Option<(Source,u32)>)
+fontdb::Database method not exposed: family_name (arg: &'aFamily)
+fontdb::Database method not exposed: load_font_source (arg: Source)
+fontdb::Database method not exposed: make_shared_face_data (returns Option<(std::sync::Arc<dynAsRef<[u8]>+Send+Sync>,u32)>)
+fontdb::Database method not exposed: push_face_info (arg: FaceInfo)
+object (String,Language) skipped: not a public struct
+object Arc<ClipPath> skipped: not a public struct
+object Arc<LinearGradient> skipped: not a public struct
+object Arc<Mask> skipped: not a public struct
+object Arc<Pattern> skipped: not a public struct
+object Arc<RadialGradient> skipped: not a public struct
+object Arc<filter::Filter> skipped: not a public struct
+object BaselineShift skipped: not a public struct
+object FontFamily skipped: not a public struct
+object Input skipped: not a public struct
+object Kind skipped: not a public struct
+object Node skipped: not a public struct
+object Paint skipped: not a public struct
+object Source skipped: not a public struct
+object Stretch skipped: not a public struct
+object Style skipped: not a public struct
+object [FontFamily] skipped: not a public struct
+object [TextChunk] skipped: not a public struct
+object [TextSpan] skipped: not a public struct
+object f32 skipped: not a public struct
+payload enum Error not mapped: ParsingFailed carries roxmltree::Error, which does not map to a field
+payload enum Family not mapped: Name carries &'astr, which does not map to a field
+payload enum ImageKind not mapped: JPEG carries Arc<Vec<u8>>, and Vec<u8> has no id() to name it by
+payload enum Kind not mapped: Blend carries Blend, which does not map to a field
+payload enum LightSource not mapped: DistantLight carries DistantLight, which does not map to a field
+payload enum Node not mapped: Group carries Box<Group>, which does not map to a field
+payload enums emitted as unions: BaselineShift, Paint, TextFlow
+payload enums found: BaselineShift(4), ColorMatrixKind(4), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), Weight(10)
+usvg precision clamp derived from POW_VEC: 12
+usvg sources: usvg-0.48.1
+usvg::ClipPath method covered by the content view: root (returns &Group)
+usvg::ClipPath method not exposed: clip_path (returns Option<&ClipPath>)
+usvg::Group method covered by the template, not generated: children (returns &[Node])
+usvg::Group method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
+usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)
+usvg::Mask method covered by the content view: root (returns &Group)
+usvg::Mask method not exposed: mask (returns Option<&Mask>)
+usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
+usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
+usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)
+usvg::Pattern method covered by the content view: root (returns &Group)
+usvg::Tree method covered by the template as `children`: root (returns &Group)
+usvg::Tree method covered by the template as `new`: from_data (no receiver)
+usvg::Tree method covered by the template as `new`: from_data_nested (no receiver)
+usvg::Tree method covered by the template as `new`: from_str (no receiver)
+usvg::Tree method covered by the template as `new`: from_xmltree (no receiver)
+usvg::Tree method covered by the template as `node`: node_by_id (returns Option<&Node>)
+usvg::Tree method covered by the template as `to_svg_string`: to_string (arg: &WriteOptions)
+usvg::WriteOptions field not exposed: attributes_indent: Indent (dropped)
+usvg::WriteOptions field not exposed: indent: Indent (dropped)
+vocabulary derived: 8 f32 newtypes, 7 type aliases
+wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database

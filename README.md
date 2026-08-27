@@ -77,13 +77,16 @@ and [CONTRIBUTING.md](CONTRIBUTING.md) explains what the reasons mean.
 
 ## Platforms
 
-| | x64 | arm64 |
-|---|---|---|
-| Linux (glibc) | ✅ | ✅ |
-| Linux (musl) | ✅ | ✅ |
-| macOS | ✅ | ✅ |
-| Windows (MSVC) | ✅ | ✅ |
-| WASI (`wasm32-wasip1-threads`) | ✅ | — |
+Thirteen targets.
+
+| | x64 | arm64 | armv7 | ia32 |
+|---|---|---|---|---|
+| Linux (glibc) | ✅ | ✅ | ✅ | — |
+| Linux (musl) | ✅ | ✅ | — | — |
+| macOS | ✅ | ✅ | — | — |
+| Windows (MSVC) | ✅ | ✅ | — | ✅ |
+| Android | — | ✅ | ✅ | — |
+| WASI (`wasm32-wasip1-threads`) | ✅ | — | — | — |
 
 The dependency tree is pure Rust — `fontconfig` support comes from
 `fontconfig-parser`, not the C library — so every target cross-compiles without
@@ -96,8 +99,18 @@ work. One difference: `loadSystemFonts()` finds 0 faces inside the sandbox, so
 fonts must be supplied with `loadFontData(buffer)` — the demo fetches them from
 google/fonts by name rather than making you find a file.
 
-Adding a target is one line in `package.json` under `napi.targets`, plus a row in
-the CI matrix; then `npm run create-npm-dirs`.
+Adding a target is an entry in `scripts/ci-targets.mjs` — which host builds it
+and which cross-compilation flag it needs — and the triple in `package.json`
+under `napi.targets`; then `npm run create-npm-dirs`. The two lists used to be
+independent, so a target could sit in one and not the other; the script now
+fails when they disagree.
+
+CI does not build all thirteen on a pull request. It builds the two that can
+tell it something — `x86_64-unknown-linux-gnu`, which the tests, the drift
+checks and the conformance suite run on, and `wasm32-wasip1-threads`, whose
+generated shims and test run are a different code path. The other eleven build
+on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
+`full-matrix` when the proof is wanted before merging rather than after.
 
 
 ## Fitting text to a width

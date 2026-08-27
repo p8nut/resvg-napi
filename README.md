@@ -93,7 +93,8 @@ The WASI build is the same generated bindings on emnapi instead of node-api, and
 it is complete: rendering, `toString`, bounding boxes, the node walk, `renderAsync`
 (threads via `wasm32-wasip1-threads`) and even filesystem image resolution all
 work. One difference: `loadSystemFonts()` finds 0 faces inside the sandbox, so
-fonts must be supplied with `loadFontData(buffer)`.
+fonts must be supplied with `loadFontData(buffer)` — the demo fetches them from
+google/fonts by name rather than making you find a file.
 
 Adding a target is one line in `package.json` under `napi.targets`, plus a row in
 the CI matrix; then `npm run create-npm-dirs`.

@@ -226,21 +226,352 @@ enum Js {
     IntNewtype(String),
     // `&[f32]` / `Vec<f32>`, e.g. a dash pattern.
     F32List,
+    // `u16`, widened to u32 on the JS side: a font weight, an axis count.
+    U16,
     // `[u8; 4]`: an OpenType axis tag, four ASCII bytes -- `b"wght"`. A string
     // on the JS side, which is how every font tool spells it.
     Tag4,
     // `tiny_skia_path::Path`: outside usvg, and a verb/point stream rather than
     // a struct, so the template flattens it into segments.
     PathData,
-    // `usvg::Paint`: an enum carrying a payload, so it has no derivable shape.
-    // The template splits it into a discriminated union; `paint_js` converts.
-    Paint,
+    // An upstream enum carrying payloads, emitted as a discriminated union.
+    PayloadEnum(String),
+    PayloadEnumList(String),
+}
+
+/// One upstream enum whose variants carry payloads. usvg has sixteen; a rule
+/// cannot invent their JS shape, but it can apply one convention to all of
+/// them, which is what this describes: a discriminated union, tagged `type`,
+/// one struct per payload variant plus one shared struct for the unit ones.
+///
+/// Everything here is syntactic, so it is known before the object registry is:
+/// the payload *types* are classified later, when the structs are emitted.
+#[derive(Clone)]
+struct PayloadEnum {
+    /// Variant name and, when it carries one, its single field's type.
+    variants: Vec<(String, Option<String>)>,
+}
+
+impl PayloadEnum {
+    /// `Kind` -> `KindBlend`, the struct for one payload variant.
+    fn variant_ident(&self, enum_name: &str, variant: &str) -> proc_macro2::Ident {
+        format_ident!("{enum_name}{variant}")
+    }
+
+    /// The struct the unit variants share, or None when there are none.
+    fn unit_ident(&self, enum_name: &str) -> Option<proc_macro2::Ident> {
+        self.variants
+            .iter()
+            .any(|(_, p)| p.is_none())
+            .then(|| format_ident!("{enum_name}Plain"))
+    }
+}
+
+impl PayloadEnum {
+    /// The structs of the union, in declaration order, unit ones first.
+    fn parts(&self, name: &str) -> Vec<proc_macro2::Ident> {
+        let mut v: Vec<_> = self.unit_ident(name).into_iter().collect();
+        v.extend(
+            self.variants
+                .iter()
+                .filter(|(_, p)| p.is_some())
+                .map(|(n, _)| self.variant_ident(name, n)),
+        );
+        v
+    }
+
+    /// `Either<A, B>` / `Either17<..>`, or the bare struct when there is one.
+    fn either_ty(&self, name: &str) -> TokenStream {
+        let parts = self.parts(name);
+        match parts.len() {
+            1 => quote!(#(#parts)*),
+            2 => quote!(Either<#(#parts),*>),
+            n => {
+                let e = format_ident!("Either{n}");
+                quote!(#e<#(#parts),*>)
+            }
+        }
+    }
+
+    /// `Either::A` / `Either17::C`, for the nth arm.
+    fn either_arm(&self, name: &str, i: usize) -> TokenStream {
+        let letter = format_ident!("{}", ((b'A' + i as u8) as char).to_string());
+        let n = self.parts(name).len();
+        let e = if n == 2 {
+            format_ident!("Either")
+        } else {
+            format_ident!("Either{n}")
+        };
+        if n == 1 {
+            quote!()
+        } else {
+            quote!(#e::#letter)
+        }
+    }
+
+    /// Whether every payload maps to something an object field can hold. The
+    /// generator's match is the authority on *how*; this answers *whether*, so
+    /// a union that cannot be built whole is never classified in the first
+    /// place and its member is reported unexposed instead.
+    fn payload_maps(&self, vocab: &Vocab) -> bool {
+        self.payload_blocker(vocab).is_none()
+    }
+
+    /// The first payload that stops the union being built, and why. Reported
+    /// rather than silently dropped: a usvg upgrade adding a mappable payload
+    /// should show up as a union appearing, not as a mystery.
+    fn payload_blocker(&self, vocab: &Vocab) -> Option<String> {
+        self.variants
+            .iter()
+            .filter_map(|(n, p)| p.as_ref().map(|p| (n, p)))
+            .find_map(|(n, p)| {
+                if let Some(Js::Handle(t)) = vocab.classify(p) {
+                    return (!vocab.with_id.contains(&t))
+                        .then(|| format!("{n} carries {p}, and {t} has no id() to name it by"));
+                }
+                let ok = !vocab.payload.contains_key(&vocab.resolve(p))
+                    && matches!(
+                        vocab.classify(p),
+                        Some(
+                            Js::Str
+                                | Js::F32
+                                | Js::F64
+                                | Js::U32
+                                | Js::U8
+                                | Js::U16
+                                | Js::F32List
+                                | Js::Scalar
+                                | Js::Bool
+                                | Js::Enum
+                                | Js::Object(_)
+                                | Js::Value(_)
+                        )
+                    );
+                (!ok).then(|| format!("{n} carries {p}, which does not map to a field"))
+            })
+    }
+
+    fn conv_ident(&self, name: &str) -> proc_macro2::Ident {
+        let mut snake = String::new();
+        for (i, c) in name.chars().enumerate() {
+            if c.is_uppercase() && i > 0 {
+                snake.push('_');
+            }
+            snake.extend(c.to_lowercase());
+        }
+        format_ident!("{snake}_to_js")
+    }
+}
+
+/// Types with an `id(&self) -> &str`, directly or through a Deref the sources
+/// declare. An `Arc<T>` payload cannot be an object field, but if T has an id
+/// it can be named by one -- the way the document itself refers to a paint
+/// server with `url(#id)`.
+fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
+    let mut direct = BTreeSet::new();
+    let mut derefs: BTreeMap<String, String> = BTreeMap::new();
+    for item in files.iter().flat_map(|f| &f.items) {
+        let Item::Impl(imp) = item else { continue };
+        let target = ty_str(&imp.self_ty);
+        if let Some(tr) = &imp.trait_ {
+            if tr.0.segments.last().is_some_and(|seg| seg.ident == "Deref") {
+                for it in &imp.items {
+                    if let ImplItem::Type(t) = it {
+                        derefs.insert(target.clone(), ty_str(&t.ty));
+                    }
+                }
+            }
+            continue;
+        }
+        if imp.items.iter().any(|it| {
+            matches!(it, ImplItem::Fn(f)
+                if is_pub(&f.vis) && f.sig.ident == "id" && f.sig.inputs.len() == 1)
+        }) {
+            direct.insert(target);
+        }
+    }
+    // one hop is enough: LinearGradient -> BaseGradient -> id()
+    let mut out = direct.clone();
+    for (from, to) in derefs {
+        if direct.contains(&to) {
+            out.insert(from);
+        }
+    }
+    out
+}
+
+/// Payload enums, found by shape. Skips any with a variant carrying more than
+/// one field or named fields: those have no single obvious `value`, and saying
+/// so in the report beats guessing.
+fn payload_enums(files: &[syn::File]) -> BTreeMap<String, PayloadEnum> {
+    let mut out = BTreeMap::new();
+    for item in files.iter().flat_map(|f| &f.items) {
+        let Item::Enum(e) = item else { continue };
+        if !is_pub(&e.vis) {
+            continue;
+        }
+        let mut variants = Vec::new();
+        let mut usable = false;
+        for v in &e.variants {
+            match &v.fields {
+                Fields::Unit => variants.push((v.ident.to_string(), None)),
+                Fields::Unnamed(f) if f.unnamed.len() == 1 => {
+                    usable = true;
+                    let ty = ty_str(&f.unnamed[0].ty);
+                    variants.push((v.ident.to_string(), Some(ty)));
+                }
+                // more than one field, or named ones: no single `value`
+                _ => {
+                    usable = false;
+                    break;
+                }
+            }
+        }
+        if usable {
+            out.insert(e.ident.to_string(), PayloadEnum { variants });
+        }
+    }
+    out
+}
+
+/// The union for one payload enum: a struct per payload variant, one shared
+/// struct for the unit ones, and the converter that produces them.
+///
+/// Err with a reason rather than a partial union: half a discriminated union is
+/// worse than none, because the missing arm is invisible at the call site.
+fn payload_enum_code(
+    name: &str,
+    info: &PayloadEnum,
+    vocab: &Vocab,
+    modules: &BTreeMap<String, String>,
+) -> std::result::Result<TokenStream, String> {
+    let up = upstream_path(name, modules, &quote!(usvg));
+    let mut items = TokenStream::new();
+    let mut arms: Vec<TokenStream> = Vec::new();
+    let mut i = 0usize;
+
+    if let Some(unit) = info.unit_ident(name) {
+        let ts = info
+            .variants
+            .iter()
+            .filter(|(_, p)| p.is_none())
+            .map(|(n, _)| format!("'{}'", lower_camel(n)))
+            .collect::<Vec<_>>()
+            .join(" | ");
+        let doc = format!(" The payload-free variants of `{name}`.");
+        items.extend(quote! {
+            #[doc = #doc]
+            #[napi(object)]
+            #[derive(Clone)]
+            pub struct #unit {
+                #[doc = " Discriminant. Narrow on this."]
+                #[napi(ts_type = #ts)]
+                pub r#type: String,
+            }
+        });
+        let arm = info.either_arm(name, 0);
+        for (n, p) in info.variants.iter().filter(|(_, p)| p.is_none()) {
+            let _ = p;
+            let vid = format_ident!("{}", n);
+            let tag = lower_camel(n);
+            arms.push(quote!(#up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
+        }
+        i = 1;
+    }
+
+    for (n, pty) in &info.variants {
+        let Some(pty) = pty else { continue };
+        let sid = info.variant_ident(name, n);
+        let vid = format_ident!("{}", n);
+        let tag = lower_camel(n);
+        let ts = format!("'{tag}'");
+        let arm = info.either_arm(name, i);
+        i += 1;
+
+        let (fty, expr) = match vocab.classify(pty) {
+            Some(Js::Str) => (quote!(String), quote!(v.to_string())),
+            Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(*v as f64)),
+            Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(*v as u32)),
+            Some(Js::F32List) => (
+                quote!(Vec<f64>),
+                quote!(v.iter().map(|x| *x as f64).collect()),
+            ),
+            Some(Js::Scalar) => (quote!(f64), quote!(v.get() as f64)),
+            Some(Js::Bool) => (quote!(bool), quote!(*v)),
+            Some(Js::Enum) => {
+                let e = format_ident!("{}", vocab.resolve(pty));
+                (quote!(#e), quote!(#e::from(*v)))
+            }
+            Some(Js::Object(t)) => {
+                let o = format_ident!("{}", t);
+                (quote!(#o), quote!(#o::from(v)))
+            }
+            Some(Js::Value(t)) => {
+                let c = value_class_ident(&t);
+                (quote!(#c), quote!(#c::wrap(v.clone())))
+            }
+            // An Arc-held definition is shared by every element referencing it,
+            // so it is named rather than copied. `id` instead of `value`: the
+            // field says what it is.
+            Some(Js::Handle(t)) if vocab.with_id.contains(&t) => {
+                let doc = format!(" Id of the `{t}` this refers to.");
+                items.extend(quote! {
+                    #[doc = #doc]
+                    #[napi(object)]
+                    #[derive(Clone)]
+                    pub struct #sid {
+                        #[doc = " Discriminant. Narrow on this."]
+                        #[napi(ts_type = #ts)]
+                        pub r#type: String,
+                        pub id: String,
+                    }
+                });
+                arms.push(quote!(#up::#vid(v) => #arm(#sid {
+                    r#type: #tag.to_string(),
+                    id: v.id().to_string(),
+                }),));
+                continue;
+            }
+            other => {
+                return Err(format!(
+                    "{name}::{n} carries {pty}, which maps to {other:?} -- not something an object field can hold"
+                ));
+            }
+        };
+        let doc = format!(" `{name}::{n}`.");
+        items.extend(quote! {
+            #[doc = #doc]
+            #[napi(object)]
+            #[derive(Clone)]
+            pub struct #sid {
+                #[doc = " Discriminant. Narrow on this."]
+                #[napi(ts_type = #ts)]
+                pub r#type: String,
+                pub value: #fty,
+            }
+        });
+        arms.push(quote!(#up::#vid(v) => #arm(#sid { r#type: #tag.to_string(), value: #expr }),));
+    }
+
+    let conv = info.conv_ident(name);
+    let ety = info.either_ty(name);
+    items.extend(quote! {
+        fn #conv(v: &#up) -> #ety {
+            match v { #(#arms)* }
+        }
+    });
+    Ok(items)
 }
 
 /// Everything the classifier needs to know about the upstream crates, all of it
 /// derived: enums worth mirroring, `f32` newtypes, and `pub type` aliases.
 #[derive(Default)]
 struct Vocab {
+    /// Types that can be named by an id, for an `Arc<T>` payload.
+    with_id: BTreeSet<String>,
+    /// Upstream enums carrying payloads, by name. Syntactic, so populated with
+    /// the rest of the vocabulary rather than after the object registry.
+    payload: BTreeMap<String, PayloadEnum>,
     enums: BTreeSet<String>,
     scalars: BTreeSet<String>,
     aliases: BTreeMap<String, String>,
@@ -255,6 +586,13 @@ impl Vocab {
         // `crate::FontVariation` and `FontVariation` are the same type: usvg
         // spells some of its own members with the prefix and the rest without,
         // and nothing downstream cares which.
+        // `crate::FontVariation` and `FontVariation` are the same type: usvg
+        // spells some of its own members with the prefix and the rest without.
+        //
+        // Lifetimes are *not* stripped here on purpose: `ty_str` drops
+        // whitespace, so `&'a str` arrives as `&'astr` and there is no way to
+        // tell the lifetime from the type that follows it. That is why
+        // `Family::Name` is reported unmapped rather than guessed at.
         let mut t = ty.replace("crate::", "");
         for _ in 0..8 {
             match self.aliases.get(&t) {
@@ -272,6 +610,22 @@ impl Vocab {
         }
         if self.ints.contains(&t) {
             return Some(Js::IntNewtype(t));
+        }
+        // `&Paint` and `Paint` are the same enum; the registry is keyed bare.
+        let bare = t.trim_start_matches('&').to_string();
+        if let Some(p) = self.payload.get(&bare) {
+            return p.payload_maps(self).then_some(Js::PayloadEnum(bare));
+        }
+        // `&[BaselineShift]`: a list of one, which reads the same way.
+        if let Some(inner) = t
+            .trim_start_matches('&')
+            .strip_prefix('[')
+            .and_then(|r| r.strip_suffix(']'))
+            .map(|r| self.resolve(r.trim_start_matches('&')))
+        {
+            if let Some(p) = self.payload.get(&inner) {
+                return p.payload_maps(self).then_some(Js::PayloadEnumList(inner));
+            }
         }
         classify_object(&t, &self.objects).or_else(|| match classify_object(&t, &self.values) {
             Some(Js::Object(x)) => Some(Js::Value(x)),
@@ -329,6 +683,7 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
         "f64" => Js::F64,
         "u32" => Js::U32,
         "u8" => Js::U8,
+        "u16" => Js::U16,
         "bool" => Js::Bool,
         "usize" => Js::Count,
         "String" | "&str" => Js::Str,
@@ -350,13 +705,11 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
             Js::Handle(s[5..s.len() - 1].to_string())
         }
         s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
-        // Payload enums have no derivable mapping, but this one has a
-        // hand-written union in the template. Before the plain-enum arm: Paint
-        // must not be mistaken for a unit enum.
-        "Paint" | "&Paint" | "usvg::Paint" | "&usvg::Paint" => Js::Paint,
         "tiny_skia_path::Path" | "&tiny_skia_path::Path" => Js::PathData,
         "[u8;4]" | "&[u8;4]" | "[u8; 4]" => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
+        // Payload enums are classified by name here and given their union
+        // further down; `map_enums` only mirrors the unit ones.
         other if scalars.contains(other) => Js::Scalar,
         _ => return None,
     })
@@ -674,9 +1027,11 @@ fn map_struct(
             | Some(Js::Count)
             | Some(Js::TryUnit)
             | Some(Js::Matrix)
-            // Read-only: a paint is something a document has, never something
-            // a render option sets.
-            | Some(Js::Paint)
+            // Read-only: a union describes what a document holds, never what a
+            // render option sets.
+            | Some(Js::U16)
+            | Some(Js::PayloadEnum(_))
+            | Some(Js::PayloadEnumList(_))
             | Some(Js::PathData)
             | Some(Js::Tag4)
             | Some(Js::F32List)
@@ -928,7 +1283,7 @@ fn data_members(
         let id = format_ident!("{}", name);
         let (jsty, value) = match vocab.classify(ty_s) {
             Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(#access as f64)),
-            Some(Js::U32) | Some(Js::U8) => (quote!(u32), quote!(#access as u32)),
+            Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(#access as u32)),
             Some(Js::Bool) => (quote!(bool), quote!(#access)),
             Some(Js::Count) => (quote!(u32), quote!(#access as u32)),
             Some(Js::Str) => (quote!(String), quote!(#access.to_string())),
@@ -963,15 +1318,29 @@ fn data_members(
                     quote!(#access.map(|x| #c::wrap(x.clone()))),
                 )
             }
+            Some(Js::PayloadEnumList(t)) => {
+                let info = &vocab.payload[&t];
+                let (ety, conv) = (info.either_ty(&t), info.conv_ident(&t));
+                (
+                    quote!(Vec<#ety>),
+                    quote!(#access.iter().map(#conv).collect()),
+                )
+            }
+            Some(Js::PayloadEnum(t)) => {
+                let info = &vocab.payload[&t];
+                let (ety, conv) = (info.either_ty(&t), info.conv_ident(&t));
+                let arg = if ty_s.starts_with('&') {
+                    quote!(#access)
+                } else {
+                    quote!(&#access)
+                };
+                (quote!(#ety), quote!(#conv(#arg)))
+            }
             Some(Js::Tag4) => (
                 quote!(String),
                 quote!(String::from_utf8_lossy(&#access).into_owned()),
             ),
             Some(Js::PathData) => (quote!(Vec<PathSegment>), quote!(path_segments(#access))),
-            Some(Js::Paint) => (
-                quote!(Either<ColorPaint, PaintServer>),
-                quote!(paint_js(#access)),
-            ),
             Some(Js::Enum) => {
                 let e = format_ident!("{}", vocab.resolve(ty_s));
                 (quote!(#e), quote!(#e::from(#access)))
@@ -2484,32 +2853,6 @@ fn template(
             None
         }
 
-        #[doc = " `Paint::Color`: a colour resolved by the parser."]
-        #[napi(object)]
-        #[derive(Clone)]
-        pub struct ColorPaint {
-            #[doc = " Discriminant. Narrow on this."]
-            #[napi(ts_type = "'color'")]
-            pub r#type: String,
-            pub color: Color,
-        }
-
-        #[doc = " A paint server -- gradient or pattern -- named by id, the way the"]
-        #[doc = " document itself refers to one with `url(#id)`. Resolve it through"]
-        #[doc = " `linearGradients()`, `radialGradients()` or `patterns()`."]
-        #[doc = ""]
-        #[doc = " An id rather than the object: a paint server is shared by every"]
-        #[doc = " element that references it, so handing out a copy per element would"]
-        #[doc = " misrepresent the document."]
-        #[napi(object)]
-        #[derive(Clone)]
-        pub struct PaintServer {
-            #[doc = " Discriminant. Narrow on this."]
-            #[napi(ts_type = "'linearGradient' | 'radialGradient' | 'pattern'")]
-            pub r#type: String,
-            pub id: String,
-        }
-
         #[doc = " One command of a path outline, in the document's own units."]
         #[doc = ""]
         #[doc = " `points` holds x,y pairs, and how many depends on `type`: one point"]
@@ -2543,24 +2886,6 @@ fn template(
                     tiny_skia::PathSegment::Close => seg("close", &[]),
                 })
                 .collect()
-        }
-
-        #[doc = " `usvg::Paint` is an enum carrying a payload, which napi cannot map on"]
-        #[doc = " its own -- hence the hand-written split into a discriminated union."]
-        fn paint_js(p: &usvg::Paint) -> Either<ColorPaint, PaintServer> {
-            let server = |kind: &str, id: &str| {
-                Either::B(PaintServer { r#type: kind.to_string(), id: id.to_string() })
-            };
-            match p {
-                usvg::Paint::Color(c) => Either::A(ColorPaint {
-                    r#type: "color".to_string(),
-                    color: Color::from(c),
-                }),
-                // id() reaches BaseGradient through Deref for both gradients.
-                usvg::Paint::LinearGradient(g) => server("linearGradient", g.id()),
-                usvg::Paint::RadialGradient(g) => server("radialGradient", g.id()),
-                usvg::Paint::Pattern(p) => server("pattern", p.id()),
-            }
         }
 
         #[doc = " A read-only handle on one element of the parsed tree."]
@@ -3280,7 +3605,18 @@ fn main() {
     for set in [&usvg_files, &fontdb_files, &extra] {
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
+        vocab.payload.extend(payload_enums(set));
+        vocab.with_id.extend(types_with_id(set));
     }
+    report!(
+        "payload enums found: {}",
+        vocab
+            .payload
+            .iter()
+            .map(|(n, p)| format!("{n}({})", p.variants.len()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     report!(
         "vocabulary derived: {} f32 newtypes, {} type aliases",
         vocab.scalars.len(),
@@ -3600,10 +3936,41 @@ fn main() {
     if !dropped.is_empty() {
         report!("object types pruned as unreachable: {}", dropped.join(", "));
     }
-    let object_code: TokenStream = kept
+    let mut object_code: TokenStream = kept
         .iter()
         .filter_map(|k| object_parts.get(k).cloned())
         .collect();
+
+    // The unions for the payload enums something actually reached. Generated
+    // last, because a payload may be one of the data types settled just above,
+    // and appended only when the converter is referenced -- an unreferenced
+    // union is dead TS surface, the same reason the pruner exists.
+    let mut unions: Vec<String> = Vec::new();
+    for (name, info) in &vocab.payload {
+        if let Some(why) = info.payload_blocker(&vocab) {
+            report!("payload enum {name} not mapped: {why}");
+            continue;
+        }
+        // Plain `contains`, not the space-padded `mentions` used for type names:
+        // a token stream renders a call as `foo_to_js(..)` with no space before
+        // the paren, and a `_to_js` identifier is specific enough that a
+        // substring cannot collide.
+        let conv = info.conv_ident(name).to_string();
+        let used = |c: &TokenStream| c.to_string().contains(&conv);
+        if !used(&object_code) && !generated.values().any(used) {
+            continue;
+        }
+        match payload_enum_code(name, info, &vocab, &modules) {
+            Ok(code) => {
+                object_code.extend(code);
+                unions.push(name.clone());
+            }
+            Err(why) => report!("payload enum {name} skipped: {why}"),
+        }
+    }
+    if !unions.is_empty() {
+        report!("payload enums emitted as unions: {}", unions.join(", "));
+    }
     report!(
         "data types emitted: {}",
         kept.iter().cloned().collect::<Vec<_>>().join(", ")

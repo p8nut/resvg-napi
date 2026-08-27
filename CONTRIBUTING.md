@@ -83,7 +83,7 @@ npm run build         # napi build --platform --release
 npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
-npm run typecheck     # tsc --strict over index.d.ts and types.mts
+npm run typecheck     # tsc --strict over index.d.ts and test/types.mts
 npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```
 

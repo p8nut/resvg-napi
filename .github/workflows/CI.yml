@@ -134,7 +134,7 @@ jobs:
       # checked-in bindings no longer match what the pinned usvg/resvg produce.
       - name: Generated bindings are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: git diff --exit-code -- src/lib.rs index.d.ts index.js
+        run: git diff --exit-code -- src/lib.rs index.d.ts index.js browser.js
 
       # The codegen's report -- what it derived, and what it left alone with the
       # reason -- is documentation now: the README points at it as the answer to

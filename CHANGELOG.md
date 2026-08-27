@@ -5,6 +5,13 @@
 First cut. Nothing has been published yet, so there is no upgrade path to
 describe; this entry is what the package contains.
 
+Published under the `@p8nut` scope. An unscoped `resvg-napi` and its nine
+`resvg-napi-<platform>` names were all unclaimed on npm while this manifest
+already declared them as optional dependencies -- so the first person to publish
+one of them would have had their code resolved by `npm install` here, and in
+CI. A scope cannot be published into by anyone who does not own it, which closes
+that without needing to occupy ten names.
+
 ### The bindings are generated
 
 `build.rs` parses the pinned `usvg`, `resvg`, `tiny-skia` and `fontdb` sources

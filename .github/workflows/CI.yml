@@ -185,6 +185,33 @@ jobs:
       # path where it reports the pins as obsolete. The networked half runs on
       # a schedule in the `pins` job.
       - run: npm run check:pins:selftest
+      - run: npm run check:package:selftest
+
+  # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
+  # npm drops a files[] entry that is not on disk *silently*, so a platform
+  # package whose binary never arrived publishes as a README and a manifest,
+  # and the first person to notice is whoever installs it.
+  #
+  # `napi pre-publish` is deliberately not run here: it rewrites the manifest
+  # and its behaviour without a registry token is unknown, so it stays the one
+  # step of the publish path that the first real tag will exercise for us.
+  package:
+    name: package (dry run)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install  # not `npm ci` -- see the build job
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      # Sorts each *.node into its npm/<platform>/ package, exactly as the
+      # publish job does.
+      - run: npx napi artifacts -d artifacts --npm-dir npm
+      - run: npm run check:package
 
   publish:
     name: publish

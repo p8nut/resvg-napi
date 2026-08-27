@@ -39,7 +39,9 @@
     "conformance:selftest": "node scripts/conformance.mjs --selftest && node scripts/conformance-fetch.mjs --selftest",
     "conformance:fetch": "node scripts/conformance-fetch.mjs",
     "check:resvg": "node scripts/check-resvg.mjs",
-    "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest"
+    "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest",
+    "ci:targets": "node scripts/ci-targets.mjs",
+    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {
@@ -59,12 +61,16 @@
     "targets": [
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu",
+      "armv7-unknown-linux-gnueabihf",
       "x86_64-unknown-linux-musl",
       "aarch64-unknown-linux-musl",
-      "x86_64-apple-darwin",
       "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
       "x86_64-pc-windows-msvc",
+      "i686-pc-windows-msvc",
       "aarch64-pc-windows-msvc",
+      "aarch64-linux-android",
+      "armv7-linux-androideabi",
       "wasm32-wasip1-threads"
     ]
   },
@@ -91,14 +97,18 @@
     "url": "git+https://github.com/p8nut/resvg-napi.git"
   },
   "optionalDependencies": {
+    "@p8nut/resvg-napi-android-arm-eabi": "0.1.0",
+    "@p8nut/resvg-napi-android-arm64": "0.1.0",
     "@p8nut/resvg-napi-darwin-arm64": "0.1.0",
     "@p8nut/resvg-napi-darwin-x64": "0.1.0",
+    "@p8nut/resvg-napi-linux-arm-gnueabihf": "0.1.0",
     "@p8nut/resvg-napi-linux-arm64-gnu": "0.1.0",
     "@p8nut/resvg-napi-linux-arm64-musl": "0.1.0",
     "@p8nut/resvg-napi-linux-x64-gnu": "0.1.0",
     "@p8nut/resvg-napi-linux-x64-musl": "0.1.0",
     "@p8nut/resvg-napi-wasm32-wasi": "0.1.0",
     "@p8nut/resvg-napi-win32-arm64-msvc": "0.1.0",
+    "@p8nut/resvg-napi-win32-ia32-msvc": "0.1.0",
     "@p8nut/resvg-napi-win32-x64-msvc": "0.1.0"
   },
   "dependencies": {

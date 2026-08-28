@@ -104,12 +104,24 @@ cargo fmt --check
 cargo clippy --release --all-targets -- -D warnings
 npm run check:pins:selftest      # the Cargo.toml pins, offline half
 npm run check:package:selftest   # what publish would ship, offline half
+npm run check:resvg:selftest     # the version probe the weekly bump uses
+npm run report:selftest          # the codegen report snapshot
+npm run conformance:selftest     # the corpus runner, offline half
+npm run ci:targets:selftest      # the build matrix and its tiers
 ```
 
 CI runs the lint on `x86_64-unknown-linux-gnu` only -- the toolchain is warm
-there and nothing here is target-specific enough to lint nine times -- and
-regenerates the committed bindings to fail on any diff, `src/lib.rs`,
-`index.js`, `index.d.ts` and the five WASI shims.
+there and nothing here is target-specific enough to lint thirteen times -- and
+regenerates the committed bindings to fail on any diff: `src/lib.rs`,
+`index.js`, `index.d.ts`, `browser.js` and the five WASI shims.
+
+It does not build all thirteen targets on a pull request. It builds
+`x86_64-unknown-linux-gnu`, which everything above runs on, and
+`wasm32-wasip1-threads`, which is a different code path. The other eleven build
+on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
+`full-matrix`. Adding a target means an entry in `scripts/ci-targets.mjs` and
+the triple in `package.json` under `napi.targets` -- the script fails when the
+two disagree -- then `npm run create-npm-dirs`.
 
 The codegen keeps a report of everything it derived and everything it left
 alone, with the reason. It is off by default, because it rides on

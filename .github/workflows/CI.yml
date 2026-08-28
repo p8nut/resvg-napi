@@ -5,6 +5,11 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+    # `labeled` is not a default type, and without it the `full-matrix` label
+    # would be an escape hatch that never fires: applying it produces an event
+    # this workflow does not listen for, and a re-run replays the old payload
+    # with no label on it.
+    types: [opened, synchronize, reopened, labeled]
     # Markdown and the licence cannot break a build. This skips the whole
     # workflow rather than gating a job, so there is nothing to pay for -- but
     # it also means no check reports at all, which would deadlock a required
@@ -31,41 +36,60 @@ env:
   CARGO_INCREMENTAL: '0'
 
 jobs:
+  # Which targets this event deserves. Thirteen of them on every push is most of
+  # a CPU-hour spent learning that a comment changed, so a pull request builds
+  # the two that can tell it something -- the one the tests, the drift checks and
+  # the conformance suite run on, and wasm, whose shims and test run are a
+  # different code path. The rest waits for the merge, the tag, a manual
+  # dispatch, or a `full-matrix` label when the proof is wanted before merging.
+  #
+  # The script is also where the target list lives: it asserts against
+  # package.json's `napi.targets` rather than being a second copy of it.
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.p.outputs.targets }}
+      tests: ${{ steps.p.outputs.tests }}
+      full: ${{ steps.p.outputs.full }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - id: p
+        env:
+          EVENT: ${{ github.event_name }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: node scripts/ci-targets.mjs >> "$GITHUB_OUTPUT"
+      # Two targets where thirteen are expected reads as a broken matrix unless
+      # the run says why it chose that.
+      - name: Say what was chosen
+        run: |
+          {
+            if [ "${{ steps.p.outputs.full }}" = "true" ]; then
+              echo "Full matrix: every target in \`napi.targets\`."
+            else
+              echo "Slim matrix: \`x86_64-unknown-linux-gnu\` and \`wasm32-wasip1-threads\`."
+              echo ""
+              echo "The other eleven build on merge, on a \`v*\` tag, on a manual dispatch,"
+              echo "or on this pull request with the \`full-matrix\` label."
+            fi
+            echo ""
+            echo '```json'
+            echo '${{ steps.p.outputs.targets }}' | node -e \
+              'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(t=>t.target).join("\n")))'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: ${{ matrix.target }}
+    needs: plan
     runs-on: ${{ matrix.host }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            host: ubuntu-latest
-          - target: aarch64-unknown-linux-gnu
-            host: ubuntu-latest
-            # pure-Rust dependency tree, so napi-cross's sysroot is enough
-            build_args: --use-napi-cross
-          - target: x86_64-unknown-linux-musl
-            host: ubuntu-latest
-            build_args: -x
-          - target: aarch64-unknown-linux-musl
-            host: ubuntu-latest
-            build_args: -x
-          - target: aarch64-apple-darwin
-            host: macos-latest
-          - target: x86_64-apple-darwin
-            host: macos-latest
-          - target: x86_64-pc-windows-msvc
-            host: windows-latest
-          - target: aarch64-pc-windows-msvc
-            host: windows-latest
-          # WASI build: same generated bindings, emnapi instead of node-api.
-          - target: wasm32-wasip1-threads
-            host: ubuntu-latest
-            artifact_path: |
-              *.wasm
-              resvg-napi.wasi*.*js
-              resvg-napi.wasi.d.cts
-              wasi-worker*.mjs
+        include: ${{ fromJSON(needs.plan.outputs.targets) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -180,16 +204,13 @@ jobs:
 
   test:
     name: test ${{ matrix.target }} on node ${{ matrix.node }}
-    needs: build
+    needs: [plan, build]
     runs-on: ${{ matrix.host }}
     strategy:
       fail-fast: false
+      # Only targets this run actually built: a slim run tests linux-gnu alone.
       matrix:
-        include:
-          - { target: x86_64-unknown-linux-gnu, host: ubuntu-latest, node: 18 }
-          - { target: x86_64-unknown-linux-gnu, host: ubuntu-latest, node: 22 }
-          - { target: aarch64-apple-darwin, host: macos-latest, node: 22 }
-          - { target: x86_64-pc-windows-msvc, host: windows-latest, node: 22 }
+        include: ${{ fromJSON(needs.plan.outputs.tests) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -211,6 +232,7 @@ jobs:
       - run: npm run report:selftest
       - run: npm run conformance:selftest
       - run: npm run check:resvg:selftest
+      - run: npm run ci:targets:selftest
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform
@@ -222,7 +244,7 @@ jobs:
   # step of the publish path that the first real tag will exercise for us.
   package:
     name: package (dry run)
-    needs: build
+    needs: [plan, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -230,13 +252,20 @@ jobs:
         with:
           node-version: 22
       - run: npm install  # not `npm ci` -- see the build job
+      # `napi artifacts` walks package.json's napi.targets and wants a binary for
+      # every one of the thirteen, so it errors outright on a slim run's two --
+      # this is not a check being lenient, it is a step that cannot run at all.
+      # `--root-only` needs no artifacts: the root tarball holds no platform
+      # binary, and the files[] entries npm drops in silence are what it checks.
       - uses: actions/download-artifact@v8
+        if: needs.plan.outputs.full == 'true'
         with:
           path: artifacts
       # Sorts each *.node into its npm/<platform>/ package, exactly as the
       # publish job does.
-      - run: npx napi artifacts -d artifacts --npm-dir npm
-      - run: npm run check:package
+      - if: needs.plan.outputs.full == 'true'
+        run: npx napi artifacts -d artifacts --npm-dir npm
+      - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
 
   # resvg's own corpus, rendered through this binding: 1715 SVGs against the
   # reference PNGs upstream asserts on, with the 20 fonts it ships, at the

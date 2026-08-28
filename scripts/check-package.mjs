@@ -52,9 +52,14 @@ function pack(dir) {
   return JSON.parse(out)[0].files.map((f) => f.path);
 }
 
-function collect() {
+// `--root-only` checks the root package and nothing else. A slim CI run holds
+// two of the thirteen platform binaries, so the per-platform half would report
+// eleven absences that are not faults -- while the half that matters, the
+// files[] entries npm drops in silence, still runs.
+function collect(rootOnly = false) {
   const read = (d) => JSON.parse(readFileSync(join(d, 'package.json'), 'utf8'));
   const pkgs = [{ name: read('.').name, promised: read('.').files ?? [], shipped: pack('.'), root: true }];
+  if (rootOnly) return pkgs;
   for (const d of readdirSync('npm')) {
     const dir = join('npm', d);
     if (!existsSync(join(dir, 'package.json'))) continue;
@@ -106,7 +111,9 @@ async function selftest() {
 }
 
 async function main() {
-  const pkgs = collect();
+  const rootOnly = process.argv.includes('--root-only');
+  const pkgs = collect(rootOnly);
+  if (rootOnly) console.log('  (root package only -- not every platform binary is present)');
   const reasons = assess(pkgs);
   for (const p of pkgs) {
     console.log(`  ${p.name.padEnd(30)} ${p.shipped.length} file(s)`);

@@ -43,6 +43,26 @@ export function assess(pkgs) {
   return reasons;
 }
 
+/**
+ * An optionalDependency with no `os` and no `cpu` is not optional in practice:
+ * npm has nothing to match against, so it installs it everywhere. That is why
+ * `napi pre-publish` drops the wasm package from the list -- it is reached
+ * through `browser.js` and the WASI shim, not through per-platform resolution.
+ * Committing it back put a download on every consumer of every platform, and
+ * made the published manifest differ from the committed one on every release.
+ *
+ * @param {Record<string, string>} optional  optionalDependencies
+ * @param {Record<string, {os?: string[], cpu?: string[]}>} platforms  by package name
+ */
+export function unconstrained(optional, platforms) {
+  return Object.keys(optional)
+    .filter((name) => {
+      const m = platforms[name];
+      return m && !(m.os?.length || m.cpu?.length);
+    })
+    .map((name) => `${name} is an optionalDependency with no os/cpu, so npm installs it everywhere`);
+}
+
 function pack(dir) {
   const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: dir,
@@ -107,14 +127,31 @@ async function selftest() {
     [],
   );
 
-  console.log('ok — check-package: 6 checks passed');
+  // the invariant that would have caught the wasm package being put back
+  assert.deepEqual(unconstrained({ a: '1' }, { a: { os: ['linux'], cpu: ['x64'] } }), []);
+  assert.deepEqual(unconstrained({ a: '1' }, { a: { os: ['linux'] } }), []);
+  assert.deepEqual(unconstrained({ a: '1' }, { a: { cpu: ['x64'] } }), []);
+  const loose = unconstrained({ w: '1' }, { w: { name: 'w' } });
+  assert.equal(loose.length, 1);
+  assert.match(loose[0], /installs it everywhere/);
+  // a dependency with no platform package of its own is somebody else's problem
+  assert.deepEqual(unconstrained({ pngjs: '1' }, {}), []);
+  console.log('ok — check-package: 12 checks passed');
 }
 
 async function main() {
   const rootOnly = process.argv.includes('--root-only');
   const pkgs = collect(rootOnly);
+  const platforms = Object.fromEntries(readdirSync('npm')
+    .filter((d) => existsSync(join('npm', d, 'package.json')))
+    .map((d) => {
+      const m = JSON.parse(readFileSync(join('npm', d, 'package.json'), 'utf8'));
+      return [m.name, m];
+    }));
+  const root = JSON.parse(readFileSync('package.json', 'utf8'));
+  const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
   if (rootOnly) console.log('  (root package only -- not every platform binary is present)');
-  const reasons = assess(pkgs);
+  const reasons = [...assess(pkgs), ...loose];
   for (const p of pkgs) {
     console.log(`  ${p.name.padEnd(30)} ${p.shipped.length} file(s)`);
   }

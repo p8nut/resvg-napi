@@ -321,10 +321,17 @@ jobs:
       # itself, which the loop below would then publish a second time. That hook
       # is gone.
       - run: npx napi pre-publish -t npm --no-gh-release --skip-optional-publish
+      # Platform packages first, the root last. An npm version is immutable, so
+      # the order decides what a half-finished release leaves behind: root-first
+      # publishes a package whose optionalDependencies do not exist yet, and
+      # 0.1.0 can never be corrected -- only superseded. This way a failure
+      # leaves platform packages nothing references, which is invisible to
+      # anyone installing, and the root version stays free to publish once the
+      # cause is fixed.
       - name: Publish
         run: |
-          npm publish --access public --provenance
           for dir in npm/*/; do npm publish "$dir" --access public --provenance; done
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

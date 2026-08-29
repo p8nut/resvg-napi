@@ -91,6 +91,11 @@
     "node": ">= 18"
   },
   "license": "Apache-2.0 OR MIT",
+  "author": "p8nut <38731495+p8nut@users.noreply.github.com>",
+  "homepage": "https://github.com/p8nut/resvg-napi#readme",
+  "bugs": {
+    "url": "https://github.com/p8nut/resvg-napi/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/p8nut/resvg-napi.git"

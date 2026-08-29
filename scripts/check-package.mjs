@@ -63,6 +63,22 @@ export function unconstrained(optional, platforms) {
     .map((name) => `${name} is an optionalDependency with no os/cpu, so npm installs it everywhere`);
 }
 
+/**
+ * The fields npm renders on a package page. Absent, they do not fail anything --
+ * the package publishes and simply shows no author and no way to report a bug.
+ * This repository shipped all the way to a release candidate with every one of
+ * them missing, which is how quiet the failure is.
+ *
+ * @param {{name: string, manifest: Record<string, unknown>}[]} pkgs
+ */
+export function anonymous(pkgs) {
+  const wanted = ['author', 'license', 'repository', 'homepage', 'bugs'];
+  return pkgs.flatMap(({ name, manifest }) => {
+    const missing = wanted.filter((k) => !manifest[k]);
+    return missing.length ? [`${name} declares no ${missing.join(', ')}`] : [];
+  });
+}
+
 function pack(dir) {
   const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: dir,
@@ -136,7 +152,17 @@ async function selftest() {
   assert.match(loose[0], /installs it everywhere/);
   // a dependency with no platform package of its own is somebody else's problem
   assert.deepEqual(unconstrained({ pngjs: '1' }, {}), []);
-  console.log('ok — check-package: 12 checks passed');
+  const full = { author: 'a', license: 'b', repository: 'c', homepage: 'd', bugs: 'e' };
+  assert.deepEqual(anonymous([{ name: 'p', manifest: full }]), []);
+  const { author, ...noAuthor } = full;
+  const one = anonymous([{ name: 'p', manifest: noAuthor }]);
+  assert.equal(one.length, 1);
+  assert.match(one[0], /p declares no author/);
+  // every field named at once, not one complaint per field
+  const none = anonymous([{ name: 'p', manifest: {} }]);
+  assert.equal(none.length, 1);
+  assert.match(none[0], /author, license, repository, homepage, bugs/);
+  console.log('ok — check-package: 17 checks passed');
 }
 
 async function main() {
@@ -150,8 +176,12 @@ async function main() {
     }));
   const root = JSON.parse(readFileSync('package.json', 'utf8'));
   const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
+  const bare = anonymous([
+    { name: root.name, manifest: root },
+    ...(rootOnly ? [] : Object.entries(platforms).map(([name, manifest]) => ({ name, manifest }))),
+  ]);
   if (rootOnly) console.log('  (root package only -- not every platform binary is present)');
-  const reasons = [...assess(pkgs), ...loose];
+  const reasons = [...assess(pkgs), ...loose, ...bare];
   for (const p of pkgs) {
     console.log(`  ${p.name.padEnd(30)} ${p.shipped.length} file(s)`);
   }

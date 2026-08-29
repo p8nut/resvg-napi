@@ -2,6 +2,11 @@
 name = "resvg-napi"
 version = "0.1.0"
 edition = "2024"
+authors = ["p8nut <38731495+p8nut@users.noreply.github.com>"]
+description = "Node bindings for resvg, generated from the upstream Rust sources."
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/p8nut/resvg-napi"
+homepage = "https://github.com/p8nut/resvg-napi"
 rust-version = "1.85"
 build = "build.rs"
 publish = false

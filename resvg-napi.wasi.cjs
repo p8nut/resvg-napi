@@ -1,4 +1,4 @@
-// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","Font","FontDatabase","FontFace","LinearGradient","Mask","Pattern","RadialGradient","Resvg","SvgNode","Text","TextChunk","TextSpan","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
+// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","Font","FontDatabase","FontFace","LinearGradient","Mask","Pattern","RadialGradient","Resvg","SvgNode","Text","TextChunk","TextSpan","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontFaceStyle","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
 /* eslint-disable */
 /* prettier-ignore */
 
@@ -942,6 +942,7 @@ module.exports.ColorInterpolation = __napiModule.exports.ColorInterpolation
 module.exports.DominantBaseline = __napiModule.exports.DominantBaseline
 module.exports.EdgeMode = __napiModule.exports.EdgeMode
 module.exports.FillRule = __napiModule.exports.FillRule
+module.exports.FontFaceStyle = __napiModule.exports.FontFaceStyle
 module.exports.FontOpticalSizing = __napiModule.exports.FontOpticalSizing
 module.exports.FontStretch = __napiModule.exports.FontStretch
 module.exports.FontStyle = __napiModule.exports.FontStyle

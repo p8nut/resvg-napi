@@ -730,26 +730,26 @@ impl From<usvg::WritingMode> for WritingMode {
 #[doc = " Allows italic or oblique faces to be selected."]
 #[napi(string_enum = "camelCase")]
 #[derive(Copy, Clone)]
-pub enum Style {
+pub enum FontFaceStyle {
     Normal,
     Italic,
     Oblique,
 }
-impl From<Style> for usvg::fontdb::Style {
-    fn from(v: Style) -> Self {
+impl From<FontFaceStyle> for usvg::fontdb::Style {
+    fn from(v: FontFaceStyle) -> Self {
         match v {
-            Style::Normal => <usvg::fontdb::Style>::Normal,
-            Style::Italic => <usvg::fontdb::Style>::Italic,
-            Style::Oblique => <usvg::fontdb::Style>::Oblique,
+            FontFaceStyle::Normal => <usvg::fontdb::Style>::Normal,
+            FontFaceStyle::Italic => <usvg::fontdb::Style>::Italic,
+            FontFaceStyle::Oblique => <usvg::fontdb::Style>::Oblique,
         }
     }
 }
-impl From<usvg::fontdb::Style> for Style {
+impl From<usvg::fontdb::Style> for FontFaceStyle {
     fn from(v: usvg::fontdb::Style) -> Self {
         match v {
-            <usvg::fontdb::Style>::Normal => Style::Normal,
-            <usvg::fontdb::Style>::Italic => Style::Italic,
-            <usvg::fontdb::Style>::Oblique => Style::Oblique,
+            <usvg::fontdb::Style>::Normal => FontFaceStyle::Normal,
+            <usvg::fontdb::Style>::Italic => FontFaceStyle::Italic,
+            <usvg::fontdb::Style>::Oblique => FontFaceStyle::Oblique,
         }
     }
 }
@@ -1572,9 +1572,9 @@ impl FontFace {
         v.post_script_name.clone().to_string()
     }
     #[napi(getter)]
-    pub fn style(&self) -> Style {
+    pub fn style(&self) -> FontFaceStyle {
         let v = &self.inner;
-        Style::from(v.style.clone())
+        FontFaceStyle::from(v.style.clone())
     }
     #[napi(getter)]
     pub fn weight(&self) -> u32 {

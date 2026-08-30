@@ -1,16 +1,16 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-08-30
 
-First cut. Nothing has been published yet, so there is no upgrade path to
-describe; this entry is what the package contains.
+First release. There is no upgrade path to describe; this entry is what the
+package contains.
 
-Published under the `@p8nut` scope. An unscoped `resvg-napi` and its nine
+Published under the `@p8nut` scope. An unscoped `resvg-napi` and its
 `resvg-napi-<platform>` names were all unclaimed on npm while this manifest
 already declared them as optional dependencies -- so the first person to publish
 one of them would have had their code resolved by `npm install` here, and in
 CI. A scope cannot be published into by anyone who does not own it, which closes
-that without needing to occupy ten names.
+that without needing to occupy the names.
 
 ### The bindings are generated
 
@@ -39,12 +39,22 @@ Against resvg 0.48.1 / usvg 0.48.1 / fontdb 0.24 / tiny-skia 0.12.
   the renderer rather than estimated.
 - Diagnostics: `setLogLevel` / `takeLogs` collect what usvg and resvg report.
 
+### Conformance
+
+resvg's own test corpus, rendered through these bindings: **1715 of 1715 match**
+the reference PNGs upstream asserts on, within 1/255 per channel -- a tolerance
+measured rather than chosen, and the reason for it is in `scripts/conformance.mjs`.
+`npm run conformance` reproduces it, and CI runs it on every pull request.
+
 ### Platforms
 
-Eight native targets plus `wasm32-wasip1-threads`. The test suite runs against
-both the native binding and the wasm one (`npm run test:wasi`); the wasm build
-has no system fonts, which is why nothing in the suite assumes a font is
-installed.
+Twelve native targets plus `wasm32-wasip1-threads`: Linux glibc (x64, arm64,
+armv7), Linux musl (x64, arm64), macOS (x64, arm64), Windows MSVC (x64, ia32,
+arm64) and Android (arm64, armv7).
+
+The test suite runs against both the native binding and the wasm one
+(`npm run test:wasi`); the wasm build has no system fonts, which is why nothing
+in the suite assumes a font is installed.
 
 ### Demo
 
@@ -52,3 +62,8 @@ installed.
 analysis, partials, filters that measure text through resvg, the resolved usvg
 tree, a node list with per-element PNG export, and four worked examples that
 also render headlessly through `demo/render.mjs`.
+
+Fonts are fetched by name rather than found on disk: a family from
+google/fonts, `fontawesome`, or any URL to a `.ttf`. The Google Fonts CSS API
+is no use for this -- it serves a browser WOFF2, which `ttf-parser` does not
+read -- so the original TTFs come from the google/fonts repository.

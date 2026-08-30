@@ -1,6 +1,62 @@
 # Changelog
 
-## 0.1.0 — 2026-08-30
+## 0.1.1 — 2026-08-31
+
+The first installable release. 0.1.0 was published and then unpublished by
+mistake, and npm never lets a `name@version` be reused, so the number had to
+move. The wait for the name to unblock was spent on the generator rather than
+idle, so this is not an empty bump.
+
+### Text decoration
+
+`TextSpan.decoration` hands back `underline`, `overline` and `lineThrough`, each
+with the `fill` and `stroke` it is drawn with. Nothing could read them before.
+
+```js
+const span = doc.node('title').text().chunks[0].spans[0];
+span.decoration.underline?.fill.paint   // { type: 'color', value: {…} }
+```
+
+### Font style
+
+`FontFace.style` says `'normal' | 'italic' | 'oblique'` instead of not existing.
+
+### What made those possible
+
+Both were generator faults, and neither was specific to the member it hid.
+
+The enum pass only ever read usvg's sources, so nothing fontdb defines could be
+mapped -- and it read a crate's private modules, where fontdb vendors a copy of
+ttf-parser, emitting one type twice and naming another that does not exist. It
+also only wanted enums that some method returned, which missed every enum used
+as a plain struct field.
+
+And the object fixpoint judged a type unmappable before letting it queue the
+types it needed, so anything whose members were all still undiscovered was
+written off on its first turn and took its dependencies down with it. That is
+what `TextDecoration` was: it reaches only `TextDecorationStyle`.
+
+### Not done, and why
+
+Image bytes. `ImageKind` carries the encoded bytes of an embedded image, and
+reaching them needs the enum emitted as a union -- but a union variant is an
+`#[napi(object)]`, and napi requires `Clone` of every field. `Buffer` is a
+handle into the JS heap and has none. The codegen report says so now, in place
+of the wrong reason it used to give.
+
+### Enforced after the fact
+
+`npm version` bumps the root manifest and the thirteen platform manifests but
+not the `optionalDependencies` naming them. Left as it landed, 0.1.1 would have
+asked for platform packages at 0.1.0 -- a version that can never exist again --
+and `npm install` would have resolved nothing. `check:package` refuses any
+version drift between the root, its pins and the platform manifests.
+
+Also worth knowing: `npm unpublish` prints `- <name>` whether or not the
+registry accepted it. The `DELETE` behind it can return 404 -- an expired local
+credential is enough -- and the CLI reports success anyway.
+
+## 0.1.0 — 2026-08-30 (unpublished)
 
 First release. There is no upgrade path to describe; this entry is what the
 package contains.

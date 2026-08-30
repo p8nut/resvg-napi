@@ -1,3 +1,3 @@
-# `@p8nut/resvg-napi-darwin-arm64`
+# `resvg-napi-darwin-arm64`
 
-This is the **aarch64-apple-darwin** binary for `@p8nut/resvg-napi`
+This is the **aarch64-apple-darwin** binary for `resvg-napi`

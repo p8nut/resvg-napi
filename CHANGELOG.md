@@ -5,12 +5,11 @@
 First release. There is no upgrade path to describe; this entry is what the
 package contains.
 
-Published under the `@p8nut` scope. An unscoped `resvg-napi` and its
-`resvg-napi-<platform>` names were all unclaimed on npm while this manifest
-already declared them as optional dependencies -- so the first person to publish
-one of them would have had their code resolved by `npm install` here, and in
-CI. A scope cannot be published into by anyone who does not own it, which closes
-that without needing to occupy the names.
+`resvg-napi` and its `resvg-napi-<platform>` names were unclaimed on npm while
+this manifest already declared them as optional dependencies -- so the first
+person to publish one of them would have had their code resolved by
+`npm install` here, and in CI. Publishing all of them closes that: they are
+occupied now.
 
 ### The bindings are generated
 

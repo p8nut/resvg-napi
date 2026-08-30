@@ -1,5 +1,5 @@
 {
-  "name": "@p8nut/resvg-napi-darwin-x64",
+  "name": "resvg-napi-darwin-x64",
   "version": "0.1.0",
   "cpu": [
     "x64"

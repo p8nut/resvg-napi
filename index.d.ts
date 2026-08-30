@@ -598,6 +598,7 @@ export declare class TextSpan {
   get smallCaps(): boolean
   get applyKerning(): boolean
   get fontOpticalSizing(): FontOpticalSizing
+  get decoration(): TextDecoration
   get dominantBaseline(): DominantBaseline
   get alignmentBaseline(): AlignmentBaseline
   get baselineShift(): Array<BaselineShiftPlain | BaselineShiftNumber>
@@ -1489,6 +1490,19 @@ export declare const enum TextAnchor {
   Start = 'start',
   Middle = 'middle',
   End = 'end'
+}
+
+/** Plain view of a `TextDecoration`. */
+export interface TextDecoration {
+  underline?: TextDecorationStyle
+  overline?: TextDecorationStyle
+  lineThrough?: TextDecorationStyle
+}
+
+/** Plain view of a `TextDecorationStyle`. */
+export interface TextDecorationStyle {
+  fill?: Fill
+  stroke?: Stroke
 }
 
 /** `TextFlow::Path`. */

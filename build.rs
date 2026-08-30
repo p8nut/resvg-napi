@@ -3976,6 +3976,8 @@ fn main() {
     let mut object_todo: std::collections::VecDeque<String> = object_seeds.into_iter().collect();
     let mut object_done: BTreeSet<String> = BTreeSet::new();
     let mut object_root: BTreeMap<String, TokenStream> = BTreeMap::new();
+    // Types given a second turn once their dependencies were discovered.
+    let mut retried: BTreeSet<String> = BTreeSet::new();
     // Phase 1: discover. Generation is only used here to learn what a type
     // reaches; the code is thrown away because the registry is still growing.
     while let Some(t) = object_todo.pop_front() {
@@ -4009,12 +4011,16 @@ fn main() {
         vocab.objects.insert(t.clone());
         object_root.insert(t.clone(), root.clone());
         let (members, dropped, reached) = data_members(source, &t, &vocab, true);
-        if members.is_empty() {
-            vocab.objects.remove(&t);
-            object_root.remove(&t);
-            report!("data type {t} skipped: nothing mappable on it");
-            continue;
-        }
+        // Seeding runs before the emptiness check, and a type that seeded
+        // something gets one more turn.
+        //
+        // A type whose every member names a type not discovered yet maps to
+        // nothing *yet*, and judging it here made that verdict permanent: the
+        // dependencies it would have queued never were. `TextDecoration`
+        // reaches only `TextDecorationStyle`, so it was reported as having
+        // nothing mappable and the pair stayed invisible -- underline, overline
+        // and line-through with them.
+        let mut seeded = false;
         // A dropped member whose type is itself a public struct is a candidate:
         // that is how `Stop` reaches `Color`.
         for d in &dropped {
@@ -4031,9 +4037,29 @@ fn main() {
                 .to_string();
             if !bare.is_empty() && !object_done.contains(&bare) {
                 object_todo.push_back(bare);
+                seeded = true;
             }
         }
-        object_todo.extend(reached.into_iter().filter(|x| !object_done.contains(x)));
+        let fresh: Vec<_> = reached
+            .into_iter()
+            .filter(|x| !object_done.contains(x))
+            .collect();
+        seeded |= !fresh.is_empty();
+        object_todo.extend(fresh);
+        if members.is_empty() {
+            vocab.objects.remove(&t);
+            object_root.remove(&t);
+            // One retry, and only when this turn queued something new: without
+            // both conditions a cycle of mutually undiscovered types would keep
+            // re-queueing each other forever.
+            if seeded && retried.insert(t.clone()) {
+                object_done.remove(&t);
+                object_todo.push_back(t);
+                continue;
+            }
+            report!("data type {t} skipped: nothing mappable on it");
+            continue;
+        }
     }
     // Phase 2, with the registry complete: strict mapping becomes an object,
     // partial mapping becomes a read-only class. Deciding this in phase 1 got it

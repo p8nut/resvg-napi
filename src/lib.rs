@@ -2101,6 +2101,38 @@ impl TextChunk {
         v.text().to_string()
     }
 }
+#[doc = " Plain view of a `TextDecoration`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TextDecoration {
+    pub underline: Option<TextDecorationStyle>,
+    pub overline: Option<TextDecorationStyle>,
+    pub line_through: Option<TextDecorationStyle>,
+}
+impl From<&usvg::TextDecoration> for TextDecoration {
+    fn from(v: &usvg::TextDecoration) -> Self {
+        Self {
+            underline: v.underline().map(TextDecorationStyle::from),
+            overline: v.overline().map(TextDecorationStyle::from),
+            line_through: v.line_through().map(TextDecorationStyle::from),
+        }
+    }
+}
+#[doc = " Plain view of a `TextDecorationStyle`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct TextDecorationStyle {
+    pub fill: Option<Fill>,
+    pub stroke: Option<Stroke>,
+}
+impl From<&usvg::TextDecorationStyle> for TextDecorationStyle {
+    fn from(v: &usvg::TextDecorationStyle) -> Self {
+        Self {
+            fill: v.fill().map(Fill::from),
+            stroke: v.stroke().map(Stroke::from),
+        }
+    }
+}
 #[doc = " Read-only view of a `TextSpan`."]
 #[napi]
 pub struct TextSpan {
@@ -2162,6 +2194,11 @@ impl TextSpan {
     pub fn font_optical_sizing(&self) -> FontOpticalSizing {
         let v = &self.inner;
         FontOpticalSizing::from(v.font_optical_sizing())
+    }
+    #[napi(getter)]
+    pub fn decoration(&self) -> TextDecoration {
+        let v = &self.inner;
+        TextDecoration::from(v.decoration())
     }
     #[napi(getter)]
     pub fn dominant_baseline(&self) -> DominantBaseline {

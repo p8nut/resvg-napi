@@ -4,7 +4,8 @@
 
 The first installable release. 0.1.0 was published and then unpublished by
 mistake, and npm never lets a `name@version` be reused, so the number had to
-move. It carries three months of nothing and one afternoon of something.
+move. The wait for the name to unblock was spent on the generator rather than
+idle, so this is not an empty bump.
 
 ### Text decoration
 

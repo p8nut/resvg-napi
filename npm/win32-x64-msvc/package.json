@@ -1,5 +1,5 @@
 {
-  "name": "@p8nut/resvg-napi-win32-x64-msvc",
+  "name": "resvg-napi-win32-x64-msvc",
   "version": "0.1.0",
   "cpu": [
     "x64"

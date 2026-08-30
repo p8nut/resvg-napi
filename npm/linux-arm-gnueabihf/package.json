@@ -1,5 +1,5 @@
 {
-  "name": "@p8nut/resvg-napi-linux-arm-gnueabihf",
+  "name": "resvg-napi-linux-arm-gnueabihf",
   "version": "0.1.0",
   "cpu": [
     "arm"

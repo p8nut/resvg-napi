@@ -1,3 +1,3 @@
-# `@p8nut/resvg-napi-linux-arm64-musl`
+# `resvg-napi-linux-arm64-musl`
 
-This is the **aarch64-unknown-linux-musl** binary for `@p8nut/resvg-napi`
+This is the **aarch64-unknown-linux-musl** binary for `resvg-napi`

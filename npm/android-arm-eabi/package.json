@@ -1,5 +1,5 @@
 {
-  "name": "@p8nut/resvg-napi-android-arm-eabi",
+  "name": "resvg-napi-android-arm-eabi",
   "version": "0.1.0",
   "cpu": [
     "arm"

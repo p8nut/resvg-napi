@@ -24,6 +24,8 @@
     "text-measurement",
     "fontdb"
   ],
+  "author": "p8nut <38731495+p8nut@users.noreply.github.com>",
+  "homepage": "https://github.com/p8nut/resvg-napi#readme",
   "license": "Apache-2.0 OR MIT",
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=23.5.0"
@@ -31,6 +33,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/p8nut/resvg-napi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/p8nut/resvg-napi/issues"
   },
   "publishConfig": {
     "access": "public"

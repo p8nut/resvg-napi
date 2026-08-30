@@ -26,7 +26,6 @@
     "build:debug": "napi build --platform",
     "artifacts": "napi artifacts",
     "create-npm-dirs": "napi create-npm-dirs",
-    "prepublishOnly": "napi pre-publish -t npm",
     "version": "napi version",
     "demo": "napi build --platform --release --target wasm32-wasip1-threads && cp resvg-napi.wasm32-wasi.wasm demo/ && esbuild resvg-napi.wasi-browser.js --bundle --format=esm --outfile=demo/resvg.js && esbuild wasi-worker-browser.mjs --bundle --format=esm --outfile=demo/wasi-worker-browser.mjs && esbuild demo/liquid-entry.mjs --bundle --format=esm --outfile=demo/liquid.js && node demo/serve.mjs",
     "check:pins": "node scripts/check-pins.mjs",
@@ -92,6 +91,11 @@
     "node": ">= 18"
   },
   "license": "Apache-2.0 OR MIT",
+  "author": "p8nut <38731495+p8nut@users.noreply.github.com>",
+  "homepage": "https://github.com/p8nut/resvg-napi#readme",
+  "bugs": {
+    "url": "https://github.com/p8nut/resvg-napi/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/p8nut/resvg-napi.git"
@@ -106,7 +110,6 @@
     "@p8nut/resvg-napi-linux-arm64-musl": "0.1.0",
     "@p8nut/resvg-napi-linux-x64-gnu": "0.1.0",
     "@p8nut/resvg-napi-linux-x64-musl": "0.1.0",
-    "@p8nut/resvg-napi-wasm32-wasi": "0.1.0",
     "@p8nut/resvg-napi-win32-arm64-msvc": "0.1.0",
     "@p8nut/resvg-napi-win32-ia32-msvc": "0.1.0",
     "@p8nut/resvg-napi-win32-x64-msvc": "0.1.0"

@@ -2,14 +2,12 @@ FaceInfo member not exposed: families: Vec<(String,Language)>
 FaceInfo member not exposed: id: ID
 FaceInfo member not exposed: source: Source
 FaceInfo member not exposed: stretch: Stretch
-FaceInfo member not exposed: style: Style
 FaceInfo: partial mapping, emitted as read-only class FontFace
 Font member not exposed: families: &[FontFamily]
 Font: partial mapping, emitted as read-only class Font
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
-TextSpan member not exposed: decoration: &TextDecoration
 TextSpan: partial mapping, emitted as read-only class TextSpan
 async twin generated: Resvg::node_png_bytes -> render_node_png_async (Promise<Buffer>)
 async twin generated: Resvg::png_bytes -> render_png_async (Promise<Buffer>)
@@ -18,9 +16,8 @@ async twin generated: Resvg::svg_text -> to_string_async (Promise<String>)
 async twin generated: SvgNode::png_bytes -> render_png_async (Promise<Buffer>)
 data type ID skipped: nothing mappable on it
 data type SvgNode skipped: nothing mappable on it
-data type TextDecoration skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
-data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextSpan, Tile, Turbulence
+data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
 fontdb::Database method covered by the template as `face_data`: with_face_data (arg: P)
 fontdb::Database method covered by the template, not generated: new (no receiver)
 fontdb::Database method covered by the template, not generated: query (arg: &Query)
@@ -43,17 +40,16 @@ object Input skipped: not a public struct
 object Node skipped: not a public struct
 object Source skipped: not a public struct
 object Stretch skipped: not a public struct
-object Style skipped: not a public struct
 object [FontFamily] skipped: not a public struct
 object [TextChunk] skipped: not a public struct
 object [TextSpan] skipped: not a public struct
 object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None
-payload enum ImageKind not mapped: JPEG carries Arc<Vec<u8>>, and Vec<u8> has no id() to name it by
+payload enum ImageKind not mapped: JPEG carries Arc<Vec<u8>>, and being bytes, it would need a Buffer field, which a union variant cannot have: napi requires Clone of every field of an object
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
 payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, Input, Kind, LightSource, Paint, TextFlow, TransferFunction
-payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(6), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5), Weight(10)
+payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(6), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5)
 usvg precision clamp derived from POW_VEC: 12
 usvg sources: usvg-0.48.1
 usvg::ClipPath method covered by the content view: root (returns &Group)

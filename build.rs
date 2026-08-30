@@ -352,9 +352,7 @@ impl PayloadEnum {
             // A payload naming a public struct the registry dropped carries nothing
             // mappable: `filter::Image` has one method, `root() -> &Group`, and a
             // Group is a handle question. The variant keeps its discriminant and
-            // loses its value, because there is no value to give it. Not the same
-            // as a shape we cannot map -- `Arc<Vec<u8>>` still blocks, or image
-            // bytes would vanish without a word.
+            // loses its value, because there is no value to give it.
             if vocab.classify(p).is_none() && vocab.structs.contains(bare(p)) {
                 return Ok(());
             }
@@ -376,6 +374,16 @@ impl PayloadEnum {
                 // A read-only class is not a field: napi needs Clone and
                 // FromNapiValue of one, and a class has neither.
                 Some(Js::Value(t)) => Err(format!("{t} maps only partially")),
+                // A union variant is an `#[napi(object)]`, and napi wants Clone
+                // of every field. `Buffer` is a handle into the JS heap and has
+                // none, so image bytes cannot be a field of one -- they would
+                // need the variant to be a read-only class with a getter, which
+                // the union machinery does not build.
+                Some(Js::Bytes) => Err(
+                    "being bytes, it would need a Buffer field, which a union variant \
+                     cannot have: napi requires Clone of every field of an object"
+                        .into(),
+                ),
                 other => Err(format!("it maps to {other:?}")),
             }
         }
@@ -531,7 +539,7 @@ fn carried_field(
         Some(Js::Scalar) => (None, quote!(f64), quote!(#access.get() as f64)),
         Some(Js::Bool) => (None, quote!(bool), quote!(*#access)),
         Some(Js::Enum) => {
-            let e = format_ident!("{}", vocab.resolve(ty));
+            let e = enum_ident(&vocab.resolve(ty));
             (None, quote!(#e), quote!(#e::from(*#access)))
         }
         Some(Js::Object(t)) => {
@@ -768,6 +776,42 @@ fn type_aliases(files: &[syn::File]) -> BTreeMap<String, String> {
 
 /// Parses every `.rs` under a crate's `src`, for crates we only mine for
 /// vocabulary (newtypes, aliases) rather than wrap.
+/// Drops the files a crate keeps to itself.
+///
+/// A `mod x;` without `pub` is an implementation detail, and what it declares
+/// is not reachable by the crate's own path. fontdb vendors a copy of
+/// ttf-parser under one: its `pub enum Style` is not `usvg::fontdb::Style`, and
+/// mapping it emitted `Style` twice and referenced `usvg::fontdb::Width`, a
+/// type that does not exist. Anything the crate wants public it re-exports, and
+/// the re-export is what the root file shows.
+fn public_only(dir: &Path, files: Vec<(PathBuf, syn::File)>) -> Vec<(PathBuf, syn::File)> {
+    let root = files.iter().find(|(p, _)| {
+        p.file_name().and_then(|n| n.to_str()) == Some("lib.rs") && p.parent() == Some(dir)
+    });
+    let Some((_, root)) = root else { return files };
+    let private: BTreeSet<String> = root
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Mod(m) if !is_pub(&m.vis) => Some(m.ident.to_string()),
+            _ => None,
+        })
+        .collect();
+    if private.is_empty() {
+        return files;
+    }
+    files
+        .into_iter()
+        .filter(|(p, _)| {
+            let rel = p.strip_prefix(dir).unwrap_or(p);
+            !rel.components().next().is_some_and(|c| {
+                let name = c.as_os_str().to_str().unwrap_or_default();
+                private.contains(name.trim_end_matches(".rs"))
+            })
+        })
+        .collect()
+}
+
 fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -810,7 +854,12 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
         "Option<std::path::PathBuf>" | "Option<PathBuf>" => Js::OptPath,
         "Vec<String>" => Js::StrList,
         "Vec<f32>" | "&[f32]" | "[f32]" | "Vec<f64>" | "&[f64]" | "[f64]" => Js::F32List,
-        "Vec<u8>" | "&[u8]" => Js::Bytes,
+        // An Arc around bytes is shared *data*, not a shared entity: it has no
+        // identity to name it by, and treating it as a handle is what made
+        // `ImageKind`'s image payloads unmappable.
+        "Vec<u8>" | "&[u8]" | "Arc<Vec<u8>>" | "&Arc<Vec<u8>>" | "std::sync::Arc<Vec<u8>>" => {
+            Js::Bytes
+        }
         "Size" | "usvg::Size" => Js::Size,
         // geometry newtypes over four f32 with public accessors
         "Rect" | "NonZeroRect" => Js::Bbox,
@@ -927,6 +976,33 @@ fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
 
 /// Every type named by a return of the impl blocks we wrap. Drives which enums
 /// get mirrored, so the set follows the wrapped surface instead of a list.
+/// Every type named by a field of a public struct.
+///
+/// `returned_types` finds what methods hand back, which is how usvg's enums get
+/// discovered -- they are all behind accessors. fontdb's are not:
+/// `FaceInfo.style` is a plain public field, so `Style` was never in the wanted
+/// set and the enum pass skipped it, leaving object discovery to report it as
+/// "not a public struct" and drop the field.
+fn field_types(files: &[syn::File]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for item in files.iter().flat_map(|f| &f.items) {
+        let Item::Struct(st) = item else { continue };
+        if !is_pub(&st.vis) {
+            continue;
+        }
+        for f in &st.fields {
+            let t = ty_str(&f.ty);
+            out.insert(
+                t.trim_start_matches('&')
+                    .trim_start_matches("Option<")
+                    .trim_end_matches('>')
+                    .to_string(),
+            );
+        }
+    }
+    out
+}
+
 fn returned_types(files: &[syn::File], types: &[&str]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
@@ -1234,7 +1310,20 @@ fn upstream_modules(
                 Item::Struct(s) if is_pub(&s.vis) => s.ident.to_string(),
                 _ => continue,
             };
-            out.entry(name).or_insert_with(|| prefix.clone());
+            // A name declared both at the crate root and inside a module
+            // resolves to the root one: `usvg::Image` is what `Image` means,
+            // and `filter::Image` says its module. First-wins made that depend
+            // on which file the walk reached first, which put `Image` in
+            // `filter` and left the tree's own image type unnameable.
+            match out.entry(name) {
+                std::collections::btree_map::Entry::Vacant(e) => {
+                    e.insert(prefix.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(mut e) if prefix.is_empty() => {
+                    e.insert(String::new());
+                }
+                _ => {}
+            }
         }
     }
     out
@@ -1266,6 +1355,10 @@ fn map_enums(
     files: &[syn::File],
     wanted: &BTreeSet<String>,
     modules: &BTreeMap<String, String>,
+    // Where the upstream type lives: `usvg` for its own enums, `usvg::fontdb`
+    // for the ones fontdb defines. Hardcoding `usvg` meant fontdb's enums could
+    // never be mapped, which is why `FaceInfo.style` was missing.
+    root: &TokenStream,
 ) -> (BTreeSet<String>, TokenStream) {
     let mut names = BTreeSet::new();
     let mut code = TokenStream::new();
@@ -1278,11 +1371,15 @@ fn map_enums(
         if !e.variants.iter().all(|v| matches!(v.fields, Fields::Unit)) {
             continue; // enum with payload -> no clean JS representation
         }
-        let ident = &e.ident;
+        let ident = enum_ident(&e.ident.to_string());
+        let ident = &ident;
         let variants: Vec<_> = e.variants.iter().map(|v| v.ident.clone()).collect();
         let doc = docs(&e.attrs);
-        let up = upstream_path(&ident.to_string(), modules, &quote!(usvg));
-        names.insert(ident.to_string());
+        // The upstream path is the upstream name, not the renamed one.
+        let up = upstream_path(&e.ident.to_string(), modules, root);
+        // The vocabulary is keyed by the upstream name: that is what a member's
+        // type string says, and what `classify` is handed.
+        names.insert(e.ident.to_string());
         code.extend(quote! {
             #(#doc)*
             #[napi(string_enum = "camelCase")]
@@ -1487,7 +1584,7 @@ fn data_members(
             ),
             Some(Js::PathData) => (quote!(Vec<PathSegment>), quote!(path_segments(#access))),
             Some(Js::Enum) => {
-                let e = format_ident!("{}", vocab.resolve(ty_s));
+                let e = enum_ident(&vocab.resolve(ty_s));
                 (quote!(#e), quote!(#e::from(#access)))
             }
             Some(Js::Object(t)) => {
@@ -1739,6 +1836,19 @@ fn data_ident(ty: &str) -> proc_macro2::Ident {
         return format_ident!("{camel}{name}");
     }
     format_ident!("{}", if ty == "FaceInfo" { "FontFace" } else { ty })
+}
+
+/// JS name for a mapped enum.
+///
+/// `Style` alone says nothing next to usvg's own `FontStyle`, and the two would
+/// sit side by side in the exports with identical variants: one is what a text
+/// run asked for, the other what a loaded face is. Renamed for the same reason
+/// `FaceInfo` is emitted as `FontFace`.
+fn enum_ident(name: &str) -> proc_macro2::Ident {
+    match name {
+        "Style" => format_ident!("FontFaceStyle"),
+        _ => format_ident!("{}", name),
+    }
 }
 
 /// JS class name for an Arc-held usvg definition: `filter::Filter` -> `Filter`.
@@ -3754,7 +3864,10 @@ fn main() {
     // Only the crate root for free functions: a module-level `pub fn` elsewhere
     // is not crate-public (resvg has an internal `render(&Image, ...)`).
     let resvg_root = vec![parse(&resvg.join("lib.rs"))];
-    let fontdb_files: Vec<syn::File> = parse_crate(&fontdb).into_iter().map(|(_, f)| f).collect();
+    let fontdb_files: Vec<syn::File> = public_only(&fontdb, parse_crate(&fontdb))
+        .into_iter()
+        .map(|(_, f)| f)
+        .collect();
 
     // Guards first: no point generating against a moved API.
     assert_free_fn(
@@ -3788,6 +3901,7 @@ fn main() {
     referenced.extend(struct_field_types(&usvg_files, "WriteOptions"));
     referenced.extend(returned_types(&usvg_files, &[]));
     referenced.extend(returned_types(&fontdb_files, &[]));
+    referenced.extend(field_types(&fontdb_files));
 
     // Object candidates: a *collection* of values wants a value type, whereas a
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
@@ -3886,8 +4000,16 @@ fn main() {
         vocab.aliases.len()
     );
 
-    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules);
+    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules, &quote!(usvg));
+    // fontdb defines enums too -- `Style` is Normal/Italic/Oblique -- and a
+    // usvg-only pass left them to the object path, which reported them as "not
+    // a public struct" and dropped the field that used them.
+    let (fontdb_enum_names, fontdb_enums) =
+        map_enums(&fontdb_files, &referenced, &modules, &quote!(usvg::fontdb));
+    let mut enums = enums;
+    enums.extend(fontdb_enums);
     vocab.enums = enum_names.clone();
+    vocab.enums.extend(fontdb_enum_names.iter().cloned());
     for set in [&usvg_files, &fontdb_files] {
         vocab.ints.extend(int_newtypes(set));
     }
@@ -3897,6 +4019,8 @@ fn main() {
     let mut object_todo: std::collections::VecDeque<String> = object_seeds.into_iter().collect();
     let mut object_done: BTreeSet<String> = BTreeSet::new();
     let mut object_root: BTreeMap<String, TokenStream> = BTreeMap::new();
+    // Types given a second turn once their dependencies were discovered.
+    let mut retried: BTreeSet<String> = BTreeSet::new();
     // Phase 1: discover. Generation is only used here to learn what a type
     // reaches; the code is thrown away because the registry is still growing.
     while let Some(t) = object_todo.pop_front() {
@@ -3930,12 +4054,16 @@ fn main() {
         vocab.objects.insert(t.clone());
         object_root.insert(t.clone(), root.clone());
         let (members, dropped, reached) = data_members(source, &t, &vocab, true);
-        if members.is_empty() {
-            vocab.objects.remove(&t);
-            object_root.remove(&t);
-            report!("data type {t} skipped: nothing mappable on it");
-            continue;
-        }
+        // Seeding runs before the emptiness check, and a type that seeded
+        // something gets one more turn.
+        //
+        // A type whose every member names a type not discovered yet maps to
+        // nothing *yet*, and judging it here made that verdict permanent: the
+        // dependencies it would have queued never were. `TextDecoration`
+        // reaches only `TextDecorationStyle`, so it was reported as having
+        // nothing mappable and the pair stayed invisible -- underline, overline
+        // and line-through with them.
+        let mut seeded = false;
         // A dropped member whose type is itself a public struct is a candidate:
         // that is how `Stop` reaches `Color`.
         for d in &dropped {
@@ -3952,9 +4080,29 @@ fn main() {
                 .to_string();
             if !bare.is_empty() && !object_done.contains(&bare) {
                 object_todo.push_back(bare);
+                seeded = true;
             }
         }
-        object_todo.extend(reached.into_iter().filter(|x| !object_done.contains(x)));
+        let fresh: Vec<_> = reached
+            .into_iter()
+            .filter(|x| !object_done.contains(x))
+            .collect();
+        seeded |= !fresh.is_empty();
+        object_todo.extend(fresh);
+        if members.is_empty() {
+            vocab.objects.remove(&t);
+            object_root.remove(&t);
+            // One retry, and only when this turn queued something new: without
+            // both conditions a cycle of mutually undiscovered types would keep
+            // re-queueing each other forever.
+            if seeded && retried.insert(t.clone()) {
+                object_done.remove(&t);
+                object_todo.push_back(t);
+                continue;
+            }
+            report!("data type {t} skipped: nothing mappable on it");
+            continue;
+        }
     }
     // Phase 2, with the registry complete: strict mapping becomes an object,
     // partial mapping becomes a read-only class. Deciding this in phase 1 got it

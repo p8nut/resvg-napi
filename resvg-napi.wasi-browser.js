@@ -622,6 +622,7 @@ export const ColorInterpolation = __napiModule.exports.ColorInterpolation
 export const DominantBaseline = __napiModule.exports.DominantBaseline
 export const EdgeMode = __napiModule.exports.EdgeMode
 export const FillRule = __napiModule.exports.FillRule
+export const FontFaceStyle = __napiModule.exports.FontFaceStyle
 export const FontOpticalSizing = __napiModule.exports.FontOpticalSizing
 export const FontStretch = __napiModule.exports.FontStretch
 export const FontStyle = __napiModule.exports.FontStyle

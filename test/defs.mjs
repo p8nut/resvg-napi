@@ -73,7 +73,7 @@ assert.ok(faces.length > 0);
 // the strict policy makes it a class with getters rather than a plain object.
 assert.deepEqual(
   Object.getOwnPropertyNames(Object.getPrototypeOf(faces[0])).sort(),
-  ['constructor', 'families', 'index', 'monospaced', 'postScriptName', 'weight'],
+  ['constructor', 'families', 'index', 'monospaced', 'postScriptName', 'style', 'weight'],
 );
 
 // 6. a def's content is walkable as nodes, rooted at that def
@@ -106,6 +106,8 @@ console.log('ok — generated definition classes + value objects: all checks pas
   // 9. faces() hands out class instances, not plain objects
   const face = db.faces()[0];
   assert.equal(typeof face.postScriptName, 'string');
+  // fontdb's own enum, not a string usvg invented: a face is one of three.
+  assert.ok(['normal', 'italic', 'oblique'].includes(face.style), `style: ${face.style}`);
   // Family names matter: fontdb resolves by family, not by PostScript name, so
   // `postScriptName` alone leaves a caller unable to fill `fontFamily`.
   assert.ok(Array.isArray(face.families) && face.families.length > 0);

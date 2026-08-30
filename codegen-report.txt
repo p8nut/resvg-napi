@@ -46,7 +46,7 @@ object [TextSpan] skipped: not a public struct
 object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None
-payload enum ImageKind not mapped: JPEG carries Arc<Vec<u8>>, and Vec<u8> has no id() to name it by
+payload enum ImageKind not mapped: JPEG carries Arc<Vec<u8>>, and being bytes, it would need a Buffer field, which a union variant cannot have: napi requires Clone of every field of an object
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
 payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, Input, Kind, LightSource, Paint, TextFlow, TransferFunction
 payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(6), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5)

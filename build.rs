@@ -352,9 +352,7 @@ impl PayloadEnum {
             // A payload naming a public struct the registry dropped carries nothing
             // mappable: `filter::Image` has one method, `root() -> &Group`, and a
             // Group is a handle question. The variant keeps its discriminant and
-            // loses its value, because there is no value to give it. Not the same
-            // as a shape we cannot map -- `Arc<Vec<u8>>` still blocks, or image
-            // bytes would vanish without a word.
+            // loses its value, because there is no value to give it.
             if vocab.classify(p).is_none() && vocab.structs.contains(bare(p)) {
                 return Ok(());
             }
@@ -376,6 +374,16 @@ impl PayloadEnum {
                 // A read-only class is not a field: napi needs Clone and
                 // FromNapiValue of one, and a class has neither.
                 Some(Js::Value(t)) => Err(format!("{t} maps only partially")),
+                // A union variant is an `#[napi(object)]`, and napi wants Clone
+                // of every field. `Buffer` is a handle into the JS heap and has
+                // none, so image bytes cannot be a field of one -- they would
+                // need the variant to be a read-only class with a getter, which
+                // the union machinery does not build.
+                Some(Js::Bytes) => Err(
+                    "being bytes, it would need a Buffer field, which a union variant \
+                     cannot have: napi requires Clone of every field of an object"
+                        .into(),
+                ),
                 other => Err(format!("it maps to {other:?}")),
             }
         }
@@ -846,7 +854,12 @@ fn classify(ty: &str, known_enums: &BTreeSet<String>, scalars: &BTreeSet<String>
         "Option<std::path::PathBuf>" | "Option<PathBuf>" => Js::OptPath,
         "Vec<String>" => Js::StrList,
         "Vec<f32>" | "&[f32]" | "[f32]" | "Vec<f64>" | "&[f64]" | "[f64]" => Js::F32List,
-        "Vec<u8>" | "&[u8]" => Js::Bytes,
+        // An Arc around bytes is shared *data*, not a shared entity: it has no
+        // identity to name it by, and treating it as a handle is what made
+        // `ImageKind`'s image payloads unmappable.
+        "Vec<u8>" | "&[u8]" | "Arc<Vec<u8>>" | "&Arc<Vec<u8>>" | "std::sync::Arc<Vec<u8>>" => {
+            Js::Bytes
+        }
         "Size" | "usvg::Size" => Js::Size,
         // geometry newtypes over four f32 with public accessors
         "Rect" | "NonZeroRect" => Js::Bbox,
@@ -1297,7 +1310,20 @@ fn upstream_modules(
                 Item::Struct(s) if is_pub(&s.vis) => s.ident.to_string(),
                 _ => continue,
             };
-            out.entry(name).or_insert_with(|| prefix.clone());
+            // A name declared both at the crate root and inside a module
+            // resolves to the root one: `usvg::Image` is what `Image` means,
+            // and `filter::Image` says its module. First-wins made that depend
+            // on which file the walk reached first, which put `Image` in
+            // `filter` and left the tree's own image type unnameable.
+            match out.entry(name) {
+                std::collections::btree_map::Entry::Vacant(e) => {
+                    e.insert(prefix.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(mut e) if prefix.is_empty() => {
+                    e.insert(String::new());
+                }
+                _ => {}
+            }
         }
     }
     out

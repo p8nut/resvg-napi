@@ -768,6 +768,42 @@ fn type_aliases(files: &[syn::File]) -> BTreeMap<String, String> {
 
 /// Parses every `.rs` under a crate's `src`, for crates we only mine for
 /// vocabulary (newtypes, aliases) rather than wrap.
+/// Drops the files a crate keeps to itself.
+///
+/// A `mod x;` without `pub` is an implementation detail, and what it declares
+/// is not reachable by the crate's own path. fontdb vendors a copy of
+/// ttf-parser under one: its `pub enum Style` is not `usvg::fontdb::Style`, and
+/// mapping it emitted `Style` twice and referenced `usvg::fontdb::Width`, a
+/// type that does not exist. Anything the crate wants public it re-exports, and
+/// the re-export is what the root file shows.
+fn public_only(dir: &Path, files: Vec<(PathBuf, syn::File)>) -> Vec<(PathBuf, syn::File)> {
+    let root = files.iter().find(|(p, _)| {
+        p.file_name().and_then(|n| n.to_str()) == Some("lib.rs") && p.parent() == Some(dir)
+    });
+    let Some((_, root)) = root else { return files };
+    let private: BTreeSet<String> = root
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Mod(m) if !is_pub(&m.vis) => Some(m.ident.to_string()),
+            _ => None,
+        })
+        .collect();
+    if private.is_empty() {
+        return files;
+    }
+    files
+        .into_iter()
+        .filter(|(p, _)| {
+            let rel = p.strip_prefix(dir).unwrap_or(p);
+            !rel.components().next().is_some_and(|c| {
+                let name = c.as_os_str().to_str().unwrap_or_default();
+                private.contains(name.trim_end_matches(".rs"))
+            })
+        })
+        .collect()
+}
+
 fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -927,6 +963,33 @@ fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
 
 /// Every type named by a return of the impl blocks we wrap. Drives which enums
 /// get mirrored, so the set follows the wrapped surface instead of a list.
+/// Every type named by a field of a public struct.
+///
+/// `returned_types` finds what methods hand back, which is how usvg's enums get
+/// discovered -- they are all behind accessors. fontdb's are not:
+/// `FaceInfo.style` is a plain public field, so `Style` was never in the wanted
+/// set and the enum pass skipped it, leaving object discovery to report it as
+/// "not a public struct" and drop the field.
+fn field_types(files: &[syn::File]) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for item in files.iter().flat_map(|f| &f.items) {
+        let Item::Struct(st) = item else { continue };
+        if !is_pub(&st.vis) {
+            continue;
+        }
+        for f in &st.fields {
+            let t = ty_str(&f.ty);
+            out.insert(
+                t.trim_start_matches('&')
+                    .trim_start_matches("Option<")
+                    .trim_end_matches('>')
+                    .to_string(),
+            );
+        }
+    }
+    out
+}
+
 fn returned_types(files: &[syn::File], types: &[&str]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
@@ -1266,6 +1329,10 @@ fn map_enums(
     files: &[syn::File],
     wanted: &BTreeSet<String>,
     modules: &BTreeMap<String, String>,
+    // Where the upstream type lives: `usvg` for its own enums, `usvg::fontdb`
+    // for the ones fontdb defines. Hardcoding `usvg` meant fontdb's enums could
+    // never be mapped, which is why `FaceInfo.style` was missing.
+    root: &TokenStream,
 ) -> (BTreeSet<String>, TokenStream) {
     let mut names = BTreeSet::new();
     let mut code = TokenStream::new();
@@ -1281,7 +1348,7 @@ fn map_enums(
         let ident = &e.ident;
         let variants: Vec<_> = e.variants.iter().map(|v| v.ident.clone()).collect();
         let doc = docs(&e.attrs);
-        let up = upstream_path(&ident.to_string(), modules, &quote!(usvg));
+        let up = upstream_path(&ident.to_string(), modules, root);
         names.insert(ident.to_string());
         code.extend(quote! {
             #(#doc)*
@@ -3754,7 +3821,10 @@ fn main() {
     // Only the crate root for free functions: a module-level `pub fn` elsewhere
     // is not crate-public (resvg has an internal `render(&Image, ...)`).
     let resvg_root = vec![parse(&resvg.join("lib.rs"))];
-    let fontdb_files: Vec<syn::File> = parse_crate(&fontdb).into_iter().map(|(_, f)| f).collect();
+    let fontdb_files: Vec<syn::File> = public_only(&fontdb, parse_crate(&fontdb))
+        .into_iter()
+        .map(|(_, f)| f)
+        .collect();
 
     // Guards first: no point generating against a moved API.
     assert_free_fn(
@@ -3788,6 +3858,7 @@ fn main() {
     referenced.extend(struct_field_types(&usvg_files, "WriteOptions"));
     referenced.extend(returned_types(&usvg_files, &[]));
     referenced.extend(returned_types(&fontdb_files, &[]));
+    referenced.extend(field_types(&fontdb_files));
 
     // Object candidates: a *collection* of values wants a value type, whereas a
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
@@ -3886,8 +3957,16 @@ fn main() {
         vocab.aliases.len()
     );
 
-    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules);
+    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules, &quote!(usvg));
+    // fontdb defines enums too -- `Style` is Normal/Italic/Oblique -- and a
+    // usvg-only pass left them to the object path, which reported them as "not
+    // a public struct" and dropped the field that used them.
+    let (fontdb_enum_names, fontdb_enums) =
+        map_enums(&fontdb_files, &referenced, &modules, &quote!(usvg::fontdb));
+    let mut enums = enums;
+    enums.extend(fontdb_enums);
     vocab.enums = enum_names.clone();
+    vocab.enums.extend(fontdb_enum_names.iter().cloned());
     for set in [&usvg_files, &fontdb_files] {
         vocab.ints.extend(int_newtypes(set));
     }

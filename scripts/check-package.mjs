@@ -79,6 +79,29 @@ export function anonymous(pkgs) {
   });
 }
 
+/**
+ * Every version in the tree must be the same one. `npm version` bumps the root
+ * and, through the `version` script, the platform manifests -- but not the
+ * optionalDependencies that name them. Left behind, the root asks for platform
+ * packages at a version that was never published, and `npm install` resolves
+ * nothing. An unpublished version can never be published again, so this is not
+ * a mistake a later patch release can undo.
+ *
+ * @param {string} version  the root version
+ * @param {Record<string, string>} optional  optionalDependencies
+ * @param {Record<string, {version?: string}>} platforms  by package name
+ */
+export function mismatched(version, optional, platforms) {
+  const why = [];
+  for (const [name, want] of Object.entries(optional)) {
+    if (want !== version) why.push(`${name} is pinned at ${want}, but this package is ${version}`);
+  }
+  for (const [name, m] of Object.entries(platforms)) {
+    if (m.version && m.version !== version) why.push(`${name} is ${m.version}, but the root is ${version}`);
+  }
+  return why;
+}
+
 function pack(dir) {
   const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: dir,
@@ -162,7 +185,17 @@ async function selftest() {
   const none = anonymous([{ name: 'p', manifest: {} }]);
   assert.equal(none.length, 1);
   assert.match(none[0], /author, license, repository, homepage, bugs/);
-  console.log('ok — check-package: 17 checks passed');
+  assert.deepEqual(mismatched('1.0.0', { a: '1.0.0' }, { a: { version: '1.0.0' } }), []);
+  const stale = mismatched('0.1.1', { a: '0.1.0' }, { a: { version: '0.1.1' } });
+  assert.equal(stale.length, 1);
+  assert.match(stale[0], /a is pinned at 0\.1\.0, but this package is 0\.1\.1/);
+  const behind = mismatched('0.1.1', { a: '0.1.1' }, { a: { version: '0.1.0' } });
+  assert.equal(behind.length, 1);
+  assert.match(behind[0], /a is 0\.1\.0, but the root is 0\.1\.1/);
+  // exactly what `npm version patch` leaves behind: manifests bumped, pins not
+  assert.equal(mismatched('0.1.1', { a: '0.1.0', b: '0.1.0' },
+    { a: { version: '0.1.1' }, b: { version: '0.1.1' } }).length, 2);
+  console.log('ok — check-package: 23 checks passed');
 }
 
 async function main() {
@@ -176,12 +209,13 @@ async function main() {
     }));
   const root = JSON.parse(readFileSync('package.json', 'utf8'));
   const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
+  const drift = mismatched(root.version, root.optionalDependencies ?? {}, platforms);
   const bare = anonymous([
     { name: root.name, manifest: root },
     ...(rootOnly ? [] : Object.entries(platforms).map(([name, manifest]) => ({ name, manifest }))),
   ]);
   if (rootOnly) console.log('  (root package only -- not every platform binary is present)');
-  const reasons = [...assess(pkgs), ...loose, ...bare];
+  const reasons = [...assess(pkgs), ...loose, ...bare, ...drift];
   for (const p of pkgs) {
     console.log(`  ${p.name.padEnd(30)} ${p.shipped.length} file(s)`);
   }

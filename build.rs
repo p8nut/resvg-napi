@@ -539,7 +539,7 @@ fn carried_field(
         Some(Js::Scalar) => (None, quote!(f64), quote!(#access.get() as f64)),
         Some(Js::Bool) => (None, quote!(bool), quote!(*#access)),
         Some(Js::Enum) => {
-            let e = format_ident!("{}", vocab.resolve(ty));
+            let e = enum_ident(&vocab.resolve(ty));
             (None, quote!(#e), quote!(#e::from(*#access)))
         }
         Some(Js::Object(t)) => {
@@ -1371,11 +1371,15 @@ fn map_enums(
         if !e.variants.iter().all(|v| matches!(v.fields, Fields::Unit)) {
             continue; // enum with payload -> no clean JS representation
         }
-        let ident = &e.ident;
+        let ident = enum_ident(&e.ident.to_string());
+        let ident = &ident;
         let variants: Vec<_> = e.variants.iter().map(|v| v.ident.clone()).collect();
         let doc = docs(&e.attrs);
-        let up = upstream_path(&ident.to_string(), modules, root);
-        names.insert(ident.to_string());
+        // The upstream path is the upstream name, not the renamed one.
+        let up = upstream_path(&e.ident.to_string(), modules, root);
+        // The vocabulary is keyed by the upstream name: that is what a member's
+        // type string says, and what `classify` is handed.
+        names.insert(e.ident.to_string());
         code.extend(quote! {
             #(#doc)*
             #[napi(string_enum = "camelCase")]
@@ -1580,7 +1584,7 @@ fn data_members(
             ),
             Some(Js::PathData) => (quote!(Vec<PathSegment>), quote!(path_segments(#access))),
             Some(Js::Enum) => {
-                let e = format_ident!("{}", vocab.resolve(ty_s));
+                let e = enum_ident(&vocab.resolve(ty_s));
                 (quote!(#e), quote!(#e::from(#access)))
             }
             Some(Js::Object(t)) => {
@@ -1832,6 +1836,19 @@ fn data_ident(ty: &str) -> proc_macro2::Ident {
         return format_ident!("{camel}{name}");
     }
     format_ident!("{}", if ty == "FaceInfo" { "FontFace" } else { ty })
+}
+
+/// JS name for a mapped enum.
+///
+/// `Style` alone says nothing next to usvg's own `FontStyle`, and the two would
+/// sit side by side in the exports with identical variants: one is what a text
+/// run asked for, the other what a loaded face is. Renamed for the same reason
+/// `FaceInfo` is emitted as `FontFace`.
+fn enum_ident(name: &str) -> proc_macro2::Ident {
+    match name {
+        "Style" => format_ident!("FontFaceStyle"),
+        _ => format_ident!("{}", name),
+    }
 }
 
 /// JS class name for an Arc-held usvg definition: `filter::Filter` -> `Filter`.

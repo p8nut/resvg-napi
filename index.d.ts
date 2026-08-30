@@ -159,7 +159,7 @@ export declare class FontDatabase {
 export declare class FontFace {
   get index(): number
   get postScriptName(): string
-  get style(): Style
+  get style(): FontFaceStyle
   get weight(): number
   get monospaced(): boolean
   /** Family names of this face, English (US) first when present. */
@@ -873,6 +873,13 @@ export interface Flood {
   opacity: number
 }
 
+/** Allows italic or oblique faces to be selected. */
+export declare const enum FontFaceStyle {
+  Normal = 'normal',
+  Italic = 'italic',
+  Oblique = 'oblique'
+}
+
 /**
  * A font optical sizing property.
  *
@@ -1473,13 +1480,6 @@ export interface Stroke {
   width: number
   linecap: LineCap
   linejoin: LineJoin
-}
-
-/** Allows italic or oblique faces to be selected. */
-export declare const enum Style {
-  Normal = 'normal',
-  Italic = 'italic',
-  Oblique = 'oblique'
 }
 
 /** Drains the messages collected since the last call. */

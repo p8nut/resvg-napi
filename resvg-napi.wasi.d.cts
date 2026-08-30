@@ -159,6 +159,7 @@ export declare class FontDatabase {
 export declare class FontFace {
   get index(): number
   get postScriptName(): string
+  get style(): FontFaceStyle
   get weight(): number
   get monospaced(): boolean
   /** Family names of this face, English (US) first when present. */
@@ -597,6 +598,7 @@ export declare class TextSpan {
   get smallCaps(): boolean
   get applyKerning(): boolean
   get fontOpticalSizing(): FontOpticalSizing
+  get decoration(): TextDecoration
   get dominantBaseline(): DominantBaseline
   get alignmentBaseline(): AlignmentBaseline
   get baselineShift(): Array<BaselineShiftPlain | BaselineShiftNumber>
@@ -869,6 +871,13 @@ export declare const enum FillRule {
 export interface Flood {
   color: Color
   opacity: number
+}
+
+/** Allows italic or oblique faces to be selected. */
+export declare const enum FontFaceStyle {
+  Normal = 'normal',
+  Italic = 'italic',
+  Oblique = 'oblique'
 }
 
 /**
@@ -1481,6 +1490,19 @@ export declare const enum TextAnchor {
   Start = 'start',
   Middle = 'middle',
   End = 'end'
+}
+
+/** Plain view of a `TextDecoration`. */
+export interface TextDecoration {
+  underline?: TextDecorationStyle
+  overline?: TextDecorationStyle
+  lineThrough?: TextDecorationStyle
+}
+
+/** Plain view of a `TextDecorationStyle`. */
+export interface TextDecorationStyle {
+  fill?: Fill
+  stroke?: Stroke
 }
 
 /** `TextFlow::Path`. */

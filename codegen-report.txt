@@ -8,7 +8,6 @@ Font: partial mapping, emitted as read-only class Font
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
-TextSpan member not exposed: decoration: &TextDecoration
 TextSpan: partial mapping, emitted as read-only class TextSpan
 async twin generated: Resvg::node_png_bytes -> render_node_png_async (Promise<Buffer>)
 async twin generated: Resvg::png_bytes -> render_png_async (Promise<Buffer>)
@@ -17,9 +16,8 @@ async twin generated: Resvg::svg_text -> to_string_async (Promise<String>)
 async twin generated: SvgNode::png_bytes -> render_png_async (Promise<Buffer>)
 data type ID skipped: nothing mappable on it
 data type SvgNode skipped: nothing mappable on it
-data type TextDecoration skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
-data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextSpan, Tile, Turbulence
+data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
 fontdb::Database method covered by the template as `face_data`: with_face_data (arg: P)
 fontdb::Database method covered by the template, not generated: new (no receiver)
 fontdb::Database method covered by the template, not generated: query (arg: &Query)

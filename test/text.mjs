@@ -18,6 +18,8 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="90">
   <text id="one" x="10" y="30" font-size="20" fill="#38bdf8">Hi there</text>
   <text id="anchored" x="100" y="60" font-size="12" text-anchor="middle">mid</text>
   <text id="split" x="10" y="80" font-size="12">plain<tspan fill="teal" font-size="18">loud</tspan></text>
+  <text id="deco" x="10" y="88" font-size="12" fill="#c2410c"
+        text-decoration="underline line-through">marked</text>
   <rect id="notext" width="5" height="5"/>
 </svg>`;
 
@@ -82,5 +84,27 @@ assert.equal(text('one').chunks[0].spans[0].fill.paint.type, 'color');
 // 7. the boxes agree with what SvgNode reports, so text() is a view of the same
 //    node rather than a second source of truth
 assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
+
+// 8. text-decoration reaches through as its own object, one entry per line the
+//    document asked for, each carrying the paint it is drawn with. usvg keeps
+//    these behind accessors on a struct whose fields are pub(crate), so nothing
+//    here is a field read -- it is the generator following methods.
+{
+  const plain = text('one').chunks[0].spans[0].decoration;
+  assert.equal(plain.underline, undefined, 'undecorated text carries no lines');
+  assert.equal(plain.overline, undefined);
+  assert.equal(plain.lineThrough, undefined);
+
+  const marked = text('deco').chunks[0].spans[0].decoration;
+  assert.ok(marked.underline, 'underline was asked for');
+  assert.ok(marked.lineThrough, 'line-through was asked for');
+  assert.equal(marked.overline, undefined, 'overline was not');
+  // the line inherits the text's own paint, and it is a full Fill
+  assert.equal(marked.underline.fill.paint.type, 'color');
+  assert.deepEqual(
+    [marked.underline.fill.paint.value.red, marked.underline.fill.paint.value.green],
+    [0xc2, 0x41],
+  );
+}
 
 console.log('ok — text content: all checks passed');

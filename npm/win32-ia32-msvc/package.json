@@ -1,5 +1,5 @@
 {
-  "name": "@p8nut/resvg-napi-win32-ia32-msvc",
+  "name": "resvg-napi-win32-ia32-msvc",
   "version": "0.1.0",
   "cpu": [
     "ia32"

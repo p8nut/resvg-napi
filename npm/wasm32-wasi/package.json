@@ -1,5 +1,5 @@
 {
-  "name": "@p8nut/resvg-napi-wasm32-wasi",
+  "name": "resvg-napi-wasm32-wasi",
   "version": "0.1.0",
   "main": "resvg-napi.wasi.cjs",
   "files": [

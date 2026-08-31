@@ -269,7 +269,22 @@ struct PayloadEnum {
 impl PayloadEnum {
     /// `Kind` -> `KindBlend`, the struct for one payload variant.
     fn variant_ident(&self, enum_name: &str, variant: &str) -> proc_macro2::Ident {
-        format_ident!("{enum_name}{variant}")
+        // `SVG` becomes `Svg`, because napi normalises a type name to PascalCase
+        // on the way out and the union type here has to match what it wrote.
+        // It aliases the original spelling back for classes -- `export type
+        // ImageKindPNG = ImageKindPng` -- but not for objects, so `ImageKindSVG`
+        // named a type that did not exist.
+        let v = if variant.len() > 1
+            && variant
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        {
+            let mut c = variant.chars();
+            c.next().into_iter().collect::<String>() + &c.as_str().to_lowercase()
+        } else {
+            variant.to_string()
+        };
+        format_ident!("{enum_name}{v}")
     }
 
     /// The struct the unit variants share, or None when there are none.
@@ -379,11 +394,12 @@ impl PayloadEnum {
                 // none, so image bytes cannot be a field of one -- they would
                 // need the variant to be a read-only class with a getter, which
                 // the union machinery does not build.
-                Some(Js::Bytes) => Err(
-                    "being bytes, it would need a Buffer field, which a union variant \
-                     cannot have: napi requires Clone of every field of an object"
-                        .into(),
-                ),
+                // Bytes cannot be an object *field* -- neither `Buffer` nor
+                // `Uint8Array` is `Clone`, and napi requires that of every
+                // field. They can be a getter, so the variant carrying them is
+                // emitted as a read-only class instead. See
+                // `payload_enum_code`.
+                Some(Js::Bytes) => Ok(()),
                 other => Err(format!("it maps to {other:?}")),
             }
         }
@@ -625,6 +641,42 @@ fn payload_enum_code(
                     "{name}::{n} carries {ty}, which has no mappable data: emitted without a value"
                 );
                 (Vec::new(), quote!(#up::#vid(_)), Vec::new())
+            }
+            // A payload that no object field can hold, but a getter can. Only
+            // bytes today: `Buffer` is a handle into the JS heap and is not
+            // `Clone`, which `#[napi(object)]` requires of every field, so the
+            // variant becomes a read-only class. Narrowing still works -- the
+            // discriminant is a getter with a literal return type.
+            Payload::Value(ty) if matches!(vocab.classify(ty), Some(Js::Bytes)) => {
+                let doc = format!(" `{name}::{n}`. The bytes are the document's own.");
+                let bytes_doc = " The encoded bytes, exactly as the document supplied them: \
+usvg does not decode them, and neither does this.";
+                items.extend(quote! {
+                    #[doc = #doc]
+                    #[napi]
+                    pub struct #sid {
+                        raw: Vec<u8>,
+                    }
+                    #[napi]
+                    impl #sid {
+                        // Not `fn r#type`: napi-derive builds
+                        // `r#type_c_callback` from the method name and panics on
+                        // it. `js_name` sets what JavaScript sees, which is all
+                        // that matters.
+                        #[doc = " Discriminant. Narrow on this."]
+                        #[napi(getter, js_name = "type", ts_return_type = #ts)]
+                        pub fn kind_tag(&self) -> &'static str {
+                            #tag
+                        }
+                        #[doc = #bytes_doc]
+                        #[napi(getter)]
+                        pub fn bytes(&self) -> Buffer {
+                            self.raw.as_slice().into()
+                        }
+                    }
+                });
+                arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: (**v).clone() }),));
+                continue;
             }
             Payload::Value(ty) => {
                 let access = quote!(v);
@@ -2454,6 +2506,15 @@ fn emit_twins(twins: &[Twin]) -> TokenStream {
 
 /// `render_png` -> `renderPng`, the name napi gives it in JS.
 fn lower_camel(s: &str) -> String {
+    // An all-caps name is an acronym, not camel case: `PNG` is `png`, and
+    // lowering only the first letter would give `pNG`. usvg spells
+    // `ImageKind::PNG`, `JPEG`, `GIF` and `WEBP` that way.
+    if s.len() > 1
+        && s.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
+        return s.to_lowercase();
+    }
     let camel = heck_camel(s);
     let mut c = camel.chars();
     match c.next() {
@@ -3252,6 +3313,22 @@ fn template(
             pub fn path(&self) -> Result<Option<Path>> {
                 Ok(match self.node()? {
                     usvg::Node::Path(p) => Some(Path::from(&**p)),
+                    _ => None,
+                })
+            }
+
+            #[doc = " The content of an image node: its size, how it is to be"]
+            #[doc = " scaled, and the bytes themselves. Null for anything else."]
+            #[doc = ""]
+            #[doc = " `kind` is a discriminated union. The four raster variants"]
+            #[doc = " carry the encoded bytes exactly as the document supplied"]
+            #[doc = " them -- usvg says they should be decoded by the caller, and"]
+            #[doc = " this is the caller -- while `svg` carries none, an embedded"]
+            #[doc = " SVG being a tree rather than a payload."]
+            #[napi]
+            pub fn image(&self) -> Result<Option<Image>> {
+                Ok(match self.node()? {
+                    usvg::Node::Image(i) => Some(Image::wrap((**i).clone())),
                     _ => None,
                 })
             }

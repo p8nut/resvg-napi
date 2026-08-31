@@ -25,7 +25,20 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 FORCE=0
-[ "${1:-}" = "--force" ] && FORCE=1
+PROBE=0
+for a in "$@"; do
+  case "$a" in
+    --force) FORCE=1 ;;
+    # A write test on every name, costing nothing. Publishes a throwaway
+    # 0.0.0-probe.<timestamp> under the `probe` dist-tag, from a temporary
+    # manifest holding no files -- so npm answers the only question that
+    # matters, "would you accept a write here", without the release version
+    # being spent on the packages that say yes. Implies --force: testing the
+    # window is the point.
+    --probe) PROBE=1; FORCE=1 ;;
+    *) printf 'unknown flag: %s\n' "$a" >&2; exit 2 ;;
+  esac
+done
 
 say() { printf '%s\n' "$*"; }
 die() { printf '\n!! %s\n' "$*" >&2; exit 1; }
@@ -36,8 +49,15 @@ version=$(node -p "require('./package.json').version")
 root=$(node -p "require('./package.json').name")
 mapfile -t dirs < <(ls -d npm/*/ | sed 's:/$::')
 
-say "  account : $who"
-say "  release : $root@$version"
+if [ "$PROBE" = "1" ]; then
+  version="0.0.0-probe.$(date +%s)"
+  say "  account : $who"
+  say "  MODE    : probe -- publishing $version, tagged 'probe', never 'latest'"
+  say "            the real release version is not touched"
+else
+  say "  account : $who"
+  say "  release : $root@$version"
+fi
 say "  packages: ${#dirs[@]} platform + 1 root"
 
 # --- is the window open? ----------------------------------------------------
@@ -87,10 +107,26 @@ ask_otp
 
 # `+ name@version` is npm's success line. Believed only until the registry
 # confirms it below.
+PROBE_DIR=""
+[ "$PROBE" = "1" ] && PROBE_DIR=$(mktemp -d)
+trap '[ -n "$PROBE_DIR" ] && rm -rf "$PROBE_DIR"' EXIT
+
 publish_one() {
   local dir="$1" name="$2" out
+  if [ "$PROBE" = "1" ]; then
+    # A manifest with nothing in it: no binary is uploaded, and no provenance
+    # is claimed for something that is not a build.
+    dir="$PROBE_DIR/$name"
+    mkdir -p "$dir"
+    printf '{"name":"%s","version":"%s","description":"write probe"}\n' \
+      "$name" "$version" > "$dir/package.json"
+  fi
   for attempt in 1 2 3; do
-    out=$(npm publish "$dir" --access public --provenance --otp="$OTP" 2>&1)
+    if [ "$PROBE" = "1" ]; then
+      out=$(npm publish "$dir" --access public --tag probe --otp="$OTP" 2>&1)
+    else
+      out=$(npm publish "$dir" --access public --provenance --otp="$OTP" 2>&1)
+    fi
     if printf '%s' "$out" | grep -q "^+ $name@"; then return 0; fi
     if printf '%s' "$out" | grep -q 'code EOTP'; then
       say "    OTP expired, need a fresh one"
@@ -127,6 +163,19 @@ for dir in "${dirs[@]}"; do
     failed+=("$name")
   fi
 done
+
+if [ "$PROBE" = "1" ]; then
+  say ""
+  printf '  root package %-21s ' "$root"
+  if publish_one "." "$root" && confirm_one "$root"; then say "ok"; else say "REFUSE"; failed+=("$root"); fi
+  say ""
+  say "  ${#failed[@]} of $(( ${#dirs[@]} + 1 )) names refused the write."
+  [ "${#failed[@]}" -gt 0 ] && printf '    %s\n' "${failed[@]}"
+  say ""
+  say "  nothing of value was published: $version is a throwaway under the"
+  say "  'probe' tag. The release version is untouched."
+  exit 0
+fi
 
 if [ "${#failed[@]}" -gt 0 ]; then
   say ""

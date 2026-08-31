@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi-wasm32-wasi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "resvg-napi.wasi.cjs",
   "files": [
     "resvg-napi.wasm32-wasi.wasm",

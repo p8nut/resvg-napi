@@ -1205,7 +1205,14 @@ pub struct RenderParams {
     #[doc = " `absLayerBoundingBox()` to trim the document to its content."]
     pub crop: Option<BBox>,
 }
-#[doc = " An affine transform, same field order as SVG's `matrix(...)`."]
+#[doc = " An affine transform. Field names and order are tiny-skia's."]
+#[doc = ""]
+#[doc = " They are *not* the order of SVG's `matrix(a b c d e f)`, which"]
+#[doc = " takes `sx ky kx sy tx ty` -- upstream says so itself: \"we are"]
+#[doc = " using column-major-column-vector matrix notation, therefore it's"]
+#[doc = " ky-kx, not kx-ky\". Reading these positionally into a `matrix()`"]
+#[doc = " string mirrors the transform, silently. Name the fields:"]
+#[doc = " `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`."]
 #[napi(object)]
 #[derive(Clone, Copy)]
 pub struct Matrix {

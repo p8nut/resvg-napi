@@ -136,4 +136,27 @@ console.log('ok — generated definition classes + value objects: all checks pas
   assert.equal(db.len(), before - 1, 'removeFace took the id from the class');
   assert.equal(db.face(face), null, 'and it is gone');
 }
+// The Matrix doc used to claim its field order was SVG's `matrix(...)`. It is
+// not: tiny-skia says so itself -- "we are using column-major-column-vector
+// matrix notation, therefore it's ky-kx, not kx-ky". Reading the fields
+// positionally mirrors the transform, silently, so this pins which order
+// actually round-trips.
+{
+  const rot = (t) => new Resvg(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g transform="${t}"><rect id="r" width="10" height="10"/></g></svg>`,
+  ).node('r').path().absTransform;
+
+  const m = rot('rotate(30)');
+  const near = (a, b) => Math.abs(a - b) < 1e-4;
+  const six = (o) => `matrix(${o.join(' ')})`;
+
+  // declaration order is the wrong one, and wrong in a way that looks right
+  const declared = rot(six([m.sx, m.kx, m.ky, m.sy, m.tx, m.ty]));
+  assert.ok(near(declared.kx, -m.kx), 'positional round trip mirrors the rotation');
+
+  // the order SVG actually takes
+  const svgOrder = rot(six([m.sx, m.ky, m.kx, m.sy, m.tx, m.ty]));
+  assert.ok(near(svgOrder.kx, m.kx) && near(svgOrder.ky, m.ky), 'sx ky kx sy tx ty round-trips');
+}
+
 console.log('ok — FontFace + strict objects: all checks passed');

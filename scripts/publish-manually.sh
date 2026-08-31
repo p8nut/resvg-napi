@@ -26,6 +26,8 @@ cd "$(dirname "$0")/.."
 
 FORCE=0
 PROBE=0
+ASSUME_YES=0
+OTP_ARG=""
 for a in "$@"; do
   case "$a" in
     --force) FORCE=1 ;;
@@ -36,6 +38,8 @@ for a in "$@"; do
     # being spent on the packages that say yes. Implies --force: testing the
     # window is the point.
     --probe) PROBE=1; FORCE=1 ;;
+    --yes|-y) ASSUME_YES=1 ;;
+    --otp=*) OTP_ARG="${a#--otp=}" ;;
     *) printf 'unknown flag: %s\n' "$a" >&2; exit 2 ;;
   esac
 done
@@ -98,12 +102,24 @@ fi
 
 # --- confirm ----------------------------------------------------------------
 say ""
-read -r -p "  publish $root@$version to npm? this cannot be undone [y/N] " yn
-case "$yn" in [yY]*) ;; *) die "aborted";; esac
+if [ "$ASSUME_YES" = "0" ]; then
+  read -r -p "  publish $root@$version to npm? this cannot be undone [y/N] " yn
+  case "$yn" in [yY]*) ;; *) die "aborted";; esac
+fi
 
-OTP=""
-ask_otp() { read -r -p "  OTP: " OTP; }
-ask_otp
+# A token with the 2FA bypass -- the one CI holds -- needs no code, and there is
+# nobody at a keyboard to type one there anyway. An interactive session does,
+# because the account is `auth-and-writes`.
+OTP="$OTP_ARG"
+HAVE_TOKEN=0
+[ -n "${NODE_AUTH_TOKEN:-}" ] && HAVE_TOKEN=1
+ask_otp() {
+  if [ "$HAVE_TOKEN" = "1" ]; then return 0; fi
+  if [ ! -t 0 ]; then die "npm wants an OTP and there is no terminal to ask on.
+    Pass --otp=CODE, or set NODE_AUTH_TOKEN to a token that bypasses 2FA."; fi
+  read -r -p "  OTP: " OTP
+}
+[ -z "$OTP" ] && ask_otp
 
 # `+ name@version` is npm's success line. Believed only until the registry
 # confirms it below.
@@ -123,9 +139,17 @@ publish_one() {
   fi
   for attempt in 1 2 3; do
     if [ "$PROBE" = "1" ]; then
-      out=$(npm publish "$dir" --access public --tag probe --otp="$OTP" 2>&1)
+      if [ -n "$OTP" ]; then
+        out=$(npm publish "$dir" --access public --tag probe --otp="$OTP" 2>&1)
+      else
+        out=$(npm publish "$dir" --access public --tag probe 2>&1)
+      fi
     else
-      out=$(npm publish "$dir" --access public --provenance --otp="$OTP" 2>&1)
+      if [ -n "$OTP" ]; then
+        out=$(npm publish "$dir" --access public --provenance --otp="$OTP" 2>&1)
+      else
+        out=$(npm publish "$dir" --access public --provenance 2>&1)
+      fi
     fi
     if printf '%s' "$out" | grep -q "^+ $name@"; then return 0; fi
     if printf '%s' "$out" | grep -q 'code EOTP'; then

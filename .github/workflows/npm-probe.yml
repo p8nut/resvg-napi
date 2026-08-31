@@ -1,0 +1,35 @@
+# Does npm still refuse these names? Asks with a throwaway version.
+#
+# The read-only `npm window` job infers the answer from the tombstone in each
+# packument. This asks the registry directly, which is the only authority --
+# but a real release attempt costs the version number on every package that
+# succeeds while the rest fail, and that is how 0.1.1 was lost.
+#
+# So it publishes `0.0.0-probe.<timestamp>` under the `probe` dist-tag, from a
+# manifest holding no files. Nothing becomes `latest`, no binary is uploaded,
+# and the release version is untouched.
+#
+# Here rather than on a laptop because NPM_TOKEN bypasses 2FA. An interactive
+# npm session on an `auth-and-writes` account needs a code per write, and a
+# fourteen-package run outlives any code.
+name: npm probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: will npm accept a write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: bash scripts/publish-manually.sh --probe --yes
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

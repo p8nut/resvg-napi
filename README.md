@@ -1,5 +1,9 @@
 # resvg-napi
 
+[![npm](https://img.shields.io/npm/v/resvg-napi)](https://www.npmjs.com/package/resvg-napi)
+[![conformance](https://img.shields.io/badge/resvg%20conformance-1715%2F1715-brightgreen)](#conformance)
+[![licence](https://img.shields.io/npm/l/resvg-napi)](#licence)
+
 Node.js bindings for [resvg](https://github.com/linebender/resvg) 0.48: render
 SVG to PNG, and read back what usvg made of the document — the resolved tree,
 text metrics, paint, geometry.
@@ -45,8 +49,15 @@ one knows what it is:
 const n = doc.node('surname')
 n.kind           // 'group' | 'path' | 'image' | 'text'
 n.path()         // geometry, fill, stroke — null unless it is a shape
-n.text()         // chunks, layouted spans, positioned glyphs
+n.text()         // chunks, layouted spans, positioned glyphs, decoration
 n.renderPng()    // that element alone, cropped to its own extent
+```
+
+A span carries what it is drawn with, down to the lines through it:
+
+```js
+const span = n.text().chunks[0].spans[0]
+span.decoration.underline?.fill.paint   // …and .overline, .lineThrough
 ```
 
 Paint is a discriminated union, so TypeScript narrows it:
@@ -64,7 +75,8 @@ that distinction bites.
 
 **Fonts.** `FontDatabase` is `fontdb` itself: `loadSystemFonts()`,
 `loadFontData(buffer)`, `loadFontFile(path)`, `faces()`, `query()`, and the
-generic-family setters. `pendingFonts()` on a parsed document names the
+generic-family setters. A face reports its `families`, `weight`, `style`
+(`'normal' | 'italic' | 'oblique'`) and whether it is `monospaced`. `pendingFonts()` on a parsed document names the
 families it wanted and did not get; `pendingImages()` does the same for hrefs.
 
 **Definitions.** `linearGradients()`, `radialGradients()`, `patterns()`,
@@ -74,6 +86,21 @@ refers to.
 Something missing? The generator keeps a report of every upstream member it
 left alone, with the reason. `RESVG_NAPI_CODEGEN_LOG=1 cargo build` prints it,
 and [CONTRIBUTING.md](CONTRIBUTING.md) explains what the reasons mean.
+
+## Conformance
+
+resvg's own test corpus, rendered through these bindings: **1715 of 1715 match**
+the reference PNGs upstream asserts on, within 1/255 per channel — a tolerance
+measured rather than chosen, with the reason recorded in
+[`scripts/conformance.mjs`](scripts/conformance.mjs).
+
+```bash
+npm run conformance:fetch   # the corpus, at the tag Cargo.toml pins
+npm run conformance         # 15 seconds including the fetch
+```
+
+CI runs it on every pull request, so a resvg bump that changes a render shows up
+as a diff rather than passing unnoticed.
 
 ## Platforms
 

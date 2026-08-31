@@ -75,12 +75,28 @@ export function diffPixels(a, b, tolerance = TOLERANCE) {
  * @param {Map<string, number>} want  baseline: path -> differing pixels
  * @param {Map<string, number>} got
  */
+/** A case that threw instead of rendering. Not a pixel count, and not comparable to one. */
+export const THREW = -1;
+
 export function compare(want, got) {
   const worse = [];
   const better = [];
   const gone = [];
   for (const [path, diff] of got) {
     const was = want.get(path);
+    // Throwing is its own state, ranked above every pixel count rather than
+    // sorted among them. It used to be stored as -1 and compared numerically, so
+    // a case that started throwing went from 0 to -1 and was reported as an
+    // *improvement* -- the one regression the suite exists to catch, counted as
+    // progress.
+    if (diff === THREW || was === THREW) {
+      if (diff === THREW && was !== THREW) {
+        worse.push({ path, was: was === undefined ? 'new' : was, now: 'threw' });
+      } else if (was === THREW && diff !== THREW) {
+        better.push({ path, was: 'threw', now: diff });
+      }
+      continue;
+    }
     if (was === undefined) {
       if (diff > 0) worse.push({ path, was: 'new', now: diff });
     } else if (diff > was) worse.push({ path, was, now: diff });
@@ -131,6 +147,16 @@ function run() {
   fonts.setMonospaceFamily('Noto Mono');
 
   const files = testList(readFileSync(TESTLIST, 'utf8'));
+  // A corpus that moved, a regex that stopped matching, or a fetch that landed
+  // the wrong tag all produce an empty list -- and an empty run passes, reports
+  // "0 of 0 files differ", and rewrites the baseline to nothing. The bound is
+  // loose on purpose: it catches "the list broke", not "upstream added a test".
+  if (files.length < 1000) {
+    throw new Error(
+      `only ${files.length} cases in ${TESTLIST} -- the corpus or the test list is wrong, ` +
+        'and an empty run would pass',
+    );
+  }
   const got = new Map();
   const errors = new Map();
 
@@ -149,7 +175,7 @@ function run() {
       got.set(rel, diffPixels(raw.data, ref.data));
     } catch (e) {
       errors.set(rel, e.message.split('\n')[0]);
-      got.set(rel, -1); // threw: distinct from a pixel difference
+      got.set(rel, THREW);
     }
   }
   return { got, errors };
@@ -173,6 +199,27 @@ async function selftest() {
   const w = compare(B({ 'a': 5 }), B({ 'a': 9 }));
   assert.deepEqual(w.worse, [{ path: 'a', was: 5, now: 9 }]);
 
+  // a case that starts throwing is a regression, whatever it did before
+  assert.deepEqual(
+    compare(B({ 'a': 0 }), B({ 'a': THREW })).worse,
+    [{ path: 'a', was: 0, now: 'threw' }],
+    'matching, then throwing -- the case this used to call an improvement',
+  );
+  assert.deepEqual(compare(B({ 'a': 0 }), B({ 'a': THREW })).better, []);
+  assert.deepEqual(
+    compare(B({}), B({ 'a': THREW })).worse,
+    [{ path: 'a', was: 'new', now: 'threw' }],
+    'and a new one that throws is not silently accepted',
+  );
+  // one that stops throwing is progress
+  assert.deepEqual(
+    compare(B({ 'a': THREW }), B({ 'a': 0 })).better,
+    [{ path: 'a', was: 'threw', now: 0 }],
+  );
+  // still throwing is neither
+  const same = compare(B({ 'a': THREW }), B({ 'a': THREW }));
+  assert.deepEqual([same.worse, same.better], [[], []]);
+
   const b = compare(B({ 'a': 5 }), B({ 'a': 0 }));
   assert.deepEqual(b.better, [{ path: 'a', was: 5, now: 0 }]);
 
@@ -194,7 +241,7 @@ async function selftest() {
   assert.equal(diffPixels(px([0, 0, 0, 0]), px([0, 0, 0, 0])), 0);
   assert.equal(diffPixels(px([10, 10, 10, 255]), px([10, 10, 10, 250]), 8), 0, 'alpha counts too');
 
-  console.log('ok — conformance: 12 checks passed');
+  console.log('ok — conformance: 17 checks passed');
 }
 
 async function main() {

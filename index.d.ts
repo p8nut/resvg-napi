@@ -1151,7 +1151,16 @@ export declare const enum MaskType {
   Alpha = 'alpha'
 }
 
-/** An affine transform, same field order as SVG's `matrix(...)`. */
+/**
+ * An affine transform. Field names and order are tiny-skia's.
+ *
+ * They are *not* the order of SVG's `matrix(a b c d e f)`, which
+ * takes `sx ky kx sy tx ty` -- upstream says so itself: "we are
+ * using column-major-column-vector matrix notation, therefore it's
+ * ky-kx, not kx-ky". Reading these positionally into a `matrix()`
+ * string mirrors the transform, silently. Name the fields:
+ * `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`.
+ */
 export interface Matrix {
   sx: number
   kx: number

@@ -1478,6 +1478,52 @@ struct Member {
     value: TokenStream,
 }
 
+/// The TypeScript type to force, when napi would rewrite it from the name alone.
+///
+/// napi-derive-backend maps a Rust type *named* `String`, `char`, `OsStr`,
+/// `PathBuf`, `Path`, `BigInt`, `Symbol`, `Null` or `JsFunction` to a JS
+/// primitive, reading the name and not the type. `Path` is the one that collides
+/// with a type this generator emits, and the collision is a property of napi
+/// rather than of this API -- so it is answered wherever a member is emitted,
+/// not at the one call site that noticed it first.
+///
+/// `usvg::layout::Span` carries three `Option<Path>` fields, and they shipped
+/// declared as `string` while holding a whole `Path` object.
+fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
+    const CLASHES: [&str; 9] = [
+        "String",
+        "char",
+        "OsStr",
+        "PathBuf",
+        "Path",
+        "BigInt",
+        "Symbol",
+        "Null",
+        "JsFunction",
+    ];
+    let t = jsty.to_string().replace(' ', "");
+    // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
+    // -- napi only rewrites the type itself, so only those two shapes need it.
+    let (inner, optional) = match t.strip_prefix("Option<").and_then(|r| r.strip_suffix('>')) {
+        Some(i) => (i, true),
+        None => (t.as_str(), false),
+    };
+    if !CLASHES.contains(&inner) {
+        return None;
+    }
+    // A field keeps its own optionality: napi derives `?` from the Rust type
+    // independently of `ts_type`, so spelling the union here would give
+    // `underline?: Path | null`. A getter's return type does not, so it does.
+    Some((
+        inner.to_string(),
+        if optional {
+            format!("{inner} | null")
+        } else {
+            inner.to_string()
+        },
+    ))
+}
+
 /// Walks a data type's members -- accessors first, public fields otherwise --
 /// and maps the ones it can. Shared by the strict object emitter and the value
 /// class emitter, which differ only in how they package the result.
@@ -1668,7 +1714,19 @@ fn data_members(
         out.push(Member { id, jsty, value });
     };
 
-    let mut has_accessors = false;
+    // Fields and accessors both, not one or the other.
+    //
+    // This used to take accessors when there were any and fall back to public
+    // fields only when there were none, which made the choice a whole-type
+    // switch: a single new `pub fn` upstream flipped a type off its fields and
+    // deleted every one of them. Adding `fn is_black(&self) -> bool` to
+    // `usvg::Color` replaced `red`, `green` and `blue` with `isBlack` -- no
+    // report line, no dropped member, the completeness assert satisfied because
+    // nothing had been dropped. It just emitted a different type.
+    //
+    // Accessors first so a name they share with a field resolves to the
+    // accessor, which is the one upstream means to be read.
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Impl(imp) = item else { continue };
         if imp.trait_.is_some() || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty) {
@@ -1683,19 +1741,20 @@ fn data_members(
                 continue;
             };
             let id = &f.sig.ident;
-            has_accessors = true;
+            seen.insert(id.to_string());
             push(&id.to_string(), &ty_str(o), quote!(v.#id()));
         }
     }
-    if !has_accessors {
-        if let Some(Fields::Named(named)) = struct_fields_opt(files, ty) {
-            for f in &named.named {
-                if !is_pub(&f.vis) {
-                    continue;
-                }
-                let id = f.ident.clone().unwrap();
-                push(&id.to_string(), &ty_str(&f.ty), quote!(v.#id.clone()));
+    if let Some(Fields::Named(named)) = struct_fields_opt(files, ty) {
+        for f in &named.named {
+            if !is_pub(&f.vis) {
+                continue;
             }
+            let id = f.ident.clone().unwrap();
+            if seen.contains(&id.to_string()) {
+                continue;
+            }
+            push(&id.to_string(), &ty_str(&f.ty), quote!(v.#id.clone()));
         }
     }
     (out, skipped, reached)
@@ -1718,7 +1777,10 @@ fn object_struct(
     let up = upstream_path(ty, modules, root);
     let decls = members.iter().map(|m| {
         let (id, t) = (&m.id, &m.jsty);
-        quote!(pub #id: #t,)
+        match napi_name_clash(t) {
+            Some((field_ty, _)) => quote!(#[napi(ts_type = #field_ty)] pub #id: #t,),
+            None => quote!(pub #id: #t,),
+        }
     });
     let inits = members.iter().map(|m| {
         let (id, e) = (&m.id, &m.value);
@@ -1761,8 +1823,12 @@ fn value_class(
     let up = upstream_path(ty, modules, root);
     let getters = members.iter().map(|m| {
         let (id, t, e) = (&m.id, &m.jsty, &m.value);
+        let attr = match napi_name_clash(t) {
+            Some((_, ret_ty)) => quote!(#[napi(getter, ts_return_type = #ret_ty)]),
+            None => quote!(#[napi(getter)]),
+        };
         quote! {
-            #[napi(getter)]
+            #attr
             pub fn #id(&self) -> #t {
                 let v = &self.inner;
                 #e
@@ -3622,18 +3688,33 @@ fn template(
                         "empty crop: {base_w}x{base_h}"
                     )));
                 }
-                let scale = if let Some(w) = p.width {
-                    w as f32 / base_w
+                // A requested dimension is honoured exactly, not recomputed.
+                // `(base * (w / base)).ceil()` looks like an identity and is not:
+                // the f32 round trip can land a hair above the integer and the
+                // ceil then adds a pixel. On a 100x50 document seventeen of the
+                // first four hundred widths came back one too wide -- 120 gave a
+                // PNG whose IHDR read 121x61 -- while every width the test suite
+                // uses is an exact multiple, so nothing here could see it.
+                let (scale, w, h) = if let Some(w) = p.width {
+                    // The other side from the ratio itself, in f64: going through
+                    // the f32 scale makes 50 * (120 / 100) come out 60.000004,
+                    // which ceils to 61.
+                    let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
+                    (w as f32 / base_w, w, (h as u32).max(1))
                 } else if let Some(h) = p.height {
-                    h as f32 / base_h
+                    let w = (base_w as f64 * h as f64 / base_h as f64).ceil();
+                    (h as f32 / base_h, (w as u32).max(1), h)
                 } else {
-                    p.scale.unwrap_or(1.0) as f32
+                    let s = p.scale.unwrap_or(1.0);
+                    (
+                        s as f32,
+                        ((base_w as f64 * s).ceil() as u32).max(1),
+                        ((base_h as f64 * s).ceil() as u32).max(1),
+                    )
                 };
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
-                let w = (base_w * scale).ceil() as u32;
-                let h = (base_h * scale).ceil() as u32;
                 let mut pixmap = tiny_skia::Pixmap::new(w, h)
                     .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
                 if let Some(css) = &p.background {
@@ -3663,18 +3744,33 @@ fn template(
                 let inner = node
                     .abs_layer_bounding_box()
                     .ok_or_else(|| Error::from_reason("element is empty"))?;
-                let scale = if let Some(w) = p.width {
-                    w as f32 / bbox.width()
+                // A requested dimension is honoured exactly, not recomputed.
+                // `(base * (w / base)).ceil()` looks like an identity and is not:
+                // the f32 round trip can land a hair above the integer and the
+                // ceil then adds a pixel. On a 100x50 document seventeen of the
+                // first four hundred widths came back one too wide -- 120 gave a
+                // PNG whose IHDR read 121x61 -- while every width the test suite
+                // uses is an exact multiple, so nothing here could see it.
+                let (scale, w, h) = if let Some(w) = p.width {
+                    // The other side from the ratio itself, in f64: going through
+                    // the f32 scale makes 50 * (120 / 100) come out 60.000004,
+                    // which ceils to 61.
+                    let h = (bbox.height() as f64 * w as f64 / bbox.width() as f64).ceil();
+                    (w as f32 / bbox.width(), w, (h as u32).max(1))
                 } else if let Some(h) = p.height {
-                    h as f32 / bbox.height()
+                    let w = (bbox.width() as f64 * h as f64 / bbox.height() as f64).ceil();
+                    (h as f32 / bbox.height(), (w as u32).max(1), h)
                 } else {
-                    p.scale.unwrap_or(1.0) as f32
+                    let s = p.scale.unwrap_or(1.0);
+                    (
+                        s as f32,
+                        ((bbox.width() as f64 * s).ceil() as u32).max(1),
+                        ((bbox.height() as f64 * s).ceil() as u32).max(1),
+                    )
                 };
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
-                let w = (bbox.width() * scale).ceil() as u32;
-                let h = (bbox.height() * scale).ceil() as u32;
                 let mut pixmap = tiny_skia::Pixmap::new(w, h)
                     .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
                 if let Some(css) = &p.background {

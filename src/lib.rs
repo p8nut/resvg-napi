@@ -1684,7 +1684,7 @@ impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
         }
     }
 }
-#[doc = " Read-only view of a `Image`."]
+#[doc = " Read-only view of an `Image`."]
 #[napi]
 pub struct Image {
     inner: usvg::Image,
@@ -2480,7 +2480,7 @@ fn composite_operator_to_js(
 #[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
 #[napi]
 pub struct ImageKindJpeg {
-    raw: Vec<u8>,
+    raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
 impl ImageKindJpeg {
@@ -2498,7 +2498,7 @@ impl ImageKindJpeg {
 #[doc = " `ImageKind::PNG`. The bytes are the document's own."]
 #[napi]
 pub struct ImageKindPng {
-    raw: Vec<u8>,
+    raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
 impl ImageKindPng {
@@ -2516,7 +2516,7 @@ impl ImageKindPng {
 #[doc = " `ImageKind::GIF`. The bytes are the document's own."]
 #[napi]
 pub struct ImageKindGif {
-    raw: Vec<u8>,
+    raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
 impl ImageKindGif {
@@ -2534,7 +2534,7 @@ impl ImageKindGif {
 #[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
 #[napi]
 pub struct ImageKindWebp {
-    raw: Vec<u8>,
+    raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
 impl ImageKindWebp {
@@ -2561,10 +2561,10 @@ fn image_kind_to_js(
     v: &usvg::ImageKind,
 ) -> Either5<ImageKindJpeg, ImageKindPng, ImageKindGif, ImageKindWebp, ImageKindSvg> {
     match v {
-        usvg::ImageKind::JPEG(v) => Either5::A(ImageKindJpeg { raw: (**v).clone() }),
-        usvg::ImageKind::PNG(v) => Either5::B(ImageKindPng { raw: (**v).clone() }),
-        usvg::ImageKind::GIF(v) => Either5::C(ImageKindGif { raw: (**v).clone() }),
-        usvg::ImageKind::WEBP(v) => Either5::D(ImageKindWebp { raw: (**v).clone() }),
+        usvg::ImageKind::JPEG(v) => Either5::A(ImageKindJpeg { raw: v.clone() }),
+        usvg::ImageKind::PNG(v) => Either5::B(ImageKindPng { raw: v.clone() }),
+        usvg::ImageKind::GIF(v) => Either5::C(ImageKindGif { raw: v.clone() }),
+        usvg::ImageKind::WEBP(v) => Either5::D(ImageKindWebp { raw: v.clone() }),
         usvg::ImageKind::SVG(_) => Either5::E(ImageKindSvg {
             r#type: "svg".to_string(),
         }),
@@ -3608,8 +3608,8 @@ impl SvgNode {
             _ => None,
         })
     }
-    #[doc = " The content of an image node: its size, how it is to be"]
-    #[doc = " scaled, and the bytes themselves. Null for anything else."]
+    #[doc = " The content of an image node: where it sits, how it is to"]
+    #[doc = " be scaled, and the bytes themselves. Null for anything else."]
     #[doc = ""]
     #[doc = " `kind` is a discriminated union. The four raster variants"]
     #[doc = " carry the encoded bytes exactly as the document supplied"]

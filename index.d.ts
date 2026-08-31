@@ -166,7 +166,7 @@ export declare class FontFace {
   get families(): Array<string>
 }
 
-/** Read-only view of a `Image`. */
+/** Read-only view of an `Image`. */
 export declare class Image {
   get id(): string
   get isVisible(): boolean
@@ -548,8 +548,8 @@ export declare class SvgNode {
    */
   path(): Path | null
   /**
-   * The content of an image node: its size, how it is to be
-   * scaled, and the bytes themselves. Null for anything else.
+   * The content of an image node: where it sits, how it is to
+   * be scaled, and the bytes themselves. Null for anything else.
    *
    * `kind` is a discriminated union. The four raster variants
    * carry the encoded bytes exactly as the document supplied

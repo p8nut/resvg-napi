@@ -651,11 +651,21 @@ fn payload_enum_code(
                 let doc = format!(" `{name}::{n}`. The bytes are the document's own.");
                 let bytes_doc = " The encoded bytes, exactly as the document supplied them: \
 usvg does not decode them, and neither does this.";
+                // The payload's own type, not `Vec<u8>`: usvg holds these behind
+                // an `Arc`, and copying out of it here would deep-copy the whole
+                // encoded image before anyone asked for it. Cloning the `Arc` is
+                // a refcount bump, and the one unavoidable copy happens in the
+                // getter, when the JS `Buffer` is actually built.
+                // Qualified: the generated file imports the napi prelude and usvg,
+                // not `std::sync`, and the rest of it spells `Arc` out in full.
+                let raw_src = ty.replace("Arc<", "std::sync::Arc<");
+                let raw_ty: syn::Type = syn::parse_str(&raw_src)
+                    .unwrap_or_else(|e| panic!("{name}::{n} carries {ty}, unparseable: {e}"));
                 items.extend(quote! {
                     #[doc = #doc]
                     #[napi]
                     pub struct #sid {
-                        raw: Vec<u8>,
+                        raw: #raw_ty,
                     }
                     #[napi]
                     impl #sid {
@@ -675,7 +685,7 @@ usvg does not decode them, and neither does this.";
                         }
                     }
                 });
-                arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: (**v).clone() }),));
+                arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: v.clone() }),));
                 continue;
             }
             Payload::Value(ty) => {
@@ -1821,7 +1831,14 @@ fn value_class(
             }
         }
     });
-    let doc = format!(" Read-only view of a `{ty}`.");
+    // `a Image` reads wrong in a published declaration, and these names come
+    // from upstream so the vowels are not ours to choose.
+    let article = if ty.starts_with(['A', 'E', 'I', 'O', 'U']) {
+        "an"
+    } else {
+        "a"
+    };
+    let doc = format!(" Read-only view of {article} `{ty}`.");
     let code = quote! {
         #[doc = #doc]
         #[napi]
@@ -3317,8 +3334,8 @@ fn template(
                 })
             }
 
-            #[doc = " The content of an image node: its size, how it is to be"]
-            #[doc = " scaled, and the bytes themselves. Null for anything else."]
+            #[doc = " The content of an image node: where it sits, how it is to"]
+            #[doc = " be scaled, and the bytes themselves. Null for anything else."]
             #[doc = ""]
             #[doc = " `kind` is a discriminated union. The four raster variants"]
             #[doc = " carry the encoded bytes exactly as the document supplied"]

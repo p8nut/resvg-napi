@@ -166,6 +166,49 @@ export declare class FontFace {
   get families(): Array<string>
 }
 
+/** Read-only view of a `Image`. */
+export declare class Image {
+  get id(): string
+  get isVisible(): boolean
+  get renderingMode(): ImageRendering
+  get kind(): ImageKindJpeg | ImageKindPng | ImageKindGif | ImageKindWebp | ImageKindSvg
+  get absTransform(): Matrix
+  get boundingBox(): BBox
+  get absBoundingBox(): BBox
+}
+
+/** `ImageKind::GIF`. The bytes are the document's own. */
+export declare class ImageKindGif {
+  /** Discriminant. Narrow on this. */
+  get type(): 'gif'
+  /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+  get bytes(): Buffer
+}
+
+/** `ImageKind::JPEG`. The bytes are the document's own. */
+export declare class ImageKindJpeg {
+  /** Discriminant. Narrow on this. */
+  get type(): 'jpeg'
+  /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+  get bytes(): Buffer
+}
+
+/** `ImageKind::PNG`. The bytes are the document's own. */
+export declare class ImageKindPng {
+  /** Discriminant. Narrow on this. */
+  get type(): 'png'
+  /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+  get bytes(): Buffer
+}
+
+/** `ImageKind::WEBP`. The bytes are the document's own. */
+export declare class ImageKindWebp {
+  /** Discriminant. Narrow on this. */
+  get type(): 'webp'
+  /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+  get bytes(): Buffer
+}
+
 /** Read-only handle on a `usvg::LinearGradient`. */
 export declare class LinearGradient {
   /** `x1` coordinate. */
@@ -504,6 +547,17 @@ export declare class SvgNode {
    * mapper prunes any generated type no exposed method hands out.
    */
   path(): Path | null
+  /**
+   * The content of an image node: its size, how it is to be
+   * scaled, and the bytes themselves. Null for anything else.
+   *
+   * `kind` is a discriminated union. The four raster variants
+   * carry the encoded bytes exactly as the document supplied
+   * them -- usvg says they should be decoded by the caller, and
+   * this is the caller -- while `svg` carries none, an embedded
+   * SVG being a tree rather than a payload.
+   */
+  image(): Image | null
   /** Direct children. Empty for anything that is not a group. */
   children(): Array<SvgNode>
   /**
@@ -922,6 +976,12 @@ export interface GaussianBlur {
   input: InputPlain | InputReference
   stdDevX: number
   stdDevY: number
+}
+
+/** `ImageKind::SVG`. */
+export interface ImageKindSvg {
+  /** Discriminant. Narrow on this. */
+  type: 'svg'
 }
 
 /**

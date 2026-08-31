@@ -1,6 +1,31 @@
 # Changelog
 
-## 0.1.1 — 2026-08-31
+## 0.1.2 — 2026-08-31
+
+Same contents as 0.1.1, which never fully published. The number moved because
+npm burned it on one of the fourteen packages.
+
+What happened, because it is worth knowing before unpublishing anything on npm:
+0.1.0 was unpublished by mistake, and npm blocks republishing a name for 24
+hours after that -- but the block outlives the clock. More than a day later the
+registry still refused to save a new packument for those names, answering
+
+    409 Conflict — Failed to save packument. A common cause is if you try to
+    publish a new package before the previous package has been fully processed.
+
+The publish job died on the first of the fourteen. Except the registry then
+accepted that first PUT anyway, forty minutes later, while having told the
+client it had failed -- so `resvg-napi-android-arm-eabi@0.1.1` exists and 0.1.1
+is spent there. A version set where thirteen packages are 0.1.1 and one cannot
+be is worse than a skipped number.
+
+Nothing was installable at any point: the root package publishes last, so a
+failure part-way leaves platform packages that nothing references rather than a
+root package pointing at binaries that are not there. That ordering was put in
+for exactly this and is the reason this entry describes an inconvenience instead
+of a broken release.
+
+## 0.1.1 — 2026-08-31 (never published)
 
 The first installable release. 0.1.0 was published and then unpublished by
 mistake, and npm never lets a `name@version` be reused, so the number had to

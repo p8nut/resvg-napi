@@ -51,10 +51,20 @@ if [ "$FORCE" = "0" ]; then
   # go-ahead: that is how a crashing script -- a missing file, in the first
   # version of this one -- announced an open window over thirteen tombstones.
   if [ "$rc" = "0" ]; then
-    grep -E '^blocked' /tmp/window.$$ | sed 's/^/    /'
+    total=$(grep -cE '^(blocked|free|published)' /tmp/window.$$)
+    stuck=$(grep -cE '^blocked' /tmp/window.$$)
+    say ""
+    say "  $stuck of $total names still carry a tombstone:"
+    grep -E '^blocked' /tmp/window.$$ | awk '{print "      " $2}'
+    ready=$((total - stuck))
+    [ "$ready" -gt 0 ] && {
+      say "  the other $ready are fine:"
+      grep -vE '^blocked' /tmp/window.$$ | grep -E '^(free|published)' \
+        | awk '{printf "      %-34s (%s)\n", $2, $1}'
+    }
     rm -f /tmp/window.$$
-    die "some names still carry a tombstone -- npm will refuse. Re-run when the
-    daily 'npm window' job goes red, or pass --force to try anyway."
+    die "npm will refuse these. Re-run when the daily 'npm window' job goes red,
+    or pass --force to try anyway."
   fi
   if [ "$rc" != "1" ] || ! grep -q 'the npm names are free' /tmp/window.$$; then
     sed 's/^/    /' /tmp/window.$$

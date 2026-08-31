@@ -112,14 +112,29 @@ fi
 # because the account is `auth-and-writes`.
 OTP="$OTP_ARG"
 HAVE_TOKEN=0
-[ -n "${NODE_AUTH_TOKEN:-}" ] && HAVE_TOKEN=1
+if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+  HAVE_TOKEN=1
+  # npm only reads NODE_AUTH_TOKEN through an .npmrc that mentions it, which
+  # `setup-node` writes in CI and nothing writes on a laptop -- where the stale
+  # token in ~/.npmrc wins instead, and every write comes back EOTP. Point npm
+  # at a config of our own for the length of this run.
+  NPMRC=$(mktemp)
+  printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPMRC"
+  export npm_config_userconfig="$NPMRC"
+  trap 'rm -f "$NPMRC"; [ -n "${PROBE_DIR:-}" ] && rm -rf "$PROBE_DIR"' EXIT
+  who=$(npm whoami 2>&1) || die "NODE_AUTH_TOKEN did not authenticate: $who"
+  say "  token  : authenticates as $who, 2FA bypassed"
+fi
 ask_otp() {
   if [ "$HAVE_TOKEN" = "1" ]; then return 0; fi
   if [ ! -t 0 ]; then die "npm wants an OTP and there is no terminal to ask on.
     Pass --otp=CODE, or set NODE_AUTH_TOKEN to a token that bypasses 2FA."; fi
   read -r -p "  OTP: " OTP
 }
-[ -z "$OTP" ] && ask_otp
+# No code is asked for up front. A token that bypasses 2FA needs none, and
+# whether the one in ~/.npmrc is such a token is not knowable without trying:
+# `npm whoami` succeeds either way. So the first write is attempted bare, and
+# `publish_one` asks only if npm answers EOTP.
 
 # `+ name@version` is npm's success line. Believed only until the registry
 # confirms it below.

@@ -220,7 +220,13 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.target }}
+      # A missing font on a native runner means the environment broke, not that
+      # it is a sandbox -- without this, seven of the fourteen files skip
+      # themselves and the runner still reports fourteen passes. The wasm job
+      # below deliberately does not set it: WASI has no font directories.
       - run: npm test
+        env:
+          RESVG_REQUIRE_FONTS: '1'
       # index.d.ts is generated, so a type regression is a build product
       # regression: cheap to catch here.
       - run: npm run typecheck

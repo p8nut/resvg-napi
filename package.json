@@ -40,7 +40,9 @@
     "check:resvg": "node scripts/check-resvg.mjs",
     "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest",
     "ci:targets": "node scripts/ci-targets.mjs",
-    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest"
+    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest",
+    "check:npm-window": "node scripts/check-npm-window.mjs",
+    "check:npm-window:selftest": "node scripts/check-npm-window.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {

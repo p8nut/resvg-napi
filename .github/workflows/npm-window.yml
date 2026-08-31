@@ -1,0 +1,34 @@
+# Are the npm names publishable yet?
+#
+# 0.1.0 was unpublished by mistake, and the 24-hour republish block outlived the
+# clock: a day later the registry still refused to save a new packument, and
+# twelve of the fourteen had not been touched since the unpublish. Rather than
+# check by hand every morning, this checks daily.
+#
+# Red means go. Same convention as the `pins` job: a scheduled run that fails is
+# the notification, and green is the boring answer nobody needs to read.
+#
+# Read-only against the public registry -- no token, no permissions.
+name: npm window
+
+on:
+  schedule:
+    # 06:40 UTC, before the Monday pins and resvg jobs so a free window is known
+    # by the time anything else runs.
+    - cron: '40 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  window:
+    name: can the release be published
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # No `npm install`: the script uses fetch and the manifests, nothing else.
+      - run: node scripts/check-npm-window.mjs

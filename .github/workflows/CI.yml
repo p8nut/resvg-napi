@@ -233,6 +233,7 @@ jobs:
       - run: npm run conformance:selftest
       - run: npm run check:resvg:selftest
       - run: npm run ci:targets:selftest
+      - run: npm run check:npm-window:selftest
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform

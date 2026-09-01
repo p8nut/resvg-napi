@@ -97,4 +97,26 @@ writeFileSync(out, doc.renderPng({ scale: 2 }));
 console.log(`${basename(template)}: ${doc.width}×${doc.height} units`
   + `${wanted.length ? `, partials [${wanted.join(', ')}]` : ''}`
   + `${Object.keys(scope).length ? `, vars [${Object.keys(scope).join(', ')}]` : ''} → ${out}`);
-for (const line of mod.takeLogs()) console.log('  ' + line);
+const logs = mod.takeLogs();
+for (const line of logs) console.log('  ' + line);
+
+// `npm run test:examples` runs this over four documents, and it used to pass
+// whatever the renderer said: a font that stopped resolving, a shape usvg
+// skipped, an href it could not read -- all printed, none fatal. The examples
+// render clean today, so anything usvg reports is a regression.
+//
+// Off by default: rendering a document of your own and being told about its
+// problems is the point of this script.
+if (process.env.RESVG_STRICT_EXAMPLES === '1') {
+  const pendingFonts = doc.pendingFonts();
+  const pendingImages = doc.pendingImages();
+  const why = [
+    logs.length && `${logs.length} diagnostic(s) from usvg`,
+    pendingFonts.length && `unresolved font(s): ${pendingFonts.join(', ')}`,
+    pendingImages.length && `unresolved image(s): ${pendingImages.join(', ')}`,
+  ].filter(Boolean);
+  if (why.length) {
+    console.error(`  FAIL ${basename(template)}: ${why.join('; ')}`);
+    process.exit(1);
+  }
+}

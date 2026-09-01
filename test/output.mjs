@@ -67,6 +67,14 @@ assert.match(doc.toString({ transformsPrecision: 8 }), /matrix\(58 0 0 28 1\.234
 assert.equal(doc.toString({ transformsPrecision: 300 }), doc.toString({ transformsPrecision: 12 }));
 assert.equal(doc.toString({ coordinatesPrecision: 999 }), doc.toString({ coordinatesPrecision: 12 }));
 assert.notEqual(doc.toString({ transformsPrecision: 300 }), doc.toString({ transformsPrecision: 2 }));
+//    and the same proof for the other one: without it, an ignored
+//    `coordinatesPrecision` would make the clamp assertion above pass vacuously,
+//    both sides rendering at the default.
+assert.notEqual(
+  doc.toString({ coordinatesPrecision: 12 }),
+  doc.toString({ coordinatesPrecision: 1 }),
+  'coordinatesPrecision is honoured at all',
+);
 
 // 9. round trip: the output re-parses to the same pixels
 const again = new Resvg(doc.toString(), opts, db);

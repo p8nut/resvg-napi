@@ -117,4 +117,42 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
   assert.deepEqual(ids, ['fit-1', 'fit-2']);
 }
 
+// The two problem branches nothing reached: an unusable width, and a verify
+// pass that throws. Both are reported rather than swallowed, and neither stops
+// the constraints around them from being fitted.
+{
+  // `data-maxwidth="0"` and a negative one are not widths
+  for (const bad of ['0', '-5', 'wide']) {
+    const src = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50">
+      <text id="a" x="5" y="30" font-size="20" data-maxwidth="${bad}">text</text></svg>`;
+    const { problems, adjustments } = fitTextWidths(src, render);
+    assert.equal(adjustments.length, 0, `${bad} fits nothing`);
+    assert.equal(problems.length, 1, `${bad} is reported`);
+    assert.match(problems[0], /is not a usable width/);
+  }
+
+  // one unusable constraint does not stop a usable one beside it
+  const mixed = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="60">
+    <text id="a" x="5" y="25" font-size="20" data-maxwidth="0">first</text>
+    <text id="b" x="5" y="50" font-size="20" data-maxwidth="30">second one</text></svg>`;
+  const both = fitTextWidths(mixed, render);
+  assert.equal(both.problems.length, 1, 'only the bad one is a problem');
+  assert.deepEqual(both.adjustments.map((a) => a.id), ['b'], 'the good one still fits');
+
+  // a render that throws on the verify pass is reported, and the fit still stands
+  const src = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50">
+    <text id="a" x="5" y="30" font-size="20" data-maxwidth="30">wide text here</text></svg>`;
+  let calls = 0;
+  const throwsOnVerify = (svg) => {
+    if (++calls > 1) throw new Error('renderer went away');
+    return render(svg);
+  };
+  const late = fitTextWidths(src, throwsOnVerify);
+  assert.equal(late.problems.length, 1);
+  assert.match(late.problems[0], /could not verify: renderer went away/);
+  assert.equal(late.adjustments.length, 1, 'the adjustment was still made');
+  assert.ok(Number.isNaN(late.adjustments[0].measured) || late.adjustments[0].measured === undefined,
+    'and its check is unmeasured rather than wrong');
+}
+
 console.log('ok — horizontal fitting: all checks passed');

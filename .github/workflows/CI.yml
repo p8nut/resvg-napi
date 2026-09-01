@@ -336,8 +336,26 @@ jobs:
       # cause is fixed.
       - name: Publish
         run: |
-          for dir in npm/*/; do npm publish "$dir" --access public --provenance; done
-          npm publish --access public --provenance
+          # Idempotent: a retried tag re-runs this whole loop, and the packages
+          # that landed the first time answer EPUBLISHCONFLICT. Aborting there
+          # meant a retry could never reach the root -- the one package that
+          # must go last -- so an already-published version is skipped and
+          # anything else still fails the job.
+          publish_one() {
+            local out
+            if out=$(npm publish "$1" --access public --provenance 2>&1); then
+              printf '%s\n' "$out" | grep '^+ ' || true
+              return 0
+            fi
+            if printf '%s' "$out" | grep -qE 'EPUBLISHCONFLICT|cannot publish over'; then
+              printf 'already published: %s\n' "$1"
+              return 0
+            fi
+            printf '%s\n' "$out" >&2
+            return 1
+          }
+          for dir in npm/*/; do publish_one "$dir"; done
+          publish_one .
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

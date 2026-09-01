@@ -115,11 +115,20 @@ for (const line of logs) console.log('  ' + line);
 // problems is the point of this script. `--strict` is what `test:examples`
 // passes.
 if (strict) {
+  // Which font a machine has is an environment fact, not a regression: the
+  // Linux runner ships Noto Color Emoji and photo-card.svg asks for it, while
+  // macOS and Windows do not -- so a font-matching warning is reported and not
+  // fatal. Everything else is: a skipped shape, an unreadable href, an
+  // attribute usvg could not parse.
+  const environmental = /No match for .* font-family/;
+  const defects = logs.filter((l) => !environmental.test(l));
   const pendingFonts = doc.pendingFonts();
   const pendingImages = doc.pendingImages();
+  if (pendingFonts.length) {
+    console.log(`  note: ${pendingFonts.length} font(s) this machine does not have: ${pendingFonts.join(', ')}`);
+  }
   const why = [
-    logs.length && `${logs.length} diagnostic(s) from usvg`,
-    pendingFonts.length && `unresolved font(s): ${pendingFonts.join(', ')}`,
+    defects.length && `${defects.length} diagnostic(s) from usvg`,
     pendingImages.length && `unresolved image(s): ${pendingImages.join(', ')}`,
   ].filter(Boolean);
   if (why.length) {

@@ -107,4 +107,16 @@ assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
   );
 }
 
+// 9. the declarations do not lie about what a member holds.
+//    napi maps a Rust type *named* `Path` to `string` from the name alone, and
+//    `layout::Span` carries three of them. They shipped declared as `string`
+//    while holding a whole Path object -- `.fill` was a type error on working
+//    code and `.toUpperCase()` type-checked and threw.
+{
+  const sp = text('deco').layouted[0];
+  assert.equal(typeof sp.underline, 'object', 'a Path, not the string napi would have made of it');
+  assert.ok('data' in sp.underline && 'fill' in sp.underline, 'a whole Path');
+  assert.equal(text('one').layouted[0].underline, null, 'and null when the span has none');
+}
+
 console.log('ok — text content: all checks passed');

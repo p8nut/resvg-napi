@@ -36,13 +36,18 @@ assert.deepEqual(takeLogs(), [], 'off collects nothing');
 assert.throws(() => setLogLevel('louder'), /unknown log level/);
 
 // 6. the buffer is bounded: a pathological document cannot grow it forever
+//
+//    400 shapes against a 500 cap could not fail -- it asserted `<= 500` on a
+//    number that could not exceed it, so an unbounded buffer would have passed.
+//    1200 is comfortably past the cap, and the assertion is that it *stopped*.
 setLogLevel('warn');
 const many = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${
-  Array.from({ length: 400 }, (_, i) => `<rect width="0" height="1" stroke="red" id="r${i}"/>`).join('')
+  Array.from({ length: 1200 }, (_, i) => `<rect width="0" height="1" stroke="red" id="r${i}"/>`).join('')
 }</svg>`;
 new Resvg(many).renderPng();
 const bounded = takeLogs();
-assert.ok(bounded.length <= 500, `capped at 500, got ${bounded.length}`);
+assert.ok(bounded.length > 100, `the document did produce warnings, got ${bounded.length}`);
+assert.equal(bounded.length, 500, 'capped at exactly 500, not merely under it');
 setLogLevel('off');
 
 console.log('ok — log collection: all checks passed');

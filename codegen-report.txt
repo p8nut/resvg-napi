@@ -9,6 +9,9 @@ Image member not exposed: size: Size
 Image: partial mapping, emitted as read-only class Image
 ImageKind::SVG carries Tree, which has no mappable data: emitted without a value
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
+PositionedGlyph member not exposed: font: ID
+PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
+Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
 TextSpan: partial mapping, emitted as read-only class TextSpan

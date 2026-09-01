@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.2.0 — 2026-09-01
+
+Three things you could not read before, and nineteen defects an adversarial
+review found. The minor bump is for the API additions; two of the fixes change
+shapes, and they are listed under Breaking.
+
+### New
+
+`SvgNode.image()` returns the content of an image node, and the four raster
+variants of its `kind` carry the encoded bytes exactly as the document supplied
+them. usvg says a raster payload should be decoded by the caller; this is the
+caller.
+
+```js
+const img = node.image()
+img.kind.type    // 'png' | 'jpeg' | 'gif' | 'webp' | 'svg'
+img.kind.bytes   // Buffer
+```
+
+`TextSpan.decoration` gives `underline`, `overline` and `lineThrough`, each with
+the fill and stroke it is drawn with. `FontFace.style` says
+`'normal' | 'italic' | 'oblique'`.
+
+### Breaking
+
+The string enums are type-only unions rather than ambient `const enum`s. An
+ambient `const enum` cannot be used under `isolatedModules` -- every bundler --
+so `shapeRendering`, `textRendering` and `imageRendering` had no way to be set at
+all. Write `shapeRendering: 'geometricPrecision'` instead of
+`ShapeRendering.GeometricPrecision`; the runtime is unchanged.
+
+`Span` and `PositionedGlyph` are read-only classes rather than plain objects.
+They expose more than before -- `PositionedGlyph` gained `id` and `text` -- and
+the object form only existed because those members were invisible.
+
+### Fixed, and each of these shipped
+
+**A requested width came back one pixel too wide.** Seventeen of the first four
+hundred widths were wrong on a 100x50 document; `renderPng({width: 120})`
+produced a PNG whose IHDR read 121x61. The scale was an f32 round trip, and every
+width in the test suite was an exact multiple, so nothing could see it.
+
+**Three fields declared `string` while holding a `Path`.** napi maps a type
+*named* `Path` to `string` from the name alone. `span.underline.fill` was a type
+error on working code.
+
+**`npm ci` was impossible** -- the lock file predated the rename.
+
+**A conformance case that started throwing was reported as an improvement.**
+
+**The `Matrix` doc claimed SVG's `matrix()` field order.** It is `sx ky kx sy tx
+ty`, and reading the fields positionally mirrors the transform.
+
+`browser.js` now declares the wasm package it imports, `fit.mjs` ships type
+declarations, `setLogLevel` declares its six levels, and the publish loop can be
+retried.
+
+One thing about `npm ci` worth knowing rather than filing: it works against a
+published version and cannot work against an unpublished one. The manifest names
+its platform packages at the version being released, and until that version is on
+the registry `npm install` cannot resolve them, so the lock file has nothing to
+record and `npm ci` calls them missing. That is why CI uses `npm install`.
+
+### Guarded
+
+One new upstream accessor used to delete every public field of a data type,
+silently. The POW_VEC precision clamp was keyed on a field-name suffix with no
+floor -- a rename upstream meant an index 242 past a 13-entry table, aborting the
+process. Handle discovery truncated at 24 while the report listed the classes it
+had dropped as generated. All three fail the build now, and each was made to fail
+before being trusted.
+
+### Known
+
+`defaultSizeWidth` and `defaultSizeHeight` reach usvg and usvg does not honour
+them: its converter rewrites the size from `default_size` and then recomputes it
+from the attribute, ignoring the rewrite. `test/options.mjs` records both the
+behaviour and the reason.
+
 ## 0.1.2 — 2026-08-31
 
 Same contents as 0.1.1, which never fully published. The number moved because

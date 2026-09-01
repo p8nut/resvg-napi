@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",
   "keywords": [
     "svg",
@@ -103,18 +103,18 @@
     "url": "git+https://github.com/p8nut/resvg-napi.git"
   },
   "optionalDependencies": {
-    "resvg-napi-android-arm-eabi": "0.1.2",
-    "resvg-napi-android-arm64": "0.1.2",
-    "resvg-napi-darwin-arm64": "0.1.2",
-    "resvg-napi-darwin-x64": "0.1.2",
-    "resvg-napi-linux-arm-gnueabihf": "0.1.2",
-    "resvg-napi-linux-arm64-gnu": "0.1.2",
-    "resvg-napi-linux-arm64-musl": "0.1.2",
-    "resvg-napi-linux-x64-gnu": "0.1.2",
-    "resvg-napi-linux-x64-musl": "0.1.2",
-    "resvg-napi-win32-arm64-msvc": "0.1.2",
-    "resvg-napi-win32-ia32-msvc": "0.1.2",
-    "resvg-napi-win32-x64-msvc": "0.1.2"
+    "resvg-napi-android-arm-eabi": "0.2.0",
+    "resvg-napi-android-arm64": "0.2.0",
+    "resvg-napi-darwin-arm64": "0.2.0",
+    "resvg-napi-darwin-x64": "0.2.0",
+    "resvg-napi-linux-arm-gnueabihf": "0.2.0",
+    "resvg-napi-linux-arm64-gnu": "0.2.0",
+    "resvg-napi-linux-arm64-musl": "0.2.0",
+    "resvg-napi-linux-x64-gnu": "0.2.0",
+    "resvg-napi-linux-x64-musl": "0.2.0",
+    "resvg-napi-win32-arm64-msvc": "0.2.0",
+    "resvg-napi-win32-ia32-msvc": "0.2.0",
+    "resvg-napi-win32-x64-msvc": "0.2.0"
   },
   "dependencies": {
     "@emnapi/runtime": "1.11.2",
@@ -126,7 +126,7 @@
     "provenance": true
   },
   "peerDependencies": {
-    "resvg-napi-wasm32-wasi": "0.1.2"
+    "resvg-napi-wasm32-wasi": "0.2.0"
   },
   "peerDependenciesMeta": {
     "resvg-napi-wasm32-wasi": {

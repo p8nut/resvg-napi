@@ -1086,11 +1086,12 @@ fn map_struct(
     ty: &str,
     vocab: &Vocab,
     precision_max: u32,
-) -> (Vec<Field>, Vec<String>) {
+) -> (Vec<Field>, Vec<String>, usize) {
     let named = struct_fields(files, ty);
 
     let mut out = Vec::new();
     let mut skipped = Vec::new();
+    let mut clamped = 0usize;
 
     for f in &named.named {
         if !is_pub(&f.vis) {
@@ -1125,7 +1126,16 @@ fn map_struct(
                 // A `*_precision` field indexes usvg's POW_VEC without a bounds
                 // check, so clamp it to that table's length. Any other u8 just
                 // saturates instead of wrapping.
+                //
+                // The suffix is how the field is recognised, and a rename
+                // upstream would silently fall through to u8::MAX -- which is an
+                // index 242 places past the end of a 13-entry table, reached from
+                // `write_num` for every coordinate. That is an out-of-bounds
+                // panic unwinding out of an `extern "C"` callback, so a process
+                // abort rather than a JS exception. The caller counts what this
+                // matched and fails the build when it matches nothing.
                 let max = if name.ends_with("_precision") {
+                    clamped += 1;
                     precision_max
                 } else {
                     u8::MAX as u32
@@ -1262,7 +1272,7 @@ fn map_struct(
         }
     }
 
-    (out, skipped)
+    (out, skipped, clamped)
 }
 
 fn docs(attrs: &[syn::Attribute]) -> Vec<TokenStream> {
@@ -4296,9 +4306,19 @@ fn main() {
         }
     }
 
-    let (fields, skipped_fields) = map_struct(&usvg_files, "Options", &vocab, precision_max);
-    let (write_fields, skipped_write) =
+    let (fields, skipped_fields, _) = map_struct(&usvg_files, "Options", &vocab, precision_max);
+    let (write_fields, skipped_write, clamped) =
         map_struct(&usvg_files, "WriteOptions", &vocab, precision_max);
+    // WriteOptions is where the POW_VEC indices live, and the fields are found
+    // by a `_precision` suffix. A rename upstream would match nothing, fall
+    // through to u8::MAX, and hand usvg an index 242 places past the end of a
+    // 13-entry table -- an out-of-bounds panic inside an `extern "C"` callback,
+    // which aborts the process rather than throwing. Loud here instead.
+    assert!(
+        clamped > 0,
+        "no WriteOptions field matched `*_precision`: either usvg renamed them, \
+         in which case this clamp now protects nothing, or they are gone"
+    );
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
     // class for each, then follow the handles *those* classes return. The type
@@ -4325,9 +4345,19 @@ fn main() {
     let mut done: BTreeSet<String> = BTreeSet::new();
     let mut wrapper_code = TokenStream::new();
     while let Some(t) = todo.pop() {
-        if !done.insert(t.clone()) || done.len() > 24 {
+        if !done.insert(t.clone()) {
             continue;
         }
+        // A runaway guard, not a budget -- the same rule the object loop was
+        // given. It used to be a silent `|| done.len() > 24`, which dropped
+        // whatever the LIFO pop order reached last while `report!` still listed
+        // it among the classes generated: the report named types the build had
+        // never emitted, and the build then failed on them.
+        assert!(
+            done.len() <= 512,
+            "handle discovery passed 512 types at {t}: either the graph is cyclic \
+             or this bound needs raising, but it must not truncate in silence"
+        );
         let name = wrapper_ident(&t).to_string();
         if RESERVED.contains(&name.as_str()) {
             report!("handle {t} skipped: name {name} is taken");

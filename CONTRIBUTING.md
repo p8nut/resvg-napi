@@ -1,16 +1,37 @@
 # Contributing
 
 Almost none of `src/lib.rs` is written by hand. Read this before changing it --
-or rather, before changing `build.rs`, which is what writes it.
+or rather, before changing the generator in `build.rs` and `build/`, which is
+what writes it.
 
 ## How the bindings are generated
 
-`build.rs` parses the sources of `usvg`, `resvg`, `fontdb`, `tiny-skia-path` and
-`strict-num` with `syn`, and emits `src/lib.rs` with `quote`. Everything that
+The generator parses the sources of `usvg`, `resvg`, `fontdb`, `tiny-skia-path`
+and `strict-num` with `syn`, and emits `src/lib.rs` with `quote`. Everything that
 describes upstream — types, names, signatures, doc comments, even bounds such as
 the precision clamp read out of usvg's `POW_VEC` — is derived. The hand-written
 part is the API shape: what a `Pixmap` becomes, how images and fonts are
 resolved, what runs on a worker thread.
+
+It is five files, one per phase:
+
+| | |
+|---|---|
+| `build/sources.rs` | finding and parsing upstream: env override, then git submodule, then the cargo registry at the version `Cargo.lock` names |
+| `build/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
+| `build/emit.rs` | turning those answers into tokens napi can expand |
+| `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
+| `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
+
+If you are adding to the API, `template.rs` is where it goes. If upstream moved
+and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen
+report says which member and why.
+
+The split is verifiable rather than a matter of taste: `src/lib.rs`,
+`index.d.ts` and `codegen-report.txt` are committed and CI diffs them, so a
+refactor of the generator is correct exactly when the output does not move. That
+is how this one was done — five files out of one, six generated files
+byte-identical afterwards.
 
 `src/lib.rs`, `index.js` and `index.d.ts` are generated *and* committed, and the
 generator is deterministic: CI regenerates them and fails on any diff. A

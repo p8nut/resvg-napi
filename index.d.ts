@@ -158,7 +158,7 @@ export declare class FontDatabase {
 /** Read-only view of a `FaceInfo`. */
 export declare class FontFace {
   get index(): number
-  get postScriptName(): string
+  get postScriptName(): String
   get style(): FontFaceStyle
   get weight(): number
   get monospaced(): boolean
@@ -168,7 +168,7 @@ export declare class FontFace {
 
 /** Read-only view of an `Image`. */
 export declare class Image {
-  get id(): string
+  get id(): String
   get isVisible(): boolean
   get renderingMode(): ImageRendering
   get kind(): ImageKindJpeg | ImageKindPng | ImageKindGif | ImageKindWebp | ImageKindSvg
@@ -290,6 +290,17 @@ export declare class Pattern {
   rect(): BBox
   /** Children of this definition's content group. */
   children(): Array<SvgNode>
+}
+
+/** Read-only view of a `PositionedGlyph`. */
+export declare class PositionedGlyph {
+  get fontSize(): number
+  get transform(): Matrix
+  get outlineTransform(): Matrix
+  get svgTransform(): Matrix
+  get colrTransform(): Matrix
+  get id(): number
+  get text(): String
 }
 
 /** Read-only handle on a `usvg::RadialGradient`. */
@@ -521,6 +532,21 @@ export declare class Resvg {
   renderRawAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<RawImage>
 }
 
+/** Read-only view of a `Span`. */
+export declare class Span {
+  get fill(): Fill | null
+  get stroke(): Stroke | null
+  get paintOrder(): PaintOrder
+  get fontSize(): number
+  get variations(): Array<FontVariation>
+  get fontOpticalSizing(): FontOpticalSizing
+  get visible(): boolean
+  get positionedGlyphs(): Array<PositionedGlyph>
+  get underline(): Path | null
+  get overline(): Path | null
+  get lineThrough(): Path | null
+}
+
 /**
  * A read-only handle on one element of the parsed tree.
  *
@@ -615,7 +641,7 @@ export declare class SvgNode {
 
 /** Read-only view of a `Text`. */
 export declare class Text {
-  get id(): string
+  get id(): String
   get renderingMode(): TextRendering
   get dx(): Array<number>
   get dy(): Array<number>
@@ -637,7 +663,7 @@ export declare class TextChunk {
   get anchor(): TextAnchor
   get spans(): Array<TextSpan>
   get textFlow(): TextFlowPlain | TextFlowPath
-  get text(): string
+  get text(): String
 }
 
 /** Read-only view of a `TextSpan`. */
@@ -967,7 +993,7 @@ export declare const enum FontStyle {
 
 /** Plain view of a `FontVariation`. */
 export interface FontVariation {
-  tag: string
+  tag: String
   value: number
 }
 
@@ -1185,7 +1211,16 @@ export declare const enum MaskType {
   Alpha = 'alpha'
 }
 
-/** An affine transform, same field order as SVG's `matrix(...)`. */
+/**
+ * An affine transform. Field names and order are tiny-skia's.
+ *
+ * They are *not* the order of SVG's `matrix(a b c d e f)`, which
+ * takes `sx ky kx sy tx ty` -- upstream says so itself: "we are
+ * using column-major-column-vector matrix notation, therefore it's
+ * ky-kx, not kx-ky". Reading these positionally into a `matrix()`
+ * string mirrors the transform, silently. Name the fields:
+ * `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`.
+ */
 export interface Matrix {
   sx: number
   kx: number
@@ -1272,7 +1307,7 @@ export interface PaintRadialGradient {
 
 /** Plain view of a `Path`. */
 export interface Path {
-  id: string
+  id: String
   isVisible: boolean
   fill?: Fill
   stroke?: Stroke
@@ -1309,20 +1344,11 @@ export interface PointLight {
   z: number
 }
 
-/** Plain view of a `PositionedGlyph`. */
-export interface PositionedGlyph {
-  fontSize: number
-  transform: Matrix
-  outlineTransform: Matrix
-  svgTransform: Matrix
-  colrTransform: Matrix
-}
-
 /** Plain view of a `Primitive`. */
 export interface Primitive {
   rect: BBox
   colorInterpolation: ColorInterpolation
-  result: string
+  result: String
   kind: KindBlend | KindColorMatrix | KindComponentTransfer | KindComposite | KindConvolveMatrix | KindDiffuseLighting | KindDisplacementMap | KindDropShadow | KindFlood | KindGaussianBlur | KindImage | KindMerge | KindMorphology | KindOffset | KindSpecularLighting | KindTile | KindTurbulence
 }
 
@@ -1473,21 +1499,6 @@ export declare const enum ShapeRendering {
   OptimizeSpeed = 'optimizeSpeed',
   CrispEdges = 'crispEdges',
   GeometricPrecision = 'geometricPrecision'
-}
-
-/** Plain view of a `Span`. */
-export interface Span {
-  fill?: Fill
-  stroke?: Stroke
-  paintOrder: PaintOrder
-  fontSize: number
-  variations: Array<FontVariation>
-  fontOpticalSizing: FontOpticalSizing
-  visible: boolean
-  positionedGlyphs: Array<PositionedGlyph>
-  underline?: string
-  overline?: string
-  lineThrough?: string
 }
 
 /** Plain view of a `SpecularLighting`. */

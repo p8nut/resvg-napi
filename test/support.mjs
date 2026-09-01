@@ -49,7 +49,22 @@ export function testFontFile() {
   return CANDIDATES.find((f) => existsSync(f)) ?? null;
 }
 
-/** Prints what was not checked, and why, then leaves the exit code at 0. */
+/**
+ * Prints what was not checked, and why.
+ *
+ * Seven of the fourteen test files skip themselves when no font is present, and
+ * a skip leaves the exit code at 0 -- so half the suite could go quiet and the
+ * runner would still report fourteen passes. That is right for WASI, which has
+ * no font directories by design, and wrong everywhere else.
+ *
+ * `RESVG_REQUIRE_FONTS=1` turns a skip into a failure. CI sets it on the native
+ * jobs, where a missing font means the environment broke rather than that it is
+ * a sandbox.
+ */
 export function skip(what, why) {
+  if (process.env.RESVG_REQUIRE_FONTS === '1') {
+    console.error(`FAIL — ${what}: ${why} (RESVG_REQUIRE_FONTS=1)`);
+    process.exit(1);
+  }
   console.log(`skip — ${what}: ${why}`);
 }

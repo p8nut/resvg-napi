@@ -351,7 +351,11 @@ impl PayloadEnum {
     /// should show up as a union appearing, not as a mystery.
     fn payload_blocker(&self, vocab: &Vocab) -> Option<String> {
         /// Whether one carried type can be a field of an `#[napi(object)]`.
-        fn field_of(vocab: &Vocab, p: &str) -> Result<(), String> {
+        /// `sole` says the variant carries this and nothing else, which is the
+        /// only shape `payload_enum_code` turns into a read-only class. A named
+        /// field beside others has to be an object field, and bytes cannot be
+        /// one.
+        fn field_of(vocab: &Vocab, p: &str, sole: bool) -> Result<(), String> {
             if let Some(Js::Handle(t)) = vocab.classify(p) {
                 return if vocab.with_id.contains(&t) {
                     Ok(())
@@ -399,7 +403,19 @@ impl PayloadEnum {
                 // field. They can be a getter, so the variant carrying them is
                 // emitted as a read-only class instead. See
                 // `payload_enum_code`.
-                Some(Js::Bytes) => Ok(()),
+                // Bytes alone become a read-only class with a getter. Bytes
+                // beside other named fields have nowhere to go, and saying
+                // otherwise here left `classify` committed to a union that
+                // `payload_enum_code` then refused to emit: a dangling
+                // `*_to_js` call and a crate that does not compile, with the
+                // report line explaining why never printed because `napi build`
+                // failed first.
+                Some(Js::Bytes) if sole => Ok(()),
+                Some(Js::Bytes) => Err(
+                    "being bytes, it can only be carried alone: a variant with named fields \
+                     is an object, and napi requires Clone of every field"
+                        .into(),
+                ),
                 other => Err(format!("it maps to {other:?}")),
             }
         }
@@ -410,8 +426,9 @@ impl PayloadEnum {
                 Payload::Value(t) => vec![(None, t)],
                 Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
             };
+            let sole = matches!(p, Payload::Value(_));
             carried.into_iter().find_map(|(field, t)| {
-                field_of(vocab, t).err().map(|why| match field {
+                field_of(vocab, t, sole).err().map(|why| match field {
                     Some(f) => format!("{n}.{f} carries {t}, and {why}"),
                     None => format!("{n} carries {t}, and {why}"),
                 })
@@ -1148,11 +1165,12 @@ fn map_struct(
     ty: &str,
     vocab: &Vocab,
     precision_max: u32,
-) -> (Vec<Field>, Vec<String>) {
+) -> (Vec<Field>, Vec<String>, usize) {
     let named = struct_fields(files, ty);
 
     let mut out = Vec::new();
     let mut skipped = Vec::new();
+    let mut clamped = 0usize;
 
     for f in &named.named {
         if !is_pub(&f.vis) {
@@ -1187,7 +1205,16 @@ fn map_struct(
                 // A `*_precision` field indexes usvg's POW_VEC without a bounds
                 // check, so clamp it to that table's length. Any other u8 just
                 // saturates instead of wrapping.
+                //
+                // The suffix is how the field is recognised, and a rename
+                // upstream would silently fall through to u8::MAX -- which is an
+                // index 242 places past the end of a 13-entry table, reached from
+                // `write_num` for every coordinate. That is an out-of-bounds
+                // panic unwinding out of an `extern "C"` callback, so a process
+                // abort rather than a JS exception. The caller counts what this
+                // matched and fails the build when it matches nothing.
                 let max = if name.ends_with("_precision") {
+                    clamped += 1;
                     precision_max
                 } else {
                     u8::MAX as u32
@@ -1324,7 +1351,7 @@ fn map_struct(
         }
     }
 
-    (out, skipped)
+    (out, skipped, clamped)
 }
 
 fn docs(attrs: &[syn::Attribute]) -> Vec<TokenStream> {
@@ -1540,6 +1567,52 @@ struct Member {
     value: TokenStream,
 }
 
+/// The TypeScript type to force, when napi would rewrite it from the name alone.
+///
+/// napi-derive-backend maps a Rust type *named* `String`, `char`, `OsStr`,
+/// `PathBuf`, `Path`, `BigInt`, `Symbol`, `Null` or `JsFunction` to a JS
+/// primitive, reading the name and not the type. `Path` is the one that collides
+/// with a type this generator emits, and the collision is a property of napi
+/// rather than of this API -- so it is answered wherever a member is emitted,
+/// not at the one call site that noticed it first.
+///
+/// `usvg::layout::Span` carries three `Option<Path>` fields, and they shipped
+/// declared as `string` while holding a whole `Path` object.
+fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
+    const CLASHES: [&str; 9] = [
+        "String",
+        "char",
+        "OsStr",
+        "PathBuf",
+        "Path",
+        "BigInt",
+        "Symbol",
+        "Null",
+        "JsFunction",
+    ];
+    let t = jsty.to_string().replace(' ', "");
+    // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
+    // -- napi only rewrites the type itself, so only those two shapes need it.
+    let (inner, optional) = match t.strip_prefix("Option<").and_then(|r| r.strip_suffix('>')) {
+        Some(i) => (i, true),
+        None => (t.as_str(), false),
+    };
+    if !CLASHES.contains(&inner) {
+        return None;
+    }
+    // A field keeps its own optionality: napi derives `?` from the Rust type
+    // independently of `ts_type`, so spelling the union here would give
+    // `underline?: Path | null`. A getter's return type does not, so it does.
+    Some((
+        inner.to_string(),
+        if optional {
+            format!("{inner} | null")
+        } else {
+            inner.to_string()
+        },
+    ))
+}
+
 /// Walks a data type's members -- accessors first, public fields otherwise --
 /// and maps the ones it can. Shared by the strict object emitter and the value
 /// class emitter, which differ only in how they package the result.
@@ -1730,7 +1803,19 @@ fn data_members(
         out.push(Member { id, jsty, value });
     };
 
-    let mut has_accessors = false;
+    // Fields and accessors both, not one or the other.
+    //
+    // This used to take accessors when there were any and fall back to public
+    // fields only when there were none, which made the choice a whole-type
+    // switch: a single new `pub fn` upstream flipped a type off its fields and
+    // deleted every one of them. Adding `fn is_black(&self) -> bool` to
+    // `usvg::Color` replaced `red`, `green` and `blue` with `isBlack` -- no
+    // report line, no dropped member, the completeness assert satisfied because
+    // nothing had been dropped. It just emitted a different type.
+    //
+    // Accessors first so a name they share with a field resolves to the
+    // accessor, which is the one upstream means to be read.
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Impl(imp) = item else { continue };
         if imp.trait_.is_some() || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty) {
@@ -1745,19 +1830,20 @@ fn data_members(
                 continue;
             };
             let id = &f.sig.ident;
-            has_accessors = true;
+            seen.insert(id.to_string());
             push(&id.to_string(), &ty_str(o), quote!(v.#id()));
         }
     }
-    if !has_accessors {
-        if let Some(Fields::Named(named)) = struct_fields_opt(files, ty) {
-            for f in &named.named {
-                if !is_pub(&f.vis) {
-                    continue;
-                }
-                let id = f.ident.clone().unwrap();
-                push(&id.to_string(), &ty_str(&f.ty), quote!(v.#id.clone()));
+    if let Some(Fields::Named(named)) = struct_fields_opt(files, ty) {
+        for f in &named.named {
+            if !is_pub(&f.vis) {
+                continue;
             }
+            let id = f.ident.clone().unwrap();
+            if seen.contains(&id.to_string()) {
+                continue;
+            }
+            push(&id.to_string(), &ty_str(&f.ty), quote!(v.#id.clone()));
         }
     }
     (out, skipped, reached)
@@ -1780,7 +1866,10 @@ fn object_struct(
     let up = upstream_path(ty, modules, root);
     let decls = members.iter().map(|m| {
         let (id, t) = (&m.id, &m.jsty);
-        quote!(pub #id: #t,)
+        match napi_name_clash(t) {
+            Some((field_ty, _)) => quote!(#[napi(ts_type = #field_ty)] pub #id: #t,),
+            None => quote!(pub #id: #t,),
+        }
     });
     let inits = members.iter().map(|m| {
         let (id, e) = (&m.id, &m.value);
@@ -1823,8 +1912,12 @@ fn value_class(
     let up = upstream_path(ty, modules, root);
     let getters = members.iter().map(|m| {
         let (id, t, e) = (&m.id, &m.jsty, &m.value);
+        let attr = match napi_name_clash(t) {
+            Some((_, ret_ty)) => quote!(#[napi(getter, ts_return_type = #ret_ty)]),
+            None => quote!(#[napi(getter)]),
+        };
         quote! {
-            #[napi(getter)]
+            #attr
             pub fn #id(&self) -> #t {
                 let v = &self.inner;
                 #e
@@ -2982,7 +3075,14 @@ fn template(
             pub crop: Option<BBox>,
         }
 
-        #[doc = " An affine transform, same field order as SVG's `matrix(...)`."]
+        #[doc = " An affine transform. Field names and order are tiny-skia's."]
+        #[doc = ""]
+        #[doc = " They are *not* the order of SVG's `matrix(a b c d e f)`, which"]
+        #[doc = " takes `sx ky kx sy tx ty` -- upstream says so itself: \"we are"]
+        #[doc = " using column-major-column-vector matrix notation, therefore it's"]
+        #[doc = " ky-kx, not kx-ky\". Reading these positionally into a `matrix()`"]
+        #[doc = " string mirrors the transform, silently. Name the fields:"]
+        #[doc = " `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`."]
         #[napi(object)]
         #[derive(Clone, Copy)]
         pub struct Matrix {
@@ -3716,18 +3816,33 @@ fn template(
                         "empty crop: {base_w}x{base_h}"
                     )));
                 }
-                let scale = if let Some(w) = p.width {
-                    w as f32 / base_w
+                // A requested dimension is honoured exactly, not recomputed.
+                // `(base * (w / base)).ceil()` looks like an identity and is not:
+                // the f32 round trip can land a hair above the integer and the
+                // ceil then adds a pixel. On a 100x50 document seventeen of the
+                // first four hundred widths came back one too wide -- 120 gave a
+                // PNG whose IHDR read 121x61 -- while every width the test suite
+                // uses is an exact multiple, so nothing here could see it.
+                let (scale, w, h) = if let Some(w) = p.width {
+                    // The other side from the ratio itself, in f64: going through
+                    // the f32 scale makes 50 * (120 / 100) come out 60.000004,
+                    // which ceils to 61.
+                    let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
+                    (w as f32 / base_w, w, (h as u32).max(1))
                 } else if let Some(h) = p.height {
-                    h as f32 / base_h
+                    let w = (base_w as f64 * h as f64 / base_h as f64).ceil();
+                    (h as f32 / base_h, (w as u32).max(1), h)
                 } else {
-                    p.scale.unwrap_or(1.0) as f32
+                    let s = p.scale.unwrap_or(1.0);
+                    (
+                        s as f32,
+                        ((base_w as f64 * s).ceil() as u32).max(1),
+                        ((base_h as f64 * s).ceil() as u32).max(1),
+                    )
                 };
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
-                let w = (base_w * scale).ceil() as u32;
-                let h = (base_h * scale).ceil() as u32;
                 let mut pixmap = tiny_skia::Pixmap::new(w, h)
                     .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
                 if let Some(css) = &p.background {
@@ -3757,18 +3872,33 @@ fn template(
                 let inner = node
                     .abs_layer_bounding_box()
                     .ok_or_else(|| Error::from_reason("element is empty"))?;
-                let scale = if let Some(w) = p.width {
-                    w as f32 / bbox.width()
+                // A requested dimension is honoured exactly, not recomputed.
+                // `(base * (w / base)).ceil()` looks like an identity and is not:
+                // the f32 round trip can land a hair above the integer and the
+                // ceil then adds a pixel. On a 100x50 document seventeen of the
+                // first four hundred widths came back one too wide -- 120 gave a
+                // PNG whose IHDR read 121x61 -- while every width the test suite
+                // uses is an exact multiple, so nothing here could see it.
+                let (scale, w, h) = if let Some(w) = p.width {
+                    // The other side from the ratio itself, in f64: going through
+                    // the f32 scale makes 50 * (120 / 100) come out 60.000004,
+                    // which ceils to 61.
+                    let h = (bbox.height() as f64 * w as f64 / bbox.width() as f64).ceil();
+                    (w as f32 / bbox.width(), w, (h as u32).max(1))
                 } else if let Some(h) = p.height {
-                    h as f32 / bbox.height()
+                    let w = (bbox.width() as f64 * h as f64 / bbox.height() as f64).ceil();
+                    (h as f32 / bbox.height(), (w as u32).max(1), h)
                 } else {
-                    p.scale.unwrap_or(1.0) as f32
+                    let s = p.scale.unwrap_or(1.0);
+                    (
+                        s as f32,
+                        ((bbox.width() as f64 * s).ceil() as u32).max(1),
+                        ((bbox.height() as f64 * s).ceil() as u32).max(1),
+                    )
                 };
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
-                let w = (bbox.width() * scale).ceil() as u32;
-                let h = (bbox.height() * scale).ceil() as u32;
                 let mut pixmap = tiny_skia::Pixmap::new(w, h)
                     .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
                 if let Some(css) = &p.background {
@@ -3933,15 +4063,22 @@ fn main() {
     }
     // Public names usvg defines twice. Exactly one today, `Image`, and the
     // report says so rather than leaving it to be rediscovered.
+    //
+    // Enums count as well as structs, and they count together: `payload_enums`
+    // qualifies a carried type by this set, so an enum defined in two modules --
+    // or an enum in one and a struct of the same name in another -- would be
+    // keyed by its bare name and resolve to whichever the walk reached first.
+    // That is the failure `filter::Image` already caused once on the struct side.
     let dups: BTreeSet<String> = {
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for f in &usvg_files {
             for item in &f.items {
-                if let Item::Struct(st) = item {
-                    if is_pub(&st.vis) {
-                        *seen.entry(st.ident.to_string()).or_default() += 1;
-                    }
-                }
+                let name = match item {
+                    Item::Struct(st) if is_pub(&st.vis) => st.ident.to_string(),
+                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
+                    _ => continue,
+                };
+                *seen.entry(name).or_default() += 1;
             }
         }
         seen.into_iter()
@@ -4287,9 +4424,19 @@ fn main() {
         }
     }
 
-    let (fields, skipped_fields) = map_struct(&usvg_files, "Options", &vocab, precision_max);
-    let (write_fields, skipped_write) =
+    let (fields, skipped_fields, _) = map_struct(&usvg_files, "Options", &vocab, precision_max);
+    let (write_fields, skipped_write, clamped) =
         map_struct(&usvg_files, "WriteOptions", &vocab, precision_max);
+    // WriteOptions is where the POW_VEC indices live, and the fields are found
+    // by a `_precision` suffix. A rename upstream would match nothing, fall
+    // through to u8::MAX, and hand usvg an index 242 places past the end of a
+    // 13-entry table -- an out-of-bounds panic inside an `extern "C"` callback,
+    // which aborts the process rather than throwing. Loud here instead.
+    assert!(
+        clamped > 0,
+        "no WriteOptions field matched `*_precision`: either usvg renamed them, \
+         in which case this clamp now protects nothing, or they are gone"
+    );
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
     // class for each, then follow the handles *those* classes return. The type
@@ -4316,9 +4463,19 @@ fn main() {
     let mut done: BTreeSet<String> = BTreeSet::new();
     let mut wrapper_code = TokenStream::new();
     while let Some(t) = todo.pop() {
-        if !done.insert(t.clone()) || done.len() > 24 {
+        if !done.insert(t.clone()) {
             continue;
         }
+        // A runaway guard, not a budget -- the same rule the object loop was
+        // given. It used to be a silent `|| done.len() > 24`, which dropped
+        // whatever the LIFO pop order reached last while `report!` still listed
+        // it among the classes generated: the report named types the build had
+        // never emitted, and the build then failed on them.
+        assert!(
+            done.len() <= 512,
+            "handle discovery passed 512 types at {t}: either the graph is cyclic \
+             or this bound needs raising, but it must not truncate in silence"
+        );
         let name = wrapper_ident(&t).to_string();
         if RESERVED.contains(&name.as_str()) {
             report!("handle {t} skipped: name {name} is taken");

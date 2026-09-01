@@ -4,9 +4,16 @@
     "target": "es2022",
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "noEmit": true,
     "skipLibCheck": false
   },
-  "include": ["test/types.mts", "index.d.ts"]
+  "include": [
+    "fit.d.mts",
+    "index.d.ts",
+    "test/fit-types.mts",
+    "test/types.mts"
+  ]
 }

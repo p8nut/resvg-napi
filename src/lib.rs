@@ -3496,7 +3496,7 @@ impl log::Log for LogCollector {
 #[doc = ""]
 #[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
 #[doc = " call repeatedly: the logger is installed once, the level always applies."]
-#[napi]
+#[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
 pub fn set_log_level(level: String) -> Result<()> {
     let filter: log::LevelFilter = level
         .parse()

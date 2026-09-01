@@ -57,7 +57,7 @@ A span carries what it is drawn with, down to the lines through it:
 
 ```js
 const span = n.text().chunks[0].spans[0]
-span.decoration.underline?.fill.paint   // …and .overline, .lineThrough
+span.decoration.underline?.fill?.paint  // …and .overline, .lineThrough
 ```
 
 Paint is a discriminated union, so TypeScript narrows it:

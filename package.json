@@ -71,7 +71,8 @@
       "aarch64-linux-android",
       "armv7-linux-androideabi",
       "wasm32-wasip1-threads"
-    ]
+    ],
+    "constEnum": false
   },
   "files": [
     "LICENSE-APACHE",

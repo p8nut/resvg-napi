@@ -115,12 +115,16 @@ for (const line of logs) console.log('  ' + line);
 // problems is the point of this script. `--strict` is what `test:examples`
 // passes.
 if (strict) {
-  // Which font a machine has is an environment fact, not a regression: the
-  // Linux runner ships Noto Color Emoji and photo-card.svg asks for it, while
-  // macOS and Windows do not -- so a font-matching warning is reported and not
-  // fatal. Everything else is: a skipped shape, an unreadable href, an
-  // attribute usvg could not parse.
-  const environmental = /No match for .* font-family/;
+  // Which fonts a machine has is an environment fact, not a regression, and usvg
+  // says so in two ways: it cannot match a family at all, or it matches a
+  // different one. photo-card.svg asks for an emoji font -- the Linux runner
+  // ships Noto Color Emoji, Windows falls back to Segoe UI Emoji, macOS has
+  // neither. Both phrasings are reported and neither is fatal.
+  //
+  // Deliberately not "ignore everything from usvg::text": a shaping failure or a
+  // malformed `font-size` comes from the same module and is a defect. These are
+  // the two font-*selection* messages, matched as written.
+  const environmental = /usvg::text: (No match for .* font-family|Fallback from .* to )/;
   const defects = logs.filter((l) => !environmental.test(l));
   const pendingFonts = doc.pendingFonts();
   const pendingImages = doc.pendingImages();

@@ -4,6 +4,7 @@ import {
   renderAsync,
   FontDatabase,
   ShapeRendering,
+  setLogLevel,
   TextRendering,
   type RenderOptions,
   type RawImage,
@@ -29,10 +30,21 @@ const options: RenderOptions = {
   fontFamily: 'DejaVu Sans',
   fontSize: 28,
   languages: ['fr', 'en'],
-  shapeRendering: ShapeRendering.GeometricPrecision,
-  textRendering: TextRendering.OptimizeLegibility,
+  // String literals, not enum members: the enums are type-only unions now, so
+  // no ambient `const enum` stands between a caller and these fields under
+  // isolatedModules -- which is every bundler.
+  shapeRendering: 'geometricPrecision',
+  textRendering: 'optimizeLegibility',
   styleSheet: 'text { letter-spacing: 1px }',
 };
+
+// The union still rejects a typo, which is the point of typing it at all.
+const _valid: ShapeRendering = 'crispEdges';
+// @ts-expect-error not one of the three
+const _bad: ShapeRendering = 'crispedges';
+const _level: Parameters<typeof setLogLevel>[0] = 'warn';
+// @ts-expect-error not one of the six
+const _badLevel: Parameters<typeof setLogLevel>[0] = 'loud';
 
 // 3. parse once, render many
 const doc = new Resvg(svg, options, fonts);

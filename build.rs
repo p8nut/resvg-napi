@@ -3239,7 +3239,9 @@ fn template(
         #[doc = ""]
         #[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
         #[doc = " call repeatedly: the logger is installed once, the level always applies."]
-        #[napi]
+        // The six levels are checked at runtime and were declared as a bare
+        // `string`, so a typo was a thrown error rather than a red squiggle.
+        #[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
         pub fn set_log_level(level: String) -> Result<()> {
             let filter: log::LevelFilter = level
                 .parse()

@@ -21,7 +21,7 @@
     "test": "npm run test:node && npm run test:examples",
     "test:wasi": "NAPI_RS_NATIVE_LIBRARY_PATH=./resvg-napi.wasi.cjs npm run test:node",
     "test:node": "node --test",
-    "test:examples": "RESVG_STRICT_EXAMPLES=1 node demo/render.mjs examples/roster.svg && node demo/render.mjs examples/badge-sheet.svg && node demo/render.mjs examples/photo-card.svg && node demo/render.mjs examples/sheet.svg --lang fr",
+    "test:examples": "node demo/render.mjs examples/roster.svg --strict && node demo/render.mjs examples/badge-sheet.svg --strict && node demo/render.mjs examples/photo-card.svg --strict && node demo/render.mjs examples/sheet.svg --lang fr --strict",
     "typecheck": "tsc",
     "build:debug": "napi build --platform",
     "artifacts": "napi artifacts",

@@ -85,6 +85,21 @@ export function disagreement(tableTargets, napiTargets) {
   return why;
 }
 
+/**
+ * What the script writes to GITHUB_OUTPUT: one `key=value` per line.
+ *
+ * Shared with the selftest so what is asserted is what is emitted. It used to
+ * assert that `JSON.stringify` escapes newlines, which is a fact about the
+ * standard library and stays true however this file changes.
+ */
+export function emit(full) {
+  return [
+    `full=${full}`,
+    `targets=${JSON.stringify(matrix(full))}`,
+    `tests=${JSON.stringify(tests(full))}`,
+  ].join('\n') + '\n';
+}
+
 if (process.argv.includes('--selftest')) {
   const assert = (await import('node:assert/strict')).default;
   assert.equal(isFull('push', []), true);
@@ -118,12 +133,17 @@ if (process.argv.includes('--selftest')) {
   // value silently truncates it and the matrix comes out empty. The wasm
   // artifact path is a multi-line glob, so this is a live hazard, not a
   // hypothetical -- JSON.stringify escaping it is what keeps it on one line.
-  for (const v of [JSON.stringify(matrix(true)), JSON.stringify(tests(true))]) {
-    assert.ok(!v.includes('\n'), 'a value with a raw newline would truncate GITHUB_OUTPUT');
+  // The lines this script actually prints, not `JSON.stringify`'s behaviour --
+  // asserting the latter tested the standard library rather than this file, and
+  // would have kept passing if the emitter stopped using it.
+  for (const line of emit(true).split('\n')) {
+    if (!line) continue;
+    assert.match(line, /^[a-z]+=/, `every line is key=value, got ${line.slice(0, 40)}`);
   }
+  assert.equal(emit(true).trimEnd().split('\n').length, 3, 'exactly three keys, one line each');
   assert.ok(matrix(true).find((t) => t.target === 'wasm32-wasip1-threads')
     .artifact_path.includes('\n'), 'and the wasm glob really is multi-line');
-  console.log('ok — ci-targets: 21 checks passed');
+  console.log('ok — ci-targets: 22 checks passed');
   process.exit(0);
 }
 
@@ -135,6 +155,4 @@ if (why.length) {
 }
 
 const full = isFull(process.env.EVENT ?? 'push', JSON.parse(process.env.LABELS || '[]'));
-console.log(`full=${full}`);
-console.log(`targets=${JSON.stringify(matrix(full))}`);
-console.log(`tests=${JSON.stringify(tests(full))}`);
+process.stdout.write(emit(full));

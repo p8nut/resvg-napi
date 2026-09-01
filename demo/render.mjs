@@ -27,9 +27,15 @@ const argv = process.argv.slice(2);
 const langAt = argv.indexOf('--lang');
 const languages = langAt === -1 ? undefined : [argv[langAt + 1]];
 if (langAt !== -1) argv.splice(langAt, 2);
+// A flag, not an environment variable: `VAR=1 node ...` is POSIX shell syntax
+// and `cmd` on the Windows runner answers "'VAR' is not recognized as an
+// internal or external command", which is how the 0.2.0 tag failed its test job.
+const strictAt = argv.indexOf('--strict');
+const strict = strictAt !== -1;
+if (strict) argv.splice(strictAt, 1);
 const [templateArg, outArg] = argv;
 if (!templateArg) {
-  console.error('usage: node demo/render.mjs <template.svg> [out.png] [--lang xx]');
+  console.error('usage: node demo/render.mjs <template.svg> [out.png] [--lang xx] [--strict]');
   process.exit(2);
 }
 const template = resolve(here, templateArg);
@@ -106,13 +112,27 @@ for (const line of logs) console.log('  ' + line);
 // render clean today, so anything usvg reports is a regression.
 //
 // Off by default: rendering a document of your own and being told about its
-// problems is the point of this script.
-if (process.env.RESVG_STRICT_EXAMPLES === '1') {
+// problems is the point of this script. `--strict` is what `test:examples`
+// passes.
+if (strict) {
+  // Which fonts a machine has is an environment fact, not a regression, and usvg
+  // says so in two ways: it cannot match a family at all, or it matches a
+  // different one. photo-card.svg asks for an emoji font -- the Linux runner
+  // ships Noto Color Emoji, Windows falls back to Segoe UI Emoji, macOS has
+  // neither. Both phrasings are reported and neither is fatal.
+  //
+  // Deliberately not "ignore everything from usvg::text": a shaping failure or a
+  // malformed `font-size` comes from the same module and is a defect. These are
+  // the two font-*selection* messages, matched as written.
+  const environmental = /usvg::text: (No match for .* font-family|Fallback from .* to )/;
+  const defects = logs.filter((l) => !environmental.test(l));
   const pendingFonts = doc.pendingFonts();
   const pendingImages = doc.pendingImages();
+  if (pendingFonts.length) {
+    console.log(`  note: ${pendingFonts.length} font(s) this machine does not have: ${pendingFonts.join(', ')}`);
+  }
   const why = [
-    logs.length && `${logs.length} diagnostic(s) from usvg`,
-    pendingFonts.length && `unresolved font(s): ${pendingFonts.join(', ')}`,
+    defects.length && `${defects.length} diagnostic(s) from usvg`,
     pendingImages.length && `unresolved image(s): ${pendingImages.join(', ')}`,
   ].filter(Boolean);
   if (why.length) {

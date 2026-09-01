@@ -27,9 +27,15 @@ const argv = process.argv.slice(2);
 const langAt = argv.indexOf('--lang');
 const languages = langAt === -1 ? undefined : [argv[langAt + 1]];
 if (langAt !== -1) argv.splice(langAt, 2);
+// A flag, not an environment variable: `VAR=1 node ...` is POSIX shell syntax
+// and `cmd` on the Windows runner answers "'VAR' is not recognized as an
+// internal or external command", which is how the 0.2.0 tag failed its test job.
+const strictAt = argv.indexOf('--strict');
+const strict = strictAt !== -1;
+if (strict) argv.splice(strictAt, 1);
 const [templateArg, outArg] = argv;
 if (!templateArg) {
-  console.error('usage: node demo/render.mjs <template.svg> [out.png] [--lang xx]');
+  console.error('usage: node demo/render.mjs <template.svg> [out.png] [--lang xx] [--strict]');
   process.exit(2);
 }
 const template = resolve(here, templateArg);
@@ -106,8 +112,9 @@ for (const line of logs) console.log('  ' + line);
 // render clean today, so anything usvg reports is a regression.
 //
 // Off by default: rendering a document of your own and being told about its
-// problems is the point of this script.
-if (process.env.RESVG_STRICT_EXAMPLES === '1') {
+// problems is the point of this script. `--strict` is what `test:examples`
+// passes.
+if (strict) {
   const pendingFonts = doc.pendingFonts();
   const pendingImages = doc.pendingImages();
   const why = [

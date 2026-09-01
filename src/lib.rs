@@ -1205,7 +1205,14 @@ pub struct RenderParams {
     #[doc = " `absLayerBoundingBox()` to trim the document to its content."]
     pub crop: Option<BBox>,
 }
-#[doc = " An affine transform, same field order as SVG's `matrix(...)`."]
+#[doc = " An affine transform. Field names and order are tiny-skia's."]
+#[doc = ""]
+#[doc = " They are *not* the order of SVG's `matrix(a b c d e f)`, which"]
+#[doc = " takes `sx ky kx sy tx ty` -- upstream says so itself: \"we are"]
+#[doc = " using column-major-column-vector matrix notation, therefore it's"]
+#[doc = " ky-kx, not kx-ky\". Reading these positionally into a `matrix()`"]
+#[doc = " string mirrors the transform, silently. Name the fields:"]
+#[doc = " `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`."]
 #[napi(object)]
 #[derive(Clone, Copy)]
 pub struct Matrix {
@@ -1566,7 +1573,7 @@ impl FontFace {
         let v = &self.inner;
         v.index.clone() as u32
     }
-    #[napi(getter)]
+    #[napi(getter, ts_return_type = "String")]
     pub fn post_script_name(&self) -> String {
         let v = &self.inner;
         v.post_script_name.clone().to_string()
@@ -1656,6 +1663,7 @@ impl Font {
 #[napi(object)]
 #[derive(Clone)]
 pub struct FontVariation {
+    #[napi(ts_type = "String")]
     pub tag: String,
     pub value: f64,
 }
@@ -1737,6 +1745,7 @@ impl From<&usvg::filter::Offset> for Offset {
 #[napi(object)]
 #[derive(Clone)]
 pub struct Path {
+    #[napi(ts_type = "String")]
     pub id: String,
     pub is_visible: bool,
     pub fill: Option<Fill>,
@@ -1785,25 +1794,52 @@ impl From<&usvg::filter::PointLight> for PointLight {
         }
     }
 }
-#[doc = " Plain view of a `PositionedGlyph`."]
-#[napi(object)]
-#[derive(Clone)]
+#[doc = " Read-only view of a `PositionedGlyph`."]
+#[napi]
 pub struct PositionedGlyph {
-    pub font_size: f64,
-    pub transform: Matrix,
-    pub outline_transform: Matrix,
-    pub svg_transform: Matrix,
-    pub colr_transform: Matrix,
+    inner: usvg::layout::PositionedGlyph,
 }
-impl From<&usvg::layout::PositionedGlyph> for PositionedGlyph {
-    fn from(v: &usvg::layout::PositionedGlyph) -> Self {
-        Self {
-            font_size: v.font_size() as f64,
-            transform: Matrix::from(v.transform()),
-            outline_transform: Matrix::from(v.outline_transform()),
-            svg_transform: Matrix::from(v.svg_transform()),
-            colr_transform: Matrix::from(v.colr_transform()),
-        }
+impl PositionedGlyph {
+    fn wrap(inner: usvg::layout::PositionedGlyph) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl PositionedGlyph {
+    #[napi(getter)]
+    pub fn font_size(&self) -> f64 {
+        let v = &self.inner;
+        v.font_size() as f64
+    }
+    #[napi(getter)]
+    pub fn transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.transform())
+    }
+    #[napi(getter)]
+    pub fn outline_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.outline_transform())
+    }
+    #[napi(getter)]
+    pub fn svg_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.svg_transform())
+    }
+    #[napi(getter)]
+    pub fn colr_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.colr_transform())
+    }
+    #[napi(getter)]
+    pub fn id(&self) -> u32 {
+        let v = &self.inner;
+        v.id.clone().0 as u32
+    }
+    #[napi(getter, ts_return_type = "String")]
+    pub fn text(&self) -> String {
+        let v = &self.inner;
+        v.text.clone().to_string()
     }
 }
 #[doc = " Plain view of a `Primitive`."]
@@ -1812,6 +1848,7 @@ impl From<&usvg::layout::PositionedGlyph> for PositionedGlyph {
 pub struct Primitive {
     pub rect: BBox,
     pub color_interpolation: ColorInterpolation,
+    #[napi(ts_type = "String")]
     pub result: String,
     pub kind: Either17<
         KindBlend,
@@ -1843,47 +1880,81 @@ impl From<&usvg::filter::Primitive> for Primitive {
         }
     }
 }
-#[doc = " Plain view of a `Span`."]
-#[napi(object)]
-#[derive(Clone)]
+#[doc = " Read-only view of a `Span`."]
+#[napi]
 pub struct Span {
-    pub fill: Option<Fill>,
-    pub stroke: Option<Stroke>,
-    pub paint_order: PaintOrder,
-    pub font_size: f64,
-    pub variations: Vec<FontVariation>,
-    pub font_optical_sizing: FontOpticalSizing,
-    pub visible: bool,
-    pub positioned_glyphs: Vec<PositionedGlyph>,
-    pub underline: Option<Path>,
-    pub overline: Option<Path>,
-    pub line_through: Option<Path>,
+    inner: usvg::layout::Span,
 }
-impl From<&usvg::layout::Span> for Span {
-    fn from(v: &usvg::layout::Span) -> Self {
-        Self {
-            fill: v.fill.clone().map(|x| Fill::from(&x)),
-            stroke: v.stroke.clone().map(|x| Stroke::from(&x)),
-            paint_order: PaintOrder::from(v.paint_order.clone()),
-            font_size: v.font_size.clone().get() as f64,
-            variations: v
-                .variations
-                .clone()
-                .iter()
-                .map(FontVariation::from)
-                .collect(),
-            font_optical_sizing: FontOpticalSizing::from(v.font_optical_sizing.clone()),
-            visible: v.visible.clone(),
-            positioned_glyphs: v
-                .positioned_glyphs
-                .clone()
-                .iter()
-                .map(PositionedGlyph::from)
-                .collect(),
-            underline: v.underline.clone().map(|x| Path::from(&x)),
-            overline: v.overline.clone().map(|x| Path::from(&x)),
-            line_through: v.line_through.clone().map(|x| Path::from(&x)),
-        }
+impl Span {
+    fn wrap(inner: usvg::layout::Span) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl Span {
+    #[napi(getter)]
+    pub fn fill(&self) -> Option<Fill> {
+        let v = &self.inner;
+        v.fill.clone().map(|x| Fill::from(&x))
+    }
+    #[napi(getter)]
+    pub fn stroke(&self) -> Option<Stroke> {
+        let v = &self.inner;
+        v.stroke.clone().map(|x| Stroke::from(&x))
+    }
+    #[napi(getter)]
+    pub fn paint_order(&self) -> PaintOrder {
+        let v = &self.inner;
+        PaintOrder::from(v.paint_order.clone())
+    }
+    #[napi(getter)]
+    pub fn font_size(&self) -> f64 {
+        let v = &self.inner;
+        v.font_size.clone().get() as f64
+    }
+    #[napi(getter)]
+    pub fn variations(&self) -> Vec<FontVariation> {
+        let v = &self.inner;
+        v.variations
+            .clone()
+            .iter()
+            .map(FontVariation::from)
+            .collect()
+    }
+    #[napi(getter)]
+    pub fn font_optical_sizing(&self) -> FontOpticalSizing {
+        let v = &self.inner;
+        FontOpticalSizing::from(v.font_optical_sizing.clone())
+    }
+    #[napi(getter)]
+    pub fn visible(&self) -> bool {
+        let v = &self.inner;
+        v.visible.clone()
+    }
+    #[napi(getter)]
+    pub fn positioned_glyphs(&self) -> Vec<PositionedGlyph> {
+        let v = &self.inner;
+        v.positioned_glyphs
+            .clone()
+            .iter()
+            .cloned()
+            .map(PositionedGlyph::wrap)
+            .collect()
+    }
+    #[napi(getter, ts_return_type = "Path | null")]
+    pub fn underline(&self) -> Option<Path> {
+        let v = &self.inner;
+        v.underline.clone().map(|x| Path::from(&x))
+    }
+    #[napi(getter, ts_return_type = "Path | null")]
+    pub fn overline(&self) -> Option<Path> {
+        let v = &self.inner;
+        v.overline.clone().map(|x| Path::from(&x))
+    }
+    #[napi(getter, ts_return_type = "Path | null")]
+    pub fn line_through(&self) -> Option<Path> {
+        let v = &self.inner;
+        v.line_through.clone().map(|x| Path::from(&x))
     }
 }
 #[doc = " Plain view of a `SpecularLighting`."]
@@ -1992,7 +2063,7 @@ impl Text {
 }
 #[napi]
 impl Text {
-    #[napi(getter)]
+    #[napi(getter, ts_return_type = "String")]
     pub fn id(&self) -> String {
         let v = &self.inner;
         v.id().to_string()
@@ -2055,7 +2126,7 @@ impl Text {
     #[napi(getter)]
     pub fn layouted(&self) -> Vec<Span> {
         let v = &self.inner;
-        v.layouted().iter().map(Span::from).collect()
+        v.layouted().iter().cloned().map(Span::wrap).collect()
     }
 }
 #[doc = " Read-only view of a `TextChunk`."]
@@ -2095,7 +2166,7 @@ impl TextChunk {
         let v = &self.inner;
         text_flow_to_js(&v.text_flow())
     }
-    #[napi(getter)]
+    #[napi(getter, ts_return_type = "String")]
     pub fn text(&self) -> String {
         let v = &self.inner;
         v.text().to_string()
@@ -4013,18 +4084,23 @@ fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     if !(base_w > 0.0 && base_h > 0.0) {
         return Err(Error::from_reason(format!("empty crop: {base_w}x{base_h}")));
     }
-    let scale = if let Some(w) = p.width {
-        w as f32 / base_w
+    let (scale, w, h) = if let Some(w) = p.width {
+        let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
+        (w as f32 / base_w, w, (h as u32).max(1))
     } else if let Some(h) = p.height {
-        h as f32 / base_h
+        let w = (base_w as f64 * h as f64 / base_h as f64).ceil();
+        (h as f32 / base_h, (w as u32).max(1), h)
     } else {
-        p.scale.unwrap_or(1.0) as f32
+        let s = p.scale.unwrap_or(1.0);
+        (
+            s as f32,
+            ((base_w as f64 * s).ceil() as u32).max(1),
+            ((base_h as f64 * s).ceil() as u32).max(1),
+        )
     };
     if !(scale.is_finite() && scale > 0.0) {
         return Err(Error::from_reason(format!("invalid scale: {scale}")));
     }
-    let w = (base_w * scale).ceil() as u32;
-    let h = (base_h * scale).ceil() as u32;
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
     if let Some(css) = &p.background {
@@ -4049,18 +4125,23 @@ fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
     let inner = node
         .abs_layer_bounding_box()
         .ok_or_else(|| Error::from_reason("element is empty"))?;
-    let scale = if let Some(w) = p.width {
-        w as f32 / bbox.width()
+    let (scale, w, h) = if let Some(w) = p.width {
+        let h = (bbox.height() as f64 * w as f64 / bbox.width() as f64).ceil();
+        (w as f32 / bbox.width(), w, (h as u32).max(1))
     } else if let Some(h) = p.height {
-        h as f32 / bbox.height()
+        let w = (bbox.width() as f64 * h as f64 / bbox.height() as f64).ceil();
+        (h as f32 / bbox.height(), (w as u32).max(1), h)
     } else {
-        p.scale.unwrap_or(1.0) as f32
+        let s = p.scale.unwrap_or(1.0);
+        (
+            s as f32,
+            ((bbox.width() as f64 * s).ceil() as u32).max(1),
+            ((bbox.height() as f64 * s).ceil() as u32).max(1),
+        )
     };
     if !(scale.is_finite() && scale > 0.0) {
         return Err(Error::from_reason(format!("invalid scale: {scale}")));
     }
-    let w = (bbox.width() * scale).ceil() as u32;
-    let h = (bbox.height() * scale).ceil() as u32;
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
     if let Some(css) = &p.background {

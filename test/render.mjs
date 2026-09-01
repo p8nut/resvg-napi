@@ -62,4 +62,29 @@ if (fonts) {
 // 6. errors surface as JS exceptions
 assert.throws(() => new Resvg('<svg'), /invalid SVG/);
 
+// A requested dimension comes back exactly, at every size and every ratio.
+//
+// It used to not: the scale was an f32 round trip, `(base * (w / base)).ceil()`,
+// which lands a hair above the integer often enough that seventeen of the first
+// four hundred widths came back one pixel too wide. Every width in this suite was
+// an exact multiple of the document's own, so nothing could see it. This sweeps
+// instead of picking.
+for (const [w, h] of [[100, 50], [100, 33], [37, 91], [1, 1]]) {
+  const d = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="red"/></svg>`);
+  const wrong = [];
+  for (let n = 1; n <= 300; n++) {
+    if (d.renderRaw({ width: n }).width !== n) wrong.push(`width:${n}`);
+    if (d.renderRaw({ height: n }).height !== n) wrong.push(`height:${n}`);
+  }
+  assert.deepEqual(wrong, [], `${w}x${h} honours every requested dimension`);
+}
+
+// and the PNG header agrees with the pixels
+{
+  const d = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="red"/></svg>');
+  const png = d.renderPng({ width: 120 });
+  assert.equal(png.readUInt32BE(16), 120, 'IHDR width');
+  assert.equal(png.readUInt32BE(20), 60, 'IHDR height, from the ratio and not an f32 detour');
+}
+
 console.log('ok — all checks passed');

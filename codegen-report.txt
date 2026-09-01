@@ -6,6 +6,9 @@ FaceInfo: partial mapping, emitted as read-only class FontFace
 Font member not exposed: families: &[FontFamily]
 Font: partial mapping, emitted as read-only class Font
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
+PositionedGlyph member not exposed: font: ID
+PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
+Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
 TextSpan: partial mapping, emitted as read-only class TextSpan

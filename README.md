@@ -198,7 +198,7 @@ document cannot grow it without end.
 - **[demo/](demo/README.md)** — a browser proof bench: Liquid templating, an
   array editor, per-element export, live diagnostics. `npm run demo`.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — how the bindings are generated, and
-  what to read before touching `build.rs`.
+  what to read before touching the generator.
 
 ## Licence
 

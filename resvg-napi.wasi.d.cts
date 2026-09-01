@@ -690,20 +690,18 @@ export declare class TextSpan {
 }
 
 /** An alignment baseline property. */
-export declare const enum AlignmentBaseline {
-  Auto = 'auto',
-  Baseline = 'baseline',
-  BeforeEdge = 'beforeEdge',
-  TextBeforeEdge = 'textBeforeEdge',
-  Middle = 'middle',
-  Central = 'central',
-  AfterEdge = 'afterEdge',
-  TextAfterEdge = 'textAfterEdge',
-  Ideographic = 'ideographic',
-  Alphabetic = 'alphabetic',
-  Hanging = 'hanging',
-  Mathematical = 'mathematical'
-}
+export type AlignmentBaseline =  'auto'|
+'baseline'|
+'beforeEdge'|
+'textBeforeEdge'|
+'middle'|
+'central'|
+'afterEdge'|
+'textAfterEdge'|
+'ideographic'|
+'alphabetic'|
+'hanging'|
+'mathematical';
 
 /** `BaselineShift::Number`. */
 export interface BaselineShiftNumber {
@@ -738,24 +736,22 @@ export interface Blend {
  *
  * `mix-blend-mode` attribute in the SVG.
  */
-export declare const enum BlendMode {
-  Normal = 'normal',
-  Multiply = 'multiply',
-  Screen = 'screen',
-  Overlay = 'overlay',
-  Darken = 'darken',
-  Lighten = 'lighten',
-  ColorDodge = 'colorDodge',
-  ColorBurn = 'colorBurn',
-  HardLight = 'hardLight',
-  SoftLight = 'softLight',
-  Difference = 'difference',
-  Exclusion = 'exclusion',
-  Hue = 'hue',
-  Saturation = 'saturation',
-  Color = 'color',
-  Luminosity = 'luminosity'
-}
+export type BlendMode =  'normal'|
+'multiply'|
+'screen'|
+'overlay'|
+'darken'|
+'lighten'|
+'colorDodge'|
+'colorBurn'|
+'hardLight'|
+'softLight'|
+'difference'|
+'exclusion'|
+'hue'|
+'saturation'|
+'color'|
+'luminosity';
 
 /** Plain view of a `Color`. */
 export interface Color {
@@ -765,22 +761,18 @@ export interface Color {
 }
 
 /** A color channel. */
-export declare const enum ColorChannel {
-  R = 'r',
-  G = 'g',
-  B = 'b',
-  A = 'a'
-}
+export type ColorChannel =  'r'|
+'g'|
+'b'|
+'a';
 
 /**
  * A color interpolation mode.
  *
  * The default is `ColorInterpolation::LinearRGB`.
  */
-export declare const enum ColorInterpolation {
-  SRGB = 'srgb',
-  LinearRGB = 'linearRgb'
-}
+export type ColorInterpolation =  'srgb'|
+'linearRgb';
 
 /** Plain view of a `ColorMatrix`. */
 export interface ColorMatrix {
@@ -897,20 +889,18 @@ export interface DistantLight {
 }
 
 /** A dominant baseline property. */
-export declare const enum DominantBaseline {
-  Auto = 'auto',
-  UseScript = 'useScript',
-  NoChange = 'noChange',
-  ResetSize = 'resetSize',
-  Ideographic = 'ideographic',
-  Alphabetic = 'alphabetic',
-  Hanging = 'hanging',
-  Mathematical = 'mathematical',
-  Central = 'central',
-  Middle = 'middle',
-  TextAfterEdge = 'textAfterEdge',
-  TextBeforeEdge = 'textBeforeEdge'
-}
+export type DominantBaseline =  'auto'|
+'useScript'|
+'noChange'|
+'resetSize'|
+'ideographic'|
+'alphabetic'|
+'hanging'|
+'mathematical'|
+'central'|
+'middle'|
+'textAfterEdge'|
+'textBeforeEdge';
 
 /** Plain view of a `DropShadow`. */
 export interface DropShadow {
@@ -924,11 +914,9 @@ export interface DropShadow {
 }
 
 /** An edges processing mode. */
-export declare const enum EdgeMode {
-  None = 'none',
-  Duplicate = 'duplicate',
-  Wrap = 'wrap'
-}
+export type EdgeMode =  'none'|
+'duplicate'|
+'wrap';
 
 /** Plain view of a `Fill`. */
 export interface Fill {
@@ -942,10 +930,8 @@ export interface Fill {
  *
  * `fill-rule` attribute in the SVG.
  */
-export declare const enum FillRule {
-  NonZero = 'nonZero',
-  EvenOdd = 'evenOdd'
-}
+export type FillRule =  'nonZero'|
+'evenOdd';
 
 /** Plain view of a `Flood`. */
 export interface Flood {
@@ -954,11 +940,9 @@ export interface Flood {
 }
 
 /** Allows italic or oblique faces to be selected. */
-export declare const enum FontFaceStyle {
-  Normal = 'normal',
-  Italic = 'italic',
-  Oblique = 'oblique'
-}
+export type FontFaceStyle =  'normal'|
+'italic'|
+'oblique';
 
 /**
  * A font optical sizing property.
@@ -966,30 +950,24 @@ export declare const enum FontFaceStyle {
  * Controls automatic adjustment of the `opsz` axis in variable fonts
  * based on font size. Matches CSS `font-optical-sizing`.
  */
-export declare const enum FontOpticalSizing {
-  Auto = 'auto',
-  None = 'none'
-}
+export type FontOpticalSizing =  'auto'|
+'none';
 
 /** A font stretch property. */
-export declare const enum FontStretch {
-  UltraCondensed = 'ultraCondensed',
-  ExtraCondensed = 'extraCondensed',
-  Condensed = 'condensed',
-  SemiCondensed = 'semiCondensed',
-  Normal = 'normal',
-  SemiExpanded = 'semiExpanded',
-  Expanded = 'expanded',
-  ExtraExpanded = 'extraExpanded',
-  UltraExpanded = 'ultraExpanded'
-}
+export type FontStretch =  'ultraCondensed'|
+'extraCondensed'|
+'condensed'|
+'semiCondensed'|
+'normal'|
+'semiExpanded'|
+'expanded'|
+'extraExpanded'|
+'ultraExpanded';
 
 /** A font style property. */
-export declare const enum FontStyle {
-  Normal = 'normal',
-  Italic = 'italic',
-  Oblique = 'oblique'
-}
+export type FontStyle =  'normal'|
+'italic'|
+'oblique';
 
 /** Plain view of a `FontVariation`. */
 export interface FontVariation {
@@ -1015,14 +993,12 @@ export interface ImageKindSvg {
  *
  * `image-rendering` attribute in the SVG.
  */
-export declare const enum ImageRendering {
-  OptimizeQuality = 'optimizeQuality',
-  OptimizeSpeed = 'optimizeSpeed',
-  Smooth = 'smooth',
-  HighQuality = 'highQuality',
-  CrispEdges = 'crispEdges',
-  Pixelated = 'pixelated'
-}
+export type ImageRendering =  'optimizeQuality'|
+'optimizeSpeed'|
+'smooth'|
+'highQuality'|
+'crispEdges'|
+'pixelated';
 
 /** The payload-free variants of `Input`. */
 export interface InputPlain {
@@ -1156,10 +1132,8 @@ export interface KindTurbulence {
 }
 
 /** A length adjust property. */
-export declare const enum LengthAdjust {
-  Spacing = 'spacing',
-  SpacingAndGlyphs = 'spacingAndGlyphs'
-}
+export type LengthAdjust =  'spacing'|
+'spacingAndGlyphs';
 
 /** `LightSource::DistantLight`. */
 export interface LightSourceDistantLight {
@@ -1187,29 +1161,23 @@ export interface LightSourceSpotLight {
  *
  * `stroke-linecap` attribute in the SVG.
  */
-export declare const enum LineCap {
-  Butt = 'butt',
-  Round = 'round',
-  Square = 'square'
-}
+export type LineCap =  'butt'|
+'round'|
+'square';
 
 /**
  * A line join.
  *
  * `stroke-linejoin` attribute in the SVG.
  */
-export declare const enum LineJoin {
-  Miter = 'miter',
-  MiterClip = 'miterClip',
-  Round = 'round',
-  Bevel = 'bevel'
-}
+export type LineJoin =  'miter'|
+'miterClip'|
+'round'|
+'bevel';
 
 /** A mask type. */
-export declare const enum MaskType {
-  Luminance = 'luminance',
-  Alpha = 'alpha'
-}
+export type MaskType =  'luminance'|
+'alpha';
 
 /**
  * An affine transform. Field names and order are tiny-skia's.
@@ -1244,18 +1212,14 @@ export interface Morphology {
 }
 
 /** A morphology operation. */
-export declare const enum MorphologyOperator {
-  Erode = 'erode',
-  Dilate = 'dilate'
-}
+export type MorphologyOperator =  'erode'|
+'dilate';
 
 /** Which flavour of node this is. */
-export declare const enum NodeKind {
-  Group = 'group',
-  Path = 'path',
-  Image = 'image',
-  Text = 'text'
-}
+export type NodeKind =  'group'|
+'path'|
+'image'|
+'text';
 
 /** Plain view of a `Offset`. */
 export interface Offset {
@@ -1286,10 +1250,8 @@ export interface PaintLinearGradient {
  *
  * [`paint-order`]: https://www.w3.org/TR/SVG2/painting.html#PaintOrder
  */
-export declare const enum PaintOrder {
-  FillAndStroke = 'fillAndStroke',
-  StrokeAndFill = 'strokeAndFill'
-}
+export type PaintOrder =  'fillAndStroke'|
+'strokeAndFill';
 
 /** `Paint::Pattern`. */
 export interface PaintPattern {
@@ -1488,18 +1450,16 @@ export interface RenderParams {
  * `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to
  * call repeatedly: the logger is installed once, the level always applies.
  */
-export declare function setLogLevel(level: string): void
+export declare function setLogLevel(level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'): void
 
 /**
  * A shape rendering method.
  *
  * `shape-rendering` attribute in the SVG.
  */
-export declare const enum ShapeRendering {
-  OptimizeSpeed = 'optimizeSpeed',
-  CrispEdges = 'crispEdges',
-  GeometricPrecision = 'geometricPrecision'
-}
+export type ShapeRendering =  'optimizeSpeed'|
+'crispEdges'|
+'geometricPrecision';
 
 /** Plain view of a `SpecularLighting`. */
 export interface SpecularLighting {
@@ -1528,11 +1488,9 @@ export interface SpotLight {
  *
  * `spreadMethod` attribute in the SVG.
  */
-export declare const enum SpreadMethod {
-  Pad = 'pad',
-  Reflect = 'reflect',
-  Repeat = 'repeat'
-}
+export type SpreadMethod =  'pad'|
+'reflect'|
+'repeat';
 
 /** Plain view of a `Stop`. */
 export interface Stop {
@@ -1557,11 +1515,9 @@ export interface Stroke {
 export declare function takeLogs(): Array<string>
 
 /** A text chunk anchor property. */
-export declare const enum TextAnchor {
-  Start = 'start',
-  Middle = 'middle',
-  End = 'end'
-}
+export type TextAnchor =  'start'|
+'middle'|
+'end';
 
 /** Plain view of a `TextDecoration`. */
 export interface TextDecoration {
@@ -1594,11 +1550,9 @@ export interface TextFlowPlain {
  *
  * `text-rendering` attribute in the SVG.
  */
-export declare const enum TextRendering {
-  OptimizeSpeed = 'optimizeSpeed',
-  OptimizeLegibility = 'optimizeLegibility',
-  GeometricPrecision = 'geometricPrecision'
-}
+export type TextRendering =  'optimizeSpeed'|
+'optimizeLegibility'|
+'geometricPrecision';
 
 /** Plain view of a `Tile`. */
 export interface Tile {
@@ -1653,10 +1607,8 @@ export interface Turbulence {
 }
 
 /** A turbulence kind for the `feTurbulence` filter. */
-export declare const enum TurbulenceKind {
-  FractalNoise = 'fractalNoise',
-  Turbulence = 'turbulence'
-}
+export type TurbulenceKind =  'fractalNoise'|
+'turbulence';
 
 /**
  * Mirror of `usvg::WriteOptions`, for `Resvg.toString()`. Every field is
@@ -1710,7 +1662,5 @@ export interface WriteOptions {
 }
 
 /** A writing mode. */
-export declare const enum WritingMode {
-  LeftToRight = 'leftToRight',
-  TopToBottom = 'topToBottom'
-}
+export type WritingMode =  'leftToRight'|
+'topToBottom';

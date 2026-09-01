@@ -35,21 +35,38 @@ const differs = (a, b) => Buffer.compare(a, b) !== 0;
   assert.deepEqual(size(svg, { dpi: 192 }), [192, 192], 'and at 192');
 }
 
-// 2. defaultSizeWidth / defaultSizeHeight
+// 2. defaultSizeWidth / defaultSizeHeight — wired here, not honoured upstream
 //
-//    Pinned as observed, not as assumed: neither a `viewBox`-only document nor
-//    one with no size at all changes size when these are set. Both render at
-//    10x10 either way. That may be right -- usvg resolves a default size before
-//    these are consulted -- or the pair may not be reaching usvg at all. This
-//    records today's behaviour so a change in it is visible; it does not claim
-//    the behaviour is correct.
+//    usvg documents these as "the viewport size to assume if there is no
+//    `viewBox` and the width or height attributes are relative", and in exactly
+//    that case they change nothing: a `width="100%"` document with no viewBox
+//    renders 100x100 whatever they are set to.
+//
+//    The binding is not dropping them. usvg's converter rewrites its `width`
+//    and `height` locals from `default_size` (parser/converter.rs:540-556) and
+//    then, in the branch with no viewBox, computes the size with
+//    `svg.convert_user_length(AId::Width, ..)` (:588), which re-reads the
+//    attribute and ignores the rewrite. The percentage resolves against the
+//    default viewport instead, which is 100x100.
+//
+//    So this pins two things: that the option reaches usvg's `Options` at all
+//    (a sibling on the same document does take effect), and what usvg currently
+//    does with it. If a resvg bump fixes that branch, this test fails and the
+//    assertion below is the one to invert.
 {
-  const boxed = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="red"/></svg>';
-  const bare = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="red"/></svg>';
-  for (const svg of [boxed, bare]) {
-    assert.deepEqual(size(svg, {}), size(svg, { defaultSizeWidth: 40, defaultSizeHeight: 25 }),
-      'setting a default size changes nothing today -- see the note above');
-  }
+  const relative = '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><rect width="100%" height="100%" fill="red"/></svg>';
+  assert.deepEqual(size(relative, {}), [100, 100], "usvg's own default viewport");
+  assert.deepEqual(
+    size(relative, { defaultSizeWidth: 40, defaultSizeHeight: 25 }),
+    [100, 100],
+    'unchanged -- usvg re-reads the attribute rather than its rewritten local',
+  );
+  // and the options object does reach usvg on this very document
+  assert.deepEqual(
+    [...new Resvg(relative, { styleSheet: 'rect { fill: #00ff00 }' }, db).renderRaw().data.subarray(0, 3)],
+    [0, 255, 0],
+    'a sibling option on the same document takes effect',
+  );
 }
 
 // 3. fontFamily — which family a generic name resolves to

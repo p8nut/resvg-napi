@@ -1,4 +1,4 @@
-// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","Font","FontDatabase","FontFace","LinearGradient","Mask","Pattern","PositionedGlyph","RadialGradient","Resvg","Span","SvgNode","Text","TextChunk","TextSpan","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontFaceStyle","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
+// napi-rs-artifact-metadata:{"version":2,"rootEntry":"index.js","exports":["ClipPath","Filter","Font","FontDatabase","FontFace","Image","ImageKindGif","ImageKindJpeg","ImageKindPng","ImageKindWebp","LinearGradient","Mask","Pattern","PositionedGlyph","RadialGradient","Resvg","Span","SvgNode","Text","TextChunk","TextSpan","AlignmentBaseline","BlendMode","ColorChannel","ColorInterpolation","DominantBaseline","EdgeMode","FillRule","FontFaceStyle","FontOpticalSizing","FontStretch","FontStyle","ImageRendering","LengthAdjust","LineCap","LineJoin","MaskType","MorphologyOperator","NodeKind","PaintOrder","renderAsync","setLogLevel","ShapeRendering","SpreadMethod","takeLogs","TextAnchor","TextRendering","TurbulenceKind","WritingMode"],"managedRootEntries":["browser.js","index.js","resvg-napi.wasm","resvg-napi.debug.wasm"]}
 /* eslint-disable */
 /* prettier-ignore */
 
@@ -926,6 +926,11 @@ module.exports.Filter = __napiModule.exports.Filter
 module.exports.Font = __napiModule.exports.Font
 module.exports.FontDatabase = __napiModule.exports.FontDatabase
 module.exports.FontFace = __napiModule.exports.FontFace
+module.exports.Image = __napiModule.exports.Image
+module.exports.ImageKindGif = __napiModule.exports.ImageKindGif
+module.exports.ImageKindJpeg = __napiModule.exports.ImageKindJpeg
+module.exports.ImageKindPng = __napiModule.exports.ImageKindPng
+module.exports.ImageKindWebp = __napiModule.exports.ImageKindWebp
 module.exports.LinearGradient = __napiModule.exports.LinearGradient
 module.exports.Mask = __napiModule.exports.Mask
 module.exports.Pattern = __napiModule.exports.Pattern

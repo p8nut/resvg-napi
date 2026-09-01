@@ -1,6 +1,6 @@
 [package]
 name = "resvg-napi"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 authors = ["p8nut <38731495+p8nut@users.noreply.github.com>"]
 description = "Node bindings for resvg, generated from the upstream Rust sources."

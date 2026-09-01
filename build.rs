@@ -269,7 +269,22 @@ struct PayloadEnum {
 impl PayloadEnum {
     /// `Kind` -> `KindBlend`, the struct for one payload variant.
     fn variant_ident(&self, enum_name: &str, variant: &str) -> proc_macro2::Ident {
-        format_ident!("{enum_name}{variant}")
+        // `SVG` becomes `Svg`, because napi normalises a type name to PascalCase
+        // on the way out and the union type here has to match what it wrote.
+        // It aliases the original spelling back for classes -- `export type
+        // ImageKindPNG = ImageKindPng` -- but not for objects, so `ImageKindSVG`
+        // named a type that did not exist.
+        let v = if variant.len() > 1
+            && variant
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        {
+            let mut c = variant.chars();
+            c.next().into_iter().collect::<String>() + &c.as_str().to_lowercase()
+        } else {
+            variant.to_string()
+        };
+        format_ident!("{enum_name}{v}")
     }
 
     /// The struct the unit variants share, or None when there are none.
@@ -336,7 +351,11 @@ impl PayloadEnum {
     /// should show up as a union appearing, not as a mystery.
     fn payload_blocker(&self, vocab: &Vocab) -> Option<String> {
         /// Whether one carried type can be a field of an `#[napi(object)]`.
-        fn field_of(vocab: &Vocab, p: &str) -> Result<(), String> {
+        /// `sole` says the variant carries this and nothing else, which is the
+        /// only shape `payload_enum_code` turns into a read-only class. A named
+        /// field beside others has to be an object field, and bytes cannot be
+        /// one.
+        fn field_of(vocab: &Vocab, p: &str, sole: bool) -> Result<(), String> {
             if let Some(Js::Handle(t)) = vocab.classify(p) {
                 return if vocab.with_id.contains(&t) {
                     Ok(())
@@ -379,9 +398,22 @@ impl PayloadEnum {
                 // none, so image bytes cannot be a field of one -- they would
                 // need the variant to be a read-only class with a getter, which
                 // the union machinery does not build.
+                // Bytes cannot be an object *field* -- neither `Buffer` nor
+                // `Uint8Array` is `Clone`, and napi requires that of every
+                // field. They can be a getter, so the variant carrying them is
+                // emitted as a read-only class instead. See
+                // `payload_enum_code`.
+                // Bytes alone become a read-only class with a getter. Bytes
+                // beside other named fields have nowhere to go, and saying
+                // otherwise here left `classify` committed to a union that
+                // `payload_enum_code` then refused to emit: a dangling
+                // `*_to_js` call and a crate that does not compile, with the
+                // report line explaining why never printed because `napi build`
+                // failed first.
+                Some(Js::Bytes) if sole => Ok(()),
                 Some(Js::Bytes) => Err(
-                    "being bytes, it would need a Buffer field, which a union variant \
-                     cannot have: napi requires Clone of every field of an object"
+                    "being bytes, it can only be carried alone: a variant with named fields \
+                     is an object, and napi requires Clone of every field"
                         .into(),
                 ),
                 other => Err(format!("it maps to {other:?}")),
@@ -394,8 +426,9 @@ impl PayloadEnum {
                 Payload::Value(t) => vec![(None, t)],
                 Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
             };
+            let sole = matches!(p, Payload::Value(_));
             carried.into_iter().find_map(|(field, t)| {
-                field_of(vocab, t).err().map(|why| match field {
+                field_of(vocab, t, sole).err().map(|why| match field {
                     Some(f) => format!("{n}.{f} carries {t}, and {why}"),
                     None => format!("{n} carries {t}, and {why}"),
                 })
@@ -625,6 +658,52 @@ fn payload_enum_code(
                     "{name}::{n} carries {ty}, which has no mappable data: emitted without a value"
                 );
                 (Vec::new(), quote!(#up::#vid(_)), Vec::new())
+            }
+            // A payload that no object field can hold, but a getter can. Only
+            // bytes today: `Buffer` is a handle into the JS heap and is not
+            // `Clone`, which `#[napi(object)]` requires of every field, so the
+            // variant becomes a read-only class. Narrowing still works -- the
+            // discriminant is a getter with a literal return type.
+            Payload::Value(ty) if matches!(vocab.classify(ty), Some(Js::Bytes)) => {
+                let doc = format!(" `{name}::{n}`. The bytes are the document's own.");
+                let bytes_doc = " The encoded bytes, exactly as the document supplied them: \
+usvg does not decode them, and neither does this.";
+                // The payload's own type, not `Vec<u8>`: usvg holds these behind
+                // an `Arc`, and copying out of it here would deep-copy the whole
+                // encoded image before anyone asked for it. Cloning the `Arc` is
+                // a refcount bump, and the one unavoidable copy happens in the
+                // getter, when the JS `Buffer` is actually built.
+                // Qualified: the generated file imports the napi prelude and usvg,
+                // not `std::sync`, and the rest of it spells `Arc` out in full.
+                let raw_src = ty.replace("Arc<", "std::sync::Arc<");
+                let raw_ty: syn::Type = syn::parse_str(&raw_src)
+                    .unwrap_or_else(|e| panic!("{name}::{n} carries {ty}, unparseable: {e}"));
+                items.extend(quote! {
+                    #[doc = #doc]
+                    #[napi]
+                    pub struct #sid {
+                        raw: #raw_ty,
+                    }
+                    #[napi]
+                    impl #sid {
+                        // Not `fn r#type`: napi-derive builds
+                        // `r#type_c_callback` from the method name and panics on
+                        // it. `js_name` sets what JavaScript sees, which is all
+                        // that matters.
+                        #[doc = " Discriminant. Narrow on this."]
+                        #[napi(getter, js_name = "type", ts_return_type = #ts)]
+                        pub fn kind_tag(&self) -> &'static str {
+                            #tag
+                        }
+                        #[doc = #bytes_doc]
+                        #[napi(getter)]
+                        pub fn bytes(&self) -> Buffer {
+                            self.raw.as_slice().into()
+                        }
+                    }
+                });
+                arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: v.clone() }),));
+                continue;
             }
             Payload::Value(ty) => {
                 let access = quote!(v);
@@ -1845,7 +1924,14 @@ fn value_class(
             }
         }
     });
-    let doc = format!(" Read-only view of a `{ty}`.");
+    // `a Image` reads wrong in a published declaration, and these names come
+    // from upstream so the vowels are not ours to choose.
+    let article = if ty.starts_with(['A', 'E', 'I', 'O', 'U']) {
+        "an"
+    } else {
+        "a"
+    };
+    let doc = format!(" Read-only view of {article} `{ty}`.");
     let code = quote! {
         #[doc = #doc]
         #[napi]
@@ -2530,6 +2616,15 @@ fn emit_twins(twins: &[Twin]) -> TokenStream {
 
 /// `render_png` -> `renderPng`, the name napi gives it in JS.
 fn lower_camel(s: &str) -> String {
+    // An all-caps name is an acronym, not camel case: `PNG` is `png`, and
+    // lowering only the first letter would give `pNG`. usvg spells
+    // `ImageKind::PNG`, `JPEG`, `GIF` and `WEBP` that way.
+    if s.len() > 1
+        && s.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
+        return s.to_lowercase();
+    }
     let camel = heck_camel(s);
     let mut c = camel.chars();
     match c.next() {
@@ -3339,6 +3434,22 @@ fn template(
                 })
             }
 
+            #[doc = " The content of an image node: where it sits, how it is to"]
+            #[doc = " be scaled, and the bytes themselves. Null for anything else."]
+            #[doc = ""]
+            #[doc = " `kind` is a discriminated union. The four raster variants"]
+            #[doc = " carry the encoded bytes exactly as the document supplied"]
+            #[doc = " them -- usvg says they should be decoded by the caller, and"]
+            #[doc = " this is the caller -- while `svg` carries none, an embedded"]
+            #[doc = " SVG being a tree rather than a payload."]
+            #[napi]
+            pub fn image(&self) -> Result<Option<Image>> {
+                Ok(match self.node()? {
+                    usvg::Node::Image(i) => Some(Image::wrap((**i).clone())),
+                    _ => None,
+                })
+            }
+
             #[doc = " Direct children. Empty for anything that is not a group."]
             #[napi]
             pub fn children(&self) -> Result<Vec<SvgNode>> {
@@ -3952,15 +4063,22 @@ fn main() {
     }
     // Public names usvg defines twice. Exactly one today, `Image`, and the
     // report says so rather than leaving it to be rediscovered.
+    //
+    // Enums count as well as structs, and they count together: `payload_enums`
+    // qualifies a carried type by this set, so an enum defined in two modules --
+    // or an enum in one and a struct of the same name in another -- would be
+    // keyed by its bare name and resolve to whichever the walk reached first.
+    // That is the failure `filter::Image` already caused once on the struct side.
     let dups: BTreeSet<String> = {
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for f in &usvg_files {
             for item in &f.items {
-                if let Item::Struct(st) = item {
-                    if is_pub(&st.vis) {
-                        *seen.entry(st.ident.to_string()).or_default() += 1;
-                    }
-                }
+                let name = match item {
+                    Item::Struct(st) if is_pub(&st.vis) => st.ident.to_string(),
+                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
+                    _ => continue,
+                };
+                *seen.entry(name).or_default() += 1;
             }
         }
         seen.into_iter()

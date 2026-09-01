@@ -1692,6 +1692,56 @@ impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
         }
     }
 }
+#[doc = " Read-only view of an `Image`."]
+#[napi]
+pub struct Image {
+    inner: usvg::Image,
+}
+impl Image {
+    fn wrap(inner: usvg::Image) -> Self {
+        Self { inner }
+    }
+}
+#[napi]
+impl Image {
+    #[napi(getter, ts_return_type = "String")]
+    pub fn id(&self) -> String {
+        let v = &self.inner;
+        v.id().to_string()
+    }
+    #[napi(getter)]
+    pub fn is_visible(&self) -> bool {
+        let v = &self.inner;
+        v.is_visible()
+    }
+    #[napi(getter)]
+    pub fn rendering_mode(&self) -> ImageRendering {
+        let v = &self.inner;
+        ImageRendering::from(v.rendering_mode())
+    }
+    #[napi(getter)]
+    pub fn kind(
+        &self,
+    ) -> Either5<ImageKindJpeg, ImageKindPng, ImageKindGif, ImageKindWebp, ImageKindSvg> {
+        let v = &self.inner;
+        image_kind_to_js(v.kind())
+    }
+    #[napi(getter)]
+    pub fn abs_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.abs_transform())
+    }
+    #[napi(getter)]
+    pub fn bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.bounding_box())
+    }
+    #[napi(getter)]
+    pub fn abs_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.abs_bounding_box())
+    }
+}
 #[doc = " Plain view of a `Merge`."]
 #[napi(object)]
 #[derive(Clone)]
@@ -2496,6 +2546,99 @@ fn composite_operator_to_js(
                 k4: *k4 as f64,
             })
         }
+    }
+}
+#[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
+#[napi]
+pub struct ImageKindJpeg {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[napi]
+impl ImageKindJpeg {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'jpeg'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "jpeg"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[doc = " `ImageKind::PNG`. The bytes are the document's own."]
+#[napi]
+pub struct ImageKindPng {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[napi]
+impl ImageKindPng {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'png'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "png"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[doc = " `ImageKind::GIF`. The bytes are the document's own."]
+#[napi]
+pub struct ImageKindGif {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[napi]
+impl ImageKindGif {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'gif'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "gif"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
+#[napi]
+pub struct ImageKindWebp {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[napi]
+impl ImageKindWebp {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'webp'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "webp"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[doc = " `ImageKind::SVG`."]
+#[napi(object)]
+#[derive(Clone)]
+pub struct ImageKindSvg {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'svg'")]
+    pub r#type: String,
+}
+fn image_kind_to_js(
+    v: &usvg::ImageKind,
+) -> Either5<ImageKindJpeg, ImageKindPng, ImageKindGif, ImageKindWebp, ImageKindSvg> {
+    match v {
+        usvg::ImageKind::JPEG(v) => Either5::A(ImageKindJpeg { raw: v.clone() }),
+        usvg::ImageKind::PNG(v) => Either5::B(ImageKindPng { raw: v.clone() }),
+        usvg::ImageKind::GIF(v) => Either5::C(ImageKindGif { raw: v.clone() }),
+        usvg::ImageKind::WEBP(v) => Either5::D(ImageKindWebp { raw: v.clone() }),
+        usvg::ImageKind::SVG(_) => Either5::E(ImageKindSvg {
+            r#type: "svg".to_string(),
+        }),
     }
 }
 #[doc = " The payload-free variants of `Input`."]
@@ -3533,6 +3676,21 @@ impl SvgNode {
     pub fn path(&self) -> Result<Option<Path>> {
         Ok(match self.node()? {
             usvg::Node::Path(p) => Some(Path::from(&**p)),
+            _ => None,
+        })
+    }
+    #[doc = " The content of an image node: where it sits, how it is to"]
+    #[doc = " be scaled, and the bytes themselves. Null for anything else."]
+    #[doc = ""]
+    #[doc = " `kind` is a discriminated union. The four raster variants"]
+    #[doc = " carry the encoded bytes exactly as the document supplied"]
+    #[doc = " them -- usvg says they should be decoded by the caller, and"]
+    #[doc = " this is the caller -- while `svg` carries none, an embedded"]
+    #[doc = " SVG being a tree rather than a payload."]
+    #[napi]
+    pub fn image(&self) -> Result<Option<Image>> {
+        Ok(match self.node()? {
+            usvg::Node::Image(i) => Some(Image::wrap((**i).clone())),
             _ => None,
         })
     }

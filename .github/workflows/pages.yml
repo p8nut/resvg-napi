@@ -1,0 +1,48 @@
+name: pages
+
+# The demo is the fastest answer to "what does this do": a page that renders SVG
+# through these bindings compiled to WASI, with no install. Deployed from main on
+# every push -- no paths filter, because a filter that misses a path leaves a
+# stale demo online and says nothing, and the cargo cache makes the rebuild cheap.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Queue rather than cancel: a superseded deploy has already replaced the site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: build and deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1-threads
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-wasip1-threads
+      - run: npm install  # not `npm ci` -- see the build job in CI.yml
+      # The wasm, the three bundles, and the example list the picker reads.
+      - run: npm run demo:build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: demo
+      - uses: actions/deploy-pages@v5
+        id: deploy

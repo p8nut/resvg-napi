@@ -102,6 +102,21 @@ face reports its `families`, `weight`, `style` (`'normal' | 'italic' |
 names the families it wanted and did not get; `pendingImages()` does the same for
 hrefs.
 
+`pendingFonts()` names the families nobody had. `faceOf(glyph)` names the face
+that drew the text instead — the substitution a document-wide list cannot show,
+and the one that survives to print:
+
+```js
+const text = doc.node('title').text()
+text.chunks[0].spans[0].font.families    // ['Brand Sans', 'DejaVu Sans'] — asked for
+for (const glyph of text.layouted[0].positionedGlyphs) {
+  doc.faceOf(glyph)?.postScriptName       // 'DejaVuSans' — what actually drew it
+}
+```
+
+`faceOf` returns `null` only for a glyph from another document: the id a glyph
+carries is a key into the font database its own document was parsed with.
+
 ## Paint servers
 
 `linearGradients()`, `radialGradients()`, `patterns()`, `clipPaths()`, `masks()`,
@@ -249,7 +264,8 @@ document cannot grow it without end.
 ## Troubleshooting
 
 **A font family did not apply.** `pendingFonts()` on the parsed document names
-the families it asked for and did not get. Supply them with
+the families it asked for and did not get, and `faceOf(glyph)` names the face
+that was used in their place. Supply them with
 `loadFontFile(path)` or `loadFontData(buffer)` before rendering. Under WASI,
 `loadSystemFonts()` finds nothing inside the sandbox, so every face has to be
 loaded by hand.

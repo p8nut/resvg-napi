@@ -3540,6 +3540,31 @@ impl FontFace {
             .collect()
     }
 }
+#[doc = " `Font::families` is `&[FontFamily]`, an enum svgtypes owns: five CSS"]
+#[doc = " keywords plus `Named(String)`. No rule maps an enum from a third"]
+#[doc = " crate, and without it `faceOf` answers half a question -- which face"]
+#[doc = " drew the text, with nothing to compare it against."]
+#[doc = " Decision: the strings usvg's own writer emits, keywords included."]
+#[napi]
+impl Font {
+    #[doc = " Families this span asked for, in order. Never empty: usvg appends"]
+    #[doc = " `RenderOptions.fontFamily` as the last resort."]
+    #[napi(getter)]
+    pub fn families(&self) -> Vec<String> {
+        self.inner
+            .families()
+            .iter()
+            .map(|family| match family {
+                usvg::FontFamily::Named(name) => name.clone(),
+                usvg::FontFamily::Serif => "serif".to_string(),
+                usvg::FontFamily::SansSerif => "sans-serif".to_string(),
+                usvg::FontFamily::Cursive => "cursive".to_string(),
+                usvg::FontFamily::Fantasy => "fantasy".to_string(),
+                usvg::FontFamily::Monospace => "monospace".to_string(),
+            })
+            .collect()
+    }
+}
 #[doc = " Where a node path starts from."]
 #[derive(Clone)]
 enum NodeBase {
@@ -3884,6 +3909,26 @@ impl Resvg {
     #[napi]
     pub fn pending_fonts(&self) -> Vec<String> {
         self.pending_fonts.clone()
+    }
+    #[doc = " The face that actually drew a glyph, from the database this"]
+    #[doc = " document was parsed with."]
+    #[doc = ""]
+    #[doc = " `pendingFonts()` names the families that were missing; this names"]
+    #[doc = " what was used instead, glyph by glyph, which is the half a"]
+    #[doc = " document-wide list cannot answer. A fallback that renders is the"]
+    #[doc = " failure nobody sees."]
+    #[doc = ""]
+    #[doc = " The lookup lives here rather than on `FontDatabase` because"]
+    #[doc = " `PositionedGlyph.font` is a `fontdb::ID` -- a slotmap key with no"]
+    #[doc = " public numeric form, and meaningless against any other database."]
+    #[doc = " The glyph carries it the way `FontFace` carries one for"]
+    #[doc = " `FontDatabase.face`, and `null` means exactly that: a glyph from"]
+    #[doc = " another document."]
+    #[napi]
+    pub fn face_of(&self, glyph: &PositionedGlyph) -> Option<FontFace> {
+        self.fonts
+            .face(glyph.inner.font)
+            .map(|face| FontFace::wrap(face.clone()))
     }
     #[doc = " Supplies one image and re-parses the document."]
     #[doc = ""]

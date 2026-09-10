@@ -18,6 +18,10 @@ magenta. Everything both engines said — Liquid errors, unknown filters, and ev
 `log` message from usvg — accumulates in a diagnostics list, with a count in the
 slug line so a problem is visible without scrolling.
 
+Every render reports which faces actually drew the text, and warns when that is
+not the family the document asked for — `substituted Brand Sans → DejaVuSans` is
+the failure that otherwise reaches print unnoticed.
+
 The page parses the SVG first and **asks for what the document is missing**, then
 lets you supply it:
 

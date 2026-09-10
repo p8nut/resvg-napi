@@ -1,15 +1,14 @@
-# resvg-napi
+# Render and inspect SVG
 
 [![npm](https://img.shields.io/npm/v/resvg-napi)](https://www.npmjs.com/package/resvg-napi)
 [![conformance](https://img.shields.io/badge/resvg%20conformance-1715%2F1715-brightgreen)](#conformance)
 [![licence](https://img.shields.io/npm/l/resvg-napi)](#licence)
 
-Node.js bindings for [resvg](https://github.com/linebender/resvg) 0.48: render
-SVG to PNG, and read back what usvg made of the document — the resolved tree,
-text metrics, paint, geometry.
-
-Generated from the upstream Rust sources, so the TypeScript surface is usvg's
-own, names and doc comments included.
+Render an SVG to PNG, and read back what the renderer made of the document — the
+resolved tree, text metrics, paint, geometry. Node.js bindings for
+[resvg](https://github.com/linebender/resvg) 0.48, generated from the upstream
+Rust sources, so the TypeScript surface is usvg's own, names and doc comments
+included.
 
 ```bash
 npm install resvg-napi
@@ -24,13 +23,13 @@ doc.renderRaw({ crop: doc.absLayerBoundingBox() })      // RGBA8, trimmed
 await renderAsync(svg, options, { width: 1200 })        // off the event loop
 ```
 
-## What you can read back
+`index.d.ts` is the reference — it is generated, so it cannot drift. What follows
+is the map.
 
-`index.d.ts` is the reference — it is generated, so it cannot drift. This is
-the map.
+## Render SVG to PNG
 
-**Render.** Parse once with `new Resvg(svg, options?, fonts?, images?)`, then
-render as often as you like.
+Parse once with `new Resvg(svg, options?, fonts?, images?)`, then render as often
+as you like.
 
 | | |
 |---|---|
@@ -42,8 +41,9 @@ render as often as you like.
 `params` carries `width` / `height` / `scale`, a `background` colour and a
 `crop` box. `Resvg.parseAsync` moves the parse off the loop too.
 
-**Walk the tree.** `node(id)` and `children()` hand back `SvgNode`s, and each
-one knows what it is:
+## Inspect the usvg tree
+
+`node(id)` and `children()` hand back `SvgNode`s, and each one knows what it is:
 
 ```js
 const n = doc.node('surname')
@@ -68,24 +68,60 @@ if (paint?.type === 'color') paint.value   // { red, green, blue }
 else paint?.id                             // the gradient or pattern it names
 ```
 
-**Measure.** Every node reports `boundingBox()`, `absBoundingBox()`,
-`strokeBoundingBox()`, `absLayerBoundingBox()` and `extent()` — in the
-document's own units, which is not the canvas. See *Fitting text* below for why
+## Measure text and geometry
+
+Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`,
+`absLayerBoundingBox()` and `extent()` — in the document's own units, which is
+not the canvas. See [Fitting text to a width](#fitting-text-to-a-width) for why
 that distinction bites.
 
-**Fonts.** `FontDatabase` is `fontdb` itself: `loadSystemFonts()`,
-`loadFontData(buffer)`, `loadFontFile(path)`, `faces()`, `query()`, and the
-generic-family setters. A face reports its `families`, `weight`, `style`
-(`'normal' | 'italic' | 'oblique'`) and whether it is `monospaced`. `pendingFonts()` on a parsed document names the
-families it wanted and did not get; `pendingImages()` does the same for hrefs.
+## Fonts
 
-**Definitions.** `linearGradients()`, `radialGradients()`, `patterns()`,
-`clipPaths()`, `masks()`, `filters()` — the paint servers an element's `id`
-refers to.
+`FontDatabase` is `fontdb` itself: `loadSystemFonts()`, `loadFontData(buffer)`,
+`loadFontFile(path)`, `faces()`, `query()`, and the generic-family setters. A
+face reports its `families`, `weight`, `style` (`'normal' | 'italic' |
+'oblique'`) and whether it is `monospaced`. `pendingFonts()` on a parsed document
+names the families it wanted and did not get; `pendingImages()` does the same for
+hrefs.
 
-Something missing? The generator keeps a report of every upstream member it
-left alone, with the reason. `RESVG_NAPI_CODEGEN_LOG=1 cargo build` prints it,
-and [CONTRIBUTING.md](CONTRIBUTING.md) explains what the reasons mean.
+## Paint servers
+
+`linearGradients()`, `radialGradients()`, `patterns()`, `clipPaths()`, `masks()`,
+`filters()` — the paint servers an element's `id` refers to.
+
+## Examples
+
+Four templates in [`demo/examples/`](demo/examples), each rendered by
+`node demo/render.mjs <template.svg>`: Liquid fills the template from the JSON
+file next to it, this binding rasterises the result. The images below are that
+command's output.
+
+### Roster — a table from a JSON array
+
+![roster](https://raw.githubusercontent.com/p8nut/resvg-napi/main/demo/assets/roster.png)
+
+A `staff` array becomes rows, with an embedded logo and a QR code generated
+during templating. The fourth name runs straight into the column beside it —
+measuring that overflow, and compressing it away, is what [Fitting text to a
+width](#fitting-text-to-a-width) below is for.
+
+### Photo card — images and glyphs
+
+![photo card](https://raw.githubusercontent.com/p8nut/resvg-napi/main/demo/assets/photo-card.png)
+
+Everything a card does with raster images and type, and nothing it does with
+data.
+
+### Badge sheet — one template, stamped per record
+
+![badge sheet](https://raw.githubusercontent.com/p8nut/resvg-napi/main/demo/assets/badge-sheet.png)
+
+Pulls `badge.svg` in as a partial and repeats it. A guided tour, where every zone
+of the page is one Liquid capability.
+
+`sheet.svg` covers the data half — pagination, grouping, theming, and
+`--lang fr` driving `<switch systemLanguage>`, which usvg picks nothing from
+without a language.
 
 ## Conformance
 
@@ -139,7 +175,6 @@ generated shims and test run are a different code path. The other eleven build
 on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
 `full-matrix` when the proof is wanted before merging rather than after.
 
-
 ## Fitting text to a width
 
 An Illustrator template says how wide a field may be on the element itself
@@ -174,7 +209,7 @@ left untouched, and a constraint that cannot be honoured says why: no `id` to
 measure by, no visible extent, or an unusable width. It compresses glyphs rather
 than reducing `font-size` — the choice the templates already made.
 
-## Diagnostics
+## Warnings and logs
 
 usvg and resvg report every recoverable problem through the `log` crate —
 unparsable values, skipped shapes, unmatched font families, images that could not
@@ -193,12 +228,47 @@ takeLogs()
 `takeLogs()` drains the buffer, which is capped at 500 entries so a pathological
 document cannot grow it without end.
 
-## Elsewhere
+## Troubleshooting
 
-- **[demo/](demo/README.md)** — a browser proof bench: Liquid templating, an
-  array editor, per-element export, live diagnostics. `npm run demo`.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — how the bindings are generated, and
-  what to read before touching the generator.
+**A font family did not apply.** `pendingFonts()` on the parsed document names
+the families it asked for and did not get. Supply them with
+`loadFontFile(path)` or `loadFontData(buffer)` before rendering. Under WASI,
+`loadSystemFonts()` finds nothing inside the sandbox, so every face has to be
+loaded by hand.
+
+**An image did not appear.** `pendingImages()` names the hrefs that could not be
+resolved.
+
+**A measurement disagrees with the numbers in the file.** Bounding boxes are in
+the document's own units and usvg normalises the tree, so they are not canvas
+pixels. See [Fitting text to a width](#fitting-text-to-a-width) for the arithmetic.
+
+**Something was dropped and nothing said so.** usvg reports it through the `log`
+crate and nothing consumes that by default — see [Warnings and
+logs](#warnings-and-logs).
+
+**A member is missing from the TypeScript surface.** The generator keeps a report
+of every upstream member it left alone, with the reason.
+`RESVG_NAPI_CODEGEN_LOG=1 cargo build` prints it, and
+[CONTRIBUTING.md](CONTRIBUTING.md) explains what the reasons mean.
+
+## Demo
+
+A browser proof bench for the same bindings compiled to WASI: Liquid templating,
+an array editor, per-element export, live diagnostics.
+
+```bash
+npm run demo
+```
+
+![the proof bench](https://raw.githubusercontent.com/p8nut/resvg-napi/main/demo/assets/screenshot.png)
+
+[demo/README.md](demo/README.md) describes the page.
+
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) — how the bindings are generated, and what to
+read before touching the generator.
 
 ## Licence
 

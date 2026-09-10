@@ -365,9 +365,12 @@ jobs:
       # write. Last in the job on purpose: a release announcing a version the
       # loop above failed to publish points at nothing installable.
       - name: GitHub release
-        run: gh release create "${{ github.ref_name }}" --verify-tag --generate-notes
+        run: gh release create "$TAG" --verify-tag --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Through the environment, not interpolated into the script: a ref
+          # name reaches the shell verbatim otherwise.
+          TAG: ${{ github.ref_name }}
 
   # Fails when the Rust pins in Cargo.toml are no longer needed: either emnapi
   # shipped a stable 2.x, or napi-build stopped hard-exporting the emnapi 2

@@ -1,0 +1,27 @@
+# Only what nothing else watches. The actions are pinned to major tags and would
+# otherwise sit on v7 forever, and the dev dependencies rot quietly. Cargo is
+# left out on purpose: .github/workflows/resvg.yml asks upstream every Monday
+# whether the resvg version moved, and the `pins` job in CI.yml fails when the
+# emnapi and napi-build pins in Cargo.toml stop being necessary. Dependabot has
+# no way to know that and would only propose breaking them.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # The runtime dependencies are the thirteen platform packages, rewritten by
+    # `napi pre-publish` at every release -- a bump proposed there is noise.
+    allow:
+      - dependency-type: development
+    groups:
+      dev-dependencies:
+        patterns: ['*']

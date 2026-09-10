@@ -10,6 +10,9 @@ resolved tree, text metrics, paint, geometry. Node.js bindings for
 Rust sources, so the TypeScript surface is usvg's own, names and doc comments
 included.
 
+**[Try it in the browser](https://p8nut.github.io/resvg-napi/)** — the same
+bindings compiled to WASI, rendering in the page, nothing to install.
+
 ```bash
 npm install resvg-napi
 ```
@@ -255,7 +258,9 @@ of every upstream member it left alone, with the reason.
 ## Demo
 
 A browser proof bench for the same bindings compiled to WASI: Liquid templating,
-an array editor, per-element export, live diagnostics.
+an array editor, per-element export, live diagnostics. Deployed from `main` at
+**[p8nut.github.io/resvg-napi](https://p8nut.github.io/resvg-napi/)**, and it
+runs locally too:
 
 ```bash
 npm run demo

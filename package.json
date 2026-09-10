@@ -119,7 +119,7 @@
     "resvg-napi-win32-x64-msvc": "0.2.0"
   },
   "dependencies": {
-    "@emnapi/runtime": "1.11.2",
+    "@emnapi/runtime": "1.11.3",
     "@napi-rs/wasm-runtime": "1.2.3"
   },
   "browser": "browser.js",

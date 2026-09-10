@@ -305,7 +305,7 @@ jobs:
     needs: [test, package, conformance]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # gh release create
       id-token: write # npm provenance
     steps:
       - uses: actions/checkout@v7
@@ -358,6 +358,19 @@ jobs:
           publish_one .
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # A tag is invisible on the repo page -- Releases lists releases, not tags
+      # -- and `--generate-notes` fills the body with the pull requests merged
+      # since the previous one, which is the changelog nobody has to remember to
+      # write. Last in the job on purpose: a release announcing a version the
+      # loop above failed to publish points at nothing installable.
+      - name: GitHub release
+        run: gh release create "$TAG" --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Through the environment, not interpolated into the script: a ref
+          # name reaches the shell verbatim otherwise.
+          TAG: ${{ github.ref_name }}
 
   # Fails when the Rust pins in Cargo.toml are no longer needed: either emnapi
   # shipped a stable 2.x, or napi-build stopped hard-exporting the emnapi 2

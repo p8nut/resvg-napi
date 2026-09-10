@@ -163,3 +163,15 @@ derived surface on purpose:
 ```bash
 npm run report -- -w
 ```
+
+## Releasing
+
+Bump `version` in `package.json`, run `npm run version` -- `napi version` copies
+it into all thirteen `npm/*` manifests -- commit, then push a `v*` tag. CI builds
+every target, publishes the platform packages before the root one, and creates
+the GitHub release with the pull requests merged since the last tag as its body.
+
+There is no `CHANGELOG.md` any more. It was a file to remember at every pull
+request, and it recorded what a release body is for. The generated list of pull
+requests is the *what*; the *why*, and anything breaking, is written by hand at
+the top of the release once CI has opened it.

@@ -1,7 +1,7 @@
 {
   "name": "resvg-napi",
   "version": "0.2.0",
-  "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",
+  "description": "Render SVG to PNG in Node — and read back the resolved tree, text metrics and fonts. Powered by resvg.",
   "keywords": [
     "svg",
     "png",
@@ -96,7 +96,7 @@
   },
   "license": "Apache-2.0 OR MIT",
   "author": "p8nut <38731495+p8nut@users.noreply.github.com>",
-  "homepage": "https://github.com/p8nut/resvg-napi#readme",
+  "homepage": "https://p8nut.github.io/resvg-napi/",
   "bugs": {
     "url": "https://github.com/p8nut/resvg-napi/issues"
   },

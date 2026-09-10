@@ -187,6 +187,14 @@ jobs:
             console.log('wasm renders:', png.length, 'bytes');
           "
 
+      # esbuild has exactly one consumer -- demo/build.mjs -- and pages.yml runs
+      # only on main, so an esbuild bump was provable only after merging, in the
+      # deploy. `demo:build` is not used here: it would rebuild the wasm this
+      # job already produced, which is the file the script copies.
+      - name: The demo still bundles
+        if: matrix.target == 'wasm32-wasip1-threads'
+        run: node demo/build.mjs
+
       # The whole suite against the wasm build, not just a smoke test: the
       # binding is the same generated code, but the environment is not -- WASI
       # has no system fonts, and every test had to stop assuming it did.

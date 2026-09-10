@@ -2,6 +2,9 @@
 
 # Browser demo
 
+**[Open it without installing anything](https://p8nut.github.io/resvg-napi/)** --
+the same page, deployed from `main` on every push.
+
 ```bash
 npm run demo      # builds the wasm, bundles the loaders, serves on :8787
 ```

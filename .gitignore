@@ -12,6 +12,7 @@ out.png
 demo/resvg.js
 demo/wasi-worker-browser.mjs
 demo/liquid.js
+demo/examples/index.json
 demo/examples/*.png
 
 # optional local font the demo picks up if it is there

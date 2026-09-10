@@ -1492,6 +1492,34 @@
     return svg;
   }
 
+  // Which faces actually drew the text, and where that is not the family the
+  // document asked for. `pendingFonts()` reports families nobody had at all;
+  // a substitution inside a family that *is* loaded looks like success until
+  // someone compares the two, which is what `faceOf` makes possible.
+  function faceUse(doc) {
+    const used = new Set();
+    const swaps = new Set();
+    const walk = (node) => {
+      if (node.kind === 'text') {
+        const text = node.text();
+        const asked = text.chunks.flatMap((c) => c.spans.flatMap((s) => s.font.families));
+        for (const span of text.layouted) {
+          for (const glyph of span.positionedGlyphs) {
+            const face = doc.faceOf(glyph);
+            if (!face) continue;
+            used.add(face.postScriptName);
+            if (asked.length && !asked.some((f) => face.families.includes(f))) {
+              swaps.add(`${asked[0]} → ${face.postScriptName}`);
+            }
+          }
+        }
+      }
+      for (const child of node.children()) walk(child);
+    };
+    for (const node of doc.children()) walk(node);
+    return { used: [...used], swaps: [...swaps] };
+  }
+
   function render() {
     const t0 = performance.now();
     try {
@@ -1520,6 +1548,8 @@
       $('plate').classList.add('fresh');
 
       const bbox = doc.absLayerBoundingBox();
+      const use = faceUse(doc);
+      for (const swap of use.swaps) report('warn', 'fonts', `substituted ${swap}`);
       const rows = [
         ['viewport', `${round(doc.width)} × ${round(doc.height)} user units`],
         ['content', bbox ? `${round(bbox.width)} × ${round(bbox.height)} at ${round(bbox.x)}, ${round(bbox.y)}` : 'empty'],
@@ -1527,6 +1557,7 @@
         ['elapsed', `${ms} ms`],
         ['text', doc.hasTextNodes() ? 'nodes kept' : 'flattened to paths'],
         ['fonts', [...new Set(fonts.faces().map((f) => f.families[0]))].join(', ') || 'none loaded'],
+        ['drawn with', use.used.join(' · ') || '—'],
         ['gradients', doc.linearGradients().concat(doc.radialGradients()).map((g) => g.id()).join(' ') || '—'],
         ['filters', doc.filters().map((f) => f.id()).join(' ') || '—'],
         ['top level', doc.children().map((n) => `${n.kind}${n.id() ? '#' + n.id() : ''}`).join('  ')],

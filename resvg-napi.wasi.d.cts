@@ -44,6 +44,11 @@ export declare class Font {
   get stretch(): FontStretch
   get weight(): number
   get variations(): Array<FontVariation>
+  /**
+   * Families this span asked for, in order. Never empty: usvg appends
+   * `RenderOptions.fontFamily` as the last resort.
+   */
+  get families(): Array<string>
 }
 
 /** Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form). */
@@ -360,6 +365,23 @@ export declare class Resvg {
    * `FontDatabase` and re-parse to fix the output.
    */
   pendingFonts(): Array<string>
+  /**
+   * The face that actually drew a glyph, from the database this
+   * document was parsed with.
+   *
+   * `pendingFonts()` names the families that were missing; this names
+   * what was used instead, glyph by glyph, which is the half a
+   * document-wide list cannot answer. A fallback that renders is the
+   * failure nobody sees.
+   *
+   * The lookup lives here rather than on `FontDatabase` because
+   * `PositionedGlyph.font` is a `fontdb::ID` -- a slotmap key with no
+   * public numeric form, and meaningless against any other database.
+   * The glyph carries it the way `FontFace` carries one for
+   * `FontDatabase.face`, and `null` means exactly that: a glyph from
+   * another document.
+   */
+  faceOf(glyph: PositionedGlyph): FontFace | null
   /**
    * Supplies one image and re-parses the document.
    *

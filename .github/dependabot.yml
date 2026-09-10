@@ -17,11 +17,27 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: monthly
-    # The runtime dependencies are the thirteen platform packages, rewritten by
-    # `napi pre-publish` at every release -- a bump proposed there is noise.
+      interval: weekly
     allow:
       - dependency-type: development
+      # Runtime dependencies, and exact-pinned -- but they are half of the
+      # emnapi lockstep below, so they have to be in scope for it to work.
+      - dependency-name: '@emnapi/runtime'
+      - dependency-name: '@napi-rs/wasm-runtime'
     groups:
+      # These move together or not at all: the builder aborts with `emnapi
+      # version mismatch: emnapi@1.11.3, @emnapi/core@1.11.2` when they
+      # disagree, and @emnapi/core arrives transitively through @napi-rs/cli --
+      # so bumping the two pins on their own cannot ever work. One pull request
+      # for the family, tried every week, and the wasm job answers in twenty
+      # seconds whether the versions line up yet. A red one waits; it is not a
+      # reason to stop asking.
+      emnapi:
+        patterns: ['emnapi', '@emnapi/*', '@napi-rs/cli', '@napi-rs/wasm-runtime']
+      # Minor and patch only. A major in a group means one breaking bump blocks
+      # every safe one in the same pull request -- majors come on their own,
+      # where a red build points at the dependency that caused it.
       dev-dependencies:
         patterns: ['*']
+        exclude-patterns: ['emnapi', '@emnapi/*', '@napi-rs/cli', '@napi-rs/wasm-runtime']
+        update-types: [minor, patch]

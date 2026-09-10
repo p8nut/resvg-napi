@@ -5,7 +5,9 @@
 # pull request, and CI has no business being able to.
 #
 # It deliberately does not run the test matrix -- opening the PR triggers CI,
-# which runs it better. What this job does that CI cannot is compare the new
+# which runs it better. One catch: a pull request opened with GITHUB_TOKEN gets
+# its checks queued in the approval-required state, so they wait for a click on
+# "Approve and run". A bump PR with no checks is not a broken workflow. What this job does that CI cannot is compare the new
 # corpus against the *old* baseline, so the PR body says which renders changed.
 # After that comparison the baseline is regenerated, because from the PR's point
 # of view the new reference PNGs are the truth.
@@ -119,6 +121,9 @@ jobs:
             echo "The baseline is regenerated in this commit: from here on the"
             echo "$TO reference PNGs are the truth. The block above is the only"
             echo "record of what moved, so read it before merging."
+            echo
+            echo "CI is queued behind \"Approve and run\": this PR was opened by"
+            echo "GITHUB_TOKEN, and GitHub holds those checks for a human."
             echo
             echo "\`src/lib.rs\` and \`index.d.ts\` are regenerated too. CI on this"
             echo "PR goes red whenever the surface moves -- a test pins the exact"

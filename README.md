@@ -38,11 +38,26 @@ as you like.
 |---|---|
 | `renderPng(params?)` | `Buffer` |
 | `renderRaw(params?)` | `RawImage`, un-premultiplied RGBA8 |
-| `toString(opts?)` | the resolved tree, back as SVG |
+| `toString(opts?)` | the resolved tree, back as SVG — text as paths unless `preserveText` |
 | `renderPngAsync` · `renderRawAsync` · `toStringAsync` | the same, off the event loop, `AbortSignal`-aware |
 
 `params` carries `width` / `height` / `scale`, a `background` colour and a
 `crop` box. `Resvg.parseAsync` moves the parse off the loop too.
+
+## Text as outlines
+
+`toString()` hands back the resolved tree with **the text converted to paths** —
+an SVG that draws the same where the font is not installed, which is what a
+print or PDF pipeline needs from a template:
+
+```js
+const doc = new Resvg(svg, { fontFamily: 'DejaVu Sans' }, fonts)
+doc.toString()                        // one <path> per glyph, no <text>
+doc.toString({ preserveText: true })  // <text> kept, resolved but not outlined
+```
+
+The outlines come from the same layout `renderPng` draws, so a glyph sits where
+the raster puts it — and `extent()` measured it before either.
 
 ## Inspect the usvg tree
 

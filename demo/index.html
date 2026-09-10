@@ -282,7 +282,9 @@
         </details>
         <details id="resolvedWrap">
           <summary>resolved tree · what usvg understood</summary>
-          <label class="inline"><input id="preserveText" type="checkbox" checked> keep text nodes</label>
+          <label class="inline"
+            title="Off is what toString() does by default: every glyph becomes a &lt;path&gt;, so the file needs no font installed. On keeps &lt;text&gt;, resolved but not outlined."
+            ><input id="preserveText" type="checkbox" checked> keep text nodes &middot; off = outlines</label>
           <pre id="resolvedTree"></pre>
         </details>
         <div class="controls">

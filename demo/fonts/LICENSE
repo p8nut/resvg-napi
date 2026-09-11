@@ -1,7 +1,18 @@
-The four .woff2 files next to this one are Latin subsets, taken from the
-@fontsource packages of two families the page self-hosts -- COEP require-corp
-blocks a cross-origin font that carries no CORP header, so linking them was not
-an option.
+The files next to this one are Latin subsets of two families the page
+self-hosts -- COEP require-corp blocks a cross-origin font that carries no CORP
+header, so linking them was not an option.
+
+The four .woff2 files are the page's own typography, taken from the @fontsource
+packages. IBMPlexSans-Latin.ttf is what the bench loads into `FontDatabase` on
+a first visit, since WASI has no system fonts and a page that cannot draw text
+is a poor demonstration of a text renderer. ttf rather than woff2 because
+fontdb reads neither woff nor woff2. It was cut from the upstream variable
+font, 537 KB down to 41 KB:
+
+    curl -sSLo plex.ttf 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ibmplexsans/IBMPlexSans%5Bwdth%2Cwght%5D.ttf'
+    python3 -m fontTools.varLib.instancer plex.ttf wght=400 wdth=100 -o static.ttf
+    python3 -m fontTools.subset static.ttf --unicodes='U+0020-00FF,U+2000-206F,U+20AC,U+2122,U+2192' \
+        --layout-features='kern,liga,calt' --output-file=IBMPlexSans-Latin.ttf
 
 Both are licensed under the SIL Open Font License, Version 1.1, which permits
 redistribution and modification (a subset is a Modified Version) provided the

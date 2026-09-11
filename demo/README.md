@@ -11,6 +11,12 @@ npm run demo      # builds the wasm, bundles the loaders, serves on :8787
 
 ![the proof bench](assets/screenshot.png)
 
+The page self-hosts its own typography -- `fonts/` holds Latin subsets of Space
+Mono and IBM Plex Sans, both OFL-1.1, with the notices and the licence in
+[`fonts/LICENSE`](fonts/LICENSE). Self-hosted because COEP `require-corp` blocks
+a cross-origin font without a CORP header, which is the same rule the wasm
+needs.
+
 The page is laid out as a prepress proof: a slug line of job metadata, crop
 corners, and the render framed by registration marks with tick rules measuring
 its real extent. `absLayerBoundingBox()` can be drawn over it in registration

@@ -1353,6 +1353,11 @@
   // render.
   const FA = 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/webfonts/';
   const GF = 'https://cdn.jsdelivr.net/gh/google/fonts@main/';
+  // jsdelivr answers 403 above 20 MB, and NotoColorEmoji-Regular.ttf is 25 MB:
+  // the one font a colour-glyph demo needs is the one the CDN will not serve.
+  // raw.githubusercontent has no such cap and sends `access-control-allow-origin: *`,
+  // which is what a CORS fetch under COEP require-corp needs.
+  const RAW = 'https://raw.githubusercontent.com/google/fonts/main/';
 
   async function grab(url, name) {
     const r = await fetch(url);
@@ -1386,9 +1391,15 @@
       const pick = files.filter((f) => !/italic/i.test(f.name))
         .sort((a, b) => a.name.length - b.name.length)[0] ?? files[0];
       if (!pick) break;
-      return [await grab(`${GF}${lic}/${slug}/${encodeURIComponent(pick.name)}`, pick.name)];
+      const path = `${lic}/${slug}/${encodeURIComponent(pick.name)}`;
+      return [await grab(`${GF}${path}`, pick.name)
+        .catch(() => grab(`${RAW}${path}`, pick.name))];
     }
-    throw new Error(`"${q}" is not a family in google/fonts`);
+    // Naming what this box can do beats naming what it just failed at: the
+    // families people reach for first -- Times New Roman, Arial, Calibri -- are
+    // system fonts, and no amount of retyping will find them here.
+    throw new Error(`"${q}" is not in google/fonts, which is all this box can fetch. `
+      + 'A system font (Times New Roman, Arial) has to be dropped as a file.');
   }
 
   async function fetchInto(query, button) {

@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Render SVG to PNG in Node — and read back the resolved tree, text metrics and fonts. Powered by resvg.",
   "keywords": [
     "svg",
@@ -105,18 +105,18 @@
     "url": "git+https://github.com/p8nut/resvg-napi.git"
   },
   "optionalDependencies": {
-    "resvg-napi-android-arm-eabi": "0.2.0",
-    "resvg-napi-android-arm64": "0.2.0",
-    "resvg-napi-darwin-arm64": "0.2.0",
-    "resvg-napi-darwin-x64": "0.2.0",
-    "resvg-napi-linux-arm-gnueabihf": "0.2.0",
-    "resvg-napi-linux-arm64-gnu": "0.2.0",
-    "resvg-napi-linux-arm64-musl": "0.2.0",
-    "resvg-napi-linux-x64-gnu": "0.2.0",
-    "resvg-napi-linux-x64-musl": "0.2.0",
-    "resvg-napi-win32-arm64-msvc": "0.2.0",
-    "resvg-napi-win32-ia32-msvc": "0.2.0",
-    "resvg-napi-win32-x64-msvc": "0.2.0"
+    "resvg-napi-android-arm-eabi": "0.3.0",
+    "resvg-napi-android-arm64": "0.3.0",
+    "resvg-napi-darwin-arm64": "0.3.0",
+    "resvg-napi-darwin-x64": "0.3.0",
+    "resvg-napi-linux-arm-gnueabihf": "0.3.0",
+    "resvg-napi-linux-arm64-gnu": "0.3.0",
+    "resvg-napi-linux-arm64-musl": "0.3.0",
+    "resvg-napi-linux-x64-gnu": "0.3.0",
+    "resvg-napi-linux-x64-musl": "0.3.0",
+    "resvg-napi-win32-arm64-msvc": "0.3.0",
+    "resvg-napi-win32-ia32-msvc": "0.3.0",
+    "resvg-napi-win32-x64-msvc": "0.3.0"
   },
   "dependencies": {
     "@emnapi/runtime": "1.11.2",

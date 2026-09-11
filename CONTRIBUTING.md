@@ -167,7 +167,10 @@ npm run report -- -w
 ## Releasing
 
 Bump `version` in `package.json`, run `npm run version` -- `napi version` copies
-it into all thirteen `npm/*` manifests -- commit, then push a `v*` tag. CI builds
+it into all thirteen `npm/*` manifests -- then **build**: `index.js` embeds the
+version in its binding checks (`expected 0.3.0 but got ...`), so a bump without
+a rebuild fails CI's drift check rather than the release. Commit all of it,
+then push a `v*` tag. CI builds
 every target, publishes the platform packages before the root one, and creates
 the GitHub release with the pull requests merged since the last tag as its body.
 

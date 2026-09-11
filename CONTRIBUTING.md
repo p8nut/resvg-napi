@@ -166,11 +166,23 @@ npm run report -- -w
 
 ## Releasing
 
-Bump `version` in `package.json`, run `npm run version` -- `napi version` copies
-it into all thirteen `npm/*` manifests -- then **build**: `index.js` embeds the
-version in its binding checks (`expected 0.3.0 but got ...`), so a bump without
-a rebuild fails CI's drift check rather than the release. Commit all of it,
-then push a `v*` tag. CI builds
+Bumping the version is four steps, and CI fails on each one that is skipped:
+
+```bash
+npm pkg set version=X.Y.Z
+npm run version        # napi version -> the thirteen npm/* manifests
+npm pkg set optionalDependencies.resvg-napi-linux-x64-gnu=X.Y.Z   # ...and the twelve others
+npm run build          # index.js embeds the version in its binding checks
+npm install --package-lock-only
+```
+
+`optionalDependencies` is the one `napi version` leaves alone: `napi pre-publish`
+does rewrite it in the publish job, but `check:package` reads the committed
+manifest and fails a release whose root package points at the previous version.
+`index.js` carries the version in fifty-four generated strings (`expected X.Y.Z
+but got ...`), so a bump without a rebuild trips the drift check.
+
+Commit all of it, then push a `v*` tag. CI builds
 every target, publishes the platform packages before the root one, and creates
 the GitHub release with the pull requests merged since the last tag as its body.
 

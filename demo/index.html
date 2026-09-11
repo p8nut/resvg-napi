@@ -1139,7 +1139,20 @@
     $('slugEngine').textContent = `resvg 0.48 · ${Object.keys(mod).length} exports`;
     log('idle');
     report('info', 'page',
-      `Ready. loadSystemFonts() finds ${fonts.len()} faces in this sandbox, so text needs a font file.`);
+      `Ready. loadSystemFonts() finds ${fonts.len()} faces in this sandbox, so a font has to come from somewhere else.`);
+    // ...and this page ships one, because a first visit that cannot draw text
+    // is a dead end in front of the one thing the bench exists to show. Local
+    // and same-origin: no CDN, no rate limit, and it works offline. Dropping a
+    // font replaces it -- `accept` points the generic families at whatever
+    // arrived last.
+    if (!fonts.len()) {
+      fetch('./fonts/IBMPlexSans-Latin.ttf')
+        .then((r) => r.ok ? r.blob() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((blob) => accept([new File([blob], 'IBMPlexSans-Latin.ttf')]))
+        .then(() => report('info', 'fonts',
+          'IBM Plex Sans (Latin subset) loaded for the generic families. Drop your own to replace it.'))
+        .catch((e) => report('warn', 'fonts', `the bundled font did not load: ${e.message}`));
+    }
   } catch (e) {
     if (e.message !== 'not isolated') report('error', 'page', `Could not load the wasm module: ${e.message}`);
   }
@@ -1353,10 +1366,11 @@
   // render.
   const FA = 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/webfonts/';
   const GF = 'https://cdn.jsdelivr.net/gh/google/fonts@main/';
-  // jsdelivr answers 403 above 20 MB, and NotoColorEmoji-Regular.ttf is 25 MB:
-  // the one font a colour-glyph demo needs is the one the CDN will not serve.
-  // raw.githubusercontent has no such cap and sends `access-control-allow-origin: *`,
-  // which is what a CORS fetch under COEP require-corp needs.
+  // For the files jsdelivr will not serve -- it answers 403 above 20 MB, and
+  // NotoColorEmoji-Regular.ttf is 25 MB, which is the one font a colour-glyph
+  // demo needs. raw.githubusercontent has no such cap and sends
+  // `access-control-allow-origin: *`, which is what a CORS fetch under COEP
+  // require-corp needs.
   const RAW = 'https://raw.githubusercontent.com/google/fonts/main/';
 
   async function grab(url, name) {
@@ -1392,8 +1406,16 @@
         .sort((a, b) => a.name.length - b.name.length)[0] ?? files[0];
       if (!pick) break;
       const path = `${lic}/${slug}/${encodeURIComponent(pick.name)}`;
-      return [await grab(`${GF}${path}`, pick.name)
-        .catch(() => grab(`${RAW}${path}`, pick.name))];
+      // The listing already carries each file's size, so the source is chosen
+      // rather than discovered by failing: jsdelivr answers 403 above 20 MB,
+      // and NotoColorEmoji-Regular.ttf is 25 MB. Asking it anyway would put a
+      // red line in the console for a request that was never going to work.
+      // The `catch` stays for the case the cap moves under us.
+      const big = pick.size > 20 * 1024 * 1024;
+      const first = big ? RAW : GF;
+      const second = big ? GF : RAW;
+      return [await grab(`${first}${path}`, pick.name)
+        .catch(() => grab(`${second}${path}`, pick.name))];
     }
     // Naming what this box can do beats naming what it just failed at: the
     // families people reach for first -- Times New Roman, Arial, Calibri -- are
@@ -1509,6 +1531,8 @@
   // document asked for. `pendingFonts()` reports families nobody had at all;
   // a substitution inside a family that *is* loaded looks like success until
   // someone compares the two, which is what `faceOf` makes possible.
+  const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy']);
+
   function faceUse(doc) {
     const used = new Set();
     const swaps = new Set();
@@ -1516,12 +1540,17 @@
       if (node.kind === 'text') {
         const text = node.text();
         const asked = text.chunks.flatMap((c) => c.spans.flatMap((s) => s.font.families));
+        // A generic family names no face: whatever the database points
+        // `sans-serif` at *is* the answer, and reporting it as a substitution
+        // would flag every correctly configured document. A CSS list ending in
+        // one -- `Brand Sans, sans-serif` -- says the same thing out loud.
+        const generic = asked.some((f) => GENERIC.has(f));
         for (const span of text.layouted) {
           for (const glyph of span.positionedGlyphs) {
             const face = doc.faceOf(glyph);
             if (!face) continue;
             used.add(face.postScriptName);
-            if (asked.length && !asked.some((f) => face.families.includes(f))) {
+            if (!generic && asked.length && !asked.some((f) => face.families.includes(f))) {
               swaps.add(`${asked[0]} → ${face.postScriptName}`);
             }
           }

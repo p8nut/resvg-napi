@@ -281,6 +281,24 @@ jobs:
         run: npx napi artifacts -d artifacts --npm-dir npm
       - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
 
+      # Cargo.toml carries its own version, `napi version` does not touch it,
+      # and nothing installs from crates.io -- so it drifted silently through
+      # the 0.3.0 release and only a reader would have caught it. Here rather
+      # than in check-package.mjs: that script asks what npm would ship, and
+      # the crate version is not part of that answer.
+      - name: Cargo.toml carries the npm version
+        run: |
+          node -e "
+            const { readFileSync } = require('fs');
+            const npm = require('./package.json').version;
+            const crate = readFileSync('Cargo.toml', 'utf8').match(/^version = \"(.+)\"/m)[1];
+            if (npm !== crate) {
+              console.error(\`package.json is \${npm} and Cargo.toml is \${crate}; every release so far moved both\`);
+              process.exit(1);
+            }
+            console.log(\`both at \${npm}\`);
+          "
+
   # resvg's own corpus, rendered through this binding: 1715 SVGs against the
   # reference PNGs upstream asserts on, with the 20 fonts it ships, at the
   # settings its harness uses. Fifteen seconds including the fetch.

@@ -20,32 +20,25 @@ updates:
       interval: weekly
     allow:
       - dependency-type: development
-      # A runtime dependency, but half of the gate described below.
-      - dependency-name: '@napi-rs/wasm-runtime'
-    # The emnapi pins cannot move on their own, and that is mechanical rather
-    # than a preference: @napi-rs/cli depends on @napi-rs/lzma-wasm32-wasi and
-    # @napi-rs/tar-wasm32-wasi, which pin @emnapi/core and @emnapi/runtime
-    # EXACTLY -- 1.11.2 with cli 3.8.6. @emnapi/core is transitive, so nothing
-    # here can lift it (`npm update @emnapi/core` leaves it where those exact
-    # pins hold it), and the builder aborts with `emnapi version mismatch` when
-    # the three disagree. Both halves were tried: emnapi alone (#38) and
-    # @emnapi/runtime alone (#42) each produced the mismatch, mirrored.
-    #
-    # The CLI is therefore the gate, and it stays in scope. Its bump pull
-    # request is where the two pins move -- the wasm job answers in twenty
-    # seconds whether the family lines up, and a mismatch there names the
-    # version to write. Weekly, so the question is asked often; no red pull
-    # request for a bump that cannot succeed either way.
-    ignore:
-      - dependency-name: emnapi
+      # Runtime dependencies, and the three the builder insists agree.
+      - dependency-name: '@emnapi/core'
       - dependency-name: '@emnapi/runtime'
+      - dependency-name: '@napi-rs/wasm-runtime'
     groups:
+      # These move together or not at all: the builder aborts with `emnapi
+      # version mismatch` when emnapi, @emnapi/core and @emnapi/runtime
+      # disagree. For a while they could not move at all -- @napi-rs/cli
+      # depended on wasm sub-packages that pinned @emnapi/core exactly, and
+      # nothing here could lift a transitive pin, so both were ignored and the
+      # CLI was the gate. cli 3.9.1 and wasm-runtime 1.2.4 moved them to
+      # peerDependencies: the root provides them now, all three are visible to
+      # dependabot, and one grouped pull request can carry the set.
       napi:
-        patterns: ['@napi-rs/cli', '@napi-rs/wasm-runtime']
+        patterns: ['emnapi', '@emnapi/*', '@napi-rs/cli', '@napi-rs/wasm-runtime']
       # Minor and patch only. A major in a group means one breaking bump blocks
       # every safe one in the same pull request -- majors come on their own,
       # where a red build points at the dependency that caused it.
       dev-dependencies:
         patterns: ['*']
-        exclude-patterns: ['@napi-rs/cli', '@napi-rs/wasm-runtime']
+        exclude-patterns: ['emnapi', '@emnapi/*', '@napi-rs/cli', '@napi-rs/wasm-runtime']
         update-types: [minor, patch]

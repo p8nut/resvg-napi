@@ -227,7 +227,7 @@ async function selftest() {
 
   assert.equal(mismatched('0.1.1', { a: '0.1.0', b: '0.1.0' },
     { a: { version: '0.1.1' }, b: { version: '0.1.1' } }).length, 2);
-  console.log('ok — check-package: 23 checks passed');
+  console.log('ok — check-package: 29 checks passed');
 }
 
 async function main() {

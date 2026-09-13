@@ -243,6 +243,7 @@ jobs:
       # a schedule in the `pins` job.
       - run: npm run check:pins:selftest
       - run: npm run check:package:selftest
+      - run: npm run licenses:selftest
       - run: npm run report:selftest
       - run: npm run conformance:selftest
       - run: npm run check:resvg:selftest
@@ -280,6 +281,12 @@ jobs:
       - if: needs.plan.outputs.full == 'true'
         run: npx napi artifacts -d artifacts --npm-dir npm
       - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
+
+      # What the binaries statically link, and what their licences ask to be
+      # carried with a binary distribution. Generated from Cargo.lock, so it
+      # goes stale on a resvg bump rather than on a release -- which is why it
+      # is checked here and not left to the release procedure.
+      - run: npm run licenses
 
       # Cargo.toml carries its own version, `napi version` does not touch it,
       # and nothing installs from crates.io -- so it drifted silently through

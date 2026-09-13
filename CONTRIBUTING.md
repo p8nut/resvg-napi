@@ -129,6 +129,7 @@ npm run check:resvg:selftest     # the version probe the weekly bump uses
 npm run report:selftest          # the codegen report snapshot
 npm run conformance:selftest     # the corpus runner, offline half
 npm run ci:targets:selftest      # the build matrix and its tiers
+npm run licenses:selftest        # the licence expression parser, offline
 ```
 
 CI runs the lint on `x86_64-unknown-linux-gnu` only -- the toolchain is warm
@@ -163,6 +164,21 @@ derived surface on purpose:
 ```bash
 npm run report -- -w
 ```
+
+## Third-party notices
+
+`THIRD-PARTY-NOTICES.md` is generated from `Cargo.lock` and committed, the same
+treatment `codegen-report.txt` gets and for the same reason: the crate graph
+moves under you, most often on a resvg bump. Every `.node` and the `.wasm`
+statically link 91 crates, and MIT, BSD-2, BSD-3, ISC and Unicode-3.0 all ask
+for their notice to travel with a binary. After a dependency changes:
+
+```bash
+npm run licenses -- -w
+```
+
+CI checks it in the `package (dry run)` job, so a bump that moves the graph
+fails there rather than shipping a notice that no longer describes the binary.
 
 ## Releasing
 

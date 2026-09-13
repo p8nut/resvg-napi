@@ -42,7 +42,9 @@
     "check:resvg": "node scripts/check-resvg.mjs",
     "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest",
     "ci:targets": "node scripts/ci-targets.mjs",
-    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest"
+    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest",
+    "licenses": "node scripts/licenses.mjs",
+    "licenses:selftest": "node scripts/licenses.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {
@@ -79,6 +81,7 @@
   "files": [
     "LICENSE-APACHE",
     "LICENSE-MIT",
+    "THIRD-PARTY-NOTICES.md",
     "README.md",
     "browser.js",
     "fit.d.mts",

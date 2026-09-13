@@ -172,6 +172,7 @@ Bumping the version is four steps, and CI fails on each one that is skipped:
 npm pkg set version=X.Y.Z
 npm run version        # napi version -> the thirteen npm/* manifests
 npm pkg set optionalDependencies.resvg-napi-linux-x64-gnu=X.Y.Z   # ...and the twelve others
+sed -i 's/^version = ".*"/version = "X.Y.Z"/' Cargo.toml           # the crate, and Cargo.lock with it
 npm run build          # index.js embeds the version in its binding checks
 npm install --package-lock-only
 ```

@@ -359,6 +359,10 @@ fn main() {
         .map(|(_, f)| f)
         .collect();
     for set in [&usvg_files, &fontdb_files, &extra] {
+        // tiny-skia-path is parsed for exactly this kind of answer: usvg
+        // re-exports its `Transform`, so the struct that decides the mapping is
+        // never in usvg's own files.
+        vocab.matrices.extend(matrix_like(set));
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
         vocab.payload.extend(payload_enums(set, "", &dups));

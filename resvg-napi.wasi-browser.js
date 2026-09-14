@@ -645,6 +645,7 @@ export const renderAsync = __napiModule.exports.renderAsync
 export const setLogLevel = __napiModule.exports.setLogLevel
 export const ShapeRendering = __napiModule.exports.ShapeRendering
 export const SpreadMethod = __napiModule.exports.SpreadMethod
+export const Stretch = __napiModule.exports.Stretch
 export const takeLogs = __napiModule.exports.takeLogs
 export const TextAnchor = __napiModule.exports.TextAnchor
 export const TextRendering = __napiModule.exports.TextRendering

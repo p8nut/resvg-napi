@@ -753,6 +753,50 @@ impl From<usvg::fontdb::Style> for FontFaceStyle {
         }
     }
 }
+#[doc = " A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass)."]
+#[napi(string_enum = "camelCase")]
+#[derive(Copy, Clone)]
+pub enum Stretch {
+    UltraCondensed,
+    ExtraCondensed,
+    Condensed,
+    SemiCondensed,
+    Normal,
+    SemiExpanded,
+    Expanded,
+    ExtraExpanded,
+    UltraExpanded,
+}
+impl From<Stretch> for usvg::fontdb::Stretch {
+    fn from(v: Stretch) -> Self {
+        match v {
+            Stretch::UltraCondensed => <usvg::fontdb::Stretch>::UltraCondensed,
+            Stretch::ExtraCondensed => <usvg::fontdb::Stretch>::ExtraCondensed,
+            Stretch::Condensed => <usvg::fontdb::Stretch>::Condensed,
+            Stretch::SemiCondensed => <usvg::fontdb::Stretch>::SemiCondensed,
+            Stretch::Normal => <usvg::fontdb::Stretch>::Normal,
+            Stretch::SemiExpanded => <usvg::fontdb::Stretch>::SemiExpanded,
+            Stretch::Expanded => <usvg::fontdb::Stretch>::Expanded,
+            Stretch::ExtraExpanded => <usvg::fontdb::Stretch>::ExtraExpanded,
+            Stretch::UltraExpanded => <usvg::fontdb::Stretch>::UltraExpanded,
+        }
+    }
+}
+impl From<usvg::fontdb::Stretch> for Stretch {
+    fn from(v: usvg::fontdb::Stretch) -> Self {
+        match v {
+            <usvg::fontdb::Stretch>::UltraCondensed => Stretch::UltraCondensed,
+            <usvg::fontdb::Stretch>::ExtraCondensed => Stretch::ExtraCondensed,
+            <usvg::fontdb::Stretch>::Condensed => Stretch::Condensed,
+            <usvg::fontdb::Stretch>::SemiCondensed => Stretch::SemiCondensed,
+            <usvg::fontdb::Stretch>::Normal => Stretch::Normal,
+            <usvg::fontdb::Stretch>::SemiExpanded => Stretch::SemiExpanded,
+            <usvg::fontdb::Stretch>::Expanded => Stretch::Expanded,
+            <usvg::fontdb::Stretch>::ExtraExpanded => Stretch::ExtraExpanded,
+            <usvg::fontdb::Stretch>::UltraExpanded => Stretch::UltraExpanded,
+        }
+    }
+}
 #[doc = " Mirror of `usvg::Options`. Every field is optional; omitted fields"]
 #[doc = " keep the usvg default."]
 #[napi(object)]
@@ -1587,6 +1631,11 @@ impl FontFace {
     pub fn weight(&self) -> u32 {
         let v = &self.inner;
         v.weight.clone().0 as u32
+    }
+    #[napi(getter)]
+    pub fn stretch(&self) -> Stretch {
+        let v = &self.inner;
+        Stretch::from(v.stretch.clone())
     }
     #[napi(getter)]
     pub fn monospaced(&self) -> bool {

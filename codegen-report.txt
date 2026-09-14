@@ -1,7 +1,6 @@
 FaceInfo member not exposed: families: Vec<(String,Language)>
 FaceInfo member not exposed: id: ID
 FaceInfo member not exposed: source: Source
-FaceInfo member not exposed: stretch: Stretch
 FaceInfo: partial mapping, emitted as read-only class FontFace
 Font member not exposed: families: &[FontFamily]
 Font: partial mapping, emitted as read-only class Font
@@ -46,7 +45,6 @@ object Input skipped: not a public struct
 object Node skipped: not a public struct
 object Size skipped: not a public struct
 object Source skipped: not a public struct
-object Stretch skipped: not a public struct
 object [FontFamily] skipped: not a public struct
 object [TextChunk] skipped: not a public struct
 object [TextSpan] skipped: not a public struct

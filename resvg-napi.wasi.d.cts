@@ -167,6 +167,7 @@ export declare class FontFace {
   get postScriptName(): String
   get style(): FontFaceStyle
   get weight(): number
+  get stretch(): Stretch
   get monospaced(): boolean
   /** Family names of this face, English (US) first when present. */
   get families(): Array<string>
@@ -1443,6 +1444,9 @@ export interface Stop {
   color: Color
   opacity: number
 }
+
+/** A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass). */
+export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
 
 /** Plain view of a `Stroke`. */
 export interface Stroke {

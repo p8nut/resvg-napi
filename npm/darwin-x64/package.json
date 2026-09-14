@@ -6,6 +6,9 @@
   ],
   "main": "resvg-napi.darwin-x64.node",
   "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "THIRD-PARTY-NOTICES.md",
     "resvg-napi.darwin-x64.node"
   ],
   "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",

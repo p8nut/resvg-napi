@@ -3,6 +3,9 @@
   "version": "0.3.1",
   "main": "resvg-napi.wasi.cjs",
   "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "THIRD-PARTY-NOTICES.md",
     "resvg-napi.wasm32-wasi.wasm",
     "resvg-napi.wasi.cjs",
     "resvg-napi.wasi.d.cts",

@@ -6,6 +6,9 @@
   ],
   "main": "resvg-napi.android-arm64.node",
   "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "THIRD-PARTY-NOTICES.md",
     "resvg-napi.android-arm64.node"
   ],
   "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",

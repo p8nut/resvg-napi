@@ -187,6 +187,36 @@ fn main() {
     // Public names usvg defines twice. Exactly one today, `Image`, and the
     // report says so rather than leaving it to be rediscovered.
     //
+    // Only the crate root for free functions: a module-level `pub fn` elsewhere
+    // is not crate-public (resvg has an internal `render(&Image, ...)`).
+    let resvg_root = vec![parse(&resvg.join("lib.rs"))];
+    let fontdb_files: Vec<syn::File> = public_only(&fontdb, parse_crate(&fontdb))
+        .into_iter()
+        .map(|(_, f)| f)
+        .collect();
+
+    // The crates this generator derives from, in the order a bare name is
+    // resolved against them. Two today; the point of the list is that a third
+    // is a push rather than another arm in five `if` chains -- the bare name
+    // decided the crate in every one of them, which is the assumption that
+    // breaks the moment two crates define `Color`.
+    //
+    // `label` is not `root.to_string()`: quote! spells a path with spaces
+    // around `::`, and this one reaches the report a reader is expected to
+    // grep.
+    struct Source {
+        files: Vec<syn::File>,
+        root: TokenStream,
+        label: &'static str,
+    }
+    let sources = vec![
+        Source { files: usvg_files.clone(), root: quote!(usvg), label: "usvg" },
+        Source { files: fontdb_files.clone(), root: quote!(usvg::fontdb), label: "usvg::fontdb" },
+    ];
+    // Which crate defines a type, by the same probe the chains used: the first
+    // source with a public struct of that name.
+    let defines = |t: &str| sources.iter().find(|s| struct_fields_opt(&s.files, bare(t)).is_some());
+
     // Enums count as well as structs, and they count together: `payload_enums`
     // qualifies a carried type by this set, so an enum defined in two modules --
     // or an enum in one and a struct of the same name in another -- would be
@@ -194,7 +224,13 @@ fn main() {
     // That is the failure `filter::Image` already caused once on the struct side.
     let dups: BTreeSet<String> = {
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
-        for f in &usvg_files {
+        // Across every source, not within usvg alone. The count is what decides
+        // whether a name is keyed by its module, and a name defined once in
+        // each of two crates resolves to whichever was walked first -- the same
+        // failure `filter::Image` caused inside usvg, one level up. Nothing
+        // shares a name between usvg and fontdb today; tiny-skia would bring
+        // nine at once, `Color` and `Paint` among them.
+        for f in sources.iter().flat_map(|s| s.files.iter()) {
             for item in &f.items {
                 let name = match item {
                     Item::Struct(st) if is_pub(&st.vis) => st.ident.to_string(),
@@ -211,17 +247,10 @@ fn main() {
     };
     if !dups.is_empty() {
         report!(
-            "names usvg defines twice, keyed by module: {}",
+            "names defined more than once across the sources, keyed by module: {}",
             dups.iter().cloned().collect::<Vec<_>>().join(", ")
         );
     }
-    // Only the crate root for free functions: a module-level `pub fn` elsewhere
-    // is not crate-public (resvg has an internal `render(&Image, ...)`).
-    let resvg_root = vec![parse(&resvg.join("lib.rs"))];
-    let fontdb_files: Vec<syn::File> = public_only(&fontdb, parse_crate(&fontdb))
-        .into_iter()
-        .map(|(_, f)| f)
-        .collect();
 
     // Guards first: no point generating against a moved API.
     assert_free_fn(
@@ -354,18 +383,21 @@ fn main() {
         vocab.aliases.len()
     );
 
-    let (enum_names, enums) = map_enums(&usvg_files, &referenced, &modules, &quote!(usvg));
-    // fontdb defines enums too -- `Style` is Normal/Italic/Oblique -- and a
-    // usvg-only pass left them to the object path, which reported them as "not
-    // a public struct" and dropped the field that used them.
-    let (fontdb_enum_names, fontdb_enums) =
-        map_enums(&fontdb_files, &referenced, &modules, &quote!(usvg::fontdb));
-    let mut enums = enums;
-    enums.extend(fontdb_enums);
+    // Every source, not just usvg: fontdb defines enums too -- `Style` is
+    // Normal/Italic/Oblique -- and a usvg-only pass left them to the object
+    // path, which reported them as "not a public struct" and dropped the field
+    // that used them. Driven by the list so a third crate is a push.
+    let mut enums = TokenStream::new();
+    let mut enum_names: BTreeSet<String> = BTreeSet::new();
+    for src in &sources {
+        let (names, code) = map_enums(&src.files, &referenced, &modules, &src.root);
+        enum_names.extend(names);
+        enums.extend(code);
+    }
+    // `enum_names` already carries every source's enums, fontdb's included.
     vocab.enums = enum_names.clone();
-    vocab.enums.extend(fontdb_enum_names.iter().cloned());
-    for set in [&usvg_files, &fontdb_files] {
-        vocab.ints.extend(int_newtypes(set));
+    for src in &sources {
+        vocab.ints.extend(int_newtypes(&src.files));
     }
 
     // Fixpoint over object types: a generated object can reference another
@@ -397,10 +429,8 @@ fn main() {
         let scoped = t.rsplit_once("::").and_then(|(m, _)| by_module.get(m));
         let (source, root) = if let Some(files) = scoped {
             (files, quote!(usvg))
-        } else if struct_fields_opt(&usvg_files, bare(&t)).is_some() {
-            (&usvg_files, quote!(usvg))
-        } else if struct_fields_opt(&fontdb_files, bare(&t)).is_some() {
-            (&fontdb_files, quote!(usvg::fontdb))
+        } else if let Some(src) = defines(&t) {
+            (&src.files, src.root.clone())
         } else {
             report!("object {t} skipped: not a public struct");
             continue;
@@ -478,11 +508,12 @@ fn main() {
                 return files;
             }
         }
-        if struct_fields_opt(&usvg_files, bare(t)).is_some() {
-            &usvg_files
-        } else {
-            &fontdb_files
-        }
+        // The last source is the fallback rather than an error: a type that
+        // reaches here is one the registry already accepted, so the question is
+        // which crate to read it from, not whether it exists.
+        defines(t)
+            .map(|s| s.files.as_slice())
+            .unwrap_or_else(|| sources.last().expect("at least one source").files.as_slice())
     };
     loop {
         let demote: Vec<String> = vocab
@@ -608,7 +639,8 @@ fn main() {
         if t == "fontdb::Database" {
             continue;
         }
-        let (code, skipped, reached) = wrapper_class(&usvg_files, &t, &vocab, &modules);
+        let src = defines(&t).unwrap_or(&sources[0]);
+        let (code, skipped, reached) = wrapper_class(&src.files, &t, &vocab, &modules);
         if code.is_empty() {
             report!("handle {t} skipped: nothing mappable on it");
         } else {
@@ -621,7 +653,7 @@ fn main() {
             } else {
                 "not exposed"
             };
-            report!("usvg::{t} method {verb}: {s}");
+            report!("{}::{t} method {verb}: {s}", src.label);
         }
         todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
     }

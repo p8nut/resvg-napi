@@ -86,7 +86,11 @@ pub fn payload_enum_code(
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
 ) -> std::result::Result<TokenStream, String> {
-    let up = upstream_path(name, modules, &quote!(usvg));
+    // The crate the enum came from, recorded when it was found rather than
+    // assumed here: every payload enum is usvg's today, which is exactly the
+    // kind of fact that stops being true without anything saying so.
+    let root: TokenStream = info.root.parse().expect("a crate path");
+    let up = upstream_path(name, modules, &root);
     let mut items = TokenStream::new();
     let mut arms: Vec<TokenStream> = Vec::new();
     let mut i = 0usize;
@@ -908,9 +912,10 @@ pub fn wrapper_class(
     ty: &str,
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
+    root: &TokenStream,
 ) -> (TokenStream, Vec<String>, BTreeSet<String>) {
     let name = wrapper_ident(ty);
-    let path = wrapper_path(ty, modules);
+    let path = wrapper_path(ty, modules, root);
     // Walk the type itself, then whatever it derefs to, sharing one name set so
     // an override on the outer type wins.
     let mut taken = BTreeSet::new();

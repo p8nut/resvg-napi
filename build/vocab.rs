@@ -295,6 +295,40 @@ impl PayloadEnum {
     }
 }
 
+/// Structs shaped like a 2D affine transform: exactly the six `f32` fields
+/// tiny-skia spells `sx kx ky sy tx ty`, and nothing else.
+///
+/// This used to be `"Transform" => Js::Matrix`, an arm keyed on a bare name --
+/// and a bare name stops meaning one type the moment a second crate is parsed.
+/// The shape is what the mapping was ever about: six numbers in that order are
+/// a matrix whatever the crate that declares them calls itself.
+pub fn matrix_like(files: &[syn::File]) -> BTreeSet<String> {
+    let want: BTreeSet<&str> = ["sx", "kx", "ky", "sy", "tx", "ty"].into_iter().collect();
+    let mut found = BTreeSet::new();
+    for item in files.iter().flat_map(|f| &f.items) {
+        let Item::Struct(st) = item else { continue };
+        if !is_pub(&st.vis) {
+            continue;
+        }
+        let Fields::Named(named) = &st.fields else {
+            continue;
+        };
+        if named.named.iter().any(|f| ty_str(&f.ty) != "f32") {
+            continue;
+        }
+        let got: BTreeSet<String> = named
+            .named
+            .iter()
+            .filter_map(|f| f.ident.as_ref())
+            .map(|i| i.to_string())
+            .collect();
+        if got.iter().map(String::as_str).collect::<BTreeSet<_>>() == want {
+            found.insert(st.ident.to_string());
+        }
+    }
+    found
+}
+
 /// Types with an `id(&self) -> &str`, directly or through a Deref the sources
 /// declare. An `Arc<T>` payload cannot be an object field, but if T has an id
 /// it can be named by one -- the way the document itself refers to a paint
@@ -414,6 +448,8 @@ pub struct Vocab {
     pub ints: BTreeSet<String>,
     pub objects: BTreeSet<String>,
     pub values: BTreeSet<String>,
+    /// Structs shaped like a transform, found by `matrix_like`.
+    pub matrices: BTreeSet<String>,
 }
 
 impl Vocab {
@@ -441,6 +477,9 @@ impl Vocab {
 
     pub fn classify(&self, ty: &str) -> Option<Js> {
         let t = self.resolve(ty);
+        if self.matrices.contains(&t) {
+            return Some(Js::Matrix);
+        }
         if let Some(js) = classify(&t, &self.enums, &self.scalars) {
             return Some(js);
         }
@@ -490,7 +529,8 @@ pub fn classify(
     scalars: &BTreeSet<String>,
 ) -> Option<Js> {
     Some(match ty {
-        "Transform" => Js::Matrix,
+        // No `Transform` arm: `Vocab::matrices` answers that one by shape,
+        // before this function is reached.
         "f32" => Js::F32,
         "f64" => Js::F64,
         "u32" => Js::U32,

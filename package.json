@@ -57,7 +57,7 @@
     "liquidjs": "^10.29.0",
     "pngjs": "^7.0.0",
     "qrcode-generator": "^2.0.4",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "napi": {
     "binaryName": "resvg-napi",

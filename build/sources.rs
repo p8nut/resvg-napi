@@ -149,6 +149,94 @@ pub fn is_pub(vis: &Visibility) -> bool {
 /// mapping it emitted `Style` twice and referenced `usvg::fontdb::Width`, a
 /// type that does not exist. Anything the crate wants public it re-exports, and
 /// the re-export is what the root file shows.
+/// What the crate root re-exports, grouped by the module it comes from, and
+/// under the name the root gives it: `pub use ttf_parser::Width as Stretch`
+/// answers `ttf_parser -> [(Width, Stretch)]`.
+fn reexports(root: &syn::File) -> BTreeMap<String, Vec<(String, String)>> {
+    fn walk(
+        tree: &syn::UseTree,
+        path: &mut Vec<String>,
+        out: &mut BTreeMap<String, Vec<(String, String)>>,
+    ) {
+        match tree {
+            syn::UseTree::Path(p) => {
+                path.push(p.ident.to_string());
+                walk(&p.tree, path, out);
+                path.pop();
+            }
+            // `self` and `crate` are where the path starts, not a module it
+            // names; the module is whatever follows.
+            syn::UseTree::Name(n) => {
+                if let Some(m) = path.iter().find(|s| *s != "self" && *s != "crate") {
+                    out.entry(m.clone())
+                        .or_default()
+                        .push((n.ident.to_string(), n.ident.to_string()));
+                }
+            }
+            syn::UseTree::Rename(r) => {
+                if let Some(m) = path.iter().find(|s| *s != "self" && *s != "crate") {
+                    out.entry(m.clone())
+                        .or_default()
+                        .push((r.ident.to_string(), r.rename.to_string()));
+                }
+            }
+            syn::UseTree::Group(g) => {
+                for t in &g.items {
+                    walk(t, path, out);
+                }
+            }
+            // A glob says nothing about which names it carries.
+            syn::UseTree::Glob(_) => {}
+        }
+    }
+    let mut out = BTreeMap::new();
+    for item in &root.items {
+        if let Item::Use(u) = item {
+            if matches!(u.vis, Visibility::Public(_)) {
+                walk(&u.tree, &mut Vec::new(), &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// Renames a kept item to the name the crate root exports it under, so what is
+/// parsed downstream is what a caller of the crate can actually write.
+fn rename(item: &mut Item, from: &str, to: &str) {
+    let to_ident = |i: &mut proc_macro2::Ident| {
+        if *i == from {
+            *i = proc_macro2::Ident::new(to, i.span());
+        }
+    };
+    match item {
+        Item::Struct(st) => to_ident(&mut st.ident),
+        Item::Enum(e) => to_ident(&mut e.ident),
+        Item::Type(t) => to_ident(&mut t.ident),
+        Item::Impl(im) => {
+            if let syn::Type::Path(p) = &mut *im.self_ty {
+                if let Some(seg) = p.path.segments.last_mut() {
+                    to_ident(&mut seg.ident);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The name an item declares, when it declares one this generator cares about.
+fn declared(item: &Item) -> Option<String> {
+    Some(match item {
+        Item::Struct(st) => st.ident.to_string(),
+        Item::Enum(e) => e.ident.to_string(),
+        Item::Type(t) => t.ident.to_string(),
+        Item::Impl(im) => match &*im.self_ty {
+            syn::Type::Path(p) => p.path.segments.last()?.ident.to_string(),
+            _ => return None,
+        },
+        _ => return None,
+    })
+}
+
 pub fn public_only(dir: &Path, files: Vec<(PathBuf, syn::File)>) -> Vec<(PathBuf, syn::File)> {
     let root = files.iter().find(|(p, _)| {
         p.file_name().and_then(|n| n.to_str()) == Some("lib.rs") && p.parent() == Some(dir)
@@ -165,14 +253,44 @@ pub fn public_only(dir: &Path, files: Vec<(PathBuf, syn::File)>) -> Vec<(PathBuf
     if private.is_empty() {
         return files;
     }
+    let exported = reexports(root);
     files
         .into_iter()
-        .filter(|(p, _)| {
-            let rel = p.strip_prefix(dir).unwrap_or(p);
-            !rel.components().next().is_some_and(|c| {
-                let name = c.as_os_str().to_str().unwrap_or_default();
-                private.contains(name.trim_end_matches(".rs"))
-            })
+        .filter_map(|(path, mut file)| {
+            let rel = path.strip_prefix(dir).unwrap_or(&path);
+            let module = rel
+                .components()
+                .next()
+                .map(|c| {
+                    c.as_os_str()
+                        .to_str()
+                        .unwrap_or_default()
+                        .trim_end_matches(".rs")
+                })
+                .unwrap_or_default()
+                .to_string();
+            if !private.contains(&module) {
+                return Some((path, file));
+            }
+            // A private module is not all-or-nothing: the crate root may lift
+            // individual names out of it, and those names are public API --
+            // `pub use ttf_parser::Width as Stretch` is how a caller writes
+            // `fontdb::Stretch`. Keep exactly those, under the name the root
+            // gives them, and drop the rest of the module. Taking the whole
+            // file instead is the mistake this function was written to stop:
+            // 2857 lines of vendored parser whose `Style` is not fontdb's.
+            let lifted = exported.get(&module)?;
+            file.items.retain_mut(|item| {
+                let Some(name) = declared(item) else {
+                    return false;
+                };
+                let Some((from, to)) = lifted.iter().find(|(from, _)| *from == name) else {
+                    return false;
+                };
+                rename(item, from, to);
+                true
+            });
+            (!file.items.is_empty()).then_some((path, file))
         })
         .collect()
 }

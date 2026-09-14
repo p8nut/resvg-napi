@@ -743,6 +743,7 @@ module.exports.renderAsync = nativeBinding.renderAsync
 module.exports.setLogLevel = nativeBinding.setLogLevel
 module.exports.ShapeRendering = nativeBinding.ShapeRendering
 module.exports.SpreadMethod = nativeBinding.SpreadMethod
+module.exports.Stretch = nativeBinding.Stretch
 module.exports.takeLogs = nativeBinding.takeLogs
 module.exports.TextAnchor = nativeBinding.TextAnchor
 module.exports.TextRendering = nativeBinding.TextRendering

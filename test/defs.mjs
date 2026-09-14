@@ -69,12 +69,21 @@ assert.equal(typeof prims[0].rect.width, 'number');
 assert.equal(prims[0].colorInterpolation, 'linearRgb');
 const faces = r.fontdb().faces();
 assert.ok(faces.length > 0);
-// FaceInfo maps only partially (ID, Source, Style, Stretch have no JS form), so
-// the strict policy makes it a class with getters rather than a plain object.
+// FaceInfo maps only partially (ID and Source have no JS form), so the strict
+// policy makes it a class with getters rather than a plain object.
+//
+// `stretch` arrived when the generator started reading a crate's public surface
+// the way the crate publishes it: fontdb lifts it out of a private module with
+// `pub use ttf_parser::Width as Stretch`, and the old rule -- keep a module or
+// drop it whole -- could only drop it.
 assert.deepEqual(
   Object.getOwnPropertyNames(Object.getPrototypeOf(faces[0])).sort(),
-  ['constructor', 'families', 'index', 'monospaced', 'postScriptName', 'style', 'weight'],
+  ['constructor', 'families', 'index', 'monospaced', 'postScriptName', 'stretch', 'style', 'weight'],
 );
+// The nine OS/2 width classes, spelled as usvg spells its own enums.
+assert.ok(['ultraCondensed', 'condensed', 'normal', 'expanded', 'ultraExpanded', 'semiCondensed',
+  'extraCondensed', 'semiExpanded', 'extraExpanded'].includes(faces[0].stretch),
+  `unexpected stretch: ${faces[0].stretch}`);
 
 // 6. a def's content is walkable as nodes, rooted at that def
 const pat = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">

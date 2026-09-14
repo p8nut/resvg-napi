@@ -111,6 +111,10 @@ pub enum Payload {
 pub struct PayloadEnum {
     /// Variant name and what it carries.
     pub variants: Vec<(String, Payload)>,
+    /// The Rust path its crate is reached by, `usvg` or `usvg::fontdb`. Carried
+    /// on the type because the emitter used to assume usvg, which is true of
+    /// every payload enum today and stops being true at the third crate.
+    pub root: String,
 }
 
 impl PayloadEnum {
@@ -377,6 +381,8 @@ pub fn payload_enums(
     // in the same module.
     module: &str,
     dups: &BTreeSet<String>,
+    // The crate these files belong to, recorded on every enum found.
+    root: &str,
 ) -> BTreeMap<String, PayloadEnum> {
     let mut out = BTreeMap::new();
     for item in files.iter().flat_map(|f| &f.items) {
@@ -424,7 +430,13 @@ pub fn payload_enums(
             }
         }
         if usable {
-            out.insert(e.ident.to_string(), PayloadEnum { variants });
+            out.insert(
+                e.ident.to_string(),
+                PayloadEnum {
+                    variants,
+                    root: root.to_string(),
+                },
+            );
         }
     }
     out
@@ -972,12 +984,16 @@ pub fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
 }
 
 /// Rust path of that definition, as reachable from our crate.
-pub fn wrapper_path(ty: &str, modules: &BTreeMap<String, String>) -> TokenStream {
+pub fn wrapper_path(
+    ty: &str,
+    modules: &BTreeMap<String, String>,
+    root: &TokenStream,
+) -> TokenStream {
     if ty.contains("::") {
         let segs: Vec<_> = ty.split("::").map(|s| format_ident!("{}", s)).collect();
-        quote!(usvg::#(#segs)::*)
+        quote!(#root::#(#segs)::*)
     } else {
-        upstream_path(ty, modules, &quote!(usvg))
+        upstream_path(ty, modules, root)
     }
 }
 

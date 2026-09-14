@@ -324,7 +324,7 @@ fn main() {
         .chain(
             by_module
                 .iter()
-                .flat_map(|(m, files)| payload_enums(files, m, &dups))
+                .flat_map(|(m, files)| payload_enums(files, m, &dups, "usvg"))
                 .flat_map(|(_, p)| p.variants)
                 .flat_map(|(_, payload)| match payload {
                     Payload::None => Vec::new(),
@@ -358,14 +358,22 @@ fn main() {
         .flat_map(|c| parse_crate(&locate(c, "lib.rs", &locked)))
         .map(|(_, f)| f)
         .collect();
-    for set in [&usvg_files, &fontdb_files, &extra] {
+    // Each set with the crate path its types are reached by. `extra` is mined
+    // for vocabulary only -- what usvg re-exports from tiny-skia-path is
+    // reachable as `usvg::Transform`, and what it does not re-export is never
+    // emitted, so `usvg` is the honest label for the half that can appear.
+    for (set, root) in [
+        (&usvg_files, "usvg"),
+        (&fontdb_files, "usvg::fontdb"),
+        (&extra, "usvg"),
+    ] {
         // tiny-skia-path is parsed for exactly this kind of answer: usvg
         // re-exports its `Transform`, so the struct that decides the mapping is
         // never in usvg's own files.
         vocab.matrices.extend(matrix_like(set));
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
-        vocab.payload.extend(payload_enums(set, "", &dups));
+        vocab.payload.extend(payload_enums(set, "", &dups, root));
         for item in set.iter().flat_map(|f| &f.items) {
             if let Item::Struct(st) = item {
                 if is_pub(&st.vis) {
@@ -382,7 +390,7 @@ fn main() {
         if m.is_empty() {
             continue;
         }
-        vocab.payload.extend(payload_enums(files, m, &dups));
+        vocab.payload.extend(payload_enums(files, m, &dups, "usvg"));
     }
     report!(
         "payload enums found: {}",
@@ -660,7 +668,7 @@ fn main() {
             continue;
         }
         let src = defines(&t).unwrap_or(&sources[0]);
-        let (code, skipped, reached) = wrapper_class(&src.files, &t, &vocab, &modules);
+        let (code, skipped, reached) = wrapper_class(&src.files, &t, &vocab, &modules, &src.root);
         if code.is_empty() {
             report!("handle {t} skipped: nothing mappable on it");
         } else {

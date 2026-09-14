@@ -210,12 +210,24 @@ fn main() {
         label: &'static str,
     }
     let sources = vec![
-        Source { files: usvg_files.clone(), root: quote!(usvg), label: "usvg" },
-        Source { files: fontdb_files.clone(), root: quote!(usvg::fontdb), label: "usvg::fontdb" },
+        Source {
+            files: usvg_files.clone(),
+            root: quote!(usvg),
+            label: "usvg",
+        },
+        Source {
+            files: fontdb_files.clone(),
+            root: quote!(usvg::fontdb),
+            label: "usvg::fontdb",
+        },
     ];
     // Which crate defines a type, by the same probe the chains used: the first
     // source with a public struct of that name.
-    let defines = |t: &str| sources.iter().find(|s| struct_fields_opt(&s.files, bare(t)).is_some());
+    let defines = |t: &str| {
+        sources
+            .iter()
+            .find(|s| struct_fields_opt(&s.files, bare(t)).is_some())
+    };
 
     // Enums count as well as structs, and they count together: `payload_enums`
     // qualifies a carried type by this set, so an enum defined in two modules --
@@ -511,9 +523,13 @@ fn main() {
         // The last source is the fallback rather than an error: a type that
         // reaches here is one the registry already accepted, so the question is
         // which crate to read it from, not whether it exists.
-        defines(t)
-            .map(|s| s.files.as_slice())
-            .unwrap_or_else(|| sources.last().expect("at least one source").files.as_slice())
+        defines(t).map(|s| s.files.as_slice()).unwrap_or_else(|| {
+            sources
+                .last()
+                .expect("at least one source")
+                .files
+                .as_slice()
+        })
     };
     loop {
         let demote: Vec<String> = vocab

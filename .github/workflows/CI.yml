@@ -169,6 +169,16 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: npm run report
 
+      # The same treatment for what the binary links: every crate whose licence
+      # asks to travel with a binary distribution, read from the crate graph.
+      # It sits here rather than in the package job because it reads that graph
+      # with `cargo metadata --offline`, and the package job has neither a
+      # toolchain nor a warm registry -- it would fail on `log` before reaching
+      # a licence. A resvg bump that moves the graph fails on this diff.
+      - name: Third-party notices are up to date
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: npm run licenses
+
       # The WASI loader shims are generated and committed too, but only the
       # wasm build emits them (they are this job's upload-artifact payload
       # below), so the linux-gnu job above cannot see them drift.
@@ -243,6 +253,7 @@ jobs:
       # a schedule in the `pins` job.
       - run: npm run check:pins:selftest
       - run: npm run check:package:selftest
+      - run: npm run licenses:selftest
       - run: npm run report:selftest
       - run: npm run conformance:selftest
       - run: npm run check:resvg:selftest
@@ -281,11 +292,19 @@ jobs:
         run: npx napi artifacts -d artifacts --npm-dir npm
       - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
 
-      # Cargo.toml carries its own version, `napi version` does not touch it,
-      # and nothing installs from crates.io -- so it drifted silently through
-      # the 0.3.0 release and only a reader would have caught it. Here rather
-      # than in check-package.mjs: that script asks what npm would ship, and
-      # the crate version is not part of that answer.
+      # This is a memory-safety guard, not tidiness -- the 0.3.0 release taught
+      # us the difference. `napi8` is on (Cargo.toml), so every #[napi] class
+      # carries a type tag hashed from `crate@version::module::ClassName`, and
+      # napi checks it before casting the pointer back to its Rust type. The
+      # version in that hash is CARGO_PKG_VERSION: Cargo.toml's, not
+      # package.json's. 0.3.0 shipped with Cargo.toml still at 0.2.0, so both
+      # published binaries stamp the *same* tag, and a FontDatabase from one is
+      # accepted by the other with no error -- a pointer read at whatever
+      # offsets the other build happened to use. Nothing broke only because
+      # resvg stayed at 0.48.1 and the layouts matched.
+      #
+      # Here rather than in check-package.mjs: that script asks what npm would
+      # ship, and the crate version is not part of that answer.
       - name: Cargo.toml carries the npm version
         run: |
           node -e "

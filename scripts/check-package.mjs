@@ -81,25 +81,47 @@ export function anonymous(pkgs) {
 
 /**
  * Every version in the tree must be the same one. `npm version` bumps the root
- * and, through the `version` script, the platform manifests -- but not the
- * optionalDependencies that name them. Left behind, the root asks for platform
+ * and, through the `version` script, the platform manifests -- but none of the
+ * dependency maps that name them. Left behind, the root asks for platform
  * packages at a version that was never published, and `npm install` resolves
  * nothing. An unpublished version can never be published again, so this is not
  * a mistake a later patch release can undo.
  *
+ * `peerDependencies` is checked for the same reason and was the one that got
+ * away: it named the wasm package at 0.2.0 through the whole of the 0.3.0
+ * release, so `npm i resvg-napi@0.3.0 resvg-napi-wasm32-wasi@0.3.0` answered
+ * ERESOLVE for anyone taking the documented WASI path.
+ *
  * @param {string} version  the root version
- * @param {Record<string, string>} optional  optionalDependencies
+ * @param {Record<string, string>} pinned  every pin naming a package of this family
  * @param {Record<string, {version?: string}>} platforms  by package name
  */
-export function mismatched(version, optional, platforms) {
+export function mismatched(version, pinned, platforms) {
   const why = [];
-  for (const [name, want] of Object.entries(optional)) {
+  for (const [name, want] of Object.entries(pinned)) {
     if (want !== version) why.push(`${name} is pinned at ${want}, but this package is ${version}`);
   }
   for (const [name, m] of Object.entries(platforms)) {
     if (m.version && m.version !== version) why.push(`${name} is ${m.version}, but the root is ${version}`);
   }
   return why;
+}
+
+/**
+ * The pins that must move with the version, from wherever they are declared.
+ * Restricted to this family by name: `dependencies` also carries `@emnapi/*`
+ * and `@napi-rs/wasm-runtime`, which track upstream and have no business
+ * matching our version.
+ *
+ * @param {{optionalDependencies?: Record<string,string>, peerDependencies?: Record<string,string>, dependencies?: Record<string,string>}} manifest
+ */
+export function familyPins(manifest) {
+  const family = (m) => Object.entries(m ?? {}).filter(([name]) => name.startsWith('resvg-napi'));
+  return Object.fromEntries([
+    ...family(manifest.optionalDependencies),
+    ...family(manifest.peerDependencies),
+    ...family(manifest.dependencies),
+  ]);
 }
 
 function pack(dir) {
@@ -193,9 +215,19 @@ async function selftest() {
   assert.equal(behind.length, 1);
   assert.match(behind[0], /a is 0\.1\.0, but the root is 0\.1\.1/);
   // exactly what `npm version patch` leaves behind: manifests bumped, pins not
+  // The peer pin 0.3.0 shipped with: named in another map, and left behind.
+  const peer = mismatched('0.3.0', familyPins({
+    optionalDependencies: { 'resvg-napi-linux-x64-gnu': '0.3.0' },
+    peerDependencies: { 'resvg-napi-wasm32-wasi': '0.2.0' },
+  }), {});
+  assert.equal(peer.length, 1, 'a stale peer pin is a mismatch');
+  assert.match(peer[0], /resvg-napi-wasm32-wasi/);
+  // Upstream dependencies track upstream: they are not ours to match.
+  assert.deepEqual(familyPins({ dependencies: { '@emnapi/core': '1.11.3' } }), {});
+
   assert.equal(mismatched('0.1.1', { a: '0.1.0', b: '0.1.0' },
     { a: { version: '0.1.1' }, b: { version: '0.1.1' } }).length, 2);
-  console.log('ok — check-package: 23 checks passed');
+  console.log('ok — check-package: 29 checks passed');
 }
 
 async function main() {
@@ -209,7 +241,7 @@ async function main() {
     }));
   const root = JSON.parse(readFileSync('package.json', 'utf8'));
   const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
-  const drift = mismatched(root.version, root.optionalDependencies ?? {}, platforms);
+  const drift = mismatched(root.version, familyPins(root), platforms);
   const bare = anonymous([
     { name: root.name, manifest: root },
     ...(rootOnly ? [] : Object.entries(platforms).map(([name, manifest]) => ({ name, manifest }))),

@@ -1,7 +1,7 @@
 {
   "name": "resvg-napi",
   "version": "0.3.0",
-  "description": "Render SVG to PNG in Node — and read back the resolved tree, text metrics and fonts. Powered by resvg.",
+  "description": "Render SVG to PNG in Node \u2014 and read back the resolved tree, text metrics and fonts. Powered by resvg.",
   "keywords": [
     "svg",
     "png",
@@ -42,7 +42,9 @@
     "check:resvg": "node scripts/check-resvg.mjs",
     "check:resvg:selftest": "node scripts/check-resvg.mjs --selftest",
     "ci:targets": "node scripts/ci-targets.mjs",
-    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest"
+    "ci:targets:selftest": "node scripts/ci-targets.mjs --selftest",
+    "licenses": "node scripts/licenses.mjs",
+    "licenses:selftest": "node scripts/licenses.mjs --selftest"
   },
   "types": "index.d.ts",
   "devDependencies": {
@@ -79,6 +81,7 @@
   "files": [
     "LICENSE-APACHE",
     "LICENSE-MIT",
+    "THIRD-PARTY-NOTICES.md",
     "README.md",
     "browser.js",
     "fit.d.mts",
@@ -129,7 +132,7 @@
     "provenance": true
   },
   "peerDependencies": {
-    "resvg-napi-wasm32-wasi": "0.2.0"
+    "resvg-napi-wasm32-wasi": "0.3.0"
   },
   "peerDependenciesMeta": {
     "resvg-napi-wasm32-wasi": {

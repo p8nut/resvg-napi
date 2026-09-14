@@ -184,22 +184,32 @@ no longer describes the binary.
 
 ## Releasing
 
-Bumping the version is four steps, and CI fails on each one that is skipped:
+One version lives in seven places, and every one of them has failed a release
+at least once:
 
 ```bash
 npm pkg set version=X.Y.Z
 npm run version        # napi version -> the thirteen npm/* manifests
 npm pkg set optionalDependencies.resvg-napi-linux-x64-gnu=X.Y.Z   # ...and the twelve others
+npm pkg set peerDependencies.resvg-napi-wasm32-wasi=X.Y.Z
 sed -i 's/^version = ".*"/version = "X.Y.Z"/' Cargo.toml           # the crate, and Cargo.lock with it
 npm run build          # index.js embeds the version in its binding checks
 npm install --package-lock-only
 ```
 
-`optionalDependencies` is the one `napi version` leaves alone: `napi pre-publish`
-does rewrite it in the publish job, but `check:package` reads the committed
-manifest and fails a release whose root package points at the previous version.
+`napi version` touches the thirteen manifests and nothing else. The dependency
+maps that name those packages are left alone: `napi pre-publish` rewrites
+`optionalDependencies` inside the publish job, but `check:package` reads the
+committed manifest and fails a release whose root still points at the previous
+version -- and `peerDependencies` is rewritten by nobody at all, which is how
+0.3.0 shipped asking for the 0.2.0 wasm package and answering ERESOLVE to
+anyone who installed both.
+
 `index.js` carries the version in fifty-four generated strings (`expected X.Y.Z
-but got ...`), so a bump without a rebuild trips the drift check.
+but got ...`), so a bump without a rebuild trips the drift check. `Cargo.toml`
+is the one that looks cosmetic and is not: `CARGO_PKG_VERSION` is hashed into
+every class's napi type tag, so two releases sharing a crate version stamp
+identical tags and accept each other's objects without an error.
 
 Commit all of it, then push a `v*` tag. CI builds
 every target, publishes the platform packages before the root one, and creates

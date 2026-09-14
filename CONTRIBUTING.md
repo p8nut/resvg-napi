@@ -177,10 +177,21 @@ for their notice to travel with a binary. After a dependency changes:
 npm run licenses -- -w
 ```
 
+That writes the snapshot *and* copies it, with `LICENSE-APACHE` and
+`LICENSE-MIT`, into all thirteen `npm/*` packages. The copies are the point: a
+notice about what a `.node` contains has to ship in the package that holds the
+`.node`, and the root package holds none -- it ships JavaScript and type
+declarations. Shipping it only from the root, as 0.3.0 did, put it in the one
+package none of that code is in. `files[]` names all three in every platform
+manifest -- `npm run licenses -- -w` writes that entry as well as the file,
+because `napi create-npm-dirs` rewrites those manifests from `napi.targets` and
+would otherwise drop the notices without saying so.
+
 CI checks it beside the codegen report, in the linux build job: reading the
 graph needs a toolchain and a warm registry, which the package job has neither
 of. A bump that moves the graph fails there rather than shipping a notice that
-no longer describes the binary.
+no longer describes the binary -- or a platform package left holding the
+previous one.
 
 ## Releasing
 

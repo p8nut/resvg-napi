@@ -6,6 +6,9 @@
   ],
   "main": "resvg-napi.win32-ia32-msvc.node",
   "files": [
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "THIRD-PARTY-NOTICES.md",
     "resvg-napi.win32-ia32-msvc.node"
   ],
   "description": "Node bindings for resvg, generated from the upstream Rust sources: SVG to PNG, the usvg tree, fonts and text measurement.",

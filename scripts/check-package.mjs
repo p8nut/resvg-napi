@@ -124,6 +124,34 @@ export function familyPins(manifest) {
   ]);
 }
 
+/**
+ * The wasm package declares the emnapi trio itself, and `napi pre-publish`
+ * refuses to release it when those versions disagree with the root's -- with
+ * good reason, since the builder aborts on a mismatched emnapi and the wasm
+ * package is the one that carries it to the browser.
+ *
+ * Nothing writes these but hand: `napi version` moves versions, not
+ * dependencies. They were left at 1.11.2 when the root moved to 1.11.3, and
+ * the only thing that noticed was the publish job, on the tag, after thirteen
+ * targets had already built.
+ *
+ * @param {Record<string,string>} root  the root's dependencies
+ * @param {Record<string,string>} wasm  the wasm package's dependencies
+ */
+export function wasiDeps(root, wasm) {
+  const why = [];
+  for (const [name, want] of Object.entries(wasm ?? {})) {
+    const mine = (root ?? {})[name];
+    if (!mine) continue;
+    // `~1.2.4` and `1.2.4` are both acceptable spellings of the same intent;
+    // what matters is the version they name.
+    if (want.replace(/^[~^]/, '') !== mine.replace(/^[~^]/, '')) {
+      why.push(`the wasm package declares ${name} ${want}, but the root uses ${mine}`);
+    }
+  }
+  return why;
+}
+
 function pack(dir) {
   const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: dir,
@@ -215,6 +243,14 @@ async function selftest() {
   assert.equal(behind.length, 1);
   assert.match(behind[0], /a is 0\.1\.0, but the root is 0\.1\.1/);
   // exactly what `npm version patch` leaves behind: manifests bumped, pins not
+  // What the 0.3.1 tag died on: the wasm package left on the previous emnapi.
+  assert.equal(wasiDeps({ '@emnapi/core': '1.11.3' }, { '@emnapi/core': '1.11.2' }).length, 1);
+  assert.deepEqual(wasiDeps({ '@emnapi/core': '1.11.3' }, { '@emnapi/core': '1.11.3' }), []);
+  // A tilde and an exact pin name the same version; only the version counts.
+  assert.deepEqual(wasiDeps({ '@napi-rs/wasm-runtime': '1.2.4' }, { '@napi-rs/wasm-runtime': '~1.2.4' }), []);
+  // A dependency the root does not share is the wasm package's own business.
+  assert.deepEqual(wasiDeps({}, { '@tybys/wasm-util': '0.10.3' }), []);
+
   // The peer pin 0.3.0 shipped with: named in another map, and left behind.
   const peer = mismatched('0.3.0', familyPins({
     optionalDependencies: { 'resvg-napi-linux-x64-gnu': '0.3.0' },
@@ -227,7 +263,7 @@ async function selftest() {
 
   assert.equal(mismatched('0.1.1', { a: '0.1.0', b: '0.1.0' },
     { a: { version: '0.1.1' }, b: { version: '0.1.1' } }).length, 2);
-  console.log('ok — check-package: 29 checks passed');
+  console.log('ok — check-package: 33 checks passed');
 }
 
 async function main() {
@@ -242,12 +278,14 @@ async function main() {
   const root = JSON.parse(readFileSync('package.json', 'utf8'));
   const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
   const drift = mismatched(root.version, familyPins(root), platforms);
+  const wasi = platforms['resvg-napi-wasm32-wasi'];
+  const shared = wasi ? wasiDeps(root.dependencies, wasi.dependencies) : [];
   const bare = anonymous([
     { name: root.name, manifest: root },
     ...(rootOnly ? [] : Object.entries(platforms).map(([name, manifest]) => ({ name, manifest }))),
   ]);
   if (rootOnly) console.log('  (root package only -- not every platform binary is present)');
-  const reasons = [...assess(pkgs), ...loose, ...bare, ...drift];
+  const reasons = [...assess(pkgs), ...loose, ...bare, ...drift, ...shared];
   for (const p of pkgs) {
     console.log(`  ${p.name.padEnd(30)} ${p.shipped.length} file(s)`);
   }

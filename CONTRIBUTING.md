@@ -177,8 +177,10 @@ for their notice to travel with a binary. After a dependency changes:
 npm run licenses -- -w
 ```
 
-CI checks it in the `package (dry run)` job, so a bump that moves the graph
-fails there rather than shipping a notice that no longer describes the binary.
+CI checks it beside the codegen report, in the linux build job: reading the
+graph needs a toolchain and a warm registry, which the package job has neither
+of. A bump that moves the graph fails there rather than shipping a notice that
+no longer describes the binary.
 
 ## Releasing
 

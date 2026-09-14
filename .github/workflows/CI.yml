@@ -169,6 +169,16 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: npm run report
 
+      # The same treatment for what the binary links: every crate whose licence
+      # asks to travel with a binary distribution, read from the crate graph.
+      # It sits here rather than in the package job because it reads that graph
+      # with `cargo metadata --offline`, and the package job has neither a
+      # toolchain nor a warm registry -- it would fail on `log` before reaching
+      # a licence. A resvg bump that moves the graph fails on this diff.
+      - name: Third-party notices are up to date
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: npm run licenses
+
       # The WASI loader shims are generated and committed too, but only the
       # wasm build emits them (they are this job's upload-artifact payload
       # below), so the linux-gnu job above cannot see them drift.
@@ -281,12 +291,6 @@ jobs:
       - if: needs.plan.outputs.full == 'true'
         run: npx napi artifacts -d artifacts --npm-dir npm
       - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
-
-      # What the binaries statically link, and what their licences ask to be
-      # carried with a binary distribution. Generated from Cargo.lock, so it
-      # goes stale on a resvg bump rather than on a release -- which is why it
-      # is checked here and not left to the release procedure.
-      - run: npm run licenses
 
       # This is a memory-safety guard, not tidiness -- the 0.3.0 release taught
       # us the difference. `napi8` is on (Cargo.toml), so every #[napi] class

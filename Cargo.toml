@@ -24,7 +24,7 @@ crate-type = ["cdylib"]
 # stable date. rust-lld 1.95 silently dropped the unsatisfiable export; 1.98
 # makes it an error, so the wasm target stops building.
 #
-# napi-derive-backend must stay at 6.0.0 too -- 6.1.1 began emitting
+# napi-derive-backend must stay at 6.0.0 too -- 6.1.2 began emitting
 # NativeBorrowScope, which only exists in napi 3.12. It is transitive, so it
 # cannot be named here: Cargo.lock is what holds it. `cargo update` will
 # release it and break the wasm build. `npm run check:pins` says when these

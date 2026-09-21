@@ -286,6 +286,13 @@ of every upstream member it left alone, with the reason.
 `RESVG_NAPI_CODEGEN_LOG=1 cargo build` prints it, and
 [CONTRIBUTING.md](CONTRIBUTING.md) explains what the reasons mean.
 
+**Not sure which binding loaded.** `__napiBindingTarget` names it: `'native'`
+for a platform addon, otherwise the WASI flavour. That separates a machine that
+fell back to `wasm32-wasi` — where `loadSystemFonts()` finds nothing — from
+one running the native addon, and reports what `NAPI_RS_NATIVE_LIBRARY_PATH`
+resolved to when it is set, since the loader adopts the override's own target
+rather than claiming `'native'`.
+
 ## Demo
 
 A browser proof bench for the same bindings compiled to WASI: Liquid templating,

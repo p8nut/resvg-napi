@@ -34,7 +34,7 @@ copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2025 Alice Maz, Marshall Pierce
 
-### bitflags 2.13.1
+### bitflags 2.13.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
@@ -44,17 +44,17 @@ Copyright (c) 2014 The Rust Project Developers
 Offered as `Zlib OR Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2019 Daniel "Lokathor" Gee
 
-### bytemuck_derive 1.12.0
+### bytemuck_derive 1.12.1
 Offered as `Zlib OR Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2019 Daniel "Lokathor" Gee
 
-### cfg-if 1.0.4
+### cfg-if 1.0.5
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014 Alex Crichton
 
-### crc32fast 1.5.1
+### crc32fast 1.5.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
@@ -90,7 +90,7 @@ copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014-2026 Alex Crichton
 
-### font-types 0.12.4
+### font-types 0.12.5
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
@@ -305,7 +305,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### smallvec 1.15.2
+### smallvec 1.16.1
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
@@ -322,23 +322,16 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 
-### syn 3.0.4
+### syn 3.0.6
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 
-### tinyvec 1.12.0
+### tinyvec 1.13.3
 Offered as `Zlib OR Apache-2.0 OR MIT`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2019 Daniel "Lokathor" Gee
-
-### tinyvec_macros 0.1.1
-Offered as `MIT OR Apache-2.0 OR Zlib`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
-Copyright 2020 Tomasz "Soveu" Marx
-Copyright (c) 2020 Soveu
 
 ### unicode-bidi 0.3.18
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
@@ -346,7 +339,7 @@ copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2015 The Rust Project Developers
 
-### unicode-ident 1.0.24
+### unicode-ident 1.0.26
 Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
@@ -486,7 +479,7 @@ Copyright (c) 2019 Reizner Evgeniy
 
 ## Unicode-3.0
 
-### unicode-ident 1.0.24
+### unicode-ident 1.0.26
 Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Unicode-3.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,

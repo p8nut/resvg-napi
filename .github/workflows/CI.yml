@@ -140,7 +140,7 @@ jobs:
           cargo clippy --release --all-targets -- -D warnings
 
       # napi-derive-backend is transitive, so Cargo.toml cannot name it and only
-      # Cargo.lock holds it. 6.1.1 began emitting NativeBorrowScope, which needs
+      # Cargo.lock holds it. 6.1.2 began emitting NativeBorrowScope, which needs
       # napi 3.12, and the wasm target then stops linking. A comment above `napi`
       # says so; this makes `cargo update` fail here rather than in a build.
       - name: Cargo.lock still holds the transitive pin

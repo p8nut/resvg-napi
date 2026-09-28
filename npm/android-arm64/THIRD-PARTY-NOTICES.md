@@ -19,25 +19,17 @@ reproduced in full at the end.
 ### adler2 2.0.1
 Offered as `0BSD OR MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 
 ### arrayvec 0.7.8
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) Ulrik Sverdrup "bluss" 2015-2023
 
 ### base64 0.23.1
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2025 Alice Maz, Marshall Pierce
 
 ### bitflags 2.13.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014 The Rust Project Developers
 
 ### bytemuck 1.25.2
@@ -50,44 +42,31 @@ Copyright (c) 2019 Daniel "Lokathor" Gee
 
 ### cfg-if 1.0.5
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014 Alex Crichton
 
 ### crc32fast 1.5.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright {yyyy} {name of copyright owner}
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
 
 ### ctor 1.0.13
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright {yyyy} {name of copyright owner}
 
 ### data-url 0.3.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2013-2025 The rust-url developers
 
 ### euclid 0.22.14
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2012-2013 Mozilla Foundation
 
 ### fdeflate 0.3.7
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### flate2 1.1.9
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014-2026 Alex Crichton
 
 ### font-types 0.12.5
@@ -97,100 +76,71 @@ Copyright (c) 2019 Fontations Developers
 
 ### futures 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-channel 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-core 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-executor 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-io 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-macro 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-sink 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-task 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### futures-util 0.3.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2016 Alex Crichton
 Copyright (c) 2017 The Tokio Authors
 
 ### gif 0.14.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2015 nwin
 
 ### image-webp 0.2.4
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### kurbo 0.13.1
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Raph Levien
 
 ### libc 0.2.189
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) The Rust Project Developers
 
 ### log 0.4.34
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014 The Rust Project Developers
 
 ### memmap2 0.9.11
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright [2015] [Dan Burkert]
 Copyright (c) 2020 Yevhenii Reizner
 Copyright (c) 2015 Dan Burkert
@@ -201,60 +151,44 @@ Copyright 2013-2014 RAD Game Tools and Valve Software
 Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
 Copyright (c) 2017 Frommi
 Copyright (c) 2017-2024 oyvindln
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2020 Frommi
 
 ### nohash-hasher 0.2.0
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright 2018 Parity Technologies (UK) Ltd
 
 ### num-traits 0.2.19
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2014 The Rust Project Developers
 
 ### once_cell 1.21.4
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### pin-project-lite 0.2.17
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### png 0.18.1
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2015 nwin
 
 ### polycool 0.4.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Raph Levien
 
 ### proc-macro2 1.0.107
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### quick-error 2.0.1
 Offered as `MIT/Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright {yyyy} {name of copyright owner}
 Copyright (c) 2015 The quick-error Developers
 
 ### quote 1.0.47
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### read-fonts 0.41.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
@@ -263,44 +197,32 @@ Copyright (c) 2019 Fontations Developers
 
 ### resvg 0.48.1
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright 2017 the Resvg Authors
 
 ### roxmltree 0.20.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Yevhenii Reizner
 
 ### roxmltree 0.21.1
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Yevhenii Reizner
 
 ### rustc-hash 2.1.3
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### semver 1.0.28
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### simplecss 0.2.2
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Reizner Evgeniy
 
 ### siphasher 1.0.4
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2012-2016 The Rust Project Developers
 Copyright 2016-2026 Frank Denis
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 
 ### skrifa 0.44.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
@@ -309,92 +231,64 @@ Copyright (c) 2019 Fontations Developers
 
 ### smallvec 1.16.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 The Servo Project Developers
 
 ### svgtypes 0.16.1
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Yevhenii Reizner
 
 ### syn 2.0.119
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### syn 3.0.6
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
+No copyright line in the published crate; Apache-2.0 per its manifest.
 
 ### tinyvec 1.13.3
 Offered as `Zlib OR Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2019 Daniel "Lokathor" Gee
 
 ### unicode-bidi 0.3.18
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2015 The Rust Project Developers
 
 ### unicode-ident 1.0.26
 Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 COPYRIGHT AND PERMISSION NOTICE
 Copyright © 1991-2023 Unicode, Inc
 
 ### unicode-script 0.5.8
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright 2021 The Unicode-rs Developers
 Copyright (c) 2019 Manish Goregaokar
 
 ### unicode-segmentation 1.13.3
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2015 The Rust Project Developers
 
 ### unicode-vo 0.1.0
 Offered as `MIT/Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Reizner Evgeniy
 
 ### usvg 0.48.1
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright 2017 the Resvg Authors
 
 ### weezl 0.1.12
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) HeroicKatora 2020
 
 ### windows-link 0.2.1
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) Microsoft Corporation
 
 ### zune-core 0.5.3
 Offered as `MIT OR Apache-2.0 OR Zlib`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) zune-image developers
 
 ### zune-jpeg 0.5.15
 Offered as `MIT OR Apache-2.0 OR Zlib`; listed here under Apache-2.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) zune-image developers
 
 ## BSD-2-Clause
@@ -483,8 +377,6 @@ Copyright (c) 2019 Reizner Evgeniy
 
 ### unicode-ident 1.0.26
 Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Unicode-3.0.
-copyright notice that is included in or attached to the work
-copyright license to reproduce, prepare Derivative Works of,
 COPYRIGHT AND PERMISSION NOTICE
 Copyright © 1991-2023 Unicode, Inc
 

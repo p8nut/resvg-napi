@@ -44,8 +44,11 @@ export function copyrights(text) {
   for (const line of text.split('\n')) {
     const t = line.trim();
     // "Copyright (c) 2011 Google Inc." but not the Apache boilerplate line
-    // "Copyright [yyyy] [name of copyright owner]", which names nobody.
-    if (/^copyright\b/i.test(t) && !/\[yyyy\]|\[name of/i.test(t)) seen.add(t.replace(/\.$/, ''));
+    // "Copyright [yyyy] [name of copyright owner]", which names nobody, nor
+    // the Apache prose that wraps onto a line starting "copyright notice that
+    // is included..." or "copyright license to reproduce...". A holder's line
+    // opens a sentence, so it is capitalised; the prose never is.
+    if (/^C(opyright|OPYRIGHT)\b/.test(t) && !/\[yyyy\]|\[name of/i.test(t)) seen.add(t.replace(/\.$/, ''));
   }
   return [...seen];
 }
@@ -274,6 +277,9 @@ async function selftest() {
     ['Copyright (c) 2011 Google Inc. All rights reserved']);
   // The Apache template line names nobody and must not be reported as a holder.
   assert.deepEqual(copyrights('Copyright [yyyy] [name of copyright owner]'), []);
+  // Nor the Apache prose lines that happen to wrap onto the word.
+  assert.deepEqual(copyrights('copyright notice that is included in or attached to the work\ncopyright license to reproduce, prepare Derivative Works of,'), []);
+  assert.deepEqual(copyrights('COPYRIGHT (C) 2020 A'), ['COPYRIGHT (C) 2020 A']);
   assert.deepEqual(copyrights('Copyright (c) A\nCopyright (c) A\nCopyright (c) B').length, 2);
 
   assert.deepEqual(spdxIds('MIT OR Apache-2.0'), ['MIT', 'Apache-2.0']);

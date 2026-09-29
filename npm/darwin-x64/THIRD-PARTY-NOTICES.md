@@ -295,17 +295,19 @@ copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,
 Copyright (c) 2018 Reizner Evgeniy
 
-### siphasher 1.0.3
-Offered as `MIT/Apache-2.0`; listed here under Apache-2.0.
+### siphasher 1.0.4
+Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2012-2016 The Rust Project Developers
 Copyright 2016-2026 Frank Denis
+copyright notice that is included in or attached to the work
+copyright license to reproduce, prepare Derivative Works of,
 
 ### skrifa 0.44.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### smallvec 1.16.1
+### smallvec 1.16.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 copyright notice that is included in or attached to the work
 copyright license to reproduce, prepare Derivative Works of,

@@ -128,4 +128,30 @@ console.log('ok — async rendering: all checks passed');
   assert.ok((await blocker).length > 0, 'the running task was untouched');
 }
 
+// A `signal` that is not an AbortSignal is refused before napi converts it.
+// napi 3.11 unwraps whatever object it is given as its own signal state
+// (GHSA-qr54-xrr9-7575), and one of this module's own instances is exactly the
+// object whose native pointer it would then misread. Every entry point that
+// takes a signal, since each is its own conversion.
+{
+  const doc = new Resvg(small);
+  const node = doc.children()[0];
+  const wrong = [doc, node, {}];
+  const calls = {
+    renderAsync: (s) => renderAsync(small, null, null, s),
+    parseAsync: (s) => Resvg.parseAsync(small, null, null, null, s),
+    renderPngAsync: (s) => doc.renderPngAsync(null, s),
+    renderNodePngAsync: (s) => doc.renderNodePngAsync('r', null, s),
+    toStringAsync: (s) => doc.toStringAsync(null, s),
+    renderRawAsync: (s) => doc.renderRawAsync(null, s),
+    'SvgNode.renderPngAsync': (s) => node.renderPngAsync(null, s),
+  };
+  for (const [name, call] of Object.entries(calls)) {
+    for (const s of wrong) {
+      await assert.rejects(async () => call(s), /signal must be an AbortSignal/, name);
+    }
+  }
+  assert.ok(isPng(await doc.renderPngAsync(null, new AbortController().signal)), 'a real signal still passes');
+}
+
 console.log('ok — derived async twins: all checks passed');

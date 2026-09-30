@@ -4021,7 +4021,7 @@ impl Resvg {
         options: Option<RenderOptions>,
         fonts: Option<&FontDatabase>,
         images: Option<std::collections::HashMap<String, Buffer>>,
-        signal: Option<AbortSignal>,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
     ) -> AsyncTask<ParseTask> {
         AsyncTask::with_optional_signal(
             ParseTask {
@@ -4040,7 +4040,7 @@ impl Resvg {
                     .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
                     .collect(),
             },
-            signal,
+            signal.map(|s| s.0),
         )
     }
     #[doc = " Bounding box of one element, by `id`, as it will be rendered"]
@@ -4456,6 +4456,33 @@ impl Task for ParseTask {
         })
     }
 }
+#[doc = " An `AbortSignal`, checked before napi converts it. napi 3.11 takes"]
+#[doc = " whatever object it is handed (GHSA-qr54-xrr9-7575) and unwraps its"]
+#[doc = " native pointer as its own, so an instance of one of this crate's"]
+#[doc = " classes passed as `signal` was read as the wrong type."]
+pub struct Signal(AbortSignal);
+impl FromNapiValue for Signal {
+    unsafe fn from_napi_value(
+        env: napi::sys::napi_env,
+        value: napi::sys::napi_value,
+    ) -> Result<Self> {
+        let mut global = std::ptr::null_mut();
+        napi::check_status!(unsafe { napi::sys::napi_get_global(env, &mut global) })?;
+        let mut ctor = std::ptr::null_mut();
+        napi::check_status!(unsafe {
+            napi::sys::napi_get_named_property(env, global, c"AbortSignal".as_ptr(), &mut ctor)
+        })?;
+        let mut is = false;
+        napi::check_status!(unsafe { napi::sys::napi_instanceof(env, value, ctor, &mut is) })?;
+        if !is {
+            return Err(Error::new(
+                Status::InvalidArg,
+                "signal must be an AbortSignal",
+            ));
+        }
+        unsafe { AbortSignal::from_napi_value(env, value) }.map(Signal)
+    }
+}
 #[doc = " Parse, rasterise and PNG-encode in one worker-thread round trip."]
 pub struct RenderTask {
     svg: Vec<u8>,
@@ -4486,7 +4513,7 @@ pub fn render_async(
     svg: Either<String, Buffer>,
     options: Option<RenderOptions>,
     params: Option<RenderParams>,
-    signal: Option<AbortSignal>,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
 ) -> AsyncTask<RenderTask> {
     AsyncTask::with_optional_signal(
         RenderTask {
@@ -4497,7 +4524,7 @@ pub fn render_async(
             options: options.unwrap_or_default(),
             params: params.unwrap_or_default(),
         },
-        signal,
+        signal.map(|s| s.0),
     )
 }
 #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
@@ -4522,14 +4549,14 @@ impl SvgNode {
     pub fn render_png_async(
         &self,
         params: Option<RenderParams>,
-        signal: Option<AbortSignal>,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
     ) -> AsyncTask<SvgNodePngBytesTask> {
         AsyncTask::with_optional_signal(
             SvgNodePngBytesTask {
                 recv: self.clone(),
                 params,
             },
-            signal,
+            signal.map(|s| s.0),
         )
     }
 }
@@ -4555,14 +4582,14 @@ impl Resvg {
     pub fn render_png_async(
         &self,
         params: Option<RenderParams>,
-        signal: Option<AbortSignal>,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
     ) -> AsyncTask<ResvgPngBytesTask> {
         AsyncTask::with_optional_signal(
             ResvgPngBytesTask {
                 recv: self.clone(),
                 params,
             },
-            signal,
+            signal.map(|s| s.0),
         )
     }
 }
@@ -4591,7 +4618,7 @@ impl Resvg {
         &self,
         id: String,
         params: Option<RenderParams>,
-        signal: Option<AbortSignal>,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
     ) -> AsyncTask<ResvgNodePngBytesTask> {
         AsyncTask::with_optional_signal(
             ResvgNodePngBytesTask {
@@ -4599,7 +4626,7 @@ impl Resvg {
                 id,
                 params,
             },
-            signal,
+            signal.map(|s| s.0),
         )
     }
 }
@@ -4625,14 +4652,14 @@ impl Resvg {
     pub fn to_string_async(
         &self,
         options: Option<WriteOptions>,
-        signal: Option<AbortSignal>,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
     ) -> AsyncTask<ResvgSvgTextTask> {
         AsyncTask::with_optional_signal(
             ResvgSvgTextTask {
                 recv: self.clone(),
                 options,
             },
-            signal,
+            signal.map(|s| s.0),
         )
     }
 }
@@ -4658,14 +4685,14 @@ impl Resvg {
     pub fn render_raw_async(
         &self,
         params: Option<RenderParams>,
-        signal: Option<AbortSignal>,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
     ) -> AsyncTask<ResvgRawPixelsTask> {
         AsyncTask::with_optional_signal(
             ResvgRawPixelsTask {
                 recv: self.clone(),
                 params,
             },
-            signal,
+            signal.map(|s| s.0),
         )
     }
 }

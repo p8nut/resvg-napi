@@ -1456,11 +1456,11 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
                 pub fn #public(
                     &self,
                     #(#names: #types,)*
-                    signal: Option<AbortSignal>,
+                    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
                 ) -> AsyncTask<#task> {
                     AsyncTask::with_optional_signal(
                         #task { recv: self.clone(), #(#names,)* },
-                        signal,
+                        signal.map(|s| s.0),
                     )
                 }
             }

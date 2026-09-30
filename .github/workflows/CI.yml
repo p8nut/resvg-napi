@@ -101,11 +101,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      # `npm install`, not `npm ci`: package.json declares the nine
-      # resvg-napi-<platform> optionalDependencies, and nothing is published
-      # yet, so they cannot be in the lock file. `npm ci` refuses on that
-      # mismatch; `npm install` tolerates an unresolvable *optional* dep.
-      # Switch back once 0.1.0 is on the registry.
+      # `npm install`, not `npm ci`: `npm version` moves the resvg-napi-<platform>
+      # optionalDependencies to the new version before the publish job below
+      # has put it on the registry, so on a release commit they cannot be in
+      # the lock file. `npm ci` refuses on that mismatch; `npm install`
+      # tolerates an unresolvable *optional* dep. This is permanent, not a
+      # pre-0.1.0 leftover: locking them between releases would only move the
+      # failure onto the tag.
       - run: npm install
       # musl cross-compiles through zig (`-x`). The previous `--use-cross`
       # needed a `cross` binary that no step ever installed, so both musl

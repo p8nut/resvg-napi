@@ -178,9 +178,17 @@ jobs:
       # with `cargo metadata --offline`, and the package job has neither a
       # toolchain nor a warm registry -- it would fail on `log` before reaching
       # a licence. A resvg bump that moves the graph fails on this diff.
+      #
+      # `--offline` needs every crate in the graph on disk, Windows-only ones
+      # included, and a Linux build downloads only what it compiles. A warm
+      # cache hid that until rustc 1.99 changed its key: on a cold one the step
+      # died on `failed to download windows-link`. `cargo fetch` without
+      # `--target` downloads the whole graph.
       - name: Third-party notices are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: npm run licenses
+        run: |
+          cargo fetch --locked
+          npm run licenses
 
       # The WASI loader shims are generated and committed too, but only the
       # wasm build emits them (they are this job's upload-artifact payload

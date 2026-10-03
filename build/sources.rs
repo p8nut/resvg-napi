@@ -18,9 +18,10 @@ pub fn locked_versions() -> BTreeMap<String, String> {
     let lock = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("Cargo.lock");
     println!("cargo::rerun-if-changed={}", lock.display());
     let mut out = BTreeMap::new();
-    let Ok(text) = fs::read_to_string(&lock) else {
-        return out;
-    };
+    // Without it every crate would fall through to whatever the registry
+    // cache holds, and the bindings would describe some other version.
+    let text = fs::read_to_string(&lock)
+        .unwrap_or_else(|e| panic!("{}: {e}; run `cargo generate-lockfile`", lock.display()));
     let mut name: Option<String> = None;
     for line in text.lines() {
         let line = line.trim();
@@ -60,8 +61,7 @@ pub fn cargo_home() -> PathBuf {
 }
 
 /// `$CARGO_HOME/registry/src/<any-index>/<pkg>-<version>/src`
-pub fn registry_src(pkg: &str, want: Option<&str>) -> Option<PathBuf> {
-    let mut best: Option<((u64, u64, u64), PathBuf)> = None;
+pub fn registry_src(pkg: &str, want: &str) -> Option<PathBuf> {
     for index in fs::read_dir(cargo_home().join("registry/src"))
         .ok()?
         .flatten()
@@ -70,32 +70,22 @@ pub fn registry_src(pkg: &str, want: Option<&str>) -> Option<PathBuf> {
             continue;
         };
         for e in entries.flatten() {
-            let dir = e.file_name().to_string_lossy().to_string();
-            let Some(ver) = dir.strip_prefix(&format!("{pkg}-")) else {
-                continue;
-            };
-            // "usvg-0.48.1" is ours, "usvg-parser-0.44.0" is not.
-            if !ver.starts_with(|c: char| c.is_ascii_digit()) {
-                continue;
-            }
-            let src = e.path().join("src");
-            if want == Some(ver) {
-                return Some(src);
-            }
-            let key = semver_key(ver);
-            if best.as_ref().is_none_or(|(b, _)| key > *b) {
-                best = Some((key, src));
+            if e.file_name().to_string_lossy() == format!("{pkg}-{want}") {
+                return Some(e.path().join("src"));
             }
         }
     }
-    best.map(|(_, p)| p)
+    None
 }
 
 /// Resolution order, most explicit first:
 ///   1. `<PKG>_SRC_DIR` env var (vendored checkout / git submodule anywhere)
 ///   2. `vendor/resvg/crates/<pkg>/src` (the upstream monorepo as a submodule)
 ///   3. cargo registry cache, exact locked version
-///   4. cargo registry cache, newest version present
+///
+/// A vendored checkout must declare the locked version. There is no
+/// "newest version present" fallback: a registry cache shared with other
+/// projects would hand over sources the resolver never picked.
 pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> PathBuf {
     let key = format!("{}_SRC_DIR", pkg.to_uppercase().replace('-', "_"));
     println!("cargo::rerun-if-env-changed={key}");
@@ -113,17 +103,34 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> Pat
         .join("vendor/resvg/crates")
         .join(pkg)
         .join("src");
+    let locked_ver = locked
+        .get(pkg)
+        .unwrap_or_else(|| panic!("`{pkg}` is not in Cargo.lock"));
     if vendored.join(marker).exists() {
+        // `version.workspace = true` has no literal to compare; trust it.
+        let manifest = vendored.with_file_name("Cargo.toml");
+        let declared = fs::read_to_string(&manifest).ok().and_then(|t| {
+            t.lines().find_map(|l| {
+                l.trim()
+                    .strip_prefix("version = ")
+                    .map(|v| v.trim_matches('"').to_string())
+            })
+        });
+        if let Some(v) = declared {
+            assert!(
+                &v == locked_ver,
+                "{} declares {pkg} {v}, but Cargo.lock picked {locked_ver}",
+                manifest.display()
+            );
+        }
         return vendored;
     }
 
-    let locked_ver = locked.get(pkg).map(String::as_str);
     registry_src(pkg, locked_ver)
-        .or_else(|| registry_src(pkg, None))
         .filter(|p| p.join(marker).exists())
         .unwrap_or_else(|| {
             panic!(
-                "cannot find the sources of `{pkg}` (looked for {marker}).\n\
+                "cannot find the sources of `{pkg}` {locked_ver} (looked for {marker}).\n\
                  Run `cargo fetch` first, or point {key} at a checkout."
             )
         })

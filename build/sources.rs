@@ -110,8 +110,11 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> Pat
         // `version.workspace = true` has no literal to compare; trust it.
         let manifest = vendored.with_file_name("Cargo.toml");
         let declared = fs::read_to_string(&manifest).ok().and_then(|t| {
-            t.lines()
-                .find_map(|l| l.trim().strip_prefix("version = ").map(|v| v.trim_matches('"').to_string()))
+            t.lines().find_map(|l| {
+                l.trim()
+                    .strip_prefix("version = ")
+                    .map(|v| v.trim_matches('"').to_string())
+            })
         });
         if let Some(v) = declared {
             assert!(

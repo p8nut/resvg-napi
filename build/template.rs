@@ -84,6 +84,13 @@ pub fn template(
         #[derive(Default, Clone)]
         pub struct RenderOptions {
             #(#decls)*
+            #[doc = " The directory disk reads may not leave. Default: `resourcesDir`."]
+            #[doc = ""]
+            #[doc = " Hrefs still resolve against `resourcesDir`; this only widens"]
+            #[doc = " what they may reach, so a template beside a shared assets folder"]
+            #[doc = " can use `../assets/logo.png`. Not a usvg option: usvg reads any"]
+            #[doc = " path, and this binding confines it."]
+            pub resources_root: Option<String>,
         }
 
         #[doc = " System fonts are expensive to enumerate, so do it once per process."]
@@ -152,7 +159,11 @@ pub fn template(
         #[doc = " `usvg::ImageHrefResolver` demands `Send + Sync`, so a JS callback cannot"]
         #[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
         #[doc = " unresolved is reported back to JS for a second pass."]
-        fn href_resolver(images: ImageMap, misses: Misses) -> usvg::ImageHrefResolver<'static> {
+        fn href_resolver(
+            images: ImageMap,
+            misses: Misses,
+            root: Option<std::path::PathBuf>,
+        ) -> usvg::ImageHrefResolver<'static> {
             let from_disk = usvg::ImageHrefResolver::default_string_resolver();
             let sniff = usvg::ImageHrefResolver::default_data_resolver();
             usvg::ImageHrefResolver {
@@ -167,7 +178,7 @@ pub fn template(
                     // the working directory, so an untrusted document could
                     // pull local files into its pixels or `toString()` output,
                     // or exhaust memory reading `/dev/zero`.
-                    if let Some(path) = under_resources_dir(href, opts) {
+                    if let Some(path) = under_resources_dir(href, opts, root.as_deref()) {
                         if let Some(kind) = from_disk(&path.to_string_lossy(), opts) {
                             return Some(kind);
                         }
@@ -182,12 +193,18 @@ pub fn template(
             }
         }
 
-        #[doc = " `href` resolved inside `resourcesDir`, if it names a regular file there."]
-        #[doc = " Canonicalised, so `..` and symlinks cannot step outside it."]
-        fn under_resources_dir(href: &str, opts: &usvg::Options) -> Option<std::path::PathBuf> {
-            let dir = opts.resources_dir.as_deref()?.canonicalize().ok()?;
+        #[doc = " `href` resolved against `resourcesDir`, if it names a regular file"]
+        #[doc = " inside `root` (default: `resourcesDir` itself). Canonicalised, so"]
+        #[doc = " `..` and symlinks cannot step outside it."]
+        fn under_resources_dir(
+            href: &str,
+            opts: &usvg::Options,
+            root: Option<&std::path::Path>,
+        ) -> Option<std::path::PathBuf> {
+            let dir = opts.resources_dir.as_deref()?;
+            let root = root.unwrap_or(dir).canonicalize().ok()?;
             let path = dir.join(href).canonicalize().ok()?;
-            (path.starts_with(&dir) && path.is_file()).then_some(path)
+            (path.starts_with(&root) && path.is_file()).then_some(path)
         }
 
         #[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
@@ -1069,7 +1086,11 @@ pub fn template(
                 let missing_fonts = Misses::default();
                 let mut opts = options.to_usvg(fonts);
                 opts.image_href_resolver =
-                    href_resolver(images.clone(), missing_images.clone());
+                    href_resolver(
+                        images.clone(),
+                        missing_images.clone(),
+                        options.resources_root.as_ref().map(std::path::PathBuf::from),
+                    );
                 opts.font_resolver = font_resolver(missing_fonts.clone());
                 let tree = usvg::Tree::from_data(svg, &opts)
                     .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;

@@ -1379,6 +1379,15 @@ export interface RenderOptions {
    * certain attributes.
    */
   styleSheet?: string
+  /**
+   * The directory disk reads may not leave. Default: `resourcesDir`.
+   *
+   * Hrefs still resolve against `resourcesDir`; this only widens
+   * what they may reach, so a template beside a shared assets folder
+   * can use `../assets/logo.png`. Not a usvg option: usvg reads any
+   * path, and this binding confines it.
+   */
+  resourcesRoot?: string
 }
 
 /** Output size / scaling of one render pass. */

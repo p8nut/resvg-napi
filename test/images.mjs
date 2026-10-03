@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 const { Resvg } = createRequire(import.meta.url)('../index.js');
 
@@ -99,6 +99,13 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
     assert.deepEqual(new Resvg(doc(href), { resourcesDir: inside }).pendingImages(), [href], `refused: ${href}`);
   }
   assert.deepEqual(new Resvg(doc(secret)).pendingImages(), [secret], 'absolute path without resourcesDir');
+  // resourcesRoot widens the fence, not the base: `..` now reaches the
+  // sibling folder, while a path outside the root is still refused
+  const root = dirname(outside);
+  const up = `../${basename(outside)}/secret.png`;
+  assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: root }).pendingImages(), [], 'reached under resourcesRoot');
+  assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [up], 'a root equal to resourcesDir changes nothing');
+  assert.deepEqual(new Resvg(doc(secret), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [secret], 'absolute path outside the root');
 }
 
 console.log('ok — image resolution: all checks passed');

@@ -69,7 +69,7 @@ No copyright line in the published crate; Apache-2.0 per its manifest.
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014-2026 Alex Crichton
 
-### font-types 0.12.5
+### font-types 0.12.6
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
@@ -131,7 +131,7 @@ No copyright line in the published crate; Apache-2.0 per its manifest.
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2018 Raph Levien
 
-### libc 0.2.189
+### libc 0.2.190
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) The Rust Project Developers
 

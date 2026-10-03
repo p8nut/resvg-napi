@@ -87,4 +87,11 @@ for (const [w, h] of [[100, 50], [100, 33], [37, 91], [1, 1]]) {
   assert.equal(png.readUInt32BE(20), 60, 'IHDR height, from the ratio and not an f32 detour');
 }
 
+// maxPixels: an oversized canvas is an error, not an abort
+assert.throws(() => r.renderPng({ scale: 2000 }), /exceeds maxPixels/, 'scale');
+assert.throws(() => new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="200000" height="100000"/>').renderPng(), /exceeds maxPixels/, 'declared size');
+assert.throws(() => r.renderPng({ width: 20, maxPixels: 199 }), /20x10 exceeds maxPixels \(199\)/, 'custom cap');
+assert.equal(r.renderPng({ width: 20, maxPixels: 200 }).readUInt32BE(16), 20, 'at the cap');
+assert.throws(() => r.renderPng({ maxPixels: NaN }), /invalid maxPixels/);
+
 console.log('ok — all checks passed');

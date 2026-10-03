@@ -41,8 +41,10 @@ as you like.
 | `toString(opts?)` | the resolved tree, back as SVG — text as paths unless `preserveText` |
 | `renderPngAsync` · `renderRawAsync` · `toStringAsync` | the same, off the event loop, `AbortSignal`-aware |
 
-`params` carries `width` / `height` / `scale`, a `background` colour and a
-`crop` box. `Resvg.parseAsync` moves the parse off the loop too.
+`params` carries `width` / `height` / `scale`, a `background` colour, a
+`crop` box and `maxPixels`, the canvas size past which a render throws instead
+of allocating (default 2^28, 1 GiB). `Resvg.parseAsync` moves the parse off the
+loop too.
 
 ## Text as outlines
 
@@ -271,7 +273,9 @@ that was used in their place. Supply them with
 loaded by hand.
 
 **An image did not appear.** `pendingImages()` names the hrefs that could not be
-resolved.
+resolved. Files are read from disk only below `resourcesDir`: an absolute path,
+a `..` or a symlink leading out of it is refused, and without `resourcesDir` the
+disk is not read at all. Hand the bytes over as `images` instead.
 
 **A measurement disagrees with the numbers in the file.** Bounding boxes are in
 the document's own units and usvg normalises the tree, so they are not canvas

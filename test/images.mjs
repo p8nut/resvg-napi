@@ -1,8 +1,8 @@
 // Image resolution: two-pass hook (Send+Sync forbids a JS callback inside usvg).
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createRequire } from 'node:module';
 const { Resvg } = createRequire(import.meta.url)('../index.js');
 
@@ -83,6 +83,22 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
     [20, 20],
     'the box is the image, in its own pixels',
   );
+}
+
+// 7. the disk is off limits outside resourcesDir: no absolute paths, no
+//    `..`, no symlink out, and nothing at all without resourcesDir
+{
+  const outside = mkdtempSync(join(tmpdir(), 'resvg-out-'));
+  const secret = join(outside, 'secret.png');
+  writeFileSync(secret, red);
+  const inside = mkdtempSync(join(tmpdir(), 'resvg-in-'));
+  const hrefs = [secret, `../${basename(outside)}/secret.png`];
+  // Windows needs a privilege to create symlinks; skip that case there.
+  try { symlinkSync(secret, join(inside, 'link.png')); hrefs.push('link.png'); } catch {}
+  for (const href of hrefs) {
+    assert.deepEqual(new Resvg(doc(href), { resourcesDir: inside }).pendingImages(), [href], `refused: ${href}`);
+  }
+  assert.deepEqual(new Resvg(doc(secret)).pendingImages(), [secret], 'absolute path without resourcesDir');
 }
 
 console.log('ok — image resolution: all checks passed');

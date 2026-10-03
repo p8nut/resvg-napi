@@ -1400,6 +1400,13 @@ export interface RenderParams {
    * `absLayerBoundingBox()` to trim the document to its content.
    */
   crop?: BBox
+  /**
+   * Refuse to allocate more than this many pixels (4 bytes each).
+   * Default: 2^28, a 16384x16384 canvas or 1 GiB. Without a cap a
+   * document declaring `width="200000"` aborts the whole process
+   * on the failed allocation, which no try/catch can recover.
+   */
+  maxPixels?: number
 }
 
 /**

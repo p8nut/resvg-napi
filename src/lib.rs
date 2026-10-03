@@ -961,8 +961,10 @@ fn href_resolver(images: ImageMap, misses: Misses) -> usvg::ImageHrefResolver<'s
             if let Some(data) = images.get(href) {
                 return sniff("text/plain", data.clone(), opts);
             }
-            if let Some(kind) = from_disk(href, opts) {
-                return Some(kind);
+            if let Some(path) = under_resources_dir(href, opts) {
+                if let Some(kind) = from_disk(&path.to_string_lossy(), opts) {
+                    return Some(kind);
+                }
             }
             misses
                 .0
@@ -972,6 +974,13 @@ fn href_resolver(images: ImageMap, misses: Misses) -> usvg::ImageHrefResolver<'s
             None
         }),
     }
+}
+#[doc = " `href` resolved inside `resourcesDir`, if it names a regular file there."]
+#[doc = " Canonicalised, so `..` and symlinks cannot step outside it."]
+fn under_resources_dir(href: &str, opts: &usvg::Options) -> Option<std::path::PathBuf> {
+    let dir = opts.resources_dir.as_deref()?.canonicalize().ok()?;
+    let path = dir.join(href).canonicalize().ok()?;
+    (path.starts_with(&dir) && path.is_file()).then_some(path)
 }
 #[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
 #[napi]
@@ -1248,6 +1257,11 @@ pub struct RenderParams {
     #[doc = " `height` then size the crop, not the full viewport. Feed it"]
     #[doc = " `absLayerBoundingBox()` to trim the document to its content."]
     pub crop: Option<BBox>,
+    #[doc = " Refuse to allocate more than this many pixels (4 bytes each)."]
+    #[doc = " Default: 2^28, a 16384x16384 canvas or 1 GiB. Without a cap a"]
+    #[doc = " document declaring `width=\"200000\"` aborts the whole process"]
+    #[doc = " on the failed allocation, which no try/catch can recover."]
+    pub max_pixels: Option<f64>,
 }
 #[doc = " An affine transform. Field names and order are tiny-skia's."]
 #[doc = ""]
@@ -4336,6 +4350,17 @@ fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     if !(base_w > 0.0 && base_h > 0.0) {
         return Err(Error::from_reason(format!("empty crop: {base_w}x{base_h}")));
     }
+    let (scale, mut pixmap) = canvas(base_w, base_h, p)?;
+    resvg::render(
+        tree,
+        tiny_skia::Transform::from_scale(scale, scale).pre_translate(-off_x, -off_y),
+        &mut pixmap.as_mut(),
+    );
+    Ok(pixmap)
+}
+#[doc = " Size, scale and background of one render pass, shared by `draw`"]
+#[doc = " and `render_node_png`."]
+fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
     let (scale, w, h) = if let Some(w) = p.width {
         let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
         (w as f32 / base_w, w, (h as u32).max(1))
@@ -4353,6 +4378,15 @@ fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     if !(scale.is_finite() && scale > 0.0) {
         return Err(Error::from_reason(format!("invalid scale: {scale}")));
     }
+    let max = p.max_pixels.unwrap_or((1u64 << 28) as f64);
+    if !(max.is_finite() && max > 0.0) {
+        return Err(Error::from_reason(format!("invalid maxPixels: {max}")));
+    }
+    if w as f64 * h as f64 > max {
+        return Err(Error::from_reason(format!(
+            "{w}x{h} exceeds maxPixels ({max})"
+        )));
+    }
     let mut pixmap = tiny_skia::Pixmap::new(w, h)
         .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
     if let Some(css) = &p.background {
@@ -4363,12 +4397,7 @@ fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
             c.red, c.green, c.blue, c.alpha,
         ));
     }
-    resvg::render(
-        tree,
-        tiny_skia::Transform::from_scale(scale, scale).pre_translate(-off_x, -off_y),
-        &mut pixmap.as_mut(),
-    );
-    Ok(pixmap)
+    Ok((scale, pixmap))
 }
 #[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
 fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
@@ -4377,33 +4406,7 @@ fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
     let inner = node
         .abs_layer_bounding_box()
         .ok_or_else(|| Error::from_reason("element is empty"))?;
-    let (scale, w, h) = if let Some(w) = p.width {
-        let h = (bbox.height() as f64 * w as f64 / bbox.width() as f64).ceil();
-        (w as f32 / bbox.width(), w, (h as u32).max(1))
-    } else if let Some(h) = p.height {
-        let w = (bbox.width() as f64 * h as f64 / bbox.height() as f64).ceil();
-        (h as f32 / bbox.height(), (w as u32).max(1), h)
-    } else {
-        let s = p.scale.unwrap_or(1.0);
-        (
-            s as f32,
-            ((bbox.width() as f64 * s).ceil() as u32).max(1),
-            ((bbox.height() as f64 * s).ceil() as u32).max(1),
-        )
-    };
-    if !(scale.is_finite() && scale > 0.0) {
-        return Err(Error::from_reason(format!("invalid scale: {scale}")));
-    }
-    let mut pixmap = tiny_skia::Pixmap::new(w, h)
-        .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
-    if let Some(css) = &p.background {
-        let c: svgtypes::Color = css
-            .parse()
-            .map_err(|_| Error::from_reason(format!("invalid background: {css}")))?;
-        pixmap.fill(tiny_skia::Color::from_rgba8(
-            c.red, c.green, c.blue, c.alpha,
-        ));
-    }
+    let (scale, mut pixmap) = canvas(bbox.width(), bbox.height(), p)?;
     resvg::render_node(
         node,
         tiny_skia::Transform::from_scale(scale, scale)

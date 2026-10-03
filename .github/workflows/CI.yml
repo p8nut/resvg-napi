@@ -470,3 +470,20 @@ jobs:
         with:
           node-version: 22
       - run: npm run check:pins
+
+  # Dependabot leaves Cargo alone (see .github/dependabot.yml) and resvg.yml
+  # only watches resvg, so a semver-compatible transitive fix could sit unused
+  # forever. Red on a Monday means: run `cargo update`, regenerate the notices,
+  # open a pull request. The held crates are listed where they are explained:
+  # flate2 waits for png to leave miniz_oxide 0.8, the napi ones move with the
+  # Cargo.toml pins that `pins` above watches.
+  lock:
+    name: Cargo.lock up to date
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          held='flate2|napi-derive-backend|napi-sys'
+          stale=$(cargo update --dry-run 2>&1 | grep -E 'Updating [^ ]+ v' | grep -vE "Updating ($held) " || true)
+          if [ -n "$stale" ]; then echo "$stale"; exit 1; fi

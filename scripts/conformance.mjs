@@ -165,7 +165,9 @@ function run() {
     const pngPath = svgPath.replace(/\.svg$/, '.png');
     if (!existsSync(pngPath)) continue; // no reference, not a test
     try {
-      const doc = new Resvg(readFileSync(svgPath), { resourcesDir: dirname(svgPath) }, fonts);
+      // The corpus reaches its shared images through `../../../resources`, a
+      // sibling of tests/; resourcesRoot lets disk reads leave the file's folder.
+      const doc = new Resvg(readFileSync(svgPath), { resourcesDir: dirname(svgPath), resourcesRoot: ROOT }, fonts);
       const raw = doc.renderRaw({ width: WIDTH });
       const ref = PNG.sync.read(readFileSync(pngPath));
       if (ref.width !== raw.width || ref.height !== raw.height) {

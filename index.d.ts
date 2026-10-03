@@ -1379,6 +1379,15 @@ export interface RenderOptions {
    * certain attributes.
    */
   styleSheet?: string
+  /**
+   * The directory disk reads may not leave. Default: `resourcesDir`.
+   *
+   * Hrefs still resolve against `resourcesDir`; this only widens
+   * what they may reach, so a template beside a shared assets folder
+   * can use `../assets/logo.png`. Not a usvg option: usvg reads any
+   * path, and this binding confines it.
+   */
+  resourcesRoot?: string
 }
 
 /** Output size / scaling of one render pass. */
@@ -1400,6 +1409,13 @@ export interface RenderParams {
    * `absLayerBoundingBox()` to trim the document to its content.
    */
   crop?: BBox
+  /**
+   * Refuse to allocate more than this many pixels (4 bytes each).
+   * Default: 2^28, a 16384x16384 canvas or 1 GiB. Without a cap a
+   * document declaring `width="200000"` aborts the whole process
+   * on the failed allocation, which no try/catch can recover.
+   */
+  maxPixels?: number
 }
 
 /**

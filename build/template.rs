@@ -84,6 +84,13 @@ pub fn template(
         #[derive(Default, Clone)]
         pub struct RenderOptions {
             #(#decls)*
+            #[doc = " The directory disk reads may not leave. Default: `resourcesDir`."]
+            #[doc = ""]
+            #[doc = " Hrefs still resolve against `resourcesDir`; this only widens"]
+            #[doc = " what they may reach, so a template beside a shared assets folder"]
+            #[doc = " can use `../assets/logo.png`. Not a usvg option: usvg reads any"]
+            #[doc = " path, and this binding confines it."]
+            pub resources_root: Option<String>,
         }
 
         #[doc = " System fonts are expensive to enumerate, so do it once per process."]
@@ -152,7 +159,11 @@ pub fn template(
         #[doc = " `usvg::ImageHrefResolver` demands `Send + Sync`, so a JS callback cannot"]
         #[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
         #[doc = " unresolved is reported back to JS for a second pass."]
-        fn href_resolver(images: ImageMap, misses: Misses) -> usvg::ImageHrefResolver<'static> {
+        fn href_resolver(
+            images: ImageMap,
+            misses: Misses,
+            root: Option<std::path::PathBuf>,
+        ) -> usvg::ImageHrefResolver<'static> {
             let from_disk = usvg::ImageHrefResolver::default_string_resolver();
             let sniff = usvg::ImageHrefResolver::default_data_resolver();
             usvg::ImageHrefResolver {
@@ -162,9 +173,15 @@ pub fn template(
                     if let Some(data) = images.get(href) {
                         return sniff("text/plain", data.clone(), opts);
                     }
-                    // 2. usvg default: path relative to `resourcesDir`
-                    if let Some(kind) = from_disk(href, opts) {
-                        return Some(kind);
+                    // 2. a file under `resourcesDir`, and nowhere else. usvg's
+                    // default reads any absolute path, and a relative one off
+                    // the working directory, so an untrusted document could
+                    // pull local files into its pixels or `toString()` output,
+                    // or exhaust memory reading `/dev/zero`.
+                    if let Some(path) = under_resources_dir(href, opts, root.as_deref()) {
+                        if let Some(kind) = from_disk(&path.to_string_lossy(), opts) {
+                            return Some(kind);
+                        }
                     }
                     // 3. give up, but tell JS about it
                     // Poison-tolerant: this mutex only accumulates
@@ -174,6 +191,20 @@ pub fn template(
                     None
                 }),
             }
+        }
+
+        #[doc = " `href` resolved against `resourcesDir`, if it names a regular file"]
+        #[doc = " inside `root` (default: `resourcesDir` itself). Canonicalised, so"]
+        #[doc = " `..` and symlinks cannot step outside it."]
+        fn under_resources_dir(
+            href: &str,
+            opts: &usvg::Options,
+            root: Option<&std::path::Path>,
+        ) -> Option<std::path::PathBuf> {
+            let dir = opts.resources_dir.as_deref()?;
+            let root = root.unwrap_or(dir).canonicalize().ok()?;
+            let path = dir.join(href).canonicalize().ok()?;
+            (path.starts_with(&root) && path.is_file()).then_some(path)
         }
 
         #[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
@@ -287,6 +318,11 @@ pub fn template(
             #[doc = " `height` then size the crop, not the full viewport. Feed it"]
             #[doc = " `absLayerBoundingBox()` to trim the document to its content."]
             pub crop: Option<BBox>,
+            #[doc = " Refuse to allocate more than this many pixels (4 bytes each)."]
+            #[doc = " Default: 2^28, a 16384x16384 canvas or 1 GiB. Without a cap a"]
+            #[doc = " document declaring `width=\"200000\"` aborts the whole process"]
+            #[doc = " on the failed allocation, which no try/catch can recover."]
+            pub max_pixels: Option<f64>,
         }
 
         #[doc = " An affine transform. Field names and order are tiny-skia's."]
@@ -1050,7 +1086,11 @@ pub fn template(
                 let missing_fonts = Misses::default();
                 let mut opts = options.to_usvg(fonts);
                 opts.image_href_resolver =
-                    href_resolver(images.clone(), missing_images.clone());
+                    href_resolver(
+                        images.clone(),
+                        missing_images.clone(),
+                        options.resources_root.as_ref().map(std::path::PathBuf::from),
+                    );
                 opts.font_resolver = font_resolver(missing_fonts.clone());
                 let tree = usvg::Tree::from_data(svg, &opts)
                     .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
@@ -1079,6 +1119,19 @@ pub fn template(
                         "empty crop: {base_w}x{base_h}"
                     )));
                 }
+                let (scale, mut pixmap) = canvas(base_w, base_h, p)?;
+                resvg::render(
+                    tree,
+                    tiny_skia::Transform::from_scale(scale, scale)
+                        .pre_translate(-off_x, -off_y),
+                    &mut pixmap.as_mut(),
+                );
+                Ok(pixmap)
+        }
+
+        #[doc = " Size, scale and background of one render pass, shared by `draw`"]
+        #[doc = " and `render_node_png`."]
+        fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
                 // A requested dimension is honoured exactly, not recomputed.
                 // `(base * (w / base)).ceil()` looks like an identity and is not:
                 // the f32 round trip can land a hair above the integer and the
@@ -1106,6 +1159,15 @@ pub fn template(
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
+                let max = p.max_pixels.unwrap_or((1u64 << 28) as f64);
+                if !(max.is_finite() && max > 0.0) {
+                    return Err(Error::from_reason(format!("invalid maxPixels: {max}")));
+                }
+                if w as f64 * h as f64 > max {
+                    return Err(Error::from_reason(format!(
+                        "{w}x{h} exceeds maxPixels ({max})"
+                    )));
+                }
                 let mut pixmap = tiny_skia::Pixmap::new(w, h)
                     .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
                 if let Some(css) = &p.background {
@@ -1116,13 +1178,7 @@ pub fn template(
                         .map_err(|_| Error::from_reason(format!("invalid background: {css}")))?;
                     pixmap.fill(tiny_skia::Color::from_rgba8(c.red, c.green, c.blue, c.alpha));
                 }
-                resvg::render(
-                    tree,
-                    tiny_skia::Transform::from_scale(scale, scale)
-                        .pre_translate(-off_x, -off_y),
-                    &mut pixmap.as_mut(),
-                );
-                Ok(pixmap)
+                Ok((scale, pixmap))
         }
 
         #[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
@@ -1135,41 +1191,7 @@ pub fn template(
                 let inner = node
                     .abs_layer_bounding_box()
                     .ok_or_else(|| Error::from_reason("element is empty"))?;
-                // A requested dimension is honoured exactly, not recomputed.
-                // `(base * (w / base)).ceil()` looks like an identity and is not:
-                // the f32 round trip can land a hair above the integer and the
-                // ceil then adds a pixel. On a 100x50 document seventeen of the
-                // first four hundred widths came back one too wide -- 120 gave a
-                // PNG whose IHDR read 121x61 -- while every width the test suite
-                // uses is an exact multiple, so nothing here could see it.
-                let (scale, w, h) = if let Some(w) = p.width {
-                    // The other side from the ratio itself, in f64: going through
-                    // the f32 scale makes 50 * (120 / 100) come out 60.000004,
-                    // which ceils to 61.
-                    let h = (bbox.height() as f64 * w as f64 / bbox.width() as f64).ceil();
-                    (w as f32 / bbox.width(), w, (h as u32).max(1))
-                } else if let Some(h) = p.height {
-                    let w = (bbox.width() as f64 * h as f64 / bbox.height() as f64).ceil();
-                    (h as f32 / bbox.height(), (w as u32).max(1), h)
-                } else {
-                    let s = p.scale.unwrap_or(1.0);
-                    (
-                        s as f32,
-                        ((bbox.width() as f64 * s).ceil() as u32).max(1),
-                        ((bbox.height() as f64 * s).ceil() as u32).max(1),
-                    )
-                };
-                if !(scale.is_finite() && scale > 0.0) {
-                    return Err(Error::from_reason(format!("invalid scale: {scale}")));
-                }
-                let mut pixmap = tiny_skia::Pixmap::new(w, h)
-                    .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
-                if let Some(css) = &p.background {
-                    let c: svgtypes::Color = css
-                        .parse()
-                        .map_err(|_| Error::from_reason(format!("invalid background: {css}")))?;
-                    pixmap.fill(tiny_skia::Color::from_rgba8(c.red, c.green, c.blue, c.alpha));
-                }
+                let (scale, mut pixmap) = canvas(bbox.width(), bbox.height(), p)?;
                 resvg::render_node(
                     node,
                     tiny_skia::Transform::from_scale(scale, scale)

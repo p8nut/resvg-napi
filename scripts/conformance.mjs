@@ -165,7 +165,17 @@ function run() {
     const pngPath = svgPath.replace(/\.svg$/, '.png');
     if (!existsSync(pngPath)) continue; // no reference, not a test
     try {
-      const doc = new Resvg(readFileSync(svgPath), { resourcesDir: dirname(svgPath) }, fonts);
+      const svg = readFileSync(svgPath);
+      const dir = dirname(svgPath);
+      let doc = new Resvg(svg, { resourcesDir: dir }, fonts);
+      // The corpus reaches its shared images through `../../../resources`,
+      // and the binding confines disk reads to resourcesDir. The corpus is
+      // trusted, so read those files here and hand the bytes over.
+      const found = doc.pendingImages().filter((h) => existsSync(join(dir, h)));
+      if (found.length) {
+        const images = Object.fromEntries(found.map((h) => [h, readFileSync(join(dir, h))]));
+        doc = new Resvg(svg, { resourcesDir: dir }, fonts, images);
+      }
       const raw = doc.renderRaw({ width: WIDTH });
       const ref = PNG.sync.read(readFileSync(pngPath));
       if (ref.width !== raw.width || ref.height !== raw.height) {

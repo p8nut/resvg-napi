@@ -320,7 +320,7 @@ Copyright (c) 2015 Andrew Gallant
 ### color_quant 1.1.0
 Copyright (c) 2016 PistonDevelopers
 
-### convert_case 0.11.0
+### convert_case 0.12.0
 Copyright (c) 2025 rutrum
 
 ### float-cmp 0.9.0
@@ -343,16 +343,16 @@ Copyright (c) 2017 Maiddog
 Offered as `Unlicense OR MIT`; listed here under MIT.
 Copyright (c) 2015 Andrew Gallant
 
-### napi 3.11.0
+### napi 3.14.0
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive 3.6.0
+### napi-derive 3.6.10
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive-backend 6.0.0
+### napi-derive-backend 6.1.4
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-sys 3.3.0
+### napi-sys 3.4.0
 No copyright line in the published crate; MIT per its manifest.
 
 ### pico-args 0.5.0

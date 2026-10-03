@@ -29,8 +29,8 @@ crate-type = ["cdylib"]
 # cannot be named here: Cargo.lock is what holds it. `cargo update` will
 # release it and break the wasm build. `npm run check:pins` says when these
 # pins can go.
-napi = { version = "=3.11.0", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
-napi-derive = "=3.6.0"
+napi = { version = "=3.14.0", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
+napi-derive = "=3.6.10"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.
 resvg = "0.48.1"
 # resvg's own CSS colour parser, same version it uses internally.
@@ -40,7 +40,7 @@ svgtypes = "0.16.1"
 log = "0.4"
 
 [build-dependencies]
-napi-build = "=2.3.2"
+napi-build = "=2.6.0"
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
 quote = "1.0"
 proc-macro2 = "1.0"

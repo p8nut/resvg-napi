@@ -398,6 +398,13 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm install  # not `npm ci` -- see the build job
+      # Trusted publishing: npm trades this job's OIDC token (id-token: write
+      # above) for a short-lived publish credential, so no long-lived npm
+      # token has to be renewed. Needs npm >= 11.5.1; node 22 ships npm 10.
+      # Each package must name this repo and CI.yml as its trusted publisher
+      # on npmjs.com. NPM_TOKEN below stays as the fallback until all
+      # fourteen do -- npm prefers OIDC whenever it is configured.
+      - run: npm install -g npm@^11.5.1
       - uses: actions/download-artifact@v8
         with:
           path: artifacts

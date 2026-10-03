@@ -382,9 +382,9 @@ export declare class Resvg {
    * The lookup lives here rather than on `FontDatabase` because
    * `PositionedGlyph.font` is a `fontdb::ID` -- a slotmap key with no
    * public numeric form, and meaningless against any other database.
-   * The glyph carries it the way `FontFace` carries one for
-   * `FontDatabase.face`, and `null` means exactly that: a glyph from
-   * another document.
+   * Pass a glyph of this document: the glyph carries only the key,
+   * so one from another document may name a face of this one rather
+   * than come back `null`.
    */
   faceOf(glyph: PositionedGlyph): FontFace | null
   /**
@@ -1389,9 +1389,15 @@ export interface RenderOptions {
 export interface RenderParams {
   /** Uniform scale factor. Default: 1. */
   scale?: number
-  /** Target width in px; keeps the aspect ratio and overrides `scale`. */
+  /**
+   * Target width in px, rounded to the nearest; keeps the aspect
+   * ratio and overrides `scale`.
+   */
   width?: number
-  /** Target height in px; keeps the aspect ratio and overrides `scale`. */
+  /**
+   * Target height in px, rounded to the nearest; keeps the aspect
+   * ratio and overrides `scale`.
+   */
   height?: number
   /**
    * Background colour: any CSS3 colour string, e.g. `#eee`, `teal`,

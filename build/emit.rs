@@ -1178,7 +1178,9 @@ pub fn map_methods(
                 .iter()
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat.to_vec()),
-                    Arg::Face => quote!(#pat.inner.id),
+                    // fontdb IDs are slotmap keys: another database's face can
+                    // name a slot here, and `removeFace` would delete it.
+                    Arg::Face => quote!(#pat.id_in(&#receiver)),
                     _ => quote!(#pat),
                 })
                 .collect();

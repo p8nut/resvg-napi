@@ -94,4 +94,13 @@ assert.throws(() => r.renderPng({ width: 20, maxPixels: 199 }), /20x10 exceeds m
 assert.equal(r.renderPng({ width: 20, maxPixels: 200 }).readUInt32BE(16), 20, 'at the cap');
 assert.throws(() => r.renderPng({ maxPixels: NaN }), /invalid maxPixels/);
 
+// width / height: rounded, and an error when not a positive pixel count
+// (napi's u32 used to wrap: -1 became 4294967295, 2**32 + 10 became 10)
+assert.equal(r.renderPng({ width: 120.4 }).readUInt32BE(16), 120, 'rounded');
+for (const width of [-1, 0, 2 ** 32 + 10, NaN, Infinity]) {
+  assert.throws(() => r.renderPng({ width }), /invalid width/, `width ${width}`);
+}
+assert.throws(() => r.renderPng({ height: -5 }), /invalid height/);
+assert.throws(() => r.renderPng({ crop: { x: NaN, y: 0, width: 10, height: 10 } }), /invalid crop/);
+
 console.log('ok — all checks passed');

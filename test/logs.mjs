@@ -50,4 +50,36 @@ assert.ok(bounded.length > 100, `the document did produce warnings, got ${bounde
 assert.equal(bounded.length, 500, 'capped at exactly 500, not merely under it');
 setLogLevel('off');
 
+// 7. per document: each holds its own messages, async twins included, even
+//    while both render at once on worker threads -- the global buffer
+//    interleaves them, a document's takeLogs() does not
+setLogLevel('warn');
+takeLogs();
+{
+  const doc = (colour) => `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="${colour}"/></svg>`;
+  const a = new Resvg(doc('colour-a'));
+  const b = new Resvg(doc('colour-b'));
+  const parsedA = a.takeLogs();
+  assert.ok(parsedA.some((l) => l.includes("'colour-a'")), parsedA.join('\n'));
+  assert.ok(!parsedA.some((l) => l.includes('colour-b')), 'no message from the other document');
+  assert.ok(b.takeLogs().every((l) => !l.includes('colour-a')));
+  assert.deepEqual(a.takeLogs(), [], 'draining is a drain');
+
+  // A PNG cut after its header parses (usvg reads only the size) and fails
+  // to decode at render time, on the worker thread an async twin runs on.
+  const png = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>').renderPng();
+  const broken = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image href="data:image/png;base64,${png.subarray(0, 33).toString('base64')}" width="5" height="5"/></svg>`);
+  const clean = new Resvg(doc('red'));
+  broken.takeLogs(); clean.takeLogs();
+  await Promise.all([broken.renderPngAsync(), clean.renderPngAsync(), broken.renderRawAsync(), clean.renderPngAsync()]);
+  const fromBroken = broken.takeLogs();
+  assert.equal(fromBroken.filter((l) => l.includes('Failed to decode a PNG image')).length, 2, fromBroken.join('\n'));
+  assert.deepEqual(clean.takeLogs(), [], 'the clean document rendered alongside got none of them');
+
+  // and the global buffer still receives everything, for code that used it
+  const all = takeLogs();
+  assert.ok(all.some((l) => l.includes("'colour-a'")) && all.some((l) => l.includes("'colour-b'")));
+}
+setLogLevel('off');
+
 console.log('ok — log collection: all checks passed');

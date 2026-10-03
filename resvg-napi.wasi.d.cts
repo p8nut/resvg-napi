@@ -365,6 +365,12 @@ export declare class Resvg {
    */
   pendingImages(): Array<string>
   /**
+   * Drains what usvg and resvg reported while parsing and rendering
+   * this document, async twins included, and nothing from any other.
+   * Collected only once `setLogLevel` has set a level.
+   */
+  takeLogs(): Array<string>
+  /**
    * Named font families requested by `<text>` that the database does not
    * carry, so the text was rendered with a fallback face. Load them with
    * `FontDatabase` and re-parse to fix the output.
@@ -1485,7 +1491,11 @@ export interface Stroke {
   linejoin: LineJoin
 }
 
-/** Drains the messages collected since the last call. */
+/**
+ * Drains the messages collected since the last call, from every
+ * document and thread. Concurrent renders interleave here; a
+ * document's own `takeLogs()` holds only its messages.
+ */
 export declare function takeLogs(): Array<string>
 
 /** A text chunk anchor property. */

@@ -125,4 +125,27 @@ assert.ok(
 // against this one: the lookup is the document's own database, not a global.
 assert.equal(new Resvg(withId(family), opts, new FontDatabase()).faceOf(glyphs[0]), null);
 
+// A face from another database does not name a face of this one. IDs are
+// slotmap keys, so the first face of two databases share a key; before the
+// check, B.face(faceOfA) answered with B's own face and B.removeFace(faceOfA)
+// deleted it.
+{
+  const file = testFontFile();
+  if (file) {
+    const b = new FontDatabase();
+    b.loadFontData(readFileSync(file));
+    const mine = b.faces()[0];
+    const foreign = db.faces()[0];
+    assert.equal(b.face(mine)?.postScriptName, mine.postScriptName, 'own face found');
+    // Only when the system database starts with a different face, which
+    // a container holding just the test font does not.
+    if (foreign.postScriptName !== mine.postScriptName) {
+      assert.equal(b.face(foreign), null, 'foreign face not found');
+      b.removeFace(foreign);
+      assert.equal(b.len(), 1, 'and not removed in its place');
+    }
+    assert.equal(new FontDatabase().face(mine), null, 'empty database');
+  }
+}
+
 console.log('ok — font resolution: all checks passed');

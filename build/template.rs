@@ -207,6 +207,22 @@ pub fn template(
             (path.starts_with(&root) && path.is_file()).then_some(path)
         }
 
+        impl FontFace {
+            #[doc = " This face's ID in `db`, or one that matches nothing."]
+            #[doc = ""]
+            #[doc = " IDs are slotmap keys, so a face from another database can name"]
+            #[doc = " a live slot of this one. The face found there must be the same"]
+            #[doc = " face; a copy of the database (`fontdb()`) keeps the slots and"]
+            #[doc = " still matches."]
+            fn id_in(&self, db: &usvg::fontdb::Database) -> usvg::fontdb::ID {
+                let me = &self.inner;
+                match db.face(me.id) {
+                    Some(f) if f.post_script_name == me.post_script_name && f.index == me.index => me.id,
+                    _ => usvg::fontdb::ID::dummy(),
+                }
+            }
+        }
+
         #[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
         #[napi]
         pub struct FontDatabase {
@@ -249,7 +265,8 @@ pub fn template(
                     .collect();
                 let query = usvg::fontdb::Query {
                     families: &names,
-                    weight: usvg::fontdb::Weight(weight.unwrap_or(400) as u16),
+                    // CSS weights are 1..=1000; `as u16` turned 70000 into 4464.
+                    weight: usvg::fontdb::Weight(weight.unwrap_or(400).clamp(1, 1000) as u16),
                     style: if italic.unwrap_or(false) {
                         usvg::fontdb::Style::Italic
                     } else {
@@ -307,10 +324,12 @@ pub fn template(
         pub struct RenderParams {
             #[doc = " Uniform scale factor. Default: 1."]
             pub scale: Option<f64>,
-            #[doc = " Target width in px; keeps the aspect ratio and overrides `scale`."]
-            pub width: Option<u32>,
-            #[doc = " Target height in px; keeps the aspect ratio and overrides `scale`."]
-            pub height: Option<u32>,
+            #[doc = " Target width in px, rounded to the nearest; keeps the aspect"]
+            #[doc = " ratio and overrides `scale`."]
+            pub width: Option<f64>,
+            #[doc = " Target height in px, rounded to the nearest; keeps the aspect"]
+            #[doc = " ratio and overrides `scale`."]
+            pub height: Option<f64>,
             #[doc = " Background colour: any CSS3 colour string, e.g. `#eee`, `teal`,"]
             #[doc = " `rgba(255, 0, 0, .5)`. Default: transparent."]
             pub background: Option<String>,
@@ -895,10 +914,13 @@ pub fn template(
             #[doc = " The lookup lives here rather than on `FontDatabase` because"]
             #[doc = " `PositionedGlyph.font` is a `fontdb::ID` -- a slotmap key with no"]
             #[doc = " public numeric form, and meaningless against any other database."]
-            #[doc = " The glyph carries it the way `FontFace` carries one for"]
-            #[doc = " `FontDatabase.face`, and `null` means exactly that: a glyph from"]
-            #[doc = " another document."]
+            #[doc = " Pass a glyph of this document: the glyph carries only the key,"]
+            #[doc = " so one from another document may name a face of this one rather"]
+            #[doc = " than come back `null`."]
             #[napi]
+            // ponytail: no provenance check on the glyph. Carrying the source
+            // database in every generated PositionedGlyph would fix it; add
+            // that if cross-document lookups turn out to happen.
             pub fn face_of(&self, glyph: &PositionedGlyph) -> Option<FontFace> {
                 self.fonts
                     .face(glyph.inner.font)
@@ -962,10 +984,10 @@ pub fn template(
                             Either::B(data) => data.to_vec(),
                         },
                         options: options.unwrap_or_default(),
-                        fonts: match fonts {
-                            Some(f) => std::sync::Arc::new(f.inner.clone()),
-                            None => default_fontdb(),
-                        },
+                        // The system database is left to `compute`: the first
+                        // enumeration scans every installed font, on whichever
+                        // thread asks first, and this one is the event loop.
+                        fonts: fonts.map(|f| std::sync::Arc::new(f.inner.clone())),
                         images: images
                             .unwrap_or_default()
                             .into_iter()
@@ -1119,6 +1141,12 @@ pub fn template(
                         "empty crop: {base_w}x{base_h}"
                     )));
                 }
+                // A NaN offset rendered a blank image without a word.
+                if !(off_x.is_finite() && off_y.is_finite() && base_w.is_finite() && base_h.is_finite()) {
+                    return Err(Error::from_reason(format!(
+                        "invalid crop: {off_x},{off_y} {base_w}x{base_h}"
+                    )));
+                }
                 let (scale, mut pixmap) = canvas(base_w, base_h, p)?;
                 resvg::render(
                     tree,
@@ -1139,13 +1167,25 @@ pub fn template(
                 // first four hundred widths came back one too wide -- 120 gave a
                 // PNG whose IHDR read 121x61 -- while every width the test suite
                 // uses is an exact multiple, so nothing here could see it.
-                let (scale, w, h) = if let Some(w) = p.width {
+                // f64 rather than napi's u32, which wraps: -1 became 4294967295
+                // and 2**32 + 10 rendered 10 px wide.
+                let px = |v: Option<f64>, name: &str| -> Result<Option<u32>> {
+                    match v.map(f64::round) {
+                        None => Ok(None),
+                        Some(v) if (1.0..=u32::MAX as f64).contains(&v) => Ok(Some(v as u32)),
+                        Some(_) => Err(Error::from_reason(format!(
+                            "invalid {name}: {}", v.unwrap_or_default()
+                        ))),
+                    }
+                };
+                let (width, height) = (px(p.width, "width")?, px(p.height, "height")?);
+                let (scale, w, h) = if let Some(w) = width {
                     // The other side from the ratio itself, in f64: going through
                     // the f32 scale makes 50 * (120 / 100) come out 60.000004,
                     // which ceils to 61.
                     let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
                     (w as f32 / base_w, w, (h as u32).max(1))
-                } else if let Some(h) = p.height {
+                } else if let Some(h) = height {
                     let w = (base_w as f64 * h as f64 / base_h as f64).ceil();
                     (h as f32 / base_h, (w as u32).max(1), h)
                 } else {
@@ -1226,7 +1266,8 @@ pub fn template(
         pub struct ParseTask {
             svg: Vec<u8>,
             options: RenderOptions,
-            fonts: std::sync::Arc<usvg::fontdb::Database>,
+            #[doc = " `None` for the system fonts, resolved in `compute`."]
+            fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
             images: ImageMap,
         }
 
@@ -1235,7 +1276,8 @@ pub fn template(
             type JsValue = Resvg;
 
             fn compute(&mut self) -> Result<Self::Output> {
-                Resvg::build(&self.svg, &self.options, self.fonts.clone(), &self.images)
+                let fonts = self.fonts.get_or_insert_with(default_fontdb).clone();
+                Resvg::build(&self.svg, &self.options, fonts, &self.images)
             }
 
             fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
@@ -1243,8 +1285,8 @@ pub fn template(
                 Ok(Resvg {
                     tree: std::sync::Arc::new(tree),
                     svg: std::sync::Arc::new(std::mem::take(&mut self.svg)),
-                    options: self.options.clone(),
-                    fonts: self.fonts.clone(),
+                    options: std::mem::take(&mut self.options),
+                    fonts: self.fonts.take().unwrap_or_else(default_fontdb),
                     images: std::mem::take(&mut self.images),
                     pending_images,
                     pending_fonts,

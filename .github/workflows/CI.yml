@@ -13,10 +13,14 @@ on:
     # Markdown and the licence cannot break a build. This skips the whole
     # workflow rather than gating a job, so there is nothing to pay for -- but
     # it also means no check reports at all, which would deadlock a required
-    # check if main is ever protected.
-    paths-ignore:
-      - '**/*.md'
-      - 'LICENSE*'
+    # check if main is ever protected. The notices are the exception: CI
+    # checks them against the crate graph, so a pull request touching only
+    # them must run. paths-ignore has no negation, hence the ordered list.
+    paths:
+      - '**'
+      - '!**/*.md'
+      - '!LICENSE*'
+      - '**/THIRD-PARTY-NOTICES.md'
   schedule:
     # Mondays, 07:00 UTC -- asks upstream whether the Cargo.toml pins can go.
     - cron: '0 7 * * 1'

@@ -222,6 +222,31 @@ jobs:
         if: matrix.target == 'wasm32-wasip1-threads'
         run: npm run test:wasi
 
+      # Dependabot bumps the CLI or the crate graph without running any of the
+      # generators above, so its pull request fails their drift checks every
+      # time (#69). The files are already regenerated at this point, so the diff
+      # is kept as an artifact rather than rebuilt by hand:
+      #   gh run download <run-id> -p 'regen-*' -D regen
+      #   for p in regen/*/regen.patch; do git apply "$p"; done
+      # Nothing here commits it: this job runs the freshly bumped packages, and
+      # its token stays read-only. Same file sets as the drift checks above.
+      - name: Keep the regenerated files
+        if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+        run: |
+          if [ "${{ matrix.target }}" = x86_64-unknown-linux-gnu ]; then
+            npm run report -- -w || true
+            npm run licenses -- -w || true
+            git diff --binary -- src/lib.rs index.d.ts index.js browser.js codegen-report.txt THIRD-PARTY-NOTICES.md 'npm/*/THIRD-PARTY-NOTICES.md' > regen.patch
+          elif [ "${{ matrix.target }}" = wasm32-wasip1-threads ]; then
+            git diff --binary -- resvg-napi.wasi.cjs resvg-napi.wasi.d.cts resvg-napi.wasi-browser.js wasi-worker.mjs wasi-worker-browser.mjs > regen.patch
+          fi
+      - if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+        uses: actions/upload-artifact@v7
+        with:
+          name: regen-${{ matrix.target }}
+          path: regen.patch
+          if-no-files-found: ignore
+
       # upload v7 / download v8 are the matched pair: v8 stopped unzipping
       # blindly and reads Content-Type instead, to support v7's direct uploads.
       - uses: actions/upload-artifact@v7

@@ -498,6 +498,32 @@ pub fn template(
         #[doc = " consumes it by default, so those messages are lost; this buffers them."]
         static LOGS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+        const LOG_CAP: usize = 500;
+
+        thread_local! {
+            #[doc = " Set while a document parses or renders on this thread, so its"]
+            #[doc = " messages can be told apart from a concurrent render's."]
+            static LOG_SINK: std::cell::RefCell<Option<Vec<String>>> =
+                const { std::cell::RefCell::new(None) };
+        }
+
+        #[doc = " One document's messages, shared with the clones its async twins run on."]
+        #[derive(Default, Clone)]
+        struct Logs(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+        impl Logs {
+            #[doc = " Runs `f` with this thread's messages routed here as well."]
+            fn scope<T>(&self, f: impl FnOnce() -> T) -> T {
+                let outer = LOG_SINK.with(|s| s.replace(Some(Vec::new())));
+                let out = f();
+                let got = LOG_SINK.with(|s| s.replace(outer)).unwrap_or_default();
+                let mut buf = self.0.lock().unwrap_or_else(|e| e.into_inner());
+                let room = LOG_CAP.saturating_sub(buf.len());
+                buf.extend(got.into_iter().take(room));
+                out
+            }
+        }
+
         struct LogCollector;
         static LOG_COLLECTOR: LogCollector = LogCollector;
 
@@ -507,15 +533,18 @@ pub fn template(
             }
 
             fn log(&self, record: &log::Record) {
+                let line = format!("{} {}: {}", record.level(), record.target(), record.args());
+                LOG_SINK.with(|s| {
+                    if let Some(buf) = s.borrow_mut().as_mut() {
+                        if buf.len() < LOG_CAP {
+                            buf.push(line.clone());
+                        }
+                    }
+                });
                 if let Ok(mut buf) = LOGS.lock() {
                     // Bounded: a pathological document must not grow this forever.
-                    if buf.len() < 500 {
-                        buf.push(format!(
-                            "{} {}: {}",
-                            record.level(),
-                            record.target(),
-                            record.args()
-                        ));
+                    if buf.len() < LOG_CAP {
+                        buf.push(line);
                     }
                 }
             }
@@ -542,7 +571,9 @@ pub fn template(
             Ok(())
         }
 
-        #[doc = " Drains the messages collected since the last call."]
+        #[doc = " Drains the messages collected since the last call, from every"]
+        #[doc = " document and thread. Concurrent renders interleave here; a"]
+        #[doc = " document's own `takeLogs()` holds only its messages."]
         #[napi]
         pub fn take_logs() -> Vec<String> {
             LOGS.lock()
@@ -869,6 +900,7 @@ pub fn template(
             images: ImageMap,
             pending_images: Vec<String>,
             pending_fonts: Vec<String>,
+            logs: Logs,
         }
 
         #[napi]
@@ -894,8 +926,9 @@ pub fn template(
                     .into_iter()
                     .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
                     .collect();
+                let logs = Logs::default();
                 let (tree, pending_images, pending_fonts) =
-                    Self::build(&svg, &options, fonts.clone(), &images)?;
+                    logs.scope(|| Self::build(&svg, &options, fonts.clone(), &images))?;
                 Ok(Self {
                     tree: std::sync::Arc::new(tree),
                     svg: std::sync::Arc::new(svg),
@@ -904,6 +937,7 @@ pub fn template(
                     images,
                     pending_images,
                     pending_fonts,
+                    logs,
                 })
             }
 
@@ -912,6 +946,14 @@ pub fn template(
             #[napi]
             pub fn pending_images(&self) -> Vec<String> {
                 self.pending_images.clone()
+            }
+
+            #[doc = " Drains what usvg and resvg reported while parsing and rendering"]
+            #[doc = " this document, async twins included, and nothing from any other."]
+            #[doc = " Collected only once `setLogLevel` has set a level."]
+            #[napi(js_name = "takeLogs")]
+            pub fn take_own_logs(&self) -> Vec<String> {
+                std::mem::take(&mut *self.logs.0.lock().unwrap_or_else(|e| e.into_inner()))
             }
 
             #[doc = " Named font families requested by `<text>` that the database does not"]
@@ -953,8 +995,9 @@ pub fn template(
             #[napi]
             pub fn resolve_image(&mut self, href: String, data: Buffer) -> Result<()> {
                 self.images.insert(href, std::sync::Arc::new(data.to_vec()));
-                let (tree, pending_images, pending_fonts) =
-                    Self::build(&self.svg, &self.options, self.fonts.clone(), &self.images)?;
+                let (tree, pending_images, pending_fonts) = self.logs.scope(|| {
+                    Self::build(&self.svg, &self.options, self.fonts.clone(), &self.images)
+                })?;
                 self.tree = std::sync::Arc::new(tree);
                 self.pending_images = pending_images;
                 self.pending_fonts = pending_fonts;
@@ -1012,6 +1055,7 @@ pub fn template(
                             .into_iter()
                             .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
                             .collect(),
+                        logs: Logs::default(),
                     },
                     signal.map(|s| s.0),
                 )
@@ -1051,7 +1095,7 @@ pub fn template(
                     .tree
                     .node_by_id(&id)
                     .ok_or_else(|| Error::from_reason(format!("no element with id {id:?}")))?;
-                render_node_png(node, &params.unwrap_or_default())
+                self.logs.scope(|| render_node_png(node, &params.unwrap_or_default()))
             }
 
             #[doc = " Handle on one element, by `id`."]
@@ -1095,9 +1139,9 @@ pub fn template(
                 // Numbers come from JS and the writer indexes a few tables
                 // unchecked; an unwind reaching the extern "C" frame would abort
                 // the process, so stop it here.
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                self.logs.scope(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     usvg::Tree::to_string(tree, &opt)
-                }))
+                })))
                 .map_err(|_| Error::from_reason("usvg panicked while writing the SVG"))
             }
 
@@ -1143,7 +1187,7 @@ pub fn template(
             }
 
             fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
-                draw(&self.tree, &p)
+                self.logs.scope(|| draw(&self.tree, &p))
             }
         }
 
@@ -1288,6 +1332,7 @@ pub fn template(
             #[doc = " `None` for the system fonts, resolved in `compute`."]
             fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
             images: ImageMap,
+            logs: Logs,
         }
 
         impl Task for ParseTask {
@@ -1296,7 +1341,8 @@ pub fn template(
 
             fn compute(&mut self) -> Result<Self::Output> {
                 let fonts = self.fonts.get_or_insert_with(default_fontdb).clone();
-                Resvg::build(&self.svg, &self.options, fonts, &self.images)
+                self.logs
+                    .scope(|| Resvg::build(&self.svg, &self.options, fonts, &self.images))
             }
 
             fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
@@ -1309,6 +1355,7 @@ pub fn template(
                     images: std::mem::take(&mut self.images),
                     pending_images,
                     pending_fonts,
+                    logs: std::mem::take(&mut self.logs),
                 })
             }
         }

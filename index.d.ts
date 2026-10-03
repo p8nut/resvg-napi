@@ -355,13 +355,7 @@ export declare class RadialGradient {
   stops(): Array<Stop>
 }
 
-/**
- * A parsed SVG, ready to be rendered any number of times.
- *
- * `Clone` because an async twin captures the receiver: every field is
- * behind an `Arc` or cheap to copy, so the clone is a refcount bump and
- * the worker thread never touches the JS heap.
- */
+/** A parsed SVG, ready to be rendered any number of times. */
 export declare class Resvg {
   constructor(svg: string | Buffer, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Buffer> | undefined | null)
   /**

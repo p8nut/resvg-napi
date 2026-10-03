@@ -119,6 +119,24 @@ pub fn template(
 
         type ImageMap = std::collections::HashMap<String, std::sync::Arc<Vec<u8>>>;
 
+        #[doc = " The bytes of an SVG handed over as text or as a Buffer."]
+        fn svg_bytes(svg: Either<String, Buffer>) -> Vec<u8> {
+            match svg {
+                Either::A(text) => text.into_bytes(),
+                Either::B(data) => data.to_vec(),
+            }
+        }
+
+        #[doc = " JS `{ href: Buffer }` -> the map the href resolver reads, copied"]
+        #[doc = " off the JS heap so a worker thread can hold it."]
+        fn image_map(images: Option<std::collections::HashMap<String, Buffer>>) -> ImageMap {
+            images
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
+                .collect()
+        }
+
         #[doc = " The Send half of a result, and its JS half."]
         #[doc = ""]
         #[doc = " `Buffer` holds a reference into the JS heap, so it is not `Send` and"]
@@ -160,7 +178,7 @@ pub fn template(
         #[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
         #[doc = " unresolved is reported back to JS for a second pass."]
         fn href_resolver(
-            images: ImageMap,
+            images: std::sync::Arc<ImageMap>,
             misses: Misses,
             root: Option<std::path::PathBuf>,
         ) -> usvg::ImageHrefResolver<'static> {
@@ -887,17 +905,19 @@ pub fn template(
         #[doc = " A parsed SVG, ready to be rendered any number of times."]
         #[napi]
         #[doc = ""]
-        #[doc = " `Clone` because an async twin captures the receiver: every field is"]
-        #[doc = " behind an `Arc` or cheap to copy, so the clone is a refcount bump and"]
-        #[doc = " the worker thread never touches the JS heap."]
+        // `Clone` because an async twin captures the receiver: every field is
+        // behind an `Arc` but the two short pending lists, so the clone is a
+        // few refcount bumps and the worker thread never touches the JS heap.
+        // The image map used to be copied whole: 40 us per call with 500 images.
         #[derive(Clone)]
         pub struct Resvg {
             tree: std::sync::Arc<usvg::Tree>,
             #[doc = " Source kept verbatim: resolving an image means re-parsing."]
             svg: std::sync::Arc<Vec<u8>>,
-            options: RenderOptions,
+            options: std::sync::Arc<RenderOptions>,
             fonts: std::sync::Arc<usvg::fontdb::Database>,
-            images: ImageMap,
+            #[doc = " Copied on write, by `resolveImage` only."]
+            images: std::sync::Arc<ImageMap>,
             pending_images: Vec<String>,
             pending_fonts: Vec<String>,
             logs: Logs,
@@ -912,20 +932,13 @@ pub fn template(
                 fonts: Option<&FontDatabase>,
                 images: Option<std::collections::HashMap<String, Buffer>>,
             ) -> Result<Self> {
-                let svg = match svg {
-                    Either::A(text) => text.into_bytes(),
-                    Either::B(data) => data.to_vec(),
-                };
-                let options = options.unwrap_or_default();
+                let svg = svg_bytes(svg);
+                let options = std::sync::Arc::new(options.unwrap_or_default());
                 let fonts = match fonts {
                     Some(f) => f.inner.0.clone(),
                     None => default_fontdb(),
                 };
-                let images: ImageMap = images
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
-                    .collect();
+                let images = std::sync::Arc::new(image_map(images));
                 let logs = Logs::default();
                 let (tree, pending_images, pending_fonts) =
                     logs.scope(|| Self::build(&svg, &options, fonts.clone(), &images))?;
@@ -994,7 +1007,8 @@ pub fn template(
             #[doc = " argument instead: this re-parses once per call."]
             #[napi]
             pub fn resolve_image(&mut self, href: String, data: Buffer) -> Result<()> {
-                self.images.insert(href, std::sync::Arc::new(data.to_vec()));
+                std::sync::Arc::make_mut(&mut self.images)
+                    .insert(href, std::sync::Arc::new(data.to_vec()));
                 let (tree, pending_images, pending_fonts) = self.logs.scope(|| {
                     Self::build(&self.svg, &self.options, self.fonts.clone(), &self.images)
                 })?;
@@ -1041,20 +1055,13 @@ pub fn template(
             ) -> AsyncTask<ParseTask> {
                 AsyncTask::with_optional_signal(
                     ParseTask {
-                        svg: match svg {
-                            Either::A(text) => text.into_bytes(),
-                            Either::B(data) => data.to_vec(),
-                        },
-                        options: options.unwrap_or_default(),
+                        svg: svg_bytes(svg),
+                        options: std::sync::Arc::new(options.unwrap_or_default()),
                         // The system database is left to `compute`: the first
                         // enumeration scans every installed font, on whichever
                         // thread asks first, and this one is the event loop.
                         fonts: fonts.map(|f| f.inner.0.clone()),
-                        images: images
-                            .unwrap_or_default()
-                            .into_iter()
-                            .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
-                            .collect(),
+                        images: std::sync::Arc::new(image_map(images)),
                         logs: Logs::default(),
                     },
                     signal.map(|s| s.0),
@@ -1165,7 +1172,7 @@ pub fn template(
                 svg: &[u8],
                 options: &RenderOptions,
                 fonts: std::sync::Arc<usvg::fontdb::Database>,
-                images: &ImageMap,
+                images: &std::sync::Arc<ImageMap>,
             ) -> Result<(usvg::Tree, Vec<String>, Vec<String>)> {
                 let missing_images = Misses::default();
                 let missing_fonts = Misses::default();
@@ -1328,10 +1335,10 @@ pub fn template(
         #[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
         pub struct ParseTask {
             svg: Vec<u8>,
-            options: RenderOptions,
+            options: std::sync::Arc<RenderOptions>,
             #[doc = " `None` for the system fonts, resolved in `compute`."]
             fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
-            images: ImageMap,
+            images: std::sync::Arc<ImageMap>,
             logs: Logs,
         }
 
@@ -1407,7 +1414,7 @@ pub fn template(
                     &self.svg,
                     &self.options,
                     default_fontdb(),
-                    &ImageMap::new(),
+                    &Default::default(),
                 )?;
                 draw(&tree, &self.params)?
                     .encode_png()
@@ -1433,10 +1440,7 @@ pub fn template(
         ) -> AsyncTask<RenderTask> {
             AsyncTask::with_optional_signal(
                 RenderTask {
-                    svg: match svg {
-                        Either::A(text) => text.into_bytes(),
-                        Either::B(data) => data.to_vec(),
-                    },
+                    svg: svg_bytes(svg),
                     options: options.unwrap_or_default(),
                     params: params.unwrap_or_default(),
                 },

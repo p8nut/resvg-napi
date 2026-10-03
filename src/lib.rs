@@ -1017,13 +1017,29 @@ impl FontFace {
 #[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
 #[napi]
 pub struct FontDatabase {
-    inner: usvg::fontdb::Database,
+    inner: SharedDb,
+}
+#[doc = " A database shared with every parse that used it, copied on the"]
+#[doc = " first write. A plain `Database` was deep-copied -- every `FaceInfo`"]
+#[doc = " -- by each parse, `parseAsync` and `fontdb()` call. Through"]
+#[doc = " `DerefMut` the generated `&mut self` methods keep working unchanged."]
+struct SharedDb(std::sync::Arc<usvg::fontdb::Database>);
+impl std::ops::Deref for SharedDb {
+    type Target = usvg::fontdb::Database;
+    fn deref(&self) -> &usvg::fontdb::Database {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for SharedDb {
+    fn deref_mut(&mut self) -> &mut usvg::fontdb::Database {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
 }
 impl FontDatabase {
     #[doc = " Snapshot of a shared database, e.g. the one a parse resolved."]
     fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
         Self {
-            inner: (*inner).clone(),
+            inner: SharedDb(inner),
         }
     }
 }
@@ -1086,7 +1102,7 @@ impl FontDatabase {
     #[napi(constructor)]
     pub fn new() -> Self {
         Self {
-            inner: usvg::fontdb::Database::new(),
+            inner: SharedDb(std::sync::Arc::new(usvg::fontdb::Database::new())),
         }
     }
     #[doc = " Loads a font data into the `Database`."]
@@ -1141,7 +1157,8 @@ impl FontDatabase {
     #[doc = " Or a specific face from a font."]
     #[napi]
     pub fn remove_face(&mut self, id: &FontFace) -> () {
-        self.inner.remove_face(id.id_in(&self.inner))
+        let id = id.id_in(&self.inner);
+        self.inner.remove_face(id)
     }
     #[doc = " Returns `true` if the `Database` contains no font faces."]
     #[napi]
@@ -1199,16 +1216,16 @@ impl FontDatabase {
     #[doc = " or this ID belong to the other `Database`."]
     #[napi]
     pub fn face(&self, id: &FontFace) -> Option<FontFace> {
-        self.inner
-            .face(id.id_in(&self.inner))
-            .map(|x| FontFace::wrap(x.clone()))
+        let id = id.id_in(&self.inner);
+        self.inner.face(id).map(|x| FontFace::wrap(x.clone()))
     }
     #[doc = " Transfers ownership of shared font data back to the font database. This is the reverse operation"]
     #[doc = " of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped"]
     #[doc = " from a file on disk, then that mapping is closed and the data becomes private to the process again."]
     #[napi]
     pub fn make_face_data_unshared(&mut self, id: &FontFace) -> () {
-        self.inner.make_face_data_unshared(id.id_in(&self.inner))
+        let id = id.id_in(&self.inner);
+        self.inner.make_face_data_unshared(id)
     }
 }
 #[doc = " Mirror of `usvg::WriteOptions`, for `Resvg.toString()`. Every field is"]
@@ -3974,7 +3991,7 @@ impl Resvg {
         };
         let options = options.unwrap_or_default();
         let fonts = match fonts {
-            Some(f) => std::sync::Arc::new(f.inner.clone()),
+            Some(f) => f.inner.0.clone(),
             None => default_fontdb(),
         };
         let images: ImageMap = images
@@ -4078,7 +4095,7 @@ impl Resvg {
                     Either::B(data) => data.to_vec(),
                 },
                 options: options.unwrap_or_default(),
-                fonts: fonts.map(|f| std::sync::Arc::new(f.inner.clone())),
+                fonts: fonts.map(|f| f.inner.0.clone()),
                 images: images
                     .unwrap_or_default()
                     .into_iter()

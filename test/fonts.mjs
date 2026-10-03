@@ -148,4 +148,16 @@ assert.equal(new Resvg(withId(family), opts, new FontDatabase()).faceOf(glyphs[0
   }
 }
 
+// The database is shared with the parses that used it and copied on the
+// first write, so changing it afterwards leaves a parsed document alone.
+{
+  const before = db.len();
+  const doc = new Resvg(text(family), opts, db);
+  const copy = doc.fontdb();
+  copy.removeFace(copy.faces()[0]);
+  assert.equal(copy.len(), before - 1, 'the copy changed');
+  assert.equal(db.len(), before, 'the original did not');
+  assert.equal(doc.fontdb().len(), before, 'nor the document');
+}
+
 console.log('ok — font resolution: all checks passed');

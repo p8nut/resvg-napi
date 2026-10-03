@@ -226,13 +226,32 @@ pub fn template(
         #[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
         #[napi]
         pub struct FontDatabase {
-            inner: usvg::fontdb::Database,
+            inner: SharedDb,
+        }
+
+        #[doc = " A database shared with every parse that used it, copied on the"]
+        #[doc = " first write. A plain `Database` was deep-copied -- every `FaceInfo`"]
+        #[doc = " -- by each parse, `parseAsync` and `fontdb()` call. Through"]
+        #[doc = " `DerefMut` the generated `&mut self` methods keep working unchanged."]
+        struct SharedDb(std::sync::Arc<usvg::fontdb::Database>);
+
+        impl std::ops::Deref for SharedDb {
+            type Target = usvg::fontdb::Database;
+            fn deref(&self) -> &usvg::fontdb::Database {
+                &self.0
+            }
+        }
+
+        impl std::ops::DerefMut for SharedDb {
+            fn deref_mut(&mut self) -> &mut usvg::fontdb::Database {
+                std::sync::Arc::make_mut(&mut self.0)
+            }
         }
 
         impl FontDatabase {
             #[doc = " Snapshot of a shared database, e.g. the one a parse resolved."]
             fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
-                Self { inner: (*inner).clone() }
+                Self { inner: SharedDb(inner) }
             }
         }
 
@@ -297,7 +316,7 @@ pub fn template(
 
             #[napi(constructor)]
             pub fn new() -> Self {
-                Self { inner: usvg::fontdb::Database::new() }
+                Self { inner: SharedDb(std::sync::Arc::new(usvg::fontdb::Database::new())) }
             }
             #fontdb_methods
         }
@@ -867,7 +886,7 @@ pub fn template(
                 };
                 let options = options.unwrap_or_default();
                 let fonts = match fonts {
-                    Some(f) => std::sync::Arc::new(f.inner.clone()),
+                    Some(f) => f.inner.0.clone(),
                     None => default_fontdb(),
                 };
                 let images: ImageMap = images
@@ -987,7 +1006,7 @@ pub fn template(
                         // The system database is left to `compute`: the first
                         // enumeration scans every installed font, on whichever
                         // thread asks first, and this one is the event loop.
-                        fonts: fonts.map(|f| std::sync::Arc::new(f.inner.clone())),
+                        fonts: fonts.map(|f| f.inner.0.clone()),
                         images: images
                             .unwrap_or_default()
                             .into_iter()

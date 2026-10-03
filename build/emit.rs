@@ -1178,11 +1178,17 @@ pub fn map_methods(
                 .iter()
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat.to_vec()),
-                    // fontdb IDs are slotmap keys: another database's face can
-                    // name a slot here, and `removeFace` would delete it.
-                    Arg::Face => quote!(#pat.id_in(&#receiver)),
                     _ => quote!(#pat),
                 })
+                .collect();
+            // fontdb IDs are slotmap keys: another database's face can name a
+            // slot here, and `removeFace` would delete it. Resolved before the
+            // call, not inside it: a `DerefMut` receiver (FontDatabase's
+            // copy-on-write) cannot be borrowed again in its own arguments.
+            let lets: Vec<TokenStream> = args
+                .iter()
+                .filter(|(_, kind)| matches!(kind, Arg::Face))
+                .map(|(pat, _)| quote!(let #pat = #pat.id_in(&#receiver);))
                 .collect();
             if readonly && mutable {
                 skipped.push(format!("{name} (needs &mut self)"));
@@ -1278,6 +1284,7 @@ pub fn map_methods(
                     #[napi]
                     pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
                         #prologue
+                        #(#lets)*
                         Ok(#value)
                     }
                 }
@@ -1285,7 +1292,10 @@ pub fn map_methods(
                 quote! {
                     #(#doc)*
                     #[napi]
-                    pub fn #ident(#recv, #(#params),*) -> #ret_ty { #value }
+                    pub fn #ident(#recv, #(#params),*) -> #ret_ty {
+                        #(#lets)*
+                        #value
+                    }
                 }
             });
         }

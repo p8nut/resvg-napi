@@ -770,6 +770,26 @@ pub fn template(
         }
 
         #[napi]
+        impl Filter {
+            #[doc = " Children of the `feImage` primitive at `index` in `primitives`:"]
+            #[doc = " usvg's `filter::Image::root()`. `null` for any other primitive."]
+            #[doc = ""]
+            #[doc = " A method here rather than a field on the `image` kind: a primitive"]
+            #[doc = " is a plain object, built without the filter its nodes resolve from."]
+            #[napi]
+            pub fn image_children(&self, index: u32) -> Option<Vec<SvgNode>> {
+                let index = usize::try_from(index).ok()?;
+                let base = NodeBase::FeImage(self.inner.clone(), index);
+                let count = base.group()?.children().len();
+                Some(
+                    (0..count)
+                        .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
+                        .collect(),
+                )
+            }
+        }
+
+        #[napi]
         impl Mask {
             #[doc = " The mask applied to this mask's own content, if any. `null` too"]
             #[doc = " when the handle came from no document."]
@@ -840,13 +860,19 @@ pub fn template(
         enum NodeBase {
             Tree(std::sync::Arc<usvg::Tree>),
             Def(std::sync::Arc<dyn HasRoot>),
+            #[doc = " The `feImage` primitive at this index of the filter."]
+            FeImage(std::sync::Arc<usvg::filter::Filter>, usize),
         }
 
         impl NodeBase {
-            fn group(&self) -> &usvg::Group {
+            fn group(&self) -> Option<&usvg::Group> {
                 match self {
-                    NodeBase::Tree(t) => t.root(),
-                    NodeBase::Def(d) => d.group(),
+                    NodeBase::Tree(t) => Some(t.root()),
+                    NodeBase::Def(d) => Some(d.group()),
+                    NodeBase::FeImage(f, i) => match f.primitives().get(*i)?.kind() {
+                        usvg::filter::Kind::Image(image) => Some(image.root()),
+                        _ => None,
+                    },
                 }
             }
         }
@@ -930,7 +956,9 @@ pub fn template(
 
         impl SvgNode {
             fn node(&self) -> Result<&usvg::Node> {
-                node_at(self.base.group(), &self.path)
+                self.base
+                    .group()
+                    .and_then(|root| node_at(root, &self.path))
                     .ok_or_else(|| Error::from_reason("node path no longer resolves"))
             }
 

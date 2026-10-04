@@ -194,4 +194,26 @@ console.log('ok — generated definition classes + value objects: all checks pas
   assert.ok(near(svgOrder.kx, m.kx) && near(svgOrder.ky, m.ky), 'sx ky kx sy tx ty round-trips');
 }
 
+// feImage: the referenced element, reachable through the filter, still
+// resolving its own clip path and rendering.
+{
+  const r = new Resvg(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><defs>' +
+    '<clipPath id="c"><rect width="2" height="2"/></clipPath>' +
+    '<rect id="src" width="5" height="5" fill="red" clip-path="url(#c)"/>' +
+    '<filter id="f"><feImage href="#src"/><feOffset dx="1"/></filter></defs>' +
+    '<rect width="20" height="20" filter="url(#f)"/></svg>',
+  );
+  const [f] = r.filters();
+  assert.deepEqual(f.primitives().map((p) => p.kind.type), ['image', 'offset']);
+  const kids = f.imageChildren(0);
+  assert.equal(kids.length, 1);
+  assert.equal(kids[0].kind, 'group');
+  assert.equal(kids[0].clipPath().id(), 'c');
+  assert.equal(kids[0].children()[0].kind, 'path');
+  assert.ok(kids[0].renderPng().length > 0);
+  assert.equal(f.imageChildren(1), null, 'not an feImage');
+  assert.equal(f.imageChildren(9), null, 'out of range');
+}
+
 console.log('ok — FontFace + strict objects: all checks passed');

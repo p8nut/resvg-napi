@@ -45,6 +45,14 @@ export declare class Filter {
   rect(): BBox
   /** A list of filter primitives. */
   primitives(): Array<Primitive>
+  /**
+   * Children of the `feImage` primitive at `index` in `primitives`:
+   * usvg's `filter::Image::root()`. `null` for any other primitive.
+   *
+   * A method here rather than a field on the `image` kind: a primitive
+   * is a plain object, built without the filter its nodes resolve from.
+   */
+  imageChildren(index: number): Array<SvgNode> | null
 }
 
 /** Read-only view of a `Font`. */

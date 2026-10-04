@@ -85,6 +85,10 @@ const span = n.text().chunks[0].spans[0]
 span.decoration.underline?.fill?.paint  // …and .overline, .lineThrough
 ```
 
+Definitions hold nodes too: `patterns()`, `masks()` and `clipPaths()` each
+have `children()`, and `filters()[i].imageChildren(index)` reaches what an
+`feImage` primitive draws.
+
 Paint is a discriminated union, so TypeScript narrows it:
 
 ```ts

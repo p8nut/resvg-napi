@@ -48,7 +48,14 @@ loop too.
 
 A document usvg refuses throws (or rejects) with usvg's own reason as
 `error.code`: `NotAnUtf8Str`, `SvgzFeatureNotEnabled`, `MalformedGZip`,
-`ElementsLimitReached`, `InvalidSize` or `ParsingFailed`.
+`ElementsLimitReached`, `InvalidSize` or `ParsingFailed`, typed as
+`ParseErrorCode`:
+
+```ts
+try { new Resvg(svg) } catch (e) {
+  if ((e as { code?: ParseErrorCode }).code === 'InvalidSize') …
+}
+```
 
 ## Text as outlines
 

@@ -3960,32 +3960,48 @@ impl PositionedGlyph {
 #[doc = " A parsed tree with the image and font hrefs it could not resolve."]
 type Parsed = (usvg::Tree, Vec<String>, Vec<String>);
 #[doc = " usvg's own name for a parse failure, carried as `error.code`."]
-fn parse_code(e: &usvg::Error) -> &'static str {
-    match e {
-        usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
-        usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
-        usvg::Error::MalformedGZip => "MalformedGZip",
-        usvg::Error::ElementsLimitReached => "ElementsLimitReached",
-        usvg::Error::InvalidSize => "InvalidSize",
-        usvg::Error::ParsingFailed(_) => "ParsingFailed",
+#[napi(string_enum)]
+pub enum ParseErrorCode {
+    NotAnUtf8Str,
+    SvgzFeatureNotEnabled,
+    MalformedGZip,
+    ElementsLimitReached,
+    InvalidSize,
+    ParsingFailed,
+}
+impl From<&usvg::Error> for ParseErrorCode {
+    fn from(e: &usvg::Error) -> Self {
+        match e {
+            usvg::Error::NotAnUtf8Str => Self::NotAnUtf8Str,
+            usvg::Error::SvgzFeatureNotEnabled => Self::SvgzFeatureNotEnabled,
+            usvg::Error::MalformedGZip => Self::MalformedGZip,
+            usvg::Error::ElementsLimitReached => Self::ElementsLimitReached,
+            usvg::Error::InvalidSize => Self::InvalidSize,
+            usvg::Error::ParsingFailed(_) => Self::ParsingFailed,
+        }
     }
 }
-#[doc = " A parse failure thrown from a sync call, code included. napi's own"]
-#[doc = " `Error` can only carry its fixed `Status` as the code, so the JS"]
-#[doc = " error is thrown here and the returned one only says it is pending."]
+#[doc = " The JS error for a parse failure, `code` included. napi's own"]
+#[doc = " `Error` can only carry its fixed `Status` as the code, and one built"]
+#[doc = " back from a JS object loses the object on WASI, so both paths below"]
+#[doc = " hand this object to JS themselves."]
+fn parse_error<'e>(env: &'e Env, e: &usvg::Error) -> Result<Object<'e>> {
+    let mut error = env.create_error(Error::from_reason(format!("invalid SVG: {e}")))?;
+    error.set_named_property("code", ParseErrorCode::from(e))?;
+    Ok(error)
+}
+#[doc = " Thrown from a sync call: the error is thrown here, and the one"]
+#[doc = " returned only says it is pending, so napi does not throw again."]
 fn throw_parse(env: &Env, e: &usvg::Error) -> Error {
-    let reason = format!("invalid SVG: {e}");
-    match env.throw_error(&reason, Some(parse_code(e))) {
-        Ok(()) => Error::new(Status::PendingException, reason),
+    match parse_error(env, e).and_then(|error| env.throw(error)) {
+        Ok(()) => Error::new(Status::PendingException, format!("invalid SVG: {e}")),
         Err(err) => err,
     }
 }
-#[doc = " The same failure for a worker-thread task: a rejected promise,"]
-#[doc = " which the task's own promise adopts on resolve. Rejecting with a"]
-#[doc = " napi `Error` would drop the code, and on WASI the object too."]
+#[doc = " From a worker-thread task: a rejected promise, which the task's"]
+#[doc = " own promise adopts on resolve."]
 fn rejected_parse<'e>(env: &'e Env, e: &usvg::Error) -> Result<Unknown<'e>> {
-    let mut error = env.create_error(Error::from_reason(format!("invalid SVG: {e}")))?;
-    error.set_named_property("code", parse_code(e))?;
+    let error = parse_error(env, e)?;
     let promise = env
         .get_global()?
         .get_named_property::<Unknown>("Promise")?

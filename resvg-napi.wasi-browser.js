@@ -1480,6 +1480,7 @@ export const MaskType = __napiModule.exports.MaskType
 export const MorphologyOperator = __napiModule.exports.MorphologyOperator
 export const NodeKind = __napiModule.exports.NodeKind
 export const PaintOrder = __napiModule.exports.PaintOrder
+export const ParseErrorCode = __napiModule.exports.ParseErrorCode
 export const renderAsync = __napiModule.exports.renderAsync
 export const setLogLevel = __napiModule.exports.setLogLevel
 export const ShapeRendering = __napiModule.exports.ShapeRendering

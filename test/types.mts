@@ -11,6 +11,7 @@ import {
   type Color,
   type Path,
   type PathSegment,
+  type ParseErrorCode,
 } from '../index.js';
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80">
@@ -95,4 +96,27 @@ if (shape) {
 
   const dashes: number[] | undefined = shape.stroke?.dasharray;
   console.log(`dashes: ${dashes?.join(" ") ?? "none"}`);
+}
+
+// 7. a parse failure's `code` is one of usvg's own variant names. The switch
+//    is exhaustive: a code added upstream fails to type-check here.
+try {
+  new Resvg('<svg');
+} catch (e) {
+  const code = (e as { code?: ParseErrorCode }).code;
+  switch (code) {
+    case 'NotAnUtf8Str':
+    case 'SvgzFeatureNotEnabled':
+    case 'MalformedGZip':
+    case 'ElementsLimitReached':
+    case 'InvalidSize':
+    case 'ParsingFailed':
+    case undefined:
+      console.log(`parse failed: ${code}`);
+      break;
+    default: {
+      const unhandled: never = code;
+      throw new Error(`unhandled ${unhandled}`);
+    }
+  }
 }

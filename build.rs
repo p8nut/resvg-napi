@@ -797,6 +797,12 @@ fn main() {
         skips.push((p.label, skipped));
         generated.insert(p.label, code);
     }
+    // `subroots` is a visitor over the groups a node refers to. Each one is
+    // already a handle of its own, so a callback API would add nothing.
+    report!(
+        "usvg::Node method covered by clipPath / mask / filters / imageChildren / paint ids: \
+         subroots (arg: F)"
+    );
     // Prune: an object type nothing returns is dead TS surface. Start from the
     // generated method bodies, then follow objects nested in kept objects.
     let mentions = |code: &TokenStream, name: &str| -> bool {

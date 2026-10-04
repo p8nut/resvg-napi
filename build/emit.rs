@@ -45,10 +45,10 @@ pub fn carried_field(
 ) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
     Some(match vocab.classify(ty) {
         Some(Js::Str) => (None, quote!(String), quote!(#access.to_string())),
-        Some(Js::F32) | Some(Js::F64) => (None, quote!(f64), quote!(f64::from(*#access))),
-        Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => {
-            (None, quote!(u32), quote!(u32::from(*#access)))
-        }
+        Some(Js::F32) => (None, quote!(f64), quote!(f64::from(*#access))),
+        Some(Js::F64) => (None, quote!(f64), quote!(*#access)),
+        Some(Js::U8) | Some(Js::U16) => (None, quote!(u32), quote!(u32::from(*#access))),
+        Some(Js::U32) => (None, quote!(u32), quote!(*#access)),
         Some(Js::I32) => (None, quote!(i32), quote!(*#access)),
         Some(Js::F32List) => (
             None,
@@ -610,10 +610,10 @@ pub fn data_members(
         }
         let id = format_ident!("{}", name);
         let (jsty, value) = match vocab.classify(ty_s) {
-            Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(f64::from(#access))),
-            Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => {
-                (quote!(u32), quote!(u32::from(#access)))
-            }
+            Some(Js::F32) => (quote!(f64), quote!(f64::from(#access))),
+            Some(Js::F64) => (quote!(f64), quote!(#access)),
+            Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(u32::from(#access))),
+            Some(Js::U32) => (quote!(u32), quote!(#access)),
             Some(Js::I32) => (quote!(i32), quote!(#access)),
             Some(Js::Bool) => (quote!(bool), quote!(#access)),
             Some(Js::Count) => (
@@ -800,7 +800,34 @@ pub fn data_members(
             if seen.contains(&id.to_string()) {
                 continue;
             }
-            push(&id.to_string(), &ty_str(&f.ty), quote!(v.#id.clone()));
+            // Copy kinds are read by value. Should upstream make one of them
+            // non-Copy, this stops compiling rather than silently cloning.
+            let ty_s = ty_str(&f.ty);
+            let inner = ty_s
+                .strip_prefix("Option<")
+                .and_then(|t| t.strip_suffix('>'))
+                .unwrap_or(&ty_s);
+            let copy = matches!(
+                vocab.classify(inner),
+                Some(
+                    Js::F32
+                        | Js::F64
+                        | Js::U8
+                        | Js::U16
+                        | Js::U32
+                        | Js::I32
+                        | Js::Bool
+                        | Js::Enum
+                        | Js::Scalar
+                        | Js::IntNewtype(_)
+                )
+            );
+            let access = if copy {
+                quote!(v.#id)
+            } else {
+                quote!(v.#id.clone())
+            };
+            push(&id.to_string(), &ty_s, access);
         }
     }
     (out, skipped, reached)
@@ -1232,7 +1259,7 @@ pub fn map_methods(
                     let o = data_ident(t);
                     (
                         quote!(Vec<#o>),
-                        quote!(#call.into_iter().map(#o::from).collect()),
+                        quote!(#call.iter().map(#o::from).collect()),
                         false,
                     )
                 }
@@ -1289,11 +1316,22 @@ pub fn map_methods(
                 }
                 Ret::TryUnit => (
                     quote!(()),
-                    quote!(#call.map_err(|e| Error::from_reason(e.to_string()))?),
+                    quote!(#call.map_err(|e| Error::from_reason(e.to_string()))),
                     true,
                 ),
             };
 
+            // TryUnit's value is already the Result.
+            let ok_value = if matches!(ret, Ret::TryUnit) {
+                value.clone()
+            } else {
+                quote!(Ok(#value))
+            };
+            let arrow = if matches!(ret, Ret::Unit) {
+                quote!()
+            } else {
+                quote!(-> #ret_ty)
+            };
             code.extend(if already_result || prologue.is_some() {
                 quote! {
                     #(#doc)*
@@ -1301,14 +1339,14 @@ pub fn map_methods(
                     pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
                         #prologue
                         #(#lets)*
-                        Ok(#value)
+                        #ok_value
                     }
                 }
             } else {
                 quote! {
                     #(#doc)*
                     #[napi]
-                    pub fn #ident(#recv, #(#params),*) -> #ret_ty {
+                    pub fn #ident(#recv, #(#params),*) #arrow {
                         #(#lets)*
                         #value
                     }

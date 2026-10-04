@@ -19,8 +19,11 @@ import { readFileSync } from 'node:fs';
 
 /** Host and cross-compilation flag per target. See https://napi.rs/docs/cross-build. */
 const TARGETS = {
-  'x86_64-unknown-linux-gnu': { host: 'ubuntu-latest' },
-  // pure-Rust dependency tree, so napi-cross's glibc 2.17 sysroot is enough
+  // pure-Rust dependency tree, so napi-cross's glibc 2.17 sysroot is enough.
+  // x64 too: built natively it linked against the runner's glibc, and 0.5.0
+  // needed 2.35 -- no RHEL 9, Amazon Linux 2023 or Debian 11 -- with the floor
+  // rising again when ubuntu-latest moves to Ubuntu 26.
+  'x86_64-unknown-linux-gnu': { host: 'ubuntu-latest', args: '--use-napi-cross' },
   'aarch64-unknown-linux-gnu': { host: 'ubuntu-latest', args: '--use-napi-cross' },
   'armv7-unknown-linux-gnueabihf': { host: 'ubuntu-latest', args: '--use-napi-cross' },
   // musl goes through zig: napi-cross is glibc only

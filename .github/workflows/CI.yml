@@ -159,6 +159,20 @@ jobs:
       - name: Build
         run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
 
+      # A glibc binary runs on systems at least as new as the newest symbol
+      # version it links. Built on the runner instead of napi-cross, x64 asked
+      # for 2.35 and nothing failed: the runner always has it. readelf, not
+      # objdump, because it reads the arm binaries from an x64 host.
+      - name: glibc floor is 2.17
+        if: contains(matrix.target, '-linux-gnu')
+        run: |
+          need=$(readelf -V resvg-napi.*.node | grep -oE 'GLIBC_[0-9.]+' | sort -V -u | tail -1)
+          echo "needs $need"
+          if [ "$(printf '%s\n' "$need" GLIBC_2.17 | sort -V | tail -1)" != GLIBC_2.17 ]; then
+            echo "::error::${{ matrix.target }} links $need; build it with --use-napi-cross"
+            exit 1
+          fi
+
       # build.rs regenerates src/lib.rs from the upstream sources. It is
       # committed, and the generator is deterministic, so any diff here means the
       # checked-in bindings no longer match what the pinned usvg/resvg produce.

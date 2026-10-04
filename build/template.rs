@@ -794,6 +794,47 @@ pub fn template(
             }
         }
 
+        #[doc = " A parsed tree with the image and font hrefs it could not resolve."]
+        type Parsed = (usvg::Tree, Vec<String>, Vec<String>);
+
+        #[doc = " usvg's own name for a parse failure, carried as `error.code`."]
+        fn parse_code(e: &usvg::Error) -> &'static str {
+            match e {
+                usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
+                usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
+                usvg::Error::MalformedGZip => "MalformedGZip",
+                usvg::Error::ElementsLimitReached => "ElementsLimitReached",
+                usvg::Error::InvalidSize => "InvalidSize",
+                usvg::Error::ParsingFailed(_) => "ParsingFailed",
+            }
+        }
+
+        #[doc = " A parse failure thrown from a sync call, code included. napi's own"]
+        #[doc = " `Error` can only carry its fixed `Status` as the code, so the JS"]
+        #[doc = " error is thrown here and the returned one only says it is pending."]
+        fn throw_parse(env: &Env, e: &usvg::Error) -> Error {
+            let reason = format!("invalid SVG: {e}");
+            match env.throw_error(&reason, Some(parse_code(e))) {
+                Ok(()) => Error::new(Status::PendingException, reason),
+                Err(err) => err,
+            }
+        }
+
+        #[doc = " The same failure for a worker-thread task: a rejected promise,"]
+        #[doc = " which the task's own promise adopts on resolve. Rejecting with a"]
+        #[doc = " napi `Error` would drop the code, and on WASI the object too."]
+        fn rejected_parse<'e>(env: &'e Env, e: &usvg::Error) -> Result<Unknown<'e>> {
+            let mut error = env.create_error(Error::from_reason(format!("invalid SVG: {e}")))?;
+            error.set_named_property("code", parse_code(e))?;
+            // `Promise` is a function, which `Object` refuses to read as one.
+            let promise = env
+                .get_global()?
+                .get_named_property::<Unknown>("Promise")?
+                .coerce_to_object()?;
+            let reject: Function<Unknown, Unknown> = promise.get_named_property("reject")?;
+            reject.apply(promise, error.to_unknown())
+        }
+
         #[doc = " Where a node path starts from."]
         #[derive(Clone)]
         enum NodeBase {
@@ -1061,6 +1102,7 @@ pub fn template(
         impl Resvg {
             #[napi(constructor)]
             pub fn new(
+                env: Env,
                 svg: Either<String, Buffer>,
                 options: Option<RenderOptions>,
                 fonts: Option<&FontDatabase>,
@@ -1075,7 +1117,8 @@ pub fn template(
                 let images = std::sync::Arc::new(image_map(images));
                 let logs = Logs::default();
                 let (tree, pending_images, pending_fonts) =
-                    logs.scope(|| Self::build(&svg, &options, fonts.clone(), &images))?;
+                    logs.scope(|| Self::build(&svg, &options, fonts.clone(), &images))?
+                        .map_err(|e| throw_parse(&env, &e))?;
                 Ok(Self {
                     tree: std::sync::Arc::new(tree),
                     svg: std::sync::Arc::new(svg),
@@ -1142,7 +1185,10 @@ pub fn template(
                     .insert(href, std::sync::Arc::new(data.to_vec()));
                 let (tree, pending_images, pending_fonts) = self.logs.scope(|| {
                     Self::build(&self.svg, &self.options, self.fonts.clone(), &self.images)
-                })?;
+                })?
+                // Unreachable in practice: the constructor already parsed this
+                // source with these options, and an image never fails the parse.
+                .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
                 self.tree = std::sync::Arc::new(tree);
                 self.pending_images = pending_images;
                 self.pending_fonts = pending_fonts;
@@ -1311,7 +1357,7 @@ pub fn template(
                 options: &RenderOptions,
                 fonts: std::sync::Arc<usvg::fontdb::Database>,
                 images: &std::sync::Arc<ImageMap>,
-            ) -> Result<(usvg::Tree, Vec<String>, Vec<String>)> {
+            ) -> Result<std::result::Result<Parsed, usvg::Error>> {
                 let missing_images = Misses::default();
                 let missing_fonts = Misses::default();
                 let mut opts = options.to_usvg(fonts);
@@ -1322,13 +1368,15 @@ pub fn template(
                         options.resources_root.as_ref().map(std::path::PathBuf::from),
                     );
                 opts.font_resolver = font_resolver(missing_fonts.clone());
-                let tree = contained("usvg", || usvg::Tree::from_data(svg, &opts))?
-                    .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
-                Ok((
+                let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
+                    Ok(tree) => tree,
+                    Err(e) => return Ok(Err(e)),
+                };
+                Ok(Ok((
                     tree,
                     std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())),
                     std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())),
-                ))
+                )))
             }
 
             fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
@@ -1501,9 +1549,9 @@ pub fn template(
             logs: Logs,
         }
 
-        impl Task for ParseTask {
-            type Output = (usvg::Tree, Vec<String>, Vec<String>);
-            type JsValue = Resvg;
+        impl<'env> napi::ScopedTask<'env> for ParseTask {
+            type Output = std::result::Result<Parsed, usvg::Error>;
+            type JsValue = Either<Resvg, Unknown<'env>>;
 
             fn compute(&mut self) -> Result<Self::Output> {
                 let fonts = self.fonts.get_or_insert_with(default_fontdb).clone();
@@ -1511,9 +1559,12 @@ pub fn template(
                     .scope(|| Resvg::build(&self.svg, &self.options, fonts, &self.images))
             }
 
-            fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-                let (tree, pending_images, pending_fonts) = out;
-                Ok(Resvg {
+            fn resolve(&mut self, env: &'env Env, out: Self::Output) -> Result<Self::JsValue> {
+                let (tree, pending_images, pending_fonts) = match out {
+                    Ok(parsed) => parsed,
+                    Err(e) => return rejected_parse(env, &e).map(Either::B),
+                };
+                Ok(Either::A(Resvg {
                     tree: std::sync::Arc::new(tree),
                     svg: std::sync::Arc::new(std::mem::take(&mut self.svg)),
                     options: std::mem::take(&mut self.options),
@@ -1522,7 +1573,7 @@ pub fn template(
                     pending_images,
                     pending_fonts,
                     logs: std::mem::take(&mut self.logs),
-                })
+                }))
             }
         }
 
@@ -1564,24 +1615,31 @@ pub fn template(
             params: RenderParams,
         }
 
-        impl Task for RenderTask {
-            type Output = Vec<u8>;
-            type JsValue = Buffer;
+        impl<'env> napi::ScopedTask<'env> for RenderTask {
+            type Output = std::result::Result<Vec<u8>, usvg::Error>;
+            type JsValue = Either<Buffer, Unknown<'env>>;
 
             fn compute(&mut self) -> Result<Self::Output> {
-                let (tree, _, _) = Resvg::build(
+                let tree = match Resvg::build(
                     &self.svg,
                     &self.options,
                     default_fontdb(),
                     &Default::default(),
-                )?;
+                )? {
+                    Ok((tree, _, _)) => tree,
+                    Err(e) => return Ok(Err(e)),
+                };
                 draw(&tree, &self.params)?
                     .encode_png()
+                    .map(Ok)
                     .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
             }
 
-            fn resolve(&mut self, _: napi::Env, png: Self::Output) -> Result<Self::JsValue> {
-                Ok(Buffer::from(png))
+            fn resolve(&mut self, env: &'env Env, png: Self::Output) -> Result<Self::JsValue> {
+                match png {
+                    Ok(png) => Ok(Either::A(Buffer::from(png))),
+                    Err(e) => rejected_parse(env, &e).map(Either::B),
+                }
             }
         }
 

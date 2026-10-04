@@ -46,6 +46,10 @@ as you like.
 of allocating (default 2^28, 1 GiB). `Resvg.parseAsync` moves the parse off the
 loop too.
 
+A document usvg refuses throws (or rejects) with usvg's own reason as
+`error.code`: `NotAnUtf8Str`, `SvgzFeatureNotEnabled`, `MalformedGZip`,
+`ElementsLimitReached`, `InvalidSize` or `ParsingFailed`.
+
 ## Text as outlines
 
 `toString()` hands back the resolved tree with **the text converted to paths** —

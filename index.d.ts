@@ -707,6 +707,53 @@ export declare class SvgNode {
    * See [`Group::layer_bounding_box`] for details.
    */
   absLayerBoundingBox(): BBox | null
+  /**
+   * Element's transform.
+   *
+   * This is a relative transform. The one that is set via the `transform` attribute in SVG.
+   */
+  transform(): Matrix | null
+  /**
+   * Group opacity.
+   *
+   * After the group is rendered we should combine
+   * it with a parent group using the specified opacity.
+   */
+  opacity(): number | null
+  /**
+   * Group blend mode.
+   *
+   * `mix-blend-mode` in SVG.
+   */
+  blendMode(): BlendMode | null
+  /**
+   * Group isolation.
+   *
+   * `isolation` in SVG.
+   */
+  isolate(): boolean | null
+  /** Element's filters. */
+  filters(): Array<Filter> | null
+  /**
+   * Element's "layer" bounding box in object units.
+   *
+   * Conceptually, this is `stroke_bounding_box` expanded and/or clipped
+   * by `filters_bounding_box`, but also including all the children.
+   * This is the bounding box `resvg` will later use to allocate layers/pixmaps
+   * during isolated groups rendering.
+   *
+   * Only groups have it, because only groups can have filters.
+   * For other nodes layer bounding box is the same as stroke bounding box.
+   *
+   * Unlike other bounding boxes, cannot have zero size.
+   *
+   * Returns 0x0x1x1 for empty groups.
+   */
+  layerBoundingBox(): BBox | null
+  /** Checks if this group should be isolated during rendering. */
+  shouldIsolate(): boolean | null
+  /** Returns `true` if the group has any children. */
+  hasChildren(): boolean | null
   /** `renderPng` on a worker thread: the work leaves the event loop, and a
   queued call is dropped when the signal fires. */
   renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>

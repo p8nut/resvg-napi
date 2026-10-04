@@ -76,6 +76,7 @@ n.kind           // 'group' | 'path' | 'image' | 'text'
 n.path()         // geometry, fill, stroke — null unless it is a shape
 n.text()         // chunks, layouted spans, positioned glyphs, decoration
 n.renderPng()    // that element alone, cropped to its own extent
+n.opacity()      // a group's own: transform, blendMode, isolate, filters… — null otherwise
 ```
 
 A span carries what it is drawn with, down to the lines through it:

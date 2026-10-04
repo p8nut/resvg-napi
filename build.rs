@@ -704,6 +704,11 @@ fn main() {
     // One declarative table instead of four call sites: adding a wrapped
     // `impl` block is a single row.
     let node_prologue = quote!(let __n = self.node()?;);
+    let group_prologue = quote! {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+    };
     struct Pass<'a> {
         label: &'a str,
         target: &'a str,
@@ -712,6 +717,7 @@ fn main() {
         receiver: TokenStream,
         skip: &'a [&'a str],
         prologue: Option<&'a TokenStream>,
+        optional: bool,
     }
     let passes = [
         Pass {
@@ -722,6 +728,7 @@ fn main() {
             receiver: quote!(self.inner),
             skip: &[],
             prologue: None,
+            optional: false,
         },
         Pass {
             label: "usvg::Tree",
@@ -731,6 +738,7 @@ fn main() {
             receiver: quote!(self.tree),
             skip: &[],
             prologue: None,
+            optional: false,
         },
         Pass {
             label: "usvg::Group",
@@ -740,6 +748,7 @@ fn main() {
             receiver: quote!(self.tree.root()),
             skip: &["isolate", "should_isolate", "id"],
             prologue: None,
+            optional: false,
         },
         Pass {
             label: "usvg::Node",
@@ -749,6 +758,19 @@ fn main() {
             receiver: quote!(__n),
             skip: &["subroots"],
             prologue: Some(&node_prologue),
+            optional: false,
+        },
+        // After the Node pass: what both define (`id`, the boxes) is already
+        // taken there, and stays non-null on every node.
+        Pass {
+            label: "usvg::Group (on SvgNode)",
+            target: "SvgNode",
+            files: &usvg_files,
+            ty: "Group",
+            receiver: quote!(__g),
+            skip: &["filters_bounding_box"],
+            prologue: Some(&group_prologue),
+            optional: true,
         },
     ];
 
@@ -767,12 +789,13 @@ fn main() {
                 skip: p.skip,
                 prologue: p.prologue,
                 readonly: false,
+                optional: p.optional,
             },
             &vocab,
             names,
         );
         skips.push((p.label, skipped));
-        generated.insert(p.ty, code);
+        generated.insert(p.label, code);
     }
     // Prune: an object type nothing returns is dead TS surface. Start from the
     // generated method bodies, then follow objects nested in kept objects.
@@ -885,10 +908,14 @@ fn main() {
         kept.iter().cloned().collect::<Vec<_>>().join(", ")
     );
 
-    let fontdb_methods = &generated["Database"];
-    let tree_methods = &generated["Tree"];
-    let group_methods = &generated["Group"];
-    let node_methods = &generated["Node"];
+    let fontdb_methods = &generated["fontdb::Database"];
+    let tree_methods = &generated["usvg::Tree"];
+    let group_methods = &generated["usvg::Group"];
+    let node_methods = &{
+        let node = &generated["usvg::Node"];
+        let group = &generated["usvg::Group (on SvgNode)"];
+        quote!(#node #group)
+    };
 
     for s in skipped_fields {
         report!("usvg::Options field not exposed: {s}");

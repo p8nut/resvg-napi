@@ -56,6 +56,9 @@ usvg precision clamp derived from POW_VEC: 12
 usvg sources: usvg-0.48.1
 usvg::ClipPath method covered by the content view: root (returns &Group)
 usvg::ClipPath method covered by the template: clip_path (returns Option<&ClipPath>)
+usvg::Group (on SvgNode) method covered by the template, not generated: children (returns &[Node])
+usvg::Group (on SvgNode) method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
+usvg::Group (on SvgNode) method covered by the template, not generated: mask (returns Option<&Mask>)
 usvg::Group method covered by the template, not generated: children (returns &[Node])
 usvg::Group method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
 usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)

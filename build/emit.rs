@@ -987,6 +987,7 @@ pub fn wrapper_class(
                 skip: &[],
                 prologue: None,
                 readonly: true,
+                optional: false,
             },
             vocab,
             &mut taken,
@@ -1090,6 +1091,10 @@ pub struct MethodPass<'a> {
     pub prologue: Option<&'a TokenStream>,
     /// An `Arc` receiver cannot hand out `&mut`, so drop mutating methods.
     pub readonly: bool,
+    /// The receiver may not exist (a node that is not a group): every
+    /// wrapper returns `Result<Option<_>>`, and the prologue returns
+    /// `Ok(None)` itself.
+    pub optional: bool,
 }
 
 pub fn map_methods(
@@ -1108,6 +1113,7 @@ pub fn map_methods(
         skip,
         prologue,
         readonly,
+        optional,
     } = *m;
     let mut code = TokenStream::new();
     let mut skipped = Vec::new();
@@ -1364,7 +1370,22 @@ pub fn map_methods(
             } else {
                 quote!(-> #ret_ty)
             };
-            code.extend(if already_result || prologue.is_some() {
+            code.extend(if optional {
+                let value = if matches!(ret, Ret::TryUnit) {
+                    quote!(#value.map(Some))
+                } else {
+                    quote!(Ok(Some(#value)))
+                };
+                quote! {
+                    #(#doc)*
+                    #[napi]
+                    pub fn #ident(#recv, #(#params),*) -> Result<Option<#ret_ty>> {
+                        #prologue
+                        #(#lets)*
+                        #value
+                    }
+                }
+            } else if already_result || prologue.is_some() {
                 quote! {
                     #(#doc)*
                     #[napi]

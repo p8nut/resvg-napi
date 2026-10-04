@@ -91,22 +91,39 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
 }
 
 // 6b. an embedded SVG is a document of its own: its nodes are reachable, and
-//     resolve their clip path against its definitions, not the outer ones
+//     resolve their clip path against its definitions, not the outer ones --
+//     one level down and two
 {
-  const inner = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">' +
-    '<clipPath id="ic"><rect width="3" height="3"/></clipPath>' +
-    '<rect id="r" width="10" height="10" fill="blue" clip-path="url(#ic)"/></svg>';
-  const outer = new Resvg(doc(`data:image/svg+xml;utf8,${encodeURIComponent(inner)}`));
-  const img = outer.children()[0].children()[0].image();
-  assert.equal(img.kind.type, 'svg');
-  const [clipped] = img.svgChildren();
-  assert.equal(clipped.clipPath().id(), 'ic');
-  assert.equal(clipped.children()[0].id(), 'r');
-  assert.ok(clipped.renderPng().length > 0);
-  assert.equal(outer.node('r'), null, 'the inner document stays separate');
+  const svgHref = (body) => `data:image/svg+xml;utf8,${encodeURIComponent(body)}`;
+  const level = (id, inside) => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">' +
+    `<clipPath id="${id}"><rect width="3" height="3"/></clipPath>` +
+    `<g clip-path="url(#${id})"><rect id="r-${id}" width="10" height="10" fill="blue"/>${inside}</g></svg>`;
+  const deepest = level('c2', '');
+  const middle = level('c1', `<image width="10" height="10" href="${svgHref(deepest)}"/>`);
+  const outer = new Resvg(doc(svgHref(middle)));
+
+  const imageNode = outer.children()[0].children()[0];
+  assert.equal(imageNode.image().kind.type, 'svg');
+  const [g1] = imageNode.svgChildren();
+  assert.equal(g1.clipPath().id(), 'c1');
+  assert.equal(g1.children()[0].id(), 'r-c1');
+  assert.ok(g1.renderPng().length > 0);
+  assert.equal(outer.node('r-c1'), null, 'the inner document stays separate');
+
+  // the clip path handle keeps the inner document too: its content nodes resolve
+  assert.equal(g1.clipPath().children()[0].kind, 'path');
+
+  const find = (nodes, kind) => nodes.flatMap(function all(n) {
+    return [n, ...n.children().flatMap(all)];
+  }).find((n) => n.kind === kind);
+  const [g2] = find([g1], 'image').svgChildren();
+  assert.equal(g2.clipPath().id(), 'c2', 'two levels down, its own definitions');
+  assert.equal(g2.children()[0].id(), 'r-c2');
 
   const raster = new Resvg(doc(`data:image/png;base64,${red.toString('base64')}`));
-  assert.equal(raster.children()[0].children()[0].image().svgChildren(), null);
+  const rasterNode = raster.children()[0].children()[0];
+  assert.equal(rasterNode.svgChildren(), null, 'a raster image');
+  assert.equal(raster.children()[0].svgChildren(), null, 'not an image');
 }
 
 // 7. the disk is off limits outside resourcesDir: no absolute paths, no

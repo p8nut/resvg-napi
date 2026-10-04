@@ -735,10 +735,10 @@ pub fn template(
         #[doc = " glyph needs to resolve the references it carries -- the def tables"]
         #[doc = " (`tree`), the font database its IDs belong to (`fonts`), and the"]
         #[doc = " log its renders report to. Empty for what no document handed out."]
-        #[doc = " Three refcounts, cloned into every class the generator emits."]
+        #[doc = " Cheap to clone, and cloned into every class the generator emits."]
         #[derive(Clone, Default)]
         struct Doc {
-            tree: Option<std::sync::Arc<usvg::Tree>>,
+            tree: Option<TreeRef>,
             fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
             logs: Logs,
         }
@@ -764,7 +764,7 @@ pub fn template(
             #[napi]
             pub fn clip_path(&self) -> Option<ClipPath> {
                 let target = self.inner.clip_path()?;
-                let tree = self.doc.tree.as_ref()?;
+                let tree = self.doc.tree.as_ref()?.get()?;
                 find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc()))
             }
         }
@@ -796,7 +796,7 @@ pub fn template(
             #[napi]
             pub fn mask(&self) -> Option<Mask> {
                 let target = self.inner.mask()?;
-                let tree = self.doc.tree.as_ref()?;
+                let tree = self.doc.tree.as_ref()?.get()?;
                 find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc()))
             }
         }
@@ -873,37 +873,34 @@ pub fn template(
             reject.apply(promise, error.to_unknown())
         }
 
-        #[napi]
-        impl Image {
-            #[doc = " Children of the SVG document this image embeds: usvg's"]
-            #[doc = " `ImageKind::SVG` tree. `null` for a raster image."]
-            #[doc = ""]
-            #[doc = " The nodes belong to that inner document, so their `clipPath()` and"]
-            #[doc = " `mask()` resolve against its own definitions. Fonts and logs are the"]
-            #[doc = " outer document's, which the inner one was parsed with."]
-            #[napi]
-            pub fn svg_children(&self) -> Option<Vec<SvgNode>> {
-                let usvg::ImageKind::SVG(tree) = self.inner.kind() else {
-                    return None;
-                };
-                // ponytail: a deep copy of the inner tree per call, since this
-                // handle owns its image by value. Keep a path to the image
-                // node instead if documents embed large SVGs.
-                let tree = std::sync::Arc::new(tree.clone());
-                let doc = Doc { tree: Some(tree.clone()), ..self.doc() };
-                let base = NodeBase::Tree(tree.clone());
-                Some(
-                    (0..tree.root().children().len())
-                        .map(|i| SvgNode { doc: doc.clone(), base: base.clone(), path: vec![i] })
-                        .collect(),
-                )
+        #[doc = " A document's tree: the parsed one, or the SVG an `<image>` node"]
+        #[doc = " embeds, re-resolved through that node on each use -- usvg owns it"]
+        #[doc = " by value inside the image, so there is no `Arc` to hold."]
+        #[derive(Clone)]
+        enum TreeRef {
+            Root(std::sync::Arc<usvg::Tree>),
+            Embedded(Box<NodeBase>, Vec<usize>),
+        }
+
+        impl TreeRef {
+            fn get(&self) -> Option<&usvg::Tree> {
+                match self {
+                    TreeRef::Root(t) => Some(t),
+                    TreeRef::Embedded(base, path) => match node_at(base.group()?, path)? {
+                        usvg::Node::Image(image) => match image.kind() {
+                            usvg::ImageKind::SVG(tree) => Some(tree),
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                }
             }
         }
 
         #[doc = " Where a node path starts from."]
         #[derive(Clone)]
         enum NodeBase {
-            Tree(std::sync::Arc<usvg::Tree>),
+            Tree(TreeRef),
             Def(std::sync::Arc<dyn HasRoot>),
             #[doc = " The `feImage` primitive at this index of the filter."]
             FeImage(std::sync::Arc<usvg::filter::Filter>, usize),
@@ -914,7 +911,7 @@ pub fn template(
         impl NodeBase {
             fn group(&self) -> Option<&usvg::Group> {
                 match self {
-                    NodeBase::Tree(t) => Some(t.root()),
+                    NodeBase::Tree(t) => Some(t.get()?.root()),
                     NodeBase::Def(d) => Some(d.group()),
                     NodeBase::FeImage(f, i) => match f.primitives().get(*i)?.kind() {
                         usvg::filter::Kind::Image(image) => Some(image.root()),
@@ -1062,6 +1059,30 @@ pub fn template(
                 ))
             }
 
+            #[doc = " Children of the SVG document this image node embeds: usvg's"]
+            #[doc = " `ImageKind::SVG` tree. Null for a raster image or any other node."]
+            #[doc = ""]
+            #[doc = " The nodes belong to that inner document, so their `clipPath()` and"]
+            #[doc = " `mask()` resolve against its own definitions. Fonts and logs are the"]
+            #[doc = " outer document's, which the inner one was parsed with."]
+            #[napi]
+            pub fn svg_children(&self) -> Result<Option<Vec<SvgNode>>> {
+                let usvg::Node::Image(image) = self.node()? else {
+                    return Ok(None);
+                };
+                let usvg::ImageKind::SVG(tree) = image.kind() else {
+                    return Ok(None);
+                };
+                let inner = TreeRef::Embedded(Box::new(self.base.clone()), self.path.clone());
+                let doc = Doc { tree: Some(inner.clone()), ..self.doc() };
+                let base = NodeBase::Tree(inner);
+                Ok(Some(
+                    (0..tree.root().children().len())
+                        .map(|i| SvgNode { doc: doc.clone(), base: base.clone(), path: vec![i] })
+                        .collect(),
+                ))
+            }
+
             #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
             #[doc = " Null for a group, an image or a text node."]
             #[doc = ""]
@@ -1135,7 +1156,7 @@ pub fn template(
                 let Some(target) = g.clip_path() else {
                     return Ok(None);
                 };
-                let Some(tree) = &self.doc.tree else {
+                let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
                     return Ok(None);
                 };
                 Ok(find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc())))
@@ -1150,7 +1171,7 @@ pub fn template(
                 let Some(target) = g.mask() else {
                     return Ok(None);
                 };
-                let Some(tree) = &self.doc.tree else {
+                let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
                     return Ok(None);
                 };
                 Ok(find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc())))
@@ -1382,7 +1403,7 @@ pub fn template(
             pub fn node(&self, id: String) -> Option<SvgNode> {
                 path_of_id(self.tree.root(), &id, &mut Vec::new()).map(|path| SvgNode {
                     doc: self.doc(),
-                    base: NodeBase::Tree(self.tree.clone()),
+                    base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
                     path,
                 })
             }
@@ -1393,7 +1414,7 @@ pub fn template(
                 (0..self.tree.root().children().len())
                     .map(|i| SvgNode {
                         doc: self.doc(),
-                        base: NodeBase::Tree(self.tree.clone()),
+                        base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
                         path: vec![i],
                     })
                     .collect()
@@ -1439,7 +1460,7 @@ pub fn template(
         impl Resvg {
             fn doc(&self) -> Doc {
                 Doc {
-                    tree: Some(self.tree.clone()),
+                    tree: Some(TreeRef::Root(self.tree.clone())),
                     fonts: Some(self.fonts.clone()),
                     logs: self.logs.clone(),
                 }

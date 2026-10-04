@@ -210,15 +210,6 @@ export declare class Image {
   get absTransform(): Matrix
   get boundingBox(): BBox
   get absBoundingBox(): BBox
-  /**
-   * Children of the SVG document this image embeds: usvg's
-   * `ImageKind::SVG` tree. `null` for a raster image.
-   *
-   * The nodes belong to that inner document, so their `clipPath()` and
-   * `mask()` resolve against its own definitions. Fonts and logs are the
-   * outer document's, which the inner one was parsed with.
-   */
-  svgChildren(): Array<SvgNode> | null
 }
 
 /** `ImageKind::GIF`. The bytes are the document's own. */
@@ -640,6 +631,15 @@ export declare class SvgNode {
    * anything that is not text.
    */
   flattenedChildren(): Array<SvgNode> | null
+  /**
+   * Children of the SVG document this image node embeds: usvg's
+   * `ImageKind::SVG` tree. Null for a raster image or any other node.
+   *
+   * The nodes belong to that inner document, so their `clipPath()` and
+   * `mask()` resolve against its own definitions. Fonts and logs are the
+   * outer document's, which the inner one was parsed with.
+   */
+  svgChildren(): Array<SvgNode> | null
   /**
    * The shape of a path node: geometry, fill, stroke, paint order.
    * Null for a group, an image or a text node.

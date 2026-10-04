@@ -3993,6 +3993,36 @@ fn rejected_parse<'e>(env: &'e Env, e: &usvg::Error) -> Result<Unknown<'e>> {
     let reject: Function<Unknown, Unknown> = promise.get_named_property("reject")?;
     reject.apply(promise, error.to_unknown())
 }
+#[napi]
+impl Image {
+    #[doc = " Children of the SVG document this image embeds: usvg's"]
+    #[doc = " `ImageKind::SVG` tree. `null` for a raster image."]
+    #[doc = ""]
+    #[doc = " The nodes belong to that inner document, so their `clipPath()` and"]
+    #[doc = " `mask()` resolve against its own definitions. Fonts and logs are the"]
+    #[doc = " outer document's, which the inner one was parsed with."]
+    #[napi]
+    pub fn svg_children(&self) -> Option<Vec<SvgNode>> {
+        let usvg::ImageKind::SVG(tree) = self.inner.kind() else {
+            return None;
+        };
+        let tree = std::sync::Arc::new(tree.clone());
+        let doc = Doc {
+            tree: Some(tree.clone()),
+            ..self.doc()
+        };
+        let base = NodeBase::Tree(tree.clone());
+        Some(
+            (0..tree.root().children().len())
+                .map(|i| SvgNode {
+                    doc: doc.clone(),
+                    base: base.clone(),
+                    path: vec![i],
+                })
+                .collect(),
+        )
+    }
+}
 #[doc = " Where a node path starts from."]
 #[derive(Clone)]
 enum NodeBase {

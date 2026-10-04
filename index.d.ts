@@ -215,6 +215,15 @@ export declare class Image {
   get absTransform(): Matrix
   get boundingBox(): BBox
   get absBoundingBox(): BBox
+  /**
+   * Children of the SVG document this image embeds: usvg's
+   * `ImageKind::SVG` tree. `null` for a raster image.
+   *
+   * The nodes belong to that inner document, so their `clipPath()` and
+   * `mask()` resolve against its own definitions. Fonts and logs are the
+   * outer document's, which the inner one was parsed with.
+   */
+  svgChildren(): Array<SvgNode> | null
 }
 
 /** `ImageKind::GIF`. The bytes are the document's own. */

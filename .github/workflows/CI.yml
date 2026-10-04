@@ -402,8 +402,8 @@ jobs:
       # above) for a short-lived publish credential, so no long-lived npm
       # token has to be renewed. Needs npm >= 11.5.1; node 22 ships npm 10.
       # Each package must name this repo and CI.yml as its trusted publisher
-      # on npmjs.com. NPM_TOKEN below stays as the fallback until all
-      # fourteen do -- npm prefers OIDC whenever it is configured.
+      # on npmjs.com (all fourteen do; `npm trust list <pkg>` shows it). 0.4.1
+      # was the first release published this way.
       - run: npm install -g npm@^11.5.1
       - uses: actions/download-artifact@v8
         with:
@@ -447,8 +447,6 @@ jobs:
           }
           for dir in npm/*/; do publish_one "$dir"; done
           publish_one .
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # A tag is invisible on the repo page -- Releases lists releases, not tags
       # -- and `--generate-notes` fills the body with the pull requests merged

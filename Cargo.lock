@@ -523,7 +523,7 @@ dependencies = [
 
 [[package]]
 name = "resvg-napi"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "log",
  "napi",

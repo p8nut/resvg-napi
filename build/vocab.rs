@@ -175,7 +175,10 @@ impl PayloadEnum {
 
     /// `Either::A` / `Either17::C`, for the nth arm.
     pub fn either_arm(&self, name: &str, i: usize) -> TokenStream {
-        let letter = format_ident!("{}", ((b'A' + i as u8) as char).to_string());
+        let letter = format_ident!(
+            "{}",
+            char::from(b'A' + u8::try_from(i).expect("fewer than 26 letters"))
+        );
         let n = self.parts(name).len();
         let e = if n == 2 {
             format_ident!("Either")

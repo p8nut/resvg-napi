@@ -303,7 +303,9 @@ pub fn template(
                 let query = usvg::fontdb::Query {
                     families: &names,
                     // CSS weights are 1..=1000; `as u16` turned 70000 into 4464.
-                    weight: usvg::fontdb::Weight(weight.unwrap_or(400).clamp(1, 1000) as u16),
+                    weight: usvg::fontdb::Weight(
+                        u16::try_from(weight.unwrap_or(400).clamp(1, 1000)).unwrap_or(400),
+                    ),
                     style: if italic.unwrap_or(false) {
                         usvg::fontdb::Style::Italic
                     } else {
@@ -403,8 +405,8 @@ pub fn template(
         impl From<usvg::Transform> for Matrix {
             fn from(t: usvg::Transform) -> Self {
                 Self {
-                    sx: t.sx as f64, kx: t.kx as f64, ky: t.ky as f64,
-                    sy: t.sy as f64, tx: t.tx as f64, ty: t.ty as f64,
+                    sx: t.sx.into(), kx: t.kx.into(), ky: t.ky.into(),
+                    sy: t.sy.into(), tx: t.tx.into(), ty: t.ty.into(),
                 }
             }
         }
@@ -419,7 +421,7 @@ pub fn template(
 
         impl From<usvg::Size> for Dimensions {
             fn from(s: usvg::Size) -> Self {
-                Self { width: s.width() as f64, height: s.height() as f64 }
+                Self { width: s.width().into(), height: s.height().into() }
             }
         }
 
@@ -436,10 +438,10 @@ pub fn template(
         impl From<usvg::Rect> for BBox {
             fn from(r: usvg::Rect) -> Self {
                 Self {
-                    x: r.x() as f64,
-                    y: r.y() as f64,
-                    width: r.width() as f64,
-                    height: r.height() as f64,
+                    x: r.x().into(),
+                    y: r.y().into(),
+                    width: r.width().into(),
+                    height: r.height().into(),
                 }
             }
         }
@@ -447,10 +449,10 @@ pub fn template(
         impl From<usvg::NonZeroRect> for BBox {
             fn from(r: usvg::NonZeroRect) -> Self {
                 Self {
-                    x: r.x() as f64,
-                    y: r.y() as f64,
-                    width: r.width() as f64,
-                    height: r.height() as f64,
+                    x: r.x().into(),
+                    y: r.y().into(),
+                    width: r.width().into(),
+                    height: r.height().into(),
                 }
             }
         }
@@ -664,22 +666,22 @@ pub fn template(
             }
         }
 
-        fn node_at<'t>(root: &'t usvg::Group, path: &[u32]) -> Option<&'t usvg::Node> {
+        fn node_at<'t>(root: &'t usvg::Group, path: &[usize]) -> Option<&'t usvg::Node> {
             let (last, rest) = path.split_last()?;
             let mut group = root;
             for i in rest {
-                match group.children().get(*i as usize)? {
+                match group.children().get(*i)? {
                     usvg::Node::Group(g) => group = g,
                     _ => return None,
                 }
             }
-            group.children().get(*last as usize)
+            group.children().get(*last)
         }
 
         #[doc = " Depth-first search for an element id, returning its index path."]
-        fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<u32>) -> Option<Vec<u32>> {
+        fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<usize>) -> Option<Vec<usize>> {
             for (i, child) in group.children().iter().enumerate() {
-                prefix.push(i as u32);
+                prefix.push(i);
                 if child.id() == id {
                     return Some(prefix.clone());
                 }
@@ -715,7 +717,7 @@ pub fn template(
         fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
             let seg = |kind: &str, pts: &[tiny_skia::Point]| PathSegment {
                 r#type: kind.to_string(),
-                points: pts.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect(),
+                points: pts.iter().flat_map(|p| [f64::from(p.x), f64::from(p.y)]).collect(),
             };
             p.segments()
                 .map(|s| match s {
@@ -740,7 +742,7 @@ pub fn template(
             #[doc = " no document context, so the def tables are out of reach from it."]
             tree: Option<std::sync::Arc<usvg::Tree>>,
             base: NodeBase,
-            path: Vec<u32>,
+            path: Vec<usize>,
             #[doc = " The owning document's log, so `renderPng` lands in its `takeLogs`."]
             logs: Logs,
         }
@@ -753,7 +755,7 @@ pub fn template(
 
             fn child(&self, i: usize) -> Self {
                 let mut path = self.path.clone();
-                path.push(i as u32);
+                path.push(i);
                 Self { tree: self.tree.clone(), base: self.base.clone(), path, logs: self.logs.clone() }
             }
         }
@@ -1023,12 +1025,12 @@ pub fn template(
 
             #[napi(getter)]
             pub fn width(&self) -> f64 {
-                self.tree.size().width() as f64
+                self.tree.size().width().into()
             }
 
             #[napi(getter)]
             pub fn height(&self) -> f64 {
-                self.tree.size().height() as f64
+                self.tree.size().height().into()
             }
 
             #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
@@ -1126,7 +1128,7 @@ pub fn template(
                     .map(|i| SvgNode {
                         tree: Some(self.tree.clone()),
                         base: NodeBase::Tree(self.tree.clone()),
-                        path: vec![i as u32],
+                        path: vec![i],
                         logs: self.logs.clone(),
                     })
                     .collect()
@@ -1213,7 +1215,7 @@ pub fn template(
                 // A crop replaces the viewport: width/height/scale then size the
                 // cropped region, which is what you want after a bbox call.
                 let (base_w, base_h, off_x, off_y) = match &p.crop {
-                    Some(c) => (c.width as f32, c.height as f32, c.x as f32, c.y as f32),
+                    Some(c) => (to_f32(c.width), to_f32(c.height), to_f32(c.x), to_f32(c.y)),
                     None => (size.width(), size.height(), 0.0, 0.0),
                 };
                 if !(base_w > 0.0 && base_h > 0.0) {
@@ -1237,6 +1239,19 @@ pub fn template(
                 Ok(pixmap)
         }
 
+        // ponytail: the only `as` left in the runtime. Narrowing a float has no
+        // std conversion; `as` rounds to nearest and saturates, which is the
+        // behaviour wanted here (maxPixels rejects a saturated size after).
+        fn to_f32(v: f64) -> f32 {
+            v as f32
+        }
+        fn to_px(v: f64) -> u32 {
+            (v as u32).max(1)
+        }
+        fn ratio(px: u32, base: f32) -> f32 {
+            to_f32(f64::from(px)) / base
+        }
+
         #[doc = " Size, scale and background of one render pass, shared by `draw`"]
         #[doc = " and `render_node_png`."]
         fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
@@ -1252,7 +1267,7 @@ pub fn template(
                 let px = |v: Option<f64>, name: &str| -> Result<Option<u32>> {
                     match v.map(f64::round) {
                         None => Ok(None),
-                        Some(v) if (1.0..=u32::MAX as f64).contains(&v) => Ok(Some(v as u32)),
+                        Some(v) if (1.0..=f64::from(u32::MAX)).contains(&v) => Ok(Some(to_px(v))),
                         Some(_) => Err(Error::from_reason(format!(
                             "invalid {name}: {}", v.unwrap_or_default()
                         ))),
@@ -1263,27 +1278,27 @@ pub fn template(
                     // The other side from the ratio itself, in f64: going through
                     // the f32 scale makes 50 * (120 / 100) come out 60.000004,
                     // which ceils to 61.
-                    let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
-                    (w as f32 / base_w, w, (h as u32).max(1))
+                    let h = (f64::from(base_h) * f64::from(w) / f64::from(base_w)).ceil();
+                    (ratio(w, base_w), w, to_px(h))
                 } else if let Some(h) = height {
-                    let w = (base_w as f64 * h as f64 / base_h as f64).ceil();
-                    (h as f32 / base_h, (w as u32).max(1), h)
+                    let w = (f64::from(base_w) * f64::from(h) / f64::from(base_h)).ceil();
+                    (ratio(h, base_h), to_px(w), h)
                 } else {
                     let s = p.scale.unwrap_or(1.0);
                     (
-                        s as f32,
-                        ((base_w as f64 * s).ceil() as u32).max(1),
-                        ((base_h as f64 * s).ceil() as u32).max(1),
+                        to_f32(s),
+                        to_px((f64::from(base_w) * s).ceil()),
+                        to_px((f64::from(base_h) * s).ceil()),
                     )
                 };
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
-                let max = p.max_pixels.unwrap_or((1u64 << 28) as f64);
+                let max = p.max_pixels.unwrap_or(268_435_456.0); // 2^28
                 if !(max.is_finite() && max > 0.0) {
                     return Err(Error::from_reason(format!("invalid maxPixels: {max}")));
                 }
-                if w as f64 * h as f64 > max {
+                if f64::from(w) * f64::from(h) > max {
                     return Err(Error::from_reason(format!(
                         "{w}x{h} exceeds maxPixels ({max})"
                     )));

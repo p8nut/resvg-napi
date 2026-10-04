@@ -890,13 +890,13 @@ impl RenderOptions {
         let mut o = usvg::Options::default();
         o.resources_dir = self.resources_dir.as_deref().map(std::path::PathBuf::from);
         if let Some(v) = self.dpi {
-            o.dpi = v as f32;
+            o.dpi = to_f32(v);
         }
         if let Some(v) = &self.font_family {
             o.font_family = v.clone();
         }
         if let Some(v) = self.font_size {
-            o.font_size = v as f32;
+            o.font_size = to_f32(v);
         }
         if let Some(v) = &self.languages {
             o.languages = v.clone();
@@ -911,7 +911,7 @@ impl RenderOptions {
             o.image_rendering = v.into();
         }
         if let (Some(w), Some(h)) = (self.default_size_width, self.default_size_height) {
-            if let Some(s) = usvg::Size::from_wh(w as f32, h as f32) {
+            if let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h)) {
                 o.default_size = s;
             }
         }
@@ -1088,7 +1088,9 @@ impl FontDatabase {
             .collect();
         let query = usvg::fontdb::Query {
             families: &names,
-            weight: usvg::fontdb::Weight(weight.unwrap_or(400).clamp(1, 1000) as u16),
+            weight: usvg::fontdb::Weight(
+                u16::try_from(weight.unwrap_or(400).clamp(1, 1000)).unwrap_or(400),
+            ),
             style: if italic.unwrap_or(false) {
                 usvg::fontdb::Style::Italic
             } else {
@@ -1188,7 +1190,7 @@ impl FontDatabase {
     #[doc = " then the `Database` will load 5 font faces and this method will return 5, not 1."]
     #[napi]
     pub fn len(&self) -> u32 {
-        self.inner.len() as u32
+        u32::try_from(self.inner.len()).unwrap_or(u32::MAX)
     }
     #[doc = " Sets the family that will be used by `Family::Serif`."]
     #[napi]
@@ -1294,10 +1296,10 @@ impl WriteOptions {
             o.preserve_text = v;
         }
         if let Some(v) = self.coordinates_precision {
-            o.coordinates_precision = v.min(12u32) as u8;
+            o.coordinates_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
         }
         if let Some(v) = self.transforms_precision {
-            o.transforms_precision = v.min(12u32) as u8;
+            o.transforms_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
         }
         if let Some(v) = self.use_single_quote {
             o.use_single_quote = v;
@@ -1351,12 +1353,12 @@ pub struct Matrix {
 impl From<usvg::Transform> for Matrix {
     fn from(t: usvg::Transform) -> Self {
         Self {
-            sx: t.sx as f64,
-            kx: t.kx as f64,
-            ky: t.ky as f64,
-            sy: t.sy as f64,
-            tx: t.tx as f64,
-            ty: t.ty as f64,
+            sx: t.sx.into(),
+            kx: t.kx.into(),
+            ky: t.ky.into(),
+            sy: t.sy.into(),
+            tx: t.tx.into(),
+            ty: t.ty.into(),
         }
     }
 }
@@ -1370,8 +1372,8 @@ pub struct Dimensions {
 impl From<usvg::Size> for Dimensions {
     fn from(s: usvg::Size) -> Self {
         Self {
-            width: s.width() as f64,
-            height: s.height() as f64,
+            width: s.width().into(),
+            height: s.height().into(),
         }
     }
 }
@@ -1387,20 +1389,20 @@ pub struct BBox {
 impl From<usvg::Rect> for BBox {
     fn from(r: usvg::Rect) -> Self {
         Self {
-            x: r.x() as f64,
-            y: r.y() as f64,
-            width: r.width() as f64,
-            height: r.height() as f64,
+            x: r.x().into(),
+            y: r.y().into(),
+            width: r.width().into(),
+            height: r.height().into(),
         }
     }
 }
 impl From<usvg::NonZeroRect> for BBox {
     fn from(r: usvg::NonZeroRect) -> Self {
         Self {
-            x: r.x() as f64,
-            y: r.y() as f64,
-            width: r.width() as f64,
-            height: r.height() as f64,
+            x: r.x().into(),
+            y: r.y().into(),
+            width: r.width().into(),
+            height: r.height().into(),
         }
     }
 }
@@ -1467,9 +1469,9 @@ pub struct Color {
 impl From<&usvg::Color> for Color {
     fn from(v: &usvg::Color) -> Self {
         Self {
-            red: v.red.clone() as u32,
-            green: v.green.clone() as u32,
-            blue: v.blue.clone() as u32,
+            red: u32::from(v.red.clone()),
+            green: u32::from(v.green.clone()),
+            blue: u32::from(v.blue.clone()),
         }
     }
 }
@@ -1571,8 +1573,8 @@ impl From<&usvg::filter::ConvolveMatrix> for ConvolveMatrix {
         Self {
             input: input_to_js(v.input()),
             matrix: ConvolveMatrixData::from(v.matrix()),
-            divisor: v.divisor().get() as f64,
-            bias: v.bias() as f64,
+            divisor: f64::from(v.divisor().get()),
+            bias: f64::from(v.bias()),
             edge_mode: EdgeMode::from(v.edge_mode()),
             preserve_alpha: v.preserve_alpha(),
         }
@@ -1591,11 +1593,11 @@ pub struct ConvolveMatrixData {
 impl From<&usvg::filter::ConvolveMatrixData> for ConvolveMatrixData {
     fn from(v: &usvg::filter::ConvolveMatrixData) -> Self {
         Self {
-            target_x: v.target_x() as u32,
-            target_y: v.target_y() as u32,
-            columns: v.columns() as u32,
-            rows: v.rows() as u32,
-            data: v.data().iter().map(|v| *v as f64).collect(),
+            target_x: u32::from(v.target_x()),
+            target_y: u32::from(v.target_y()),
+            columns: u32::from(v.columns()),
+            rows: u32::from(v.rows()),
+            data: v.data().iter().map(|v| f64::from(*v)).collect(),
         }
     }
 }
@@ -1613,8 +1615,8 @@ impl From<&usvg::filter::DiffuseLighting> for DiffuseLighting {
     fn from(v: &usvg::filter::DiffuseLighting) -> Self {
         Self {
             input: input_to_js(v.input()),
-            surface_scale: v.surface_scale() as f64,
-            diffuse_constant: v.diffuse_constant() as f64,
+            surface_scale: f64::from(v.surface_scale()),
+            diffuse_constant: f64::from(v.diffuse_constant()),
             lighting_color: Color::from(&v.lighting_color()),
             light_source: light_source_to_js(&v.light_source()),
         }
@@ -1635,7 +1637,7 @@ impl From<&usvg::filter::DisplacementMap> for DisplacementMap {
         Self {
             input1: input_to_js(v.input1()),
             input2: input_to_js(v.input2()),
-            scale: v.scale() as f64,
+            scale: f64::from(v.scale()),
             x_channel_selector: ColorChannel::from(v.x_channel_selector()),
             y_channel_selector: ColorChannel::from(v.y_channel_selector()),
         }
@@ -1651,8 +1653,8 @@ pub struct DistantLight {
 impl From<&usvg::filter::DistantLight> for DistantLight {
     fn from(v: &usvg::filter::DistantLight) -> Self {
         Self {
-            azimuth: v.azimuth.clone() as f64,
-            elevation: v.elevation.clone() as f64,
+            azimuth: f64::from(v.azimuth.clone()),
+            elevation: f64::from(v.elevation.clone()),
         }
     }
 }
@@ -1672,12 +1674,12 @@ impl From<&usvg::filter::DropShadow> for DropShadow {
     fn from(v: &usvg::filter::DropShadow) -> Self {
         Self {
             input: input_to_js(v.input()),
-            dx: v.dx() as f64,
-            dy: v.dy() as f64,
-            std_dev_x: v.std_dev_x().get() as f64,
-            std_dev_y: v.std_dev_y().get() as f64,
+            dx: f64::from(v.dx()),
+            dy: f64::from(v.dy()),
+            std_dev_x: f64::from(v.std_dev_x().get()),
+            std_dev_y: f64::from(v.std_dev_y().get()),
             color: Color::from(&v.color()),
-            opacity: v.opacity().get() as f64,
+            opacity: f64::from(v.opacity().get()),
         }
     }
 }
@@ -1696,7 +1698,7 @@ impl FontFace {
     #[napi(getter)]
     pub fn index(&self) -> u32 {
         let v = &self.inner;
-        v.index.clone() as u32
+        u32::from(v.index.clone())
     }
     #[napi(getter, ts_return_type = "String")]
     pub fn post_script_name(&self) -> String {
@@ -1711,7 +1713,7 @@ impl FontFace {
     #[napi(getter)]
     pub fn weight(&self) -> u32 {
         let v = &self.inner;
-        v.weight.clone().0 as u32
+        u32::from(v.weight.clone().0)
     }
     #[napi(getter)]
     pub fn stretch(&self) -> Stretch {
@@ -1736,7 +1738,7 @@ impl From<&usvg::Fill> for Fill {
     fn from(v: &usvg::Fill) -> Self {
         Self {
             paint: paint_to_js(v.paint()),
-            opacity: v.opacity().get() as f64,
+            opacity: f64::from(v.opacity().get()),
             rule: FillRule::from(v.rule()),
         }
     }
@@ -1752,7 +1754,7 @@ impl From<&usvg::filter::Flood> for Flood {
     fn from(v: &usvg::filter::Flood) -> Self {
         Self {
             color: Color::from(&v.color()),
-            opacity: v.opacity().get() as f64,
+            opacity: f64::from(v.opacity().get()),
         }
     }
 }
@@ -1781,7 +1783,7 @@ impl Font {
     #[napi(getter)]
     pub fn weight(&self) -> u32 {
         let v = &self.inner;
-        v.weight() as u32
+        u32::from(v.weight())
     }
     #[napi(getter)]
     pub fn variations(&self) -> Vec<FontVariation> {
@@ -1801,7 +1803,7 @@ impl From<&usvg::FontVariation> for FontVariation {
     fn from(v: &usvg::FontVariation) -> Self {
         Self {
             tag: String::from_utf8_lossy(&v.tag.clone()).into_owned(),
-            value: v.value.clone() as f64,
+            value: f64::from(v.value.clone()),
         }
     }
 }
@@ -1817,8 +1819,8 @@ impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
     fn from(v: &usvg::filter::GaussianBlur) -> Self {
         Self {
             input: input_to_js(v.input()),
-            std_dev_x: v.std_dev_x().get() as f64,
-            std_dev_y: v.std_dev_y().get() as f64,
+            std_dev_x: f64::from(v.std_dev_x().get()),
+            std_dev_y: f64::from(v.std_dev_y().get()),
         }
     }
 }
@@ -1899,8 +1901,8 @@ impl From<&usvg::filter::Morphology> for Morphology {
         Self {
             input: input_to_js(v.input()),
             operator: MorphologyOperator::from(v.operator()),
-            radius_x: v.radius_x().get() as f64,
-            radius_y: v.radius_y().get() as f64,
+            radius_x: f64::from(v.radius_x().get()),
+            radius_y: f64::from(v.radius_y().get()),
         }
     }
 }
@@ -1916,8 +1918,8 @@ impl From<&usvg::filter::Offset> for Offset {
     fn from(v: &usvg::filter::Offset) -> Self {
         Self {
             input: input_to_js(v.input()),
-            dx: v.dx() as f64,
-            dy: v.dy() as f64,
+            dx: f64::from(v.dx()),
+            dy: f64::from(v.dy()),
         }
     }
 }
@@ -1968,9 +1970,9 @@ pub struct PointLight {
 impl From<&usvg::filter::PointLight> for PointLight {
     fn from(v: &usvg::filter::PointLight) -> Self {
         Self {
-            x: v.x.clone() as f64,
-            y: v.y.clone() as f64,
-            z: v.z.clone() as f64,
+            x: f64::from(v.x.clone()),
+            y: f64::from(v.y.clone()),
+            z: f64::from(v.z.clone()),
         }
     }
 }
@@ -1989,7 +1991,7 @@ impl PositionedGlyph {
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
         let v = &self.inner;
-        v.font_size() as f64
+        f64::from(v.font_size())
     }
     #[napi(getter)]
     pub fn transform(&self) -> Matrix {
@@ -2014,7 +2016,7 @@ impl PositionedGlyph {
     #[napi(getter)]
     pub fn id(&self) -> u32 {
         let v = &self.inner;
-        v.id.clone().0 as u32
+        u32::from(v.id.clone().0)
     }
     #[napi(getter, ts_return_type = "String")]
     pub fn text(&self) -> String {
@@ -2090,7 +2092,7 @@ impl Span {
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
         let v = &self.inner;
-        v.font_size.clone().get() as f64
+        f64::from(v.font_size.clone().get())
     }
     #[napi(getter)]
     pub fn variations(&self) -> Vec<FontVariation> {
@@ -2152,9 +2154,9 @@ impl From<&usvg::filter::SpecularLighting> for SpecularLighting {
     fn from(v: &usvg::filter::SpecularLighting) -> Self {
         Self {
             input: input_to_js(v.input()),
-            surface_scale: v.surface_scale() as f64,
-            specular_constant: v.specular_constant() as f64,
-            specular_exponent: v.specular_exponent() as f64,
+            surface_scale: f64::from(v.surface_scale()),
+            specular_constant: f64::from(v.specular_constant()),
+            specular_exponent: f64::from(v.specular_exponent()),
             lighting_color: Color::from(&v.lighting_color()),
             light_source: light_source_to_js(&v.light_source()),
         }
@@ -2176,14 +2178,14 @@ pub struct SpotLight {
 impl From<&usvg::filter::SpotLight> for SpotLight {
     fn from(v: &usvg::filter::SpotLight) -> Self {
         Self {
-            x: v.x.clone() as f64,
-            y: v.y.clone() as f64,
-            z: v.z.clone() as f64,
-            points_at_x: v.points_at_x.clone() as f64,
-            points_at_y: v.points_at_y.clone() as f64,
-            points_at_z: v.points_at_z.clone() as f64,
-            specular_exponent: v.specular_exponent.clone().get() as f64,
-            limiting_cone_angle: v.limiting_cone_angle.clone().map(|x| x as f64),
+            x: f64::from(v.x.clone()),
+            y: f64::from(v.y.clone()),
+            z: f64::from(v.z.clone()),
+            points_at_x: f64::from(v.points_at_x.clone()),
+            points_at_y: f64::from(v.points_at_y.clone()),
+            points_at_z: f64::from(v.points_at_z.clone()),
+            specular_exponent: f64::from(v.specular_exponent.clone().get()),
+            limiting_cone_angle: v.limiting_cone_angle.clone().map(f64::from),
         }
     }
 }
@@ -2198,9 +2200,9 @@ pub struct Stop {
 impl From<&usvg::Stop> for Stop {
     fn from(v: &usvg::Stop) -> Self {
         Self {
-            offset: v.offset().get() as f64,
+            offset: f64::from(v.offset().get()),
             color: Color::from(&v.color()),
-            opacity: v.opacity().get() as f64,
+            opacity: f64::from(v.opacity().get()),
         }
     }
 }
@@ -2221,11 +2223,13 @@ impl From<&usvg::Stroke> for Stroke {
     fn from(v: &usvg::Stroke) -> Self {
         Self {
             paint: paint_to_js(v.paint()),
-            dasharray: v.dasharray().map(|v| v.iter().map(|x| *x as f64).collect()),
-            dashoffset: v.dashoffset() as f64,
-            miterlimit: v.miterlimit().get() as f64,
-            opacity: v.opacity().get() as f64,
-            width: v.width().get() as f64,
+            dasharray: v
+                .dasharray()
+                .map(|v| v.iter().map(|x| f64::from(*x)).collect()),
+            dashoffset: f64::from(v.dashoffset()),
+            miterlimit: f64::from(v.miterlimit().get()),
+            opacity: f64::from(v.opacity().get()),
+            width: f64::from(v.width().get()),
             linecap: LineCap::from(v.linecap()),
             linejoin: LineJoin::from(v.linejoin()),
         }
@@ -2256,17 +2260,17 @@ impl Text {
     #[napi(getter)]
     pub fn dx(&self) -> Vec<f64> {
         let v = &self.inner;
-        v.dx().iter().map(|v| *v as f64).collect()
+        v.dx().iter().map(|v| f64::from(*v)).collect()
     }
     #[napi(getter)]
     pub fn dy(&self) -> Vec<f64> {
         let v = &self.inner;
-        v.dy().iter().map(|v| *v as f64).collect()
+        v.dy().iter().map(|v| f64::from(*v)).collect()
     }
     #[napi(getter)]
     pub fn rotate(&self) -> Vec<f64> {
         let v = &self.inner;
-        v.rotate().iter().map(|v| *v as f64).collect()
+        v.rotate().iter().map(|v| f64::from(*v)).collect()
     }
     #[napi(getter)]
     pub fn writing_mode(&self) -> WritingMode {
@@ -2324,12 +2328,12 @@ impl TextChunk {
     #[napi(getter)]
     pub fn x(&self) -> Option<f64> {
         let v = &self.inner;
-        v.x().map(|x| x as f64)
+        v.x().map(f64::from)
     }
     #[napi(getter)]
     pub fn y(&self) -> Option<f64> {
         let v = &self.inner;
-        v.y().map(|x| x as f64)
+        v.y().map(f64::from)
     }
     #[napi(getter)]
     pub fn anchor(&self) -> TextAnchor {
@@ -2399,12 +2403,12 @@ impl TextSpan {
     #[napi(getter)]
     pub fn start(&self) -> u32 {
         let v = &self.inner;
-        v.start() as u32
+        u32::try_from(v.start()).unwrap_or(u32::MAX)
     }
     #[napi(getter)]
     pub fn end(&self) -> u32 {
         let v = &self.inner;
-        v.end() as u32
+        u32::try_from(v.end()).unwrap_or(u32::MAX)
     }
     #[napi(getter)]
     pub fn fill(&self) -> Option<Fill> {
@@ -2429,7 +2433,7 @@ impl TextSpan {
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
         let v = &self.inner;
-        v.font_size().get() as f64
+        f64::from(v.font_size().get())
     }
     #[napi(getter)]
     pub fn small_caps(&self) -> bool {
@@ -2477,17 +2481,17 @@ impl TextSpan {
     #[napi(getter)]
     pub fn letter_spacing(&self) -> f64 {
         let v = &self.inner;
-        v.letter_spacing() as f64
+        f64::from(v.letter_spacing())
     }
     #[napi(getter)]
     pub fn word_spacing(&self) -> f64 {
         let v = &self.inner;
-        v.word_spacing() as f64
+        f64::from(v.word_spacing())
     }
     #[napi(getter)]
     pub fn text_length(&self) -> Option<f64> {
         let v = &self.inner;
-        v.text_length().map(|x| x as f64)
+        v.text_length().map(f64::from)
     }
     #[napi(getter)]
     pub fn length_adjust(&self) -> LengthAdjust {
@@ -2522,9 +2526,9 @@ pub struct Turbulence {
 impl From<&usvg::filter::Turbulence> for Turbulence {
     fn from(v: &usvg::filter::Turbulence) -> Self {
         Self {
-            base_frequency_x: v.base_frequency_x().get() as f64,
-            base_frequency_y: v.base_frequency_y().get() as f64,
-            num_octaves: v.num_octaves() as u32,
+            base_frequency_x: f64::from(v.base_frequency_x().get()),
+            base_frequency_y: f64::from(v.base_frequency_y().get()),
+            num_octaves: u32::from(v.num_octaves()),
             seed: v.seed(),
             stitch_tiles: v.stitch_tiles(),
             kind: TurbulenceKind::from(v.kind()),
@@ -2563,7 +2567,7 @@ fn baseline_shift_to_js(
         }),
         usvg::BaselineShift::Number(v) => Either::B(BaselineShiftNumber {
             r#type: "number".to_string(),
-            value: *v as f64,
+            value: f64::from(*v),
         }),
     }
 }
@@ -2616,15 +2620,15 @@ fn color_matrix_kind_to_js(
         }),
         usvg::filter::ColorMatrixKind::Matrix(v) => Either4::B(ColorMatrixKindMatrix {
             r#type: "matrix".to_string(),
-            value: v.iter().map(|x| *x as f64).collect(),
+            value: v.iter().map(|x| f64::from(*x)).collect(),
         }),
         usvg::filter::ColorMatrixKind::Saturate(v) => Either4::C(ColorMatrixKindSaturate {
             r#type: "saturate".to_string(),
-            value: v.get() as f64,
+            value: f64::from(v.get()),
         }),
         usvg::filter::ColorMatrixKind::HueRotate(v) => Either4::D(ColorMatrixKindHueRotate {
             r#type: "hueRotate".to_string(),
-            value: *v as f64,
+            value: f64::from(*v),
         }),
     }
 }
@@ -2670,10 +2674,10 @@ fn composite_operator_to_js(
         usvg::filter::CompositeOperator::Arithmetic { k1, k2, k3, k4 } => {
             Either::B(CompositeOperatorArithmetic {
                 r#type: "arithmetic".to_string(),
-                k1: *k1 as f64,
-                k2: *k2 as f64,
-                k3: *k3 as f64,
-                k4: *k4 as f64,
+                k1: f64::from(*k1),
+                k2: f64::from(*k2),
+                k3: f64::from(*k3),
+                k4: f64::from(*k4),
             })
         }
     }
@@ -3238,17 +3242,17 @@ fn transfer_function_to_js(
         }),
         usvg::filter::TransferFunction::Table(v) => Either5::B(TransferFunctionTable {
             r#type: "table".to_string(),
-            value: v.iter().map(|x| *x as f64).collect(),
+            value: v.iter().map(|x| f64::from(*x)).collect(),
         }),
         usvg::filter::TransferFunction::Discrete(v) => Either5::C(TransferFunctionDiscrete {
             r#type: "discrete".to_string(),
-            value: v.iter().map(|x| *x as f64).collect(),
+            value: v.iter().map(|x| f64::from(*x)).collect(),
         }),
         usvg::filter::TransferFunction::Linear { slope, intercept } => {
             Either5::D(TransferFunctionLinear {
                 r#type: "linear".to_string(),
-                slope: *slope as f64,
-                intercept: *intercept as f64,
+                slope: f64::from(*slope),
+                intercept: f64::from(*intercept),
             })
         }
         usvg::filter::TransferFunction::Gamma {
@@ -3257,9 +3261,9 @@ fn transfer_function_to_js(
             offset,
         } => Either5::E(TransferFunctionGamma {
             r#type: "gamma".to_string(),
-            amplitude: *amplitude as f64,
-            exponent: *exponent as f64,
-            offset: *offset as f64,
+            amplitude: f64::from(*amplitude),
+            exponent: f64::from(*exponent),
+            offset: f64::from(*offset),
         }),
     }
 }
@@ -3315,32 +3319,32 @@ impl RadialGradient {
     #[doc = " `cx` coordinate."]
     #[napi]
     pub fn cx(&self) -> f64 {
-        self.inner.cx() as f64
+        f64::from(self.inner.cx())
     }
     #[doc = " `cy` coordinate."]
     #[napi]
     pub fn cy(&self) -> f64 {
-        self.inner.cy() as f64
+        f64::from(self.inner.cy())
     }
     #[doc = " Gradient radius."]
     #[napi]
     pub fn r(&self) -> f64 {
-        self.inner.r().get() as f64
+        f64::from(self.inner.r().get())
     }
     #[doc = " `fx` coordinate."]
     #[napi]
     pub fn fx(&self) -> f64 {
-        self.inner.fx() as f64
+        f64::from(self.inner.fx())
     }
     #[doc = " `fy` coordinate."]
     #[napi]
     pub fn fy(&self) -> f64 {
-        self.inner.fy() as f64
+        f64::from(self.inner.fy())
     }
     #[doc = " Focal radius."]
     #[napi]
     pub fn fr(&self) -> f64 {
-        self.inner.fr().get() as f64
+        f64::from(self.inner.fr().get())
     }
     #[doc = " Element's ID."]
     #[doc = ""]
@@ -3420,7 +3424,7 @@ impl Pattern {
             .map(|i| SvgNode {
                 tree: None,
                 base: base.clone(),
-                path: vec![i as u32],
+                path: vec![i],
                 logs: Logs::default(),
             })
             .collect()
@@ -3476,7 +3480,7 @@ impl Mask {
             .map(|i| SvgNode {
                 tree: None,
                 base: base.clone(),
-                path: vec![i as u32],
+                path: vec![i],
                 logs: Logs::default(),
             })
             .collect()
@@ -3497,22 +3501,22 @@ impl LinearGradient {
     #[doc = " `x1` coordinate."]
     #[napi]
     pub fn x1(&self) -> f64 {
-        self.inner.x1() as f64
+        f64::from(self.inner.x1())
     }
     #[doc = " `y1` coordinate."]
     #[napi]
     pub fn y1(&self) -> f64 {
-        self.inner.y1() as f64
+        f64::from(self.inner.y1())
     }
     #[doc = " `x2` coordinate."]
     #[napi]
     pub fn x2(&self) -> f64 {
-        self.inner.x2() as f64
+        f64::from(self.inner.x2())
     }
     #[doc = " `y2` coordinate."]
     #[napi]
     pub fn y2(&self) -> f64 {
-        self.inner.y2() as f64
+        f64::from(self.inner.y2())
     }
     #[doc = " Element's ID."]
     #[doc = ""]
@@ -3585,7 +3589,7 @@ impl ClipPath {
             .map(|i| SvgNode {
                 tree: None,
                 base: base.clone(),
-                path: vec![i as u32],
+                path: vec![i],
                 logs: Logs::default(),
             })
             .collect()
@@ -3734,21 +3738,21 @@ impl NodeBase {
         }
     }
 }
-fn node_at<'t>(root: &'t usvg::Group, path: &[u32]) -> Option<&'t usvg::Node> {
+fn node_at<'t>(root: &'t usvg::Group, path: &[usize]) -> Option<&'t usvg::Node> {
     let (last, rest) = path.split_last()?;
     let mut group = root;
     for i in rest {
-        match group.children().get(*i as usize)? {
+        match group.children().get(*i)? {
             usvg::Node::Group(g) => group = g,
             _ => return None,
         }
     }
-    group.children().get(*last as usize)
+    group.children().get(*last)
 }
 #[doc = " Depth-first search for an element id, returning its index path."]
-fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<u32>) -> Option<Vec<u32>> {
+fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<usize>) -> Option<Vec<usize>> {
     for (i, child) in group.children().iter().enumerate() {
-        prefix.push(i as u32);
+        prefix.push(i);
         if child.id() == id {
             return Some(prefix.clone());
         }
@@ -3782,7 +3786,10 @@ pub struct PathSegment {
 fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
     let seg = |kind: &str, pts: &[tiny_skia::Point]| PathSegment {
         r#type: kind.to_string(),
-        points: pts.iter().flat_map(|p| [p.x as f64, p.y as f64]).collect(),
+        points: pts
+            .iter()
+            .flat_map(|p| [f64::from(p.x), f64::from(p.y)])
+            .collect(),
     };
     p.segments()
         .map(|s| match s {
@@ -3806,7 +3813,7 @@ pub struct SvgNode {
     #[doc = " no document context, so the def tables are out of reach from it."]
     tree: Option<std::sync::Arc<usvg::Tree>>,
     base: NodeBase,
-    path: Vec<u32>,
+    path: Vec<usize>,
     #[doc = " The owning document's log, so `renderPng` lands in its `takeLogs`."]
     logs: Logs,
 }
@@ -3817,7 +3824,7 @@ impl SvgNode {
     }
     fn child(&self, i: usize) -> Self {
         let mut path = self.path.clone();
-        path.push(i as u32);
+        path.push(i);
         Self {
             tree: self.tree.clone(),
             base: self.base.clone(),
@@ -4108,11 +4115,11 @@ impl Resvg {
     }
     #[napi(getter)]
     pub fn width(&self) -> f64 {
-        self.tree.size().width() as f64
+        self.tree.size().width().into()
     }
     #[napi(getter)]
     pub fn height(&self) -> f64 {
-        self.tree.size().height() as f64
+        self.tree.size().height().into()
     }
     #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
     #[doc = " on a worker thread."]
@@ -4190,7 +4197,7 @@ impl Resvg {
             .map(|i| SvgNode {
                 tree: Some(self.tree.clone()),
                 base: NodeBase::Tree(self.tree.clone()),
-                path: vec![i as u32],
+                path: vec![i],
                 logs: self.logs.clone(),
             })
             .collect()
@@ -4302,7 +4309,7 @@ impl Resvg {
     #[doc = " it with a parent group using the specified opacity."]
     #[napi]
     pub fn opacity(&self) -> f64 {
-        self.tree.root().opacity().get() as f64
+        f64::from(self.tree.root().opacity().get())
     }
     #[doc = " Group blend mode."]
     #[doc = ""]
@@ -4449,7 +4456,7 @@ fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
 fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     let size = tree.size();
     let (base_w, base_h, off_x, off_y) = match &p.crop {
-        Some(c) => (c.width as f32, c.height as f32, c.x as f32, c.y as f32),
+        Some(c) => (to_f32(c.width), to_f32(c.height), to_f32(c.x), to_f32(c.y)),
         None => (size.width(), size.height(), 0.0, 0.0),
     };
     if !(base_w > 0.0 && base_h > 0.0) {
@@ -4470,13 +4477,22 @@ fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     })?;
     Ok(pixmap)
 }
+fn to_f32(v: f64) -> f32 {
+    v as f32
+}
+fn to_px(v: f64) -> u32 {
+    (v as u32).max(1)
+}
+fn ratio(px: u32, base: f32) -> f32 {
+    to_f32(f64::from(px)) / base
+}
 #[doc = " Size, scale and background of one render pass, shared by `draw`"]
 #[doc = " and `render_node_png`."]
 fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
     let px = |v: Option<f64>, name: &str| -> Result<Option<u32>> {
         match v.map(f64::round) {
             None => Ok(None),
-            Some(v) if (1.0..=u32::MAX as f64).contains(&v) => Ok(Some(v as u32)),
+            Some(v) if (1.0..=f64::from(u32::MAX)).contains(&v) => Ok(Some(to_px(v))),
             Some(_) => Err(Error::from_reason(format!(
                 "invalid {name}: {}",
                 v.unwrap_or_default()
@@ -4485,27 +4501,27 @@ fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia:
     };
     let (width, height) = (px(p.width, "width")?, px(p.height, "height")?);
     let (scale, w, h) = if let Some(w) = width {
-        let h = (base_h as f64 * w as f64 / base_w as f64).ceil();
-        (w as f32 / base_w, w, (h as u32).max(1))
+        let h = (f64::from(base_h) * f64::from(w) / f64::from(base_w)).ceil();
+        (ratio(w, base_w), w, to_px(h))
     } else if let Some(h) = height {
-        let w = (base_w as f64 * h as f64 / base_h as f64).ceil();
-        (h as f32 / base_h, (w as u32).max(1), h)
+        let w = (f64::from(base_w) * f64::from(h) / f64::from(base_h)).ceil();
+        (ratio(h, base_h), to_px(w), h)
     } else {
         let s = p.scale.unwrap_or(1.0);
         (
-            s as f32,
-            ((base_w as f64 * s).ceil() as u32).max(1),
-            ((base_h as f64 * s).ceil() as u32).max(1),
+            to_f32(s),
+            to_px((f64::from(base_w) * s).ceil()),
+            to_px((f64::from(base_h) * s).ceil()),
         )
     };
     if !(scale.is_finite() && scale > 0.0) {
         return Err(Error::from_reason(format!("invalid scale: {scale}")));
     }
-    let max = p.max_pixels.unwrap_or((1u64 << 28) as f64);
+    let max = p.max_pixels.unwrap_or(268_435_456.0);
     if !(max.is_finite() && max > 0.0) {
         return Err(Error::from_reason(format!("invalid maxPixels: {max}")));
     }
-    if w as f64 * h as f64 > max {
+    if f64::from(w) * f64::from(h) > max {
         return Err(Error::from_reason(format!(
             "{w}x{h} exceeds maxPixels ({max})"
         )));

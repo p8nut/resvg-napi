@@ -62,6 +62,15 @@ assert.match(doc.toString({ useSingleQuote: true }), /<svg width='60'/);
 assert.match(doc.toString({ transformsPrecision: 2 }), /matrix\(58 0 0 28 1\.23 0\)/);
 assert.match(doc.toString({ transformsPrecision: 8 }), /matrix\(58 0 0 28 1\.2345679 0\)/);
 
+// 7b. indentation, xmlwriter's `Indent`: spaces, tabs or none
+assert.match(doc.toString(), /\n    <defs>/, 'default: four spaces');
+assert.match(doc.toString({ indent: 2 }), /\n  <defs>/);
+assert.match(doc.toString({ indent: 'tabs' }), /\n\t<defs>/);
+assert.ok(!doc.toString({ indent: 'none' }).includes('\n'), 'none: a single line');
+assert.match(doc.toString({ attributesIndent: 'tabs' }), /<svg\n\twidth=/);
+assert.throws(() => doc.toString({ indent: 256 }), /invalid indent: 256/);
+assert.throws(() => doc.toString({ attributesIndent: 'wide' }), /invalid attributesIndent: "wide"/);
+
 // 8. precision is clamped to usvg's POW_VEC bound (12): no wrap, no panic.
 //    Unclamped, 255 indexes a 13-entry table out of bounds and aborts the process.
 assert.equal(doc.toString({ transformsPrecision: 300 }), doc.toString({ transformsPrecision: 12 }));

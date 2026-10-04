@@ -78,6 +78,11 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
 
   // the rest of the node reads back too
   assert.equal(img.renderingMode, 'optimizeQuality');
+
+  // `size` is the encoded image's own, not the element's width/height
+  const wide = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20"/></svg>').renderPng({ width: 40 });
+  const shown = new Resvg(doc(`data:image/png;base64,${wide.toString('base64')}`));
+  assert.deepEqual({ ...shown.children()[0].children()[0].image().size }, { width: 40, height: 40 });
   assert.deepEqual(
     [img.boundingBox.width, img.boundingBox.height],
     [20, 20],

@@ -439,9 +439,16 @@ pub fn map_struct(
             continue;
         }
 
-        // --- not transposable as data. Two of them are wired by the emitter
-        // template instead (opaque class / href hook); the rest is dropped.
-        const HANDLED: [&str; 3] = ["fontdb", "image_href_resolver", "font_resolver"];
+        // --- not transposable as data. These are wired by the emitter
+        // template instead (opaque class, resolver hooks, xmlwriter's
+        // `Indent`); the rest is dropped.
+        const HANDLED: [&str; 5] = [
+            "fontdb",
+            "image_href_resolver",
+            "font_resolver",
+            "indent",
+            "attributes_indent",
+        ];
         if HANDLED.contains(&name.as_str()) {
             skipped.push(format!("{name}: {ty} (handled manually by the template)"));
         } else {
@@ -624,6 +631,7 @@ pub fn data_members(
             Some(Js::Scalar) => (quote!(f64), quote!(f64::from(#access.get()))),
             Some(Js::IntNewtype(_)) => (quote!(u32), quote!(u32::from(#access.0))),
             Some(Js::Bbox) => (quote!(BBox), quote!(BBox::from(#access))),
+            Some(Js::Size) => (quote!(Dimensions), quote!(Dimensions::from(#access))),
             Some(Js::Matrix) => (quote!(Matrix), quote!(Matrix::from(#access))),
             Some(Js::F32List) => (
                 quote!(Vec<f64>),
@@ -651,6 +659,15 @@ pub fn data_members(
                     quote!(Option<#c>),
                     quote!(#access.map(|x| #c::wrap(x.clone()))),
                 )
+            }
+            // `Image` was a read-only class only because `size` did not map;
+            // mapping it promoted Image to an object holding `ImageKind`, whose
+            // byte variants are classes. Say so instead of relying on luck.
+            Some(Js::PayloadEnum(t)) | Some(Js::PayloadEnumList(t))
+                if !nested_values && vocab.payload[&t].holds_class(vocab) =>
+            {
+                skipped.push(format!("{name}: {ty_s} (a union with class variants)"));
+                return;
             }
             Some(Js::PayloadEnumList(t)) => {
                 let info = &vocab.payload[&t];

@@ -75,6 +75,7 @@ const n = doc.node('surname')
 n.kind           // 'group' | 'path' | 'image' | 'text'
 n.path()         // geometry, fill, stroke — null unless it is a shape
 n.text()         // chunks, layouted spans, positioned glyphs, decoration
+n.flattenedChildren() // that text's glyphs, as the path nodes renderPng draws
 n.renderPng()    // that element alone, cropped to its own extent
 n.opacity()      // a group's own: transform, blendMode, isolate, filters… — null otherwise
 ```

@@ -1292,9 +1292,17 @@ pub struct WriteOptions {
     #[doc = ""]
     #[doc = " Default: disabled"]
     pub use_single_quote: Option<bool>,
+    #[doc = " Indentation of nested elements: a number of spaces (0-255),"]
+    #[doc = " `'tabs'`, or `'none'` for everything on one line. Default: 4."]
+    #[napi(ts_type = "number | 'tabs' | 'none'")]
+    pub indent: Option<Either<u32, String>>,
+    #[doc = " Indentation of attributes, which then go one per line. Same"]
+    #[doc = " values as `indent`. Default: `'none'`, on the element's line."]
+    #[napi(ts_type = "number | 'tabs' | 'none'")]
+    pub attributes_indent: Option<Either<u32, String>>,
 }
 impl WriteOptions {
-    fn to_usvg(&self) -> usvg::WriteOptions {
+    fn to_usvg(&self) -> Result<usvg::WriteOptions> {
         let mut o = usvg::WriteOptions::default();
         o.id_prefix = self.id_prefix.clone();
         if let Some(v) = self.preserve_text {
@@ -1309,7 +1317,31 @@ impl WriteOptions {
         if let Some(v) = self.use_single_quote {
             o.use_single_quote = v;
         }
-        o
+        o.indent = indent(&self.indent, o.indent, "indent")?;
+        o.attributes_indent = indent(
+            &self.attributes_indent,
+            o.attributes_indent,
+            "attributesIndent",
+        )?;
+        Ok(o)
+    }
+}
+#[doc = " `usvg::Indent` is xmlwriter's, a crate the generator does not read."]
+fn indent(
+    v: &Option<Either<u32, String>>,
+    fallback: usvg::Indent,
+    name: &str,
+) -> Result<usvg::Indent> {
+    match v {
+        None => Ok(fallback),
+        Some(Either::A(n)) => u8::try_from(*n)
+            .map(usvg::Indent::Spaces)
+            .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+        Some(Either::B(s)) => match s.as_str() {
+            "tabs" => Ok(usvg::Indent::Tabs),
+            "none" => Ok(usvg::Indent::None),
+            _ => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+        },
     }
 }
 #[doc = " Output size / scaling of one render pass."]
@@ -1850,6 +1882,11 @@ impl Image {
     pub fn is_visible(&self) -> bool {
         let v = &self.inner;
         v.is_visible()
+    }
+    #[napi(getter)]
+    pub fn size(&self) -> Dimensions {
+        let v = &self.inner;
+        Dimensions::from(v.size())
     }
     #[napi(getter)]
     pub fn rendering_mode(&self) -> ImageRendering {
@@ -4403,7 +4440,7 @@ impl Resvg {
     }
     #[doc = " Serialising a large tree is not free; this is the half a twin runs."]
     fn svg_text(&self, options: Option<WriteOptions>) -> Result<String> {
-        let opt = options.unwrap_or_default().to_usvg();
+        let opt = options.unwrap_or_default().to_usvg()?;
         let tree = &self.tree;
         self.logs
             .scope(|| contained("usvg's SVG writer", || usvg::Tree::to_string(tree, &opt)))

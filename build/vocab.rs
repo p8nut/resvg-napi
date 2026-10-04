@@ -118,6 +118,15 @@ pub struct PayloadEnum {
 }
 
 impl PayloadEnum {
+    /// Whether a variant is emitted as a class (bytes, see `payload_enum_code`).
+    /// A class is not `Clone`, so no `#[napi(object)]` field can hold the
+    /// union: its holder has to stay a read-only class.
+    pub fn holds_class(&self, vocab: &Vocab) -> bool {
+        self.variants.iter().any(|(_, p)| {
+            matches!(p, Payload::Value(ty) if matches!(vocab.classify(ty), Some(Js::Bytes)))
+        })
+    }
+
     /// `Kind` -> `KindBlend`, the struct for one payload variant.
     pub fn variant_ident(&self, enum_name: &str, variant: &str) -> proc_macro2::Ident {
         // `SVG` becomes `Svg`, because napi normalises a type name to PascalCase

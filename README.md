@@ -56,6 +56,7 @@ print or PDF pipeline needs from a template:
 const doc = new Resvg(svg, { fontFamily: 'DejaVu Sans' }, fonts)
 doc.toString()                        // one <path> per glyph, no <text>
 doc.toString({ preserveText: true })  // <text> kept, resolved but not outlined
+doc.toString({ indent: 'none' })      // one line; also a number of spaces, or 'tabs'
 ```
 
 The outlines come from the same layout `renderPng` draws, so a glyph sits where

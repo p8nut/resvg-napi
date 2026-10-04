@@ -180,6 +180,7 @@ export declare class FontFace {
 export declare class Image {
   get id(): String
   get isVisible(): boolean
+  get size(): Dimensions
   get renderingMode(): ImageRendering
   get kind(): ImageKindJpeg | ImageKindPng | ImageKindGif | ImageKindWebp | ImageKindSvg
   get absTransform(): Matrix
@@ -1632,6 +1633,16 @@ export interface WriteOptions {
    * Default: disabled
    */
   useSingleQuote?: boolean
+  /**
+   * Indentation of nested elements: a number of spaces (0-255),
+   * `'tabs'`, or `'none'` for everything on one line. Default: 4.
+   */
+  indent?: number | 'tabs' | 'none'
+  /**
+   * Indentation of attributes, which then go one per line. Same
+   * values as `indent`. Default: `'none'`, on the element's line.
+   */
+  attributesIndent?: number | 'tabs' | 'none'
 }
 
 /** A writing mode. */

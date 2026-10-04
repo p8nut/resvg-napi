@@ -81,6 +81,17 @@ export declare class FontDatabase {
    * the PostScript name and the bytes are copied out.
    */
   faceData(postScriptName: string): Buffer | null
+  /**
+   * The name a family resolves to: a generic keyword (`serif`,
+   * `sans-serif`, `cursive`, `fantasy`, `monospace`) becomes the family
+   * this database maps it to, any other name comes back as is.
+   */
+  familyName(family: string): string
+  /**
+   * Where a face was loaded from, and its index in that file or
+   * buffer. `null` for a face this database does not hold.
+   */
+  faceSource(face: FontFace): FaceSource | null
   constructor()
   /**
    * Loads a font data into the `Database`.
@@ -914,6 +925,19 @@ export interface DropShadow {
 
 /** An edges processing mode. */
 export type EdgeMode = 'none' | 'duplicate' | 'wrap'
+
+/**
+ * `fontdb::Source` with the face index `faceSource` pairs it with.
+ * The bytes of a `binary` or `sharedFile` source are not copied
+ * here; `faceData` reads them.
+ */
+export interface FaceSource {
+  kind: 'binary' | 'file' | 'sharedFile'
+  /** The file, for `file` and `sharedFile`. */
+  path?: string
+  /** Index of the face in a collection (`.ttc`), 0 otherwise. */
+  index: number
+}
 
 /** Plain view of a `Fill`. */
 export interface Fill {

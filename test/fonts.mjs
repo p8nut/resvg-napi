@@ -177,4 +177,41 @@ assert.equal(glyphs[0].font.postScriptName, used.postScriptName);
   assert.equal(doc.fontdb().len(), before, 'nor the document');
 }
 
+// familyName: a generic keyword resolves to the family the database maps it
+// to, any other name comes back unchanged
+{
+  const fresh = new FontDatabase();
+  for (const generic of ['serif', 'sans-serif', 'cursive', 'fantasy', 'monospace']) {
+    const name = fresh.familyName(generic);
+    assert.ok(name.length > 0 && name !== generic, `${generic} -> ${name}`);
+  }
+  assert.equal(fresh.familyName('My Font'), 'My Font');
+}
+
+// faceSource: where a face came from, and its index in that file
+{
+  const file = testFontFile();
+  if (file) {
+    const fromData = new FontDatabase();
+    fromData.loadFontData(readFileSync(file));
+    const face = fromData.faces()[0];
+    assert.deepEqual({ ...fromData.faceSource(face) }, { kind: 'binary', index: face.index });
+    assert.equal(new FontDatabase().faceSource(face), null, 'not a face of an empty database');
+
+    // WASI has no filesystem for fontdb to open
+    let fromFile = null;
+    try {
+      fromFile = new FontDatabase();
+      fromFile.loadFontFile(file);
+    } catch {
+      fromFile = null;
+    }
+    if (fromFile) {
+      const src = fromFile.faceSource(fromFile.faces()[0]);
+      assert.ok(['file', 'sharedFile'].includes(src.kind), src.kind);
+      assert.equal(src.path, file);
+    }
+  }
+}
+
 console.log('ok — font resolution: all checks passed');

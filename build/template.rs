@@ -298,17 +298,8 @@ pub fn template(
                 weight: Option<u32>,
                 italic: Option<bool>,
             ) -> Option<FontFace> {
-                let names: Vec<usvg::fontdb::Family> = families
-                    .iter()
-                    .map(|f| match f.as_str() {
-                        "serif" => usvg::fontdb::Family::Serif,
-                        "sans-serif" => usvg::fontdb::Family::SansSerif,
-                        "cursive" => usvg::fontdb::Family::Cursive,
-                        "fantasy" => usvg::fontdb::Family::Fantasy,
-                        "monospace" => usvg::fontdb::Family::Monospace,
-                        other => usvg::fontdb::Family::Name(other),
-                    })
-                    .collect();
+                let names: Vec<usvg::fontdb::Family> =
+                    families.iter().map(|f| family_of(f)).collect();
                 let query = usvg::fontdb::Query {
                     families: &names,
                     // CSS weights are 1..=1000; `as u16` turned 70000 into 4464.
@@ -343,11 +334,62 @@ pub fn template(
                     .with_face_data(id, |data, _index| Buffer::from(data.to_vec()))
             }
 
+            #[doc = " The name a family resolves to: a generic keyword (`serif`,"]
+            #[doc = " `sans-serif`, `cursive`, `fantasy`, `monospace`) becomes the family"]
+            #[doc = " this database maps it to, any other name comes back as is."]
+            #[napi]
+            pub fn family_name(&self, family: String) -> String {
+                self.inner.family_name(&family_of(&family)).to_string()
+            }
+
+            #[doc = " Where a face was loaded from, and its index in that file or"]
+            #[doc = " buffer. `null` for a face this database does not hold."]
+            #[napi]
+            pub fn face_source(&self, face: &FontFace) -> Option<FaceSource> {
+                let (source, index) = self.inner.face_source(face.id_in(&self.inner))?;
+                let (kind, path) = match source {
+                    usvg::fontdb::Source::Binary(_) => ("binary", None),
+                    usvg::fontdb::Source::File(path) => ("file", Some(path)),
+                    usvg::fontdb::Source::SharedFile(path, _) => ("sharedFile", Some(path)),
+                };
+                Some(FaceSource {
+                    kind: kind.to_string(),
+                    path: path.map(|p| p.to_string_lossy().into_owned()),
+                    index,
+                })
+            }
+
             #[napi(constructor)]
             pub fn new() -> Self {
                 Self { inner: SharedDb(std::sync::Arc::new(usvg::fontdb::Database::new())) }
             }
             #fontdb_methods
+        }
+
+        #[doc = " A CSS family name as fontdb reads it: the five generic keywords,"]
+        #[doc = " or a family name."]
+        fn family_of(name: &str) -> usvg::fontdb::Family<'_> {
+            match name {
+                "serif" => usvg::fontdb::Family::Serif,
+                "sans-serif" => usvg::fontdb::Family::SansSerif,
+                "cursive" => usvg::fontdb::Family::Cursive,
+                "fantasy" => usvg::fontdb::Family::Fantasy,
+                "monospace" => usvg::fontdb::Family::Monospace,
+                other => usvg::fontdb::Family::Name(other),
+            }
+        }
+
+        #[doc = " `fontdb::Source` with the face index `faceSource` pairs it with."]
+        #[doc = " The bytes of a `binary` or `sharedFile` source are not copied"]
+        #[doc = " here; `faceData` reads them."]
+        #[napi(object)]
+        pub struct FaceSource {
+            #[napi(ts_type = "'binary' | 'file' | 'sharedFile'")]
+            pub kind: String,
+            #[doc = " The file, for `file` and `sharedFile`."]
+            pub path: Option<String>,
+            #[doc = " Index of the face in a collection (`.ttc`), 0 otherwise."]
+            pub index: u32,
         }
 
         #[doc = " Mirror of `usvg::WriteOptions`, for `Resvg.toString()`. Every field is"]

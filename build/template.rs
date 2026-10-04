@@ -741,6 +741,8 @@ pub fn template(
             tree: Option<std::sync::Arc<usvg::Tree>>,
             base: NodeBase,
             path: Vec<u32>,
+            #[doc = " The owning document's log, so `renderPng` lands in its `takeLogs`."]
+            logs: Logs,
         }
 
         impl SvgNode {
@@ -752,7 +754,7 @@ pub fn template(
             fn child(&self, i: usize) -> Self {
                 let mut path = self.path.clone();
                 path.push(i as u32);
-                Self { tree: self.tree.clone(), base: self.base.clone(), path }
+                Self { tree: self.tree.clone(), base: self.base.clone(), path, logs: self.logs.clone() }
             }
         }
 
@@ -890,7 +892,8 @@ pub fn template(
             #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
             #[async_twin(render_png_async, Buffer)]
             fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
-                render_node_png(self.node()?, &params.unwrap_or_default())
+                let node = self.node()?;
+                self.logs.scope(|| render_node_png(node, &params.unwrap_or_default()))
             }
 
             #[doc = " Renders this element alone, sized to its own extent."]
@@ -1112,6 +1115,7 @@ pub fn template(
                     tree: Some(self.tree.clone()),
                     base: NodeBase::Tree(self.tree.clone()),
                     path,
+                    logs: self.logs.clone(),
                 })
             }
 
@@ -1123,6 +1127,7 @@ pub fn template(
                         tree: Some(self.tree.clone()),
                         base: NodeBase::Tree(self.tree.clone()),
                         path: vec![i as u32],
+                        logs: self.logs.clone(),
                     })
                     .collect()
             }
@@ -1146,10 +1151,7 @@ pub fn template(
                 // Numbers come from JS and the writer indexes a few tables
                 // unchecked; an unwind reaching the extern "C" frame would abort
                 // the process, so stop it here.
-                self.logs.scope(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    usvg::Tree::to_string(tree, &opt)
-                })))
-                .map_err(|_| Error::from_reason("usvg panicked while writing the SVG"))
+                self.logs.scope(|| contained("usvg's SVG writer", || usvg::Tree::to_string(tree, &opt)))
             }
 
             #[doc = " Rasterise only: width, height and the demultiplied pixels, all Send."]
@@ -1184,7 +1186,7 @@ pub fn template(
                         options.resources_root.as_ref().map(std::path::PathBuf::from),
                     );
                 opts.font_resolver = font_resolver(missing_fonts.clone());
-                let tree = usvg::Tree::from_data(svg, &opts)
+                let tree = contained("usvg", || usvg::Tree::from_data(svg, &opts))?
                     .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
                 Ok((
                     tree,
@@ -1196,6 +1198,14 @@ pub fn template(
             fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
                 self.logs.scope(|| draw(&self.tree, &p))
             }
+        }
+
+        #[doc = " Runs a call into usvg/resvg, turning a panic into a JS error. An"]
+        #[doc = " unwind reaching napi's extern \"C\" frame aborts the whole process,"]
+        #[doc = " and these are the paths an untrusted document drives."]
+        fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+                .map_err(|_| Error::from_reason(format!("{what} panicked")))
         }
 
         fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
@@ -1218,12 +1228,12 @@ pub fn template(
                     )));
                 }
                 let (scale, mut pixmap) = canvas(base_w, base_h, p)?;
-                resvg::render(
+                contained("resvg", || resvg::render(
                     tree,
                     tiny_skia::Transform::from_scale(scale, scale)
                         .pre_translate(-off_x, -off_y),
                     &mut pixmap.as_mut(),
-                );
+                ))?;
                 Ok(pixmap)
         }
 
@@ -1302,14 +1312,14 @@ pub fn template(
                     .abs_layer_bounding_box()
                     .ok_or_else(|| Error::from_reason("element is empty"))?;
                 let (scale, mut pixmap) = canvas(bbox.width(), bbox.height(), p)?;
-                resvg::render_node(
+                contained("resvg", || resvg::render_node(
                     node,
                     tiny_skia::Transform::from_scale(scale, scale)
                         .pre_translate(-bbox.x(), -bbox.y())
                         .pre_concat(node.abs_transform())
                         .pre_translate(inner.x(), inner.y()),
                     &mut pixmap.as_mut(),
-                )
+                ))?
                 .ok_or_else(|| Error::from_reason("element is empty"))?;
                 pixmap
                     .encode_png()

@@ -818,6 +818,7 @@ module.exports.MaskType = nativeBinding.MaskType
 module.exports.MorphologyOperator = nativeBinding.MorphologyOperator
 module.exports.NodeKind = nativeBinding.NodeKind
 module.exports.PaintOrder = nativeBinding.PaintOrder
+module.exports.ParseErrorCode = nativeBinding.ParseErrorCode
 module.exports.renderAsync = nativeBinding.renderAsync
 module.exports.setLogLevel = nativeBinding.setLogLevel
 module.exports.ShapeRendering = nativeBinding.ShapeRendering

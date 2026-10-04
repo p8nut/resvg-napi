@@ -1332,6 +1332,9 @@ export interface PaintRadialGradient {
   id: string
 }
 
+/** usvg's own name for a parse failure, carried as `error.code`. */
+export type ParseErrorCode = 'NotAnUtf8Str' | 'SvgzFeatureNotEnabled' | 'MalformedGZip' | 'ElementsLimitReached' | 'InvalidSize' | 'ParsingFailed'
+
 /** Plain view of a `Path`. */
 export interface Path {
   id: String

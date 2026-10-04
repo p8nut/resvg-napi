@@ -64,6 +64,7 @@ usvg::Group method covered by the template, not generated: clip_path (returns Op
 usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)
 usvg::Mask method covered by the content view: root (returns &Group)
 usvg::Mask method covered by the template: mask (returns Option<&Mask>)
+usvg::Node method covered by clipPath / mask / filters / imageChildren / paint ids: subroots (arg: F)
 usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
 usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
 usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)

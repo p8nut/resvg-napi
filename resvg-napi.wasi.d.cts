@@ -635,6 +635,12 @@ export declare class SvgNode {
    */
   text(): Text | null
   /**
+   * A text node's glyphs as paths: the children of usvg's
+   * `Text::flattened()`, the outlines `renderPng` draws. Null for
+   * anything that is not text.
+   */
+  flattenedChildren(): Array<SvgNode> | null
+  /**
    * The shape of a path node: geometry, fill, stroke, paint order.
    * Null for a group, an image or a text node.
    *

@@ -4030,6 +4030,8 @@ enum NodeBase {
     Def(std::sync::Arc<dyn HasRoot>),
     #[doc = " The `feImage` primitive at this index of the filter."]
     FeImage(std::sync::Arc<usvg::filter::Filter>, usize),
+    #[doc = " The flattened outlines of the text node at this path."]
+    TextFlat(Box<NodeBase>, Vec<usize>),
 }
 impl NodeBase {
     fn group(&self) -> Option<&usvg::Group> {
@@ -4038,6 +4040,10 @@ impl NodeBase {
             NodeBase::Def(d) => Some(d.group()),
             NodeBase::FeImage(f, i) => match f.primitives().get(*i)?.kind() {
                 usvg::filter::Kind::Image(image) => Some(image.root()),
+                _ => None,
+            },
+            NodeBase::TextFlat(base, path) => match node_at(base.group()?, path)? {
+                usvg::Node::Text(text) => Some(text.flattened()),
                 _ => None,
             },
         }
@@ -4158,6 +4164,25 @@ impl SvgNode {
             usvg::Node::Text(t) => Some(Text::wrap((**t).clone(), self.doc())),
             _ => None,
         })
+    }
+    #[doc = " A text node's glyphs as paths: the children of usvg's"]
+    #[doc = " `Text::flattened()`, the outlines `renderPng` draws. Null for"]
+    #[doc = " anything that is not text."]
+    #[napi]
+    pub fn flattened_children(&self) -> Result<Option<Vec<SvgNode>>> {
+        let usvg::Node::Text(text) = self.node()? else {
+            return Ok(None);
+        };
+        let base = NodeBase::TextFlat(Box::new(self.base.clone()), self.path.clone());
+        Ok(Some(
+            (0..text.flattened().children().len())
+                .map(|i| SvgNode {
+                    doc: self.doc(),
+                    base: base.clone(),
+                    path: vec![i],
+                })
+                .collect(),
+        ))
     }
     #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
     #[doc = " Null for a group, an image or a text node."]

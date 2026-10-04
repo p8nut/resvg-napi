@@ -119,4 +119,18 @@ assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
   assert.equal(text('one').layouted[0].underline, null, 'and null when the span has none');
 }
 
+// the glyphs as the paths renderPng draws: reachable as nodes, still filled
+// with the text's own paint, and null on anything that is not text
+{
+  const flat = doc.node('one').flattenedChildren();
+  assert.ok(flat.length > 0);
+  const shapes = flat.flatMap(function leaves(n) {
+    return n.kind === 'group' ? n.children().flatMap(leaves) : [n];
+  });
+  assert.ok(shapes.every((n) => n.kind === 'path' && n.path().data.length > 0));
+  assert.equal(shapes[0].path().fill.paint.type, 'color');
+  assert.ok(flat[0].renderPng().length > 0);
+  assert.equal(doc.node('notext').flattenedChildren(), null);
+}
+
 console.log('ok — text content: all checks passed');

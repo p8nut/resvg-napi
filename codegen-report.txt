@@ -23,10 +23,10 @@ data type SvgNode skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
 fontdb::Database method covered by the template as `face_data`: with_face_data (arg: P)
+fontdb::Database method covered by the template, not generated: face_source (returns Option<(Source,u32)>)
+fontdb::Database method covered by the template, not generated: family_name (arg: &'aFamily)
 fontdb::Database method covered by the template, not generated: new (no receiver)
 fontdb::Database method covered by the template, not generated: query (arg: &Query)
-fontdb::Database method not exposed: face_source (returns Option<(Source,u32)>)
-fontdb::Database method not exposed: family_name (arg: &'aFamily)
 fontdb::Database method not exposed: load_font_source (arg: Source)
 fontdb::Database method not exposed: make_shared_face_data (returns Option<(std::sync::Arc<dynAsRef<[u8]>+Send+Sync>,u32)>)
 fontdb::Database method not exposed: push_face_info (arg: FaceInfo)

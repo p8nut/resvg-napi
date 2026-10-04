@@ -99,7 +99,8 @@ that distinction bites.
 ## Fonts
 
 `FontDatabase` is `fontdb` itself: `loadSystemFonts()`, `loadFontData(buffer)`,
-`loadFontFile(path)`, `faces()`, `query()`, and the generic-family setters. A
+`loadFontFile(path)`, `faces()`, `query()`, `familyName()`, `faceSource(face)`,
+and the generic-family setters. A
 face reports its `families`, `weight`, `style` (`'normal' | 'italic' |
 'oblique'`) and whether it is `monospaced`. `pendingFonts()` on a parsed document
 names the families it wanted and did not get; `pendingImages()` does the same for

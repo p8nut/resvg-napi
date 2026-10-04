@@ -592,6 +592,10 @@ fn main() {
         );
         object_parts.insert(t.clone(), code);
     }
+    // (class, member, label, detail) for everything the generator left out,
+    // reported once the template's own methods are known: a member it adds by
+    // hand is covered, not missing.
+    let mut unexposed: Vec<(String, String, String, String)> = Vec::new();
     for t in &vocab.values {
         // The dropped list is the *class's* own: a getter maps members an
         // object field cannot, so reporting the object probe's list here would
@@ -603,7 +607,8 @@ fn main() {
             data_ident(t)
         );
         for d in dropped {
-            report!("{t} member not exposed: {d}");
+            let member = d.split(':').next().unwrap_or_default().to_string();
+            unexposed.push((data_ident(t).to_string(), member, format!("{t} member"), d));
         }
     }
 
@@ -677,12 +682,17 @@ fn main() {
         }
         for s in skipped {
             // `root()` is served by the generated `children()` view above.
-            let verb = if s.starts_with("root ") {
-                "covered by the content view"
+            if s.starts_with("root ") {
+                report!("{}::{t} method covered by the content view: {s}", src.label);
             } else {
-                "not exposed"
-            };
-            report!("{}::{t} method {verb}: {s}", src.label);
+                let method = s.split(' ').next().unwrap_or_default().to_string();
+                unexposed.push((
+                    name.clone(),
+                    method,
+                    format!("{}::{t} method", src.label),
+                    s,
+                ));
+            }
         }
         todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
     }
@@ -908,6 +918,16 @@ fn main() {
     let empty = TokenStream::new();
     let hand = template_fns(&template(&fragments, &empty, &empty, &empty, &empty));
     let defined: BTreeSet<&String> = hand.values().flatten().collect();
+    // Members the generator left out of a class, unless the template adds
+    // them to that same class by hand.
+    for (class, member, label, s) in &unexposed {
+        let verb = if hand.get(class).is_some_and(|fns| fns.contains(member)) {
+            "covered by the template"
+        } else {
+            "not exposed"
+        };
+        report!("{label} {verb}: {s}");
+    }
     for (from, to) in RENAMED {
         assert!(
             defined.iter().any(|n| n.as_str() == *to),

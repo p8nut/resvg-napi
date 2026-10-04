@@ -26,6 +26,11 @@ export declare class ClipPath {
   transform(): Matrix
   /** Children of this definition's content group. */
   children(): Array<SvgNode>
+  /**
+   * The clip path applied to this clip path's own content, if any.
+   * `null` too when the handle came from no document.
+   */
+  clipPath(): ClipPath | null
 }
 
 /** Read-only handle on a `usvg::filter::Filter`. */
@@ -281,6 +286,11 @@ export declare class Mask {
   kind(): MaskType
   /** Children of this definition's content group. */
   children(): Array<SvgNode>
+  /**
+   * The mask applied to this mask's own content, if any. `null` too
+   * when the handle came from no document.
+   */
+  mask(): Mask | null
 }
 
 /** Read-only handle on a `usvg::Pattern`. */
@@ -317,6 +327,11 @@ export declare class PositionedGlyph {
   get colrTransform(): Matrix
   get id(): number
   get text(): String
+  /**
+   * The face that drew this glyph, from the database its document
+   * was parsed with. `null` for a glyph that came from no document.
+   */
+  get font(): FontFace | null
 }
 
 /** Read-only handle on a `usvg::RadialGradient`. */
@@ -385,12 +400,10 @@ export declare class Resvg {
    * document-wide list cannot answer. A fallback that renders is the
    * failure nobody sees.
    *
-   * The lookup lives here rather than on `FontDatabase` because
-   * `PositionedGlyph.font` is a `fontdb::ID` -- a slotmap key with no
-   * public numeric form, and meaningless against any other database.
-   * Pass a glyph of this document: the glyph carries only the key,
-   * so one from another document may name a face of this one rather
-   * than come back `null`.
+   * Same answer as `glyph.font`, plus a provenance check: a glyph laid
+   * out against another database comes back `null`. A `fontdb::ID` is
+   * a slotmap key, meaningless outside the database that issued it,
+   * and read against this one it could name an unrelated face.
    */
   faceOf(glyph: PositionedGlyph): FontFace | null
   /**
@@ -634,11 +647,10 @@ export declare class SvgNode {
    * Clip path applied to this element, if it is a clipped group.
    *
    * usvg hands out a bare `&ClipPath` here, with no `Arc` to hold on to,
-   * so it is matched by `id` against the document's clip-path table.
-   * Returns `null` for an unnamed clip path.
+   * so it is found in the document's clip-path table by identity.
    */
   clipPath(): ClipPath | null
-  /** Mask applied to this element, matched by `id` like `clipPath`. */
+  /** Mask applied to this element, found like `clipPath`. */
   mask(): Mask | null
   /** Renders this element alone, sized to its own extent. */
   renderPng(params?: RenderParams | undefined | null): Buffer

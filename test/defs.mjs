@@ -93,7 +93,33 @@ const pat = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height
 const inside = pat.children();
 assert.deepEqual(inside.map((n) => [n.kind, n.id()]), [['path', 'dot'], ['path', 'bar']]);
 assert.deepEqual(Object.values(inside[0].absBoundingBox()), [2, 2, 6, 6]);
-assert.equal(inside[0].clipPath(), null, 'no document context through a def');
+assert.equal(inside[0].clipPath(), null, 'the dot is not clipped');
+
+// 6b. a node reached through a def keeps its document, so the def tables
+//     resolve from it too; and a def applied to a def resolves through it
+{
+  const nested = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+    <defs>
+      <clipPath id="inner"><rect width="20" height="20"/></clipPath>
+      <clipPath id="outer" clip-path="url(#inner)"><rect width="30" height="30"/></clipPath>
+      <mask id="m2"><rect width="40" height="40" fill="white"/></mask>
+      <mask id="m1" mask="url(#m2)"><rect width="40" height="40" fill="white"/></mask>
+      <pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">
+        <g clip-path="url(#inner)"><circle cx="5" cy="5" r="3"/></g>
+      </pattern>
+    </defs>
+    <rect width="40" height="40" clip-path="url(#outer)" mask="url(#m1)"/>
+    <rect width="40" height="40" fill="url(#p)"/>
+  </svg>`);
+  const outer = nested.clipPaths().find((c) => c.id() === 'outer');
+  assert.equal(outer.clipPath()?.id(), 'inner', 'clip path of a clip path');
+  assert.equal(outer.clipPath().clipPath(), null, 'and the chain ends');
+  const m1 = nested.masks().find((m) => m.id() === 'm1');
+  assert.equal(m1.mask()?.id(), 'm2', 'mask of a mask');
+  assert.equal(m1.mask().mask(), null);
+  const viaDef = nested.patterns()[0].children()[0];
+  assert.equal(viaDef.clipPath()?.id(), 'inner', 'a def node resolves the document tables');
+}
 
 // 7. font bytes, keyed by PostScript name
 const resolved = r.fontdb();

@@ -1059,10 +1059,18 @@ impl std::ops::DerefMut for SharedDb {
 }
 impl FontDatabase {
     #[doc = " Snapshot of a shared database, e.g. the one a parse resolved."]
-    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
+    #[doc = " Takes the `Doc` every generated handle is built with, and drops"]
+    #[doc = " it: the database is what a document points at, not part of one."]
+    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>, _doc: Doc) -> Self {
         Self {
             inner: SharedDb(inner),
         }
+    }
+    #[doc = " Empty on purpose: a face handed out with this database's `Arc`"]
+    #[doc = " would hold a second reference, and the next `loadFont*` would"]
+    #[doc = " then deep-copy the whole database on write."]
+    fn doc(&self) -> Doc {
+        Doc::default()
     }
 }
 #[napi]
@@ -1105,7 +1113,10 @@ impl FontDatabase {
             ..Default::default()
         };
         let id = self.inner.query(&query)?;
-        self.inner.face(id).cloned().map(FontFace::wrap)
+        self.inner
+            .face(id)
+            .cloned()
+            .map(|face| FontFace::wrap(face, self.doc()))
     }
     #[doc = " Raw bytes of a face, by PostScript name (see `faces()`)."]
     #[doc = ""]
@@ -1230,7 +1241,7 @@ impl FontDatabase {
         self.inner
             .faces()
             .into_iter()
-            .map(|x| FontFace::wrap(x.clone()))
+            .map(|x| FontFace::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[doc = " Selects a `FaceInfo` by `id`."]
@@ -1240,7 +1251,9 @@ impl FontDatabase {
     #[napi]
     pub fn face(&self, id: &FontFace) -> Option<FontFace> {
         let id = id.id_in(&self.inner);
-        self.inner.face(id).map(|x| FontFace::wrap(x.clone()))
+        self.inner
+            .face(id)
+            .map(|x| FontFace::wrap(x.clone(), self.doc()))
     }
     #[doc = " Transfers ownership of shared font data back to the font database. This is the reverse operation"]
     #[doc = " of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped"]
@@ -1724,10 +1737,14 @@ impl From<&usvg::filter::DropShadow> for DropShadow {
 #[napi]
 pub struct FontFace {
     inner: usvg::fontdb::FaceInfo,
+    doc: Doc,
 }
 impl FontFace {
-    fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::fontdb::FaceInfo, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -1799,10 +1816,14 @@ impl From<&usvg::filter::Flood> for Flood {
 #[napi]
 pub struct Font {
     inner: usvg::Font,
+    doc: Doc,
 }
 impl Font {
-    fn wrap(inner: usvg::Font) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::Font, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -1865,10 +1886,14 @@ impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
 #[napi]
 pub struct Image {
     inner: usvg::Image,
+    doc: Doc,
 }
 impl Image {
-    fn wrap(inner: usvg::Image) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::Image, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -2022,10 +2047,14 @@ impl From<&usvg::filter::PointLight> for PointLight {
 #[napi]
 pub struct PositionedGlyph {
     inner: usvg::layout::PositionedGlyph,
+    doc: Doc,
 }
 impl PositionedGlyph {
-    fn wrap(inner: usvg::layout::PositionedGlyph) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::layout::PositionedGlyph, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -2108,10 +2137,14 @@ impl From<&usvg::filter::Primitive> for Primitive {
 #[napi]
 pub struct Span {
     inner: usvg::layout::Span,
+    doc: Doc,
 }
 impl Span {
-    fn wrap(inner: usvg::layout::Span) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::layout::Span, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -2161,8 +2194,7 @@ impl Span {
         v.positioned_glyphs
             .clone()
             .iter()
-            .cloned()
-            .map(PositionedGlyph::wrap)
+            .map(|x| PositionedGlyph::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -2281,10 +2313,14 @@ impl From<&usvg::Stroke> for Stroke {
 #[napi]
 pub struct Text {
     inner: usvg::Text,
+    doc: Doc,
 }
 impl Text {
-    fn wrap(inner: usvg::Text) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::Text, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -2322,7 +2358,10 @@ impl Text {
     #[napi(getter)]
     pub fn chunks(&self) -> Vec<TextChunk> {
         let v = &self.inner;
-        v.chunks().iter().cloned().map(TextChunk::wrap).collect()
+        v.chunks()
+            .iter()
+            .map(|x| TextChunk::wrap(x.clone(), self.doc()))
+            .collect()
     }
     #[napi(getter)]
     pub fn abs_transform(&self) -> Matrix {
@@ -2352,17 +2391,24 @@ impl Text {
     #[napi(getter)]
     pub fn layouted(&self) -> Vec<Span> {
         let v = &self.inner;
-        v.layouted().iter().cloned().map(Span::wrap).collect()
+        v.layouted()
+            .iter()
+            .map(|x| Span::wrap(x.clone(), self.doc()))
+            .collect()
     }
 }
 #[doc = " Read-only view of a `TextChunk`."]
 #[napi]
 pub struct TextChunk {
     inner: usvg::TextChunk,
+    doc: Doc,
 }
 impl TextChunk {
-    fn wrap(inner: usvg::TextChunk) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::TextChunk, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -2385,7 +2431,10 @@ impl TextChunk {
     #[napi(getter)]
     pub fn spans(&self) -> Vec<TextSpan> {
         let v = &self.inner;
-        v.spans().iter().cloned().map(TextSpan::wrap).collect()
+        v.spans()
+            .iter()
+            .map(|x| TextSpan::wrap(x.clone(), self.doc()))
+            .collect()
     }
     #[napi(getter)]
     pub fn text_flow(&self) -> Either<TextFlowPlain, TextFlowPath> {
@@ -2434,10 +2483,14 @@ impl From<&usvg::TextDecorationStyle> for TextDecorationStyle {
 #[napi]
 pub struct TextSpan {
     inner: usvg::TextSpan,
+    doc: Doc,
 }
 impl TextSpan {
-    fn wrap(inner: usvg::TextSpan) -> Self {
-        Self { inner }
+    fn wrap(inner: usvg::TextSpan, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -2470,7 +2523,7 @@ impl TextSpan {
     #[napi(getter)]
     pub fn font(&self) -> Font {
         let v = &self.inner;
-        Font::wrap(v.font().clone())
+        Font::wrap(v.font().clone(), self.doc())
     }
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
@@ -3313,10 +3366,14 @@ fn transfer_function_to_js(
 #[napi]
 pub struct Filter {
     inner: std::sync::Arc<usvg::filter::Filter>,
+    doc: Doc,
 }
 impl Filter {
-    fn wrap(inner: std::sync::Arc<usvg::filter::Filter>) -> Self {
-        Self { inner }
+    fn wrap(inner: std::sync::Arc<usvg::filter::Filter>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -3350,10 +3407,14 @@ impl Filter {
 #[napi]
 pub struct RadialGradient {
     inner: std::sync::Arc<usvg::RadialGradient>,
+    doc: Doc,
 }
 impl RadialGradient {
-    fn wrap(inner: std::sync::Arc<usvg::RadialGradient>) -> Self {
-        Self { inner }
+    fn wrap(inner: std::sync::Arc<usvg::RadialGradient>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -3420,10 +3481,14 @@ impl RadialGradient {
 #[napi]
 pub struct Pattern {
     inner: std::sync::Arc<usvg::Pattern>,
+    doc: Doc,
 }
 impl Pattern {
-    fn wrap(inner: std::sync::Arc<usvg::Pattern>) -> Self {
-        Self { inner }
+    fn wrap(inner: std::sync::Arc<usvg::Pattern>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -3464,10 +3529,9 @@ impl Pattern {
         let base = NodeBase::Def(self.inner.clone());
         (0..self.inner.root().children().len())
             .map(|i| SvgNode {
-                tree: None,
+                doc: self.doc(),
                 base: base.clone(),
                 path: vec![i],
-                logs: Logs::default(),
             })
             .collect()
     }
@@ -3476,10 +3540,14 @@ impl Pattern {
 #[napi]
 pub struct Mask {
     inner: std::sync::Arc<usvg::Mask>,
+    doc: Doc,
 }
 impl Mask {
-    fn wrap(inner: std::sync::Arc<usvg::Mask>) -> Self {
-        Self { inner }
+    fn wrap(inner: std::sync::Arc<usvg::Mask>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -3520,10 +3588,9 @@ impl Mask {
         let base = NodeBase::Def(self.inner.clone());
         (0..self.inner.root().children().len())
             .map(|i| SvgNode {
-                tree: None,
+                doc: self.doc(),
                 base: base.clone(),
                 path: vec![i],
-                logs: Logs::default(),
             })
             .collect()
     }
@@ -3532,10 +3599,14 @@ impl Mask {
 #[napi]
 pub struct LinearGradient {
     inner: std::sync::Arc<usvg::LinearGradient>,
+    doc: Doc,
 }
 impl LinearGradient {
-    fn wrap(inner: std::sync::Arc<usvg::LinearGradient>) -> Self {
-        Self { inner }
+    fn wrap(inner: std::sync::Arc<usvg::LinearGradient>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -3592,10 +3663,14 @@ impl LinearGradient {
 #[napi]
 pub struct ClipPath {
     inner: std::sync::Arc<usvg::ClipPath>,
+    doc: Doc,
 }
 impl ClipPath {
-    fn wrap(inner: std::sync::Arc<usvg::ClipPath>) -> Self {
-        Self { inner }
+    fn wrap(inner: std::sync::Arc<usvg::ClipPath>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
     }
 }
 #[napi]
@@ -3629,10 +3704,9 @@ impl ClipPath {
         let base = NodeBase::Def(self.inner.clone());
         (0..self.inner.root().children().len())
             .map(|i| SvgNode {
-                tree: None,
+                doc: self.doc(),
                 base: base.clone(),
                 path: vec![i],
-                logs: Logs::default(),
             })
             .collect()
     }
@@ -3766,6 +3840,63 @@ impl Font {
             .collect()
     }
 }
+#[doc = " The document a class was reached from: what a node, a def or a"]
+#[doc = " glyph needs to resolve the references it carries -- the def tables"]
+#[doc = " (`tree`), the font database its IDs belong to (`fonts`), and the"]
+#[doc = " log its renders report to. Empty for what no document handed out."]
+#[doc = " Three refcounts, cloned into every class the generator emits."]
+#[derive(Clone, Default)]
+struct Doc {
+    tree: Option<std::sync::Arc<usvg::Tree>>,
+    fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
+    logs: Logs,
+}
+#[doc = " The shared definition `target` refers to, by identity. An `id`"]
+#[doc = " match missed defs without one and could pick a namesake."]
+fn find_def<T>(defs: &[std::sync::Arc<T>], target: &T) -> Option<std::sync::Arc<T>> {
+    defs.iter()
+        .find(|d| std::ptr::eq(std::sync::Arc::as_ptr(d), target))
+        .cloned()
+}
+impl SvgNode {
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi]
+impl ClipPath {
+    #[doc = " The clip path applied to this clip path's own content, if any."]
+    #[doc = " `null` too when the handle came from no document."]
+    #[napi]
+    pub fn clip_path(&self) -> Option<ClipPath> {
+        let target = self.inner.clip_path()?;
+        let tree = self.doc.tree.as_ref()?;
+        find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc()))
+    }
+}
+#[napi]
+impl Mask {
+    #[doc = " The mask applied to this mask's own content, if any. `null` too"]
+    #[doc = " when the handle came from no document."]
+    #[napi]
+    pub fn mask(&self) -> Option<Mask> {
+        let target = self.inner.mask()?;
+        let tree = self.doc.tree.as_ref()?;
+        find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc()))
+    }
+}
+#[napi]
+impl PositionedGlyph {
+    #[doc = " The face that drew this glyph, from the database its document"]
+    #[doc = " was parsed with. `null` for a glyph that came from no document."]
+    #[napi(getter)]
+    pub fn font(&self) -> Option<FontFace> {
+        let fonts = self.doc.fonts.as_ref()?;
+        fonts
+            .face(self.inner.font)
+            .map(|face| FontFace::wrap(face.clone(), self.doc()))
+    }
+}
 #[doc = " Where a node path starts from."]
 #[derive(Clone)]
 enum NodeBase {
@@ -3851,13 +3982,9 @@ fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
 #[napi]
 #[derive(Clone)]
 pub struct SvgNode {
-    #[doc = " The document, when there is one: a node reached through a def has"]
-    #[doc = " no document context, so the def tables are out of reach from it."]
-    tree: Option<std::sync::Arc<usvg::Tree>>,
+    doc: Doc,
     base: NodeBase,
     path: Vec<usize>,
-    #[doc = " The owning document's log, so `renderPng` lands in its `takeLogs`."]
-    logs: Logs,
 }
 impl SvgNode {
     fn node(&self) -> Result<&usvg::Node> {
@@ -3868,10 +3995,9 @@ impl SvgNode {
         let mut path = self.path.clone();
         path.push(i);
         Self {
-            tree: self.tree.clone(),
+            doc: self.doc.clone(),
             base: self.base.clone(),
             path,
-            logs: self.logs.clone(),
         }
     }
 }
@@ -3895,7 +4021,7 @@ impl SvgNode {
     #[napi]
     pub fn text(&self) -> Result<Option<Text>> {
         Ok(match self.node()? {
-            usvg::Node::Text(t) => Some(Text::wrap((**t).clone())),
+            usvg::Node::Text(t) => Some(Text::wrap((**t).clone(), self.doc())),
             _ => None,
         })
     }
@@ -3922,7 +4048,7 @@ impl SvgNode {
     #[napi]
     pub fn image(&self) -> Result<Option<Image>> {
         Ok(match self.node()? {
-            usvg::Node::Image(i) => Some(Image::wrap((**i).clone())),
+            usvg::Node::Image(i) => Some(Image::wrap((**i).clone(), self.doc())),
             _ => None,
         })
     }
@@ -3954,8 +4080,7 @@ impl SvgNode {
     #[doc = " Clip path applied to this element, if it is a clipped group."]
     #[doc = ""]
     #[doc = " usvg hands out a bare `&ClipPath` here, with no `Arc` to hold on to,"]
-    #[doc = " so it is matched by `id` against the document's clip-path table."]
-    #[doc = " Returns `null` for an unnamed clip path."]
+    #[doc = " so it is found in the document's clip-path table by identity."]
     #[napi]
     pub fn clip_path(&self) -> Result<Option<ClipPath>> {
         let usvg::Node::Group(g) = self.node()? else {
@@ -3964,17 +4089,12 @@ impl SvgNode {
         let Some(target) = g.clip_path() else {
             return Ok(None);
         };
-        let Some(tree) = &self.tree else {
+        let Some(tree) = &self.doc.tree else {
             return Ok(None);
         };
-        Ok(tree
-            .clip_paths()
-            .iter()
-            .find(|c| !target.id().is_empty() && c.id() == target.id())
-            .cloned()
-            .map(ClipPath::wrap))
+        Ok(find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc())))
     }
-    #[doc = " Mask applied to this element, matched by `id` like `clipPath`."]
+    #[doc = " Mask applied to this element, found like `clipPath`."]
     #[napi]
     pub fn mask(&self) -> Result<Option<Mask>> {
         let usvg::Node::Group(g) = self.node()? else {
@@ -3983,20 +4103,16 @@ impl SvgNode {
         let Some(target) = g.mask() else {
             return Ok(None);
         };
-        let Some(tree) = &self.tree else {
+        let Some(tree) = &self.doc.tree else {
             return Ok(None);
         };
-        Ok(tree
-            .masks()
-            .iter()
-            .find(|m| !target.id().is_empty() && m.id() == target.id())
-            .cloned()
-            .map(Mask::wrap))
+        Ok(find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc())))
     }
     #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
     fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
         let node = self.node()?;
-        self.logs
+        self.doc
+            .logs
             .scope(|| render_node_png(node, &params.unwrap_or_default()))
     }
     #[doc = " Renders this element alone, sized to its own extent."]
@@ -4128,17 +4244,17 @@ impl Resvg {
     #[doc = " document-wide list cannot answer. A fallback that renders is the"]
     #[doc = " failure nobody sees."]
     #[doc = ""]
-    #[doc = " The lookup lives here rather than on `FontDatabase` because"]
-    #[doc = " `PositionedGlyph.font` is a `fontdb::ID` -- a slotmap key with no"]
-    #[doc = " public numeric form, and meaningless against any other database."]
-    #[doc = " Pass a glyph of this document: the glyph carries only the key,"]
-    #[doc = " so one from another document may name a face of this one rather"]
-    #[doc = " than come back `null`."]
+    #[doc = " Same answer as `glyph.font`, plus a provenance check: a glyph laid"]
+    #[doc = " out against another database comes back `null`. A `fontdb::ID` is"]
+    #[doc = " a slotmap key, meaningless outside the database that issued it,"]
+    #[doc = " and read against this one it could name an unrelated face."]
     #[napi]
     pub fn face_of(&self, glyph: &PositionedGlyph) -> Option<FontFace> {
-        self.fonts
-            .face(glyph.inner.font)
-            .map(|face| FontFace::wrap(face.clone()))
+        let fonts = glyph.doc.fonts.as_ref()?;
+        if !std::sync::Arc::ptr_eq(fonts, &self.fonts) {
+            return None;
+        }
+        glyph.font()
     }
     #[doc = " Supplies one image and re-parses the document."]
     #[doc = ""]
@@ -4226,10 +4342,9 @@ impl Resvg {
     #[napi]
     pub fn node(&self, id: String) -> Option<SvgNode> {
         path_of_id(self.tree.root(), &id, &mut Vec::new()).map(|path| SvgNode {
-            tree: Some(self.tree.clone()),
+            doc: self.doc(),
             base: NodeBase::Tree(self.tree.clone()),
             path,
-            logs: self.logs.clone(),
         })
     }
     #[doc = " Direct children of the root group."]
@@ -4237,10 +4352,9 @@ impl Resvg {
     pub fn children(&self) -> Vec<SvgNode> {
         (0..self.tree.root().children().len())
             .map(|i| SvgNode {
-                tree: Some(self.tree.clone()),
+                doc: self.doc(),
                 base: NodeBase::Tree(self.tree.clone()),
                 path: vec![i],
-                logs: self.logs.clone(),
             })
             .collect()
     }
@@ -4274,8 +4388,7 @@ impl Resvg {
         self.tree
             .linear_gradients()
             .iter()
-            .cloned()
-            .map(LinearGradient::wrap)
+            .map(|x| LinearGradient::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[doc = " Returns a list of all unique [`RadialGradient`]s in the tree."]
@@ -4284,8 +4397,7 @@ impl Resvg {
         self.tree
             .radial_gradients()
             .iter()
-            .cloned()
-            .map(RadialGradient::wrap)
+            .map(|x| RadialGradient::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[doc = " Returns a list of all unique [`Pattern`]s in the tree."]
@@ -4294,8 +4406,7 @@ impl Resvg {
         self.tree
             .patterns()
             .iter()
-            .cloned()
-            .map(Pattern::wrap)
+            .map(|x| Pattern::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[doc = " Returns a list of all unique [`ClipPath`]s in the tree."]
@@ -4304,14 +4415,17 @@ impl Resvg {
         self.tree
             .clip_paths()
             .iter()
-            .cloned()
-            .map(ClipPath::wrap)
+            .map(|x| ClipPath::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[doc = " Returns a list of all unique [`Mask`]s in the tree."]
     #[napi]
     pub fn masks(&self) -> Vec<Mask> {
-        self.tree.masks().iter().cloned().map(Mask::wrap).collect()
+        self.tree
+            .masks()
+            .iter()
+            .map(|x| Mask::wrap(x.clone(), self.doc()))
+            .collect()
     }
     #[doc = " Returns a list of all unique [`Filter`](filter::Filter)s in the tree."]
     #[napi]
@@ -4319,14 +4433,13 @@ impl Resvg {
         self.tree
             .filters()
             .iter()
-            .cloned()
-            .map(Filter::wrap)
+            .map(|x| Filter::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[doc = " Returns the font database that applies to all text nodes in the tree."]
     #[napi]
     pub fn fontdb(&self) -> FontDatabase {
-        FontDatabase::wrap(self.tree.fontdb().clone())
+        FontDatabase::wrap(self.tree.fontdb().clone(), self.doc())
     }
     #[doc = " Element's transform."]
     #[doc = ""]
@@ -4455,6 +4568,15 @@ impl Resvg {
     #[napi]
     pub fn render_raw(&self, params: Option<RenderParams>) -> Result<RawImage> {
         self.raw_pixels(params).map(IntoJs::into_js)
+    }
+}
+impl Resvg {
+    fn doc(&self) -> Doc {
+        Doc {
+            tree: Some(self.tree.clone()),
+            fonts: Some(self.fonts.clone()),
+            logs: self.logs.clone(),
+        }
     }
 }
 impl Resvg {

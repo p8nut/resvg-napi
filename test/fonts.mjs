@@ -125,6 +125,23 @@ assert.ok(
 // against this one: the lookup is the document's own database, not a global.
 assert.equal(new Resvg(withId(family), opts, new FontDatabase()).faceOf(glyphs[0]), null);
 
+// 13b. `glyph.font` answers the same without a document in hand, and the
+//      provenance check is by database, not by key: two databases holding the
+//      same file issue the same slotmap keys, so a key alone would match.
+assert.equal(glyphs[0].font.postScriptName, used.postScriptName);
+{
+  const file = testFontFile();
+  if (file) {
+    const other = new FontDatabase();
+    other.loadFontData(readFileSync(file));
+    const docB = new Resvg(withId(other.faces()[0].families[0]), opts, other);
+    const glyphB = docB.node('t').text().layouted[0].positionedGlyphs[0];
+    assert.ok(glyphB.font, 'glyph.font resolves against its own database');
+    assert.equal(docB.faceOf(glyphB).postScriptName, glyphB.font.postScriptName);
+    assert.equal(present.faceOf(glyphB), null, 'and not against another one');
+  }
+}
+
 // A face from another database does not name a face of this one. IDs are
 // slotmap keys, so the first face of two databases share a key; before the
 // check, B.face(faceOfA) answered with B's own face and B.removeFace(faceOfA)

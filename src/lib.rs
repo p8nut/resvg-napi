@@ -4303,6 +4303,96 @@ impl SvgNode {
         let __n = self.node()?;
         Ok(__n.abs_layer_bounding_box().map(BBox::from))
     }
+    #[doc = " Element's transform."]
+    #[doc = ""]
+    #[doc = " This is a relative transform. The one that is set via the `transform` attribute in SVG."]
+    #[napi]
+    pub fn transform(&self) -> Result<Option<Matrix>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(Matrix::from(__g.transform())))
+    }
+    #[doc = " Group opacity."]
+    #[doc = ""]
+    #[doc = " After the group is rendered we should combine"]
+    #[doc = " it with a parent group using the specified opacity."]
+    #[napi]
+    pub fn opacity(&self) -> Result<Option<f64>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(f64::from(__g.opacity().get())))
+    }
+    #[doc = " Group blend mode."]
+    #[doc = ""]
+    #[doc = " `mix-blend-mode` in SVG."]
+    #[napi]
+    pub fn blend_mode(&self) -> Result<Option<BlendMode>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(BlendMode::from(__g.blend_mode())))
+    }
+    #[doc = " Group isolation."]
+    #[doc = ""]
+    #[doc = " `isolation` in SVG."]
+    #[napi]
+    pub fn isolate(&self) -> Result<Option<bool>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(__g.isolate()))
+    }
+    #[doc = " Element's filters."]
+    #[napi]
+    pub fn filters(&self) -> Result<Option<Vec<Filter>>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(
+            __g.filters()
+                .iter()
+                .map(|x| Filter::wrap(x.clone(), self.doc()))
+                .collect(),
+        ))
+    }
+    #[doc = " Element's \"layer\" bounding box in object units."]
+    #[doc = ""]
+    #[doc = " Conceptually, this is `stroke_bounding_box` expanded and/or clipped"]
+    #[doc = " by `filters_bounding_box`, but also including all the children."]
+    #[doc = " This is the bounding box `resvg` will later use to allocate layers/pixmaps"]
+    #[doc = " during isolated groups rendering."]
+    #[doc = ""]
+    #[doc = " Only groups have it, because only groups can have filters."]
+    #[doc = " For other nodes layer bounding box is the same as stroke bounding box."]
+    #[doc = ""]
+    #[doc = " Unlike other bounding boxes, cannot have zero size."]
+    #[doc = ""]
+    #[doc = " Returns 0x0x1x1 for empty groups."]
+    #[napi]
+    pub fn layer_bounding_box(&self) -> Result<Option<BBox>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(BBox::from(__g.layer_bounding_box())))
+    }
+    #[doc = " Checks if this group should be isolated during rendering."]
+    #[napi]
+    pub fn should_isolate(&self) -> Result<Option<bool>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(__g.should_isolate()))
+    }
+    #[doc = " Returns `true` if the group has any children."]
+    #[napi]
+    pub fn has_children(&self) -> Result<Option<bool>> {
+        let usvg::Node::Group(__g) = self.node()? else {
+            return Ok(None);
+        };
+        Ok(Some(__g.has_children()))
+    }
 }
 #[doc = " A parsed SVG, ready to be rendered any number of times."]
 #[napi]

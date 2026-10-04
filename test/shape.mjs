@@ -92,4 +92,29 @@ assert.equal(doc.node('grp').path(), null, 'a group is not a shape');
   assert.deepEqual(n.path().boundingBox, n.boundingBox());
 }
 
+// A group's own properties, read off the node. `null` on anything that is
+// not a group, the way `path()` is null on anything that is not a shape.
+{
+  const r = new Resvg(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">' +
+    '<filter id="f"><feOffset dx="1"/></filter>' +
+    '<g id="g" transform="translate(3 4)" opacity="0.5" filter="url(#f)"' +
+    ' style="mix-blend-mode:multiply;isolation:isolate"><rect id="r" width="5" height="5"/></g></svg>',
+  );
+  const g = r.node('g');
+  assert.deepEqual([g.transform().tx, g.transform().ty], [3, 4]);
+  assert.equal(g.opacity(), 0.5);
+  assert.equal(g.blendMode(), 'multiply');
+  assert.equal(g.isolate(), true);
+  assert.equal(g.shouldIsolate(), true);
+  assert.deepEqual(g.filters().map((f) => f.id()), ['f']);
+  assert.equal(g.hasChildren(), true);
+  assert.ok(g.layerBoundingBox().width > 0);
+
+  const rect = r.node('r');
+  for (const m of ['transform', 'opacity', 'blendMode', 'isolate', 'filters', 'layerBoundingBox', 'hasChildren']) {
+    assert.equal(rect[m](), null, `${m} on a path`);
+  }
+}
+
 console.log('ok — path shape: all checks passed');

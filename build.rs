@@ -288,7 +288,8 @@ fn main() {
     );
 
     // POW_VEC has N entries, so the highest usable precision is N - 1.
-    let precision_max = (static_array_len(&usvg_files, "POW_VEC") - 1) as u32;
+    let precision_max =
+        u32::try_from(static_array_len(&usvg_files, "POW_VEC") - 1).expect("POW_VEC fits u32");
     report!("usvg precision clamp derived from POW_VEC: {precision_max}");
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.

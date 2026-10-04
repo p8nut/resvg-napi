@@ -45,17 +45,17 @@ pub fn carried_field(
 ) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
     Some(match vocab.classify(ty) {
         Some(Js::Str) => (None, quote!(String), quote!(#access.to_string())),
-        Some(Js::F32) | Some(Js::F64) => (None, quote!(f64), quote!(*#access as f64)),
+        Some(Js::F32) | Some(Js::F64) => (None, quote!(f64), quote!(f64::from(*#access))),
         Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => {
-            (None, quote!(u32), quote!(*#access as u32))
+            (None, quote!(u32), quote!(u32::from(*#access)))
         }
         Some(Js::I32) => (None, quote!(i32), quote!(*#access)),
         Some(Js::F32List) => (
             None,
             quote!(Vec<f64>),
-            quote!(#access.iter().map(|x| *x as f64).collect()),
+            quote!(#access.iter().map(|x| f64::from(*x)).collect()),
         ),
-        Some(Js::Scalar) => (None, quote!(f64), quote!(#access.get() as f64)),
+        Some(Js::Scalar) => (None, quote!(f64), quote!(f64::from(#access.get()))),
         Some(Js::Bool) => (None, quote!(bool), quote!(*#access)),
         Some(Js::Enum) => {
             let e = enum_ident(&vocab.resolve(ty));
@@ -285,7 +285,7 @@ pub fn map_struct(
                 &ident,
                 &doc,
                 quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = v as f32; } },
+                quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v); } },
             )),
             Some(Js::F64) => Some(field(
                 &ident,
@@ -315,13 +315,13 @@ pub fn map_struct(
                     clamped += 1;
                     precision_max
                 } else {
-                    u8::MAX as u32
+                    u32::from(u8::MAX)
                 };
                 Some(field(
                     &ident,
                     &doc,
                     quote!(u32),
-                    quote! { if let Some(v) = self.#ident { o.#ident = v.min(#max) as u8; } },
+                    quote! { if let Some(v) = self.#ident { o.#ident = u8::try_from(v.min(#max)).unwrap_or(u8::MAX); } },
                 ))
             }
             Some(Js::Bool) => Some(field(
@@ -360,7 +360,7 @@ pub fn map_struct(
                 quote!(BBox),
                 quote! { if let Some(v) = self.#ident {
                     if let Some(r) = usvg::NonZeroRect::from_xywh(
-                        v.x as f32, v.y as f32, v.width as f32, v.height as f32) {
+                        to_f32(v.x), to_f32(v.y), to_f32(v.width), to_f32(v.height)) {
                         o.#ident = r;
                     }
                 } },
@@ -385,7 +385,7 @@ pub fn map_struct(
                     },
                     assign: quote! {
                         if let (Some(w), Some(h)) = (self.#w, self.#h) {
-                            if let Some(s) = usvg::Size::from_wh(w as f32, h as f32) {
+                            if let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h)) {
                                 o.#ident = s;
                             }
                         }
@@ -398,7 +398,7 @@ pub fn map_struct(
                 &ident,
                 &doc,
                 quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = (v as f32).into(); } },
+                quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v).into(); } },
             )),
             // Handles are class instances: they belong on a method, not in a
             // plain JSON object.
@@ -610,19 +610,24 @@ pub fn data_members(
         }
         let id = format_ident!("{}", name);
         let (jsty, value) = match vocab.classify(ty_s) {
-            Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(#access as f64)),
-            Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(#access as u32)),
+            Some(Js::F32) | Some(Js::F64) => (quote!(f64), quote!(f64::from(#access))),
+            Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => {
+                (quote!(u32), quote!(u32::from(#access)))
+            }
             Some(Js::I32) => (quote!(i32), quote!(#access)),
             Some(Js::Bool) => (quote!(bool), quote!(#access)),
-            Some(Js::Count) => (quote!(u32), quote!(#access as u32)),
+            Some(Js::Count) => (
+                quote!(u32),
+                quote!(u32::try_from(#access).unwrap_or(u32::MAX)),
+            ),
             Some(Js::Str) => (quote!(String), quote!(#access.to_string())),
-            Some(Js::Scalar) => (quote!(f64), quote!(#access.get() as f64)),
-            Some(Js::IntNewtype(_)) => (quote!(u32), quote!(#access.0 as u32)),
+            Some(Js::Scalar) => (quote!(f64), quote!(f64::from(#access.get()))),
+            Some(Js::IntNewtype(_)) => (quote!(u32), quote!(u32::from(#access.0))),
             Some(Js::Bbox) => (quote!(BBox), quote!(BBox::from(#access))),
             Some(Js::Matrix) => (quote!(Matrix), quote!(Matrix::from(#access))),
             Some(Js::F32List) => (
                 quote!(Vec<f64>),
-                quote!(#access.iter().map(|v| *v as f64).collect()),
+                quote!(#access.iter().map(|v| f64::from(*v)).collect()),
             ),
             // A value class owns its upstream value, so a nested one is cloned
             // into its `wrap`.
@@ -708,7 +713,7 @@ pub fn data_members(
                         out.push(Member {
                             id,
                             jsty: quote!(Option<f64>),
-                            value: quote!(#access.map(|x| x as f64)),
+                            value: quote!(#access.map(f64::from)),
                         });
                         return;
                     }
@@ -716,7 +721,7 @@ pub fn data_members(
                         out.push(Member {
                             id,
                             jsty: quote!(Option<f64>),
-                            value: quote!(#access.map(|x| x.get() as f64)),
+                            value: quote!(#access.map(|x| f64::from(x.get()))),
                         });
                         return;
                     }
@@ -725,7 +730,7 @@ pub fn data_members(
                             id,
                             jsty: quote!(Option<Vec<f64>>),
                             value: quote!(
-                                #access.map(|v| v.iter().map(|x| *x as f64).collect())
+                                #access.map(|v| v.iter().map(|x| f64::from(*x)).collect())
                             ),
                         });
                         return;
@@ -988,7 +993,7 @@ pub fn wrapper_class(
                     // wrappers if someone renders defs and needs per-doc logs.
                     let base = NodeBase::Def(self.inner.clone());
                     (0..self.inner.root().children().len())
-                        .map(|i| SvgNode { tree: None, base: base.clone(), path: vec![i as u32], logs: Logs::default() })
+                        .map(|i| SvgNode { tree: None, base: base.clone(), path: vec![i], logs: Logs::default() })
                         .collect()
                 }
             }
@@ -1209,12 +1214,16 @@ pub fn map_methods(
             let (ret_ty, value, already_result) = match ret {
                 Ret::Unit => (quote!(()), quote!(#call), false),
                 Ret::Bool => (quote!(bool), quote!(#call), false),
-                Ret::Count => (quote!(u32), quote!(#call as u32), false),
+                Ret::Count => (
+                    quote!(u32),
+                    quote!(u32::try_from(#call).unwrap_or(u32::MAX)),
+                    false,
+                ),
                 Ret::Text => (quote!(String), quote!(#call.to_string()), false),
                 Ret::Box_ => (quote!(BBox), quote!(BBox::from(#call)), false),
                 Ret::OptBox => (quote!(Option<BBox>), quote!(#call.map(BBox::from)), false),
-                Ret::Num => (quote!(f64), quote!(#call as f64), false),
-                Ret::IntNewtype => (quote!(u32), quote!(#call.0 as u32), false),
+                Ret::Num => (quote!(f64), quote!(f64::from(#call)), false),
+                Ret::IntNewtype => (quote!(u32), quote!(u32::from(#call.0)), false),
                 Ret::Object(ref t) => {
                     let o = data_ident(t);
                     (quote!(#o), quote!(#o::from(#call)), false)
@@ -1257,9 +1266,13 @@ pub fn map_methods(
                         false,
                     )
                 }
-                Ret::Int => (quote!(u32), quote!(#call as u32), false),
+                Ret::Int => (
+                    quote!(u32),
+                    quote!(u32::try_from(#call).unwrap_or(u32::MAX)),
+                    false,
+                ),
                 Ret::Matrix => (quote!(Matrix), quote!(Matrix::from(#call)), false),
-                Ret::Scalar => (quote!(f64), quote!(#call.get() as f64), false),
+                Ret::Scalar => (quote!(f64), quote!(f64::from(#call.get())), false),
                 Ret::Dims => (quote!(Dimensions), quote!(Dimensions::from(#call)), false),
                 Ret::Enum(ref e) => (quote!(#e), quote!(#e::from(#call)), false),
                 Ret::Handle(ref t) => {

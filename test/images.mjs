@@ -90,6 +90,25 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
   );
 }
 
+// 6b. an embedded SVG is a document of its own: its nodes are reachable, and
+//     resolve their clip path against its definitions, not the outer ones
+{
+  const inner = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">' +
+    '<clipPath id="ic"><rect width="3" height="3"/></clipPath>' +
+    '<rect id="r" width="10" height="10" fill="blue" clip-path="url(#ic)"/></svg>';
+  const outer = new Resvg(doc(`data:image/svg+xml;utf8,${encodeURIComponent(inner)}`));
+  const img = outer.children()[0].children()[0].image();
+  assert.equal(img.kind.type, 'svg');
+  const [clipped] = img.svgChildren();
+  assert.equal(clipped.clipPath().id(), 'ic');
+  assert.equal(clipped.children()[0].id(), 'r');
+  assert.ok(clipped.renderPng().length > 0);
+  assert.equal(outer.node('r'), null, 'the inner document stays separate');
+
+  const raster = new Resvg(doc(`data:image/png;base64,${red.toString('base64')}`));
+  assert.equal(raster.children()[0].children()[0].image().svgChildren(), null);
+}
+
 // 7. the disk is off limits outside resourcesDir: no absolute paths, no
 //    `..`, no symlink out, and nothing at all without resourcesDir
 {

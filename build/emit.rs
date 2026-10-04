@@ -642,14 +642,14 @@ pub fn data_members(
             Some(Js::Value(t)) if nested_values => {
                 let c = data_ident(&t);
                 reached.insert(t.clone());
-                (quote!(#c), quote!(#c::wrap(#access.clone())))
+                (quote!(#c), quote!(#c::wrap(#access.clone(), self.doc())))
             }
             Some(Js::ValueList(t)) if nested_values => {
                 let c = data_ident(&t);
                 reached.insert(t.clone());
                 (
                     quote!(Vec<#c>),
-                    quote!(#access.iter().cloned().map(#c::wrap).collect()),
+                    quote!(#access.iter().map(|x| #c::wrap(x.clone(), self.doc())).collect()),
                 )
             }
             Some(Js::OptValue(t)) if nested_values => {
@@ -657,7 +657,7 @@ pub fn data_members(
                 reached.insert(t.clone());
                 (
                     quote!(Option<#c>),
-                    quote!(#access.map(|x| #c::wrap(x.clone()))),
+                    quote!(#access.map(|x| #c::wrap(x.clone(), self.doc()))),
                 )
             }
             // `Image` was a read-only class only because `size` did not map;
@@ -938,11 +938,16 @@ pub fn value_class(
         #[napi]
         pub struct #name {
             inner: #up,
+            doc: Doc,
         }
 
         impl #name {
-            fn wrap(inner: #up) -> Self {
-                Self { inner }
+            fn wrap(inner: #up, doc: Doc) -> Self {
+                Self { inner, doc }
+            }
+
+            fn doc(&self) -> Doc {
+                self.doc.clone()
             }
         }
 
@@ -1032,12 +1037,9 @@ pub fn wrapper_class(
                 #[doc = " Children of this definition's content group."]
                 #[napi]
                 pub fn children(&self) -> Vec<SvgNode> {
-                    // ponytail: def wrappers carry no document, so these nodes log
-                    // to the global buffer only. Thread `Logs` through the def
-                    // wrappers if someone renders defs and needs per-doc logs.
                     let base = NodeBase::Def(self.inner.clone());
                     (0..self.inner.root().children().len())
-                        .map(|i| SvgNode { tree: None, base: base.clone(), path: vec![i], logs: Logs::default() })
+                        .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
                         .collect()
                 }
             }
@@ -1051,11 +1053,16 @@ pub fn wrapper_class(
         #[napi]
         pub struct #name {
             inner: std::sync::Arc<#path>,
+            doc: Doc,
         }
 
         impl #name {
-            fn wrap(inner: std::sync::Arc<#path>) -> Self {
-                Self { inner }
+            fn wrap(inner: std::sync::Arc<#path>, doc: Doc) -> Self {
+                Self { inner, doc }
+            }
+
+            fn doc(&self) -> Doc {
+                self.doc.clone()
             }
         }
 
@@ -1292,13 +1299,17 @@ pub fn map_methods(
                     let w = data_ident(t);
                     (
                         quote!(Option<#w>),
-                        quote!(#call.map(|x| #w::wrap(x.clone()))),
+                        quote!(#call.map(|x| #w::wrap(x.clone(), self.doc()))),
                         false,
                     )
                 }
                 Ret::Value(ref t) => {
                     let w = data_ident(t);
-                    (quote!(#w), quote!(#w::wrap(#call.clone())), false)
+                    (
+                        quote!(#w),
+                        quote!(#w::wrap(#call.clone(), self.doc())),
+                        false,
+                    )
                 }
                 Ret::ValueList(ref t) => {
                     let w = data_ident(t);
@@ -1306,7 +1317,7 @@ pub fn map_methods(
                         quote!(Vec<#w>),
                         // `into_iter` covers both a slice of values and an
                         // iterator of references.
-                        quote!(#call.into_iter().map(|x| #w::wrap(x.clone())).collect()),
+                        quote!(#call.into_iter().map(|x| #w::wrap(x.clone(), self.doc())).collect()),
                         false,
                     )
                 }
@@ -1321,13 +1332,17 @@ pub fn map_methods(
                 Ret::Enum(ref e) => (quote!(#e), quote!(#e::from(#call)), false),
                 Ret::Handle(ref t) => {
                     let w = wrapper_ident(t);
-                    (quote!(#w), quote!(#w::wrap(#call.clone())), false)
+                    (
+                        quote!(#w),
+                        quote!(#w::wrap(#call.clone(), self.doc())),
+                        false,
+                    )
                 }
                 Ret::HandleList(ref t) => {
                     let w = wrapper_ident(t);
                     (
                         quote!(Vec<#w>),
-                        quote!(#call.iter().cloned().map(#w::wrap).collect()),
+                        quote!(#call.iter().map(|x| #w::wrap(x.clone(), self.doc())).collect()),
                         false,
                     )
                 }

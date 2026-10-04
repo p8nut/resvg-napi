@@ -1,13 +1,13 @@
-FaceInfo member not exposed: families: Vec<(String,Language)>
+FaceInfo member covered by the template: families: Vec<(String,Language)>
 FaceInfo member not exposed: id: ID
 FaceInfo member not exposed: source: Source
 FaceInfo: partial mapping, emitted as read-only class FontFace
-Font member not exposed: families: &[FontFamily]
+Font member covered by the template: families: &[FontFamily]
 Font: partial mapping, emitted as read-only class Font
 Image: partial mapping, emitted as read-only class Image
 ImageKind::SVG carries Tree, which has no mappable data: emitted without a value
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
-PositionedGlyph member not exposed: font: ID
+PositionedGlyph member covered by the template: font: ID
 PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
 Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
@@ -55,12 +55,12 @@ payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(6),
 usvg precision clamp derived from POW_VEC: 12
 usvg sources: usvg-0.48.1
 usvg::ClipPath method covered by the content view: root (returns &Group)
-usvg::ClipPath method not exposed: clip_path (returns Option<&ClipPath>)
+usvg::ClipPath method covered by the template: clip_path (returns Option<&ClipPath>)
 usvg::Group method covered by the template, not generated: children (returns &[Node])
 usvg::Group method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
 usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)
 usvg::Mask method covered by the content view: root (returns &Group)
-usvg::Mask method not exposed: mask (returns Option<&Mask>)
+usvg::Mask method covered by the template: mask (returns Option<&Mask>)
 usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
 usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
 usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)

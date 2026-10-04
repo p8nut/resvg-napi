@@ -85,6 +85,13 @@ takeLogs();
   const fromNode = sprite.takeLogs();
   assert.equal(fromNode.filter((l) => l.includes('Failed to decode a PNG image')).length, 2, fromNode.join('\n'));
 
+  // and so does a node reached through a def: it keeps its document too
+  const patterned = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse"><g><image href="data:image/png;base64,${png.subarray(0, 33).toString('base64')}" width="5" height="5"/><rect width="5" height="5"/></g></pattern></defs><rect width="20" height="20" fill="url(#p)"/></svg>`);
+  patterned.takeLogs();
+  patterned.patterns()[0].children()[0].renderPng();
+  const fromDef = patterned.takeLogs();
+  assert.equal(fromDef.filter((l) => l.includes('Failed to decode a PNG image')).length, 1, fromDef.join('\n'));
+
   // and the global buffer still receives everything, for code that used it
   const all = takeLogs();
   assert.ok(all.some((l) => l.includes("'colour-a'")) && all.some((l) => l.includes("'colour-b'")));

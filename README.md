@@ -97,7 +97,7 @@ span.decoration.underline?.fill?.paint  // …and .overline, .lineThrough
 Definitions hold nodes too: `patterns()`, `masks()` and `clipPaths()` each
 have `children()`, and `filters()[i].imageChildren(index)` reaches what an
 `feImage` primitive draws. An `<image>` that embeds an SVG hands its own
-document's nodes back through `node.image().svgChildren()`.
+document's nodes back through `node.svgChildren()`.
 
 Paint is a discriminated union, so TypeScript narrows it:
 

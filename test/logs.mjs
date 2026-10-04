@@ -76,6 +76,15 @@ takeLogs();
   assert.equal(fromBroken.filter((l) => l.includes('Failed to decode a PNG image')).length, 2, fromBroken.join('\n'));
   assert.deepEqual(clean.takeLogs(), [], 'the clean document rendered alongside got none of them');
 
+  // a node handle reports to its document, sync and async
+  const sprite = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><g id="icon"><image href="data:image/png;base64,${png.subarray(0, 33).toString('base64')}" width="5" height="5"/><rect width="5" height="5"/></g></svg>`);
+  sprite.takeLogs();
+  const icon = sprite.node('icon');
+  icon.renderPng();
+  await icon.renderPngAsync();
+  const fromNode = sprite.takeLogs();
+  assert.equal(fromNode.filter((l) => l.includes('Failed to decode a PNG image')).length, 2, fromNode.join('\n'));
+
   // and the global buffer still receives everything, for code that used it
   const all = takeLogs();
   assert.ok(all.some((l) => l.includes("'colour-a'")) && all.some((l) => l.includes("'colour-b'")));

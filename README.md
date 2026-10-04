@@ -263,7 +263,7 @@ takeLogs()
 `takeLogs()` drains the buffer, which is capped at 500 entries so a pathological
 document cannot grow it without end. It collects from every document and thread,
 so concurrent renders interleave there. A document's own `takeLogs()` holds only
-what its parse and renders reported, async ones included:
+what its parse and renders reported, its nodes' `renderPng` and async ones included:
 
 ```js
 const doc = await Resvg.parseAsync(svg)

@@ -983,9 +983,12 @@ pub fn wrapper_class(
                 #[doc = " Children of this definition's content group."]
                 #[napi]
                 pub fn children(&self) -> Vec<SvgNode> {
+                    // ponytail: def wrappers carry no document, so these nodes log
+                    // to the global buffer only. Thread `Logs` through the def
+                    // wrappers if someone renders defs and needs per-doc logs.
                     let base = NodeBase::Def(self.inner.clone());
                     (0..self.inner.root().children().len())
-                        .map(|i| SvgNode { tree: None, base: base.clone(), path: vec![i as u32] })
+                        .map(|i| SvgNode { tree: None, base: base.clone(), path: vec![i as u32], logs: Logs::default() })
                         .collect()
                 }
             }

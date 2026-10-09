@@ -50,7 +50,7 @@
   "devDependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/space-mono": "^5.3.0",
-    "@napi-rs/cli": "^3.10.6",
+    "@napi-rs/cli": "^3.10.8",
     "@types/node": "^26.2.0",
     "emnapi": "1.11.3",
     "esbuild": "^0.28.2",

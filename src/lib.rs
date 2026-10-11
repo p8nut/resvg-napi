@@ -1034,6 +1034,8 @@ const MAX_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
 #[doc = " file swapped for a FIFO or a device after `under_resources_dir`"]
 #[doc = " is refused instead of blocking (`O_NONBLOCK`), and a last"]
 #[doc = " component swapped for a symlink is not followed (`O_NOFOLLOW`)."]
+#[doc = " Unix only: on WASI and Windows the path is checked before the"]
+#[doc = " open instead, which leaves that window open."]
 #[doc = ""]
 #[doc = " A directory higher up swapped for a symlink between the check"]
 #[doc = " and the open is still followed: closing that needs"]
@@ -1045,6 +1047,10 @@ fn read_regular(path: &std::path::Path) -> Option<Vec<u8>> {
     open.read(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    #[cfg(not(unix))]
+    if !path.is_file() {
+        return None;
+    }
     let file = open.open(path).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.is_file() || meta.len() > MAX_IMAGE_BYTES {

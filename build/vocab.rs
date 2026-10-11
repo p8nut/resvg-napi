@@ -889,6 +889,7 @@ pub enum Ret {
     HandleList(String),
     Num,
     Int,
+    SignedInt,
     Object(String),
     ObjectList(String),
     Value(String),

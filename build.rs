@@ -141,6 +141,11 @@ fn assert_tree_ctor(files: &[syn::File], name: &str) {
 
 fn main() {
     napi_build::setup();
+    let probe = quote!(image_kind_to_js(x));
+    assert!(
+        calls(&probe, "image_kind_to_js") && !calls(&probe, "kind_to_js"),
+        "calls() matches inside a longer identifier"
+    );
     println!("cargo::rerun-if-changed=build.rs");
     // The generator is five files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the
@@ -820,7 +825,7 @@ fn main() {
         .filter(|(_, p)| p.payload_blocker(&vocab).is_none())
         .filter(|(n, p)| {
             let c = p.conv_ident(n).to_string();
-            let used = |t: &TokenStream| t.to_string().contains(&c);
+            let used = |t: &TokenStream| calls(t, &c);
             generated.values().any(used)
                 || object_parts.values().any(used)
                 || used(&wrapper_code)
@@ -889,12 +894,11 @@ fn main() {
             report!("payload enum {name} not mapped: {why}");
             continue;
         }
-        // Plain `contains`, not the space-padded `mentions` used for type names:
-        // a token stream renders a call as `foo_to_js(..)` with no space before
-        // the paren, and a `_to_js` identifier is specific enough that a
-        // substring cannot collide.
+        // `calls`, not the space-padded `mentions` used for type names: a
+        // token stream renders a call as `foo_to_js(..)` with no space before
+        // the paren.
         let conv = info.conv_ident(name).to_string();
-        let used = |c: &TokenStream| c.to_string().contains(&conv);
+        let used = |c: &TokenStream| calls(c, &conv);
         if !used(&object_code) && !generated.values().any(used) {
             continue;
         }
@@ -1059,4 +1063,13 @@ fn rustfmt(path: &Path) {
         .arg("--edition=2024")
         .arg(path)
         .status();
+}
+
+/// Whether `ident` occurs in `code` as a whole identifier. A substring test
+/// finds `kind_to_js` inside `image_kind_to_js` and `color_matrix_kind_to_js`,
+/// which would keep `filter::Kind`'s union alive with nothing calling it.
+fn calls(code: &TokenStream, ident: &str) -> bool {
+    code.to_string()
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .any(|w| w == ident)
 }

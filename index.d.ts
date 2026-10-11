@@ -429,9 +429,15 @@ export declare class Resvg {
    * Supplies one image and re-parses the document.
    *
    * Pass everything you already have through the constructor's `images`
-   * argument instead: this re-parses once per call.
+   * argument, or `resolveImages`, instead: this re-parses once per call.
    */
   resolveImage(href: string, data: Buffer): void
+  /**
+   * Supplies several images and re-parses the document once: what
+   * `pendingImages()` asked for, fetched, handed back in one call.
+   * An href the document does not use is kept, not an error.
+   */
+  resolveImages(images: Record<string, Buffer>): void
   get width(): number
   get height(): number
   /** Renders to a PNG buffer. */

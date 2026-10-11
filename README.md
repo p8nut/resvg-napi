@@ -306,7 +306,10 @@ resolved. Files are read from disk only below `resourcesDir`: an absolute path,
 a `..` or a symlink leading out of it is refused, and without `resourcesDir` the
 disk is not read at all. `resourcesRoot` widens the fence to an ancestor, so a
 template can still reach `../assets/logo.png`; or hand the bytes over as
-`images` instead.
+`images` instead. Bytes fetched after the parse go back with
+`resolveImages({ href: buffer, ... })`, one re-parse for all of them;
+`resolveImage(href, buffer)` re-parses once per call. A file of more than
+256 MiB is not read.
 
 **A measurement disagrees with the numbers in the file.** Bounding boxes are in
 the document's own units and usvg normalises the tree, so they are not canvas

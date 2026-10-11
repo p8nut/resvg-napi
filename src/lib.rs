@@ -4597,10 +4597,24 @@ impl Resvg {
     #[doc = " Supplies one image and re-parses the document."]
     #[doc = ""]
     #[doc = " Pass everything you already have through the constructor's `images`"]
-    #[doc = " argument instead: this re-parses once per call."]
+    #[doc = " argument, or `resolveImages`, instead: this re-parses once per call."]
     #[napi]
     pub fn resolve_image(&mut self, href: String, data: Buffer) -> Result<()> {
         std::sync::Arc::make_mut(&mut self.images).insert(href, std::sync::Arc::new(data.to_vec()));
+        self.reparse()
+    }
+    #[doc = " Supplies several images and re-parses the document once: what"]
+    #[doc = " `pendingImages()` asked for, fetched, handed back in one call."]
+    #[doc = " An href the document does not use is kept, not an error."]
+    #[napi]
+    pub fn resolve_images(
+        &mut self,
+        images: std::collections::HashMap<String, Buffer>,
+    ) -> Result<()> {
+        std::sync::Arc::make_mut(&mut self.images).extend(image_map(Some(images)));
+        self.reparse()
+    }
+    fn reparse(&mut self) -> Result<()> {
         let (tree, pending_images, pending_fonts) = self
             .logs
             .scope(|| Self::build(&self.svg, &self.options, self.fonts.clone(), &self.images))?

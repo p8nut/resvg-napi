@@ -26,6 +26,21 @@ a.resolveImage('company-logo', red);
 assert.deepEqual(a.pendingImages(), []);
 assert.deepEqual(pixel(a), [255, 0, 0, 255], 'red image drawn');
 
+// 2b. several at once: one call, one re-parse, every href resolved. A href the
+//     document does not use is kept for later parses and is not an error.
+{
+  const two = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20">
+  <image xlink:href="left" x="0" y="0" width="10" height="20"/><image xlink:href="right" x="10" y="0" width="10" height="20"/>
+</svg>`;
+  const r = new Resvg(two);
+  assert.deepEqual(r.pendingImages().sort(), ['left', 'right']);
+  r.resolveImages({ left: red, right: red, unused: red });
+  assert.deepEqual(r.pendingImages(), [], 'both resolved by one call');
+  // row 10, column 19: a 20x20 image fit into a 10x20 box is centred, rows 5-15
+  const at = (10 * 20 + 19) * 4;
+  assert.deepEqual([...r.renderRaw().data.subarray(at, at + 4)], [255, 0, 0, 255], 'right half drawn');
+}
+
 // 3. preload through the constructor: nothing pending, one parse
 const b = new Resvg(doc('company-logo'), null, null, { 'company-logo': red });
 assert.deepEqual(b.pendingImages(), []);

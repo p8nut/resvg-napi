@@ -752,9 +752,9 @@ pub fn data_members(
                         });
                         return;
                     }
-                    Some((i, Js::Object(_))) => {
-                        let o = format_ident!("{}", i);
-                        reached.insert(i.to_string());
+                    Some((_, Js::Object(t))) => {
+                        let o = data_ident(&t);
+                        reached.insert(t);
                         let value = if is_ref {
                             quote!(#access.map(#o::from))
                         } else {
@@ -1208,7 +1208,10 @@ pub fn map_methods(
                         Some(Js::OptBbox) => Ret::OptBox,
                         Some(Js::TryUnit) => Ret::TryUnit,
                         Some(Js::F32) | Some(Js::F64) => Ret::Num,
-                        Some(Js::U32) | Some(Js::U8) => Ret::Int,
+                        // The same integers `data_members` maps; i32 apart,
+                        // since the `u32` cast would turn negatives into MAX.
+                        Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => Ret::Int,
+                        Some(Js::I32) => Ret::SignedInt,
                         Some(Js::Matrix) => Ret::Matrix,
                         Some(Js::Scalar) => Ret::Scalar,
                         Some(Js::Size) => Ret::Dims,
@@ -1332,6 +1335,7 @@ pub fn map_methods(
                     quote!(u32::try_from(#call).unwrap_or(u32::MAX)),
                     false,
                 ),
+                Ret::SignedInt => (quote!(i32), quote!(#call), false),
                 Ret::Matrix => (quote!(Matrix), quote!(Matrix::from(#call)), false),
                 Ret::Scalar => (quote!(f64), quote!(f64::from(#call.get())), false),
                 Ret::Dims => (quote!(Dimensions), quote!(Dimensions::from(#call)), false),

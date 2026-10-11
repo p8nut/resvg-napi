@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use syn::{Fields, ImplItem, Item, ReturnType};
 
+use crate::config::*;
 use crate::sources::is_pub;
 use crate::vocab::*;
 
@@ -442,14 +443,7 @@ pub fn map_struct(
         // --- not transposable as data. These are wired by the emitter
         // template instead (opaque class, resolver hooks, xmlwriter's
         // `Indent`); the rest is dropped.
-        const HANDLED: [&str; 5] = [
-            "fontdb",
-            "image_href_resolver",
-            "font_resolver",
-            "indent",
-            "attributes_indent",
-        ];
-        if HANDLED.contains(&name.as_str()) {
+        if HAND_WIRED_FIELDS.contains(&name.as_str()) {
             skipped.push(format!("{name}: {ty} (handled manually by the template)"));
         } else {
             skipped.push(format!("{name}: {ty} (dropped)"));
@@ -589,18 +583,14 @@ pub fn data_members(
     let mut skipped = Vec::new();
     let mut reached = BTreeSet::new();
 
-    // Conversions, not data: `Stroke::to_tiny_skia` hands the caller a
-    // tiny-skia value to draw with. Counting it as an unmapped member would
-    // demote Stroke to a read-only class, and any object holding one -- `Path`
-    // -- would then carry a field napi cannot round-trip.
-    const NOT_DATA: [&str; 1] = ["to_tiny_skia"];
+    // `NOT_DATA` (config): conversions such as `Stroke::to_tiny_skia`.
 
     // The tree itself. Group, Node and Tree are what a handle exists for, and
     // following one into the data registry drags every definition type behind
     // it -- `Text::flattened` and `filter::Image::root` both hand back a Group.
     // A type rule rather than the two member names, because the next one to
     // return a Group should need no edit here.
-    const NOT_DATA_TYPES: [&str; 3] = NODE_TYPES;
+    const NOT_DATA_TYPES: &[&str] = NODE_TYPES;
 
     let mut push = |name: &str, ty_s: &str, access: TokenStream| {
         if NOT_DATA.contains(&name) {

@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
+use crate::config::*;
 use crate::sources::is_pub;
 
 /// Normalised textual form of a type, e.g. `Option<std::path::PathBuf>`.
@@ -924,14 +925,6 @@ pub fn deref_target(files: &[syn::File], ty: &str) -> Option<String> {
     })
 }
 
-/// Naming decision: `FaceInfo` reads as `FontFace` on the JS side.
-/// The tree itself. Group, Node and Tree are what a handle exists for, and
-/// following one into the data registry drags every definition type behind it --
-/// `Text::flattened` and `filter::Image::root` both hand back a Group, and
-/// `ImageKind` carries a Tree. Filtered both as a member and as a candidate
-/// seed, because either route reaches the same place.
-pub const NODE_TYPES: [&str; 3] = ["Group", "Node", "Tree"];
-
 /// The upstream name inside a registry key: `filter::Image` -> `Image`.
 ///
 /// A key carries the module so that two types of the same name stay distinct;
@@ -968,7 +961,7 @@ pub fn data_ident(ty: &str) -> proc_macro2::Ident {
         }
         return format_ident!("{camel}{name}");
     }
-    format_ident!("{}", if ty == "FaceInfo" { "FontFace" } else { ty })
+    format_ident!("{}", renamed(DATA_RENAMES, ty))
 }
 
 /// JS name for a mapped enum.
@@ -978,21 +971,17 @@ pub fn data_ident(ty: &str) -> proc_macro2::Ident {
 /// run asked for, the other what a loaded face is. Renamed for the same reason
 /// `FaceInfo` is emitted as `FontFace`.
 pub fn enum_ident(name: &str) -> proc_macro2::Ident {
-    match name {
-        "Style" => format_ident!("FontFaceStyle"),
-        _ => format_ident!("{}", name),
-    }
+    format_ident!("{}", renamed(ENUM_RENAMES, name))
 }
 
 /// JS class name for an Arc-held usvg definition: `filter::Filter` -> `Filter`.
 pub fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
     let last = ty.rsplit("::").next().unwrap_or(ty);
     // `fontdb::Database` already has a hand-written class.
-    let name = if ty == "fontdb::Database" {
-        "FontDatabase"
-    } else {
-        last
-    };
+    let name = HAND_WRAPPED
+        .iter()
+        .find(|(h, _)| *h == ty)
+        .map_or(last, |(_, n)| n);
     format_ident!("{}", name)
 }
 

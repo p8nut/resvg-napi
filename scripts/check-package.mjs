@@ -11,6 +11,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { npmName } from './lib/project.mjs';
 
 /** A `files[]` entry naming one concrete file, not a pattern. */
 const isLiteral = (entry) => !/[*?[\]{}]/.test(entry) && !entry.endsWith('/');
@@ -116,7 +117,7 @@ export function mismatched(version, pinned, platforms) {
  * @param {{optionalDependencies?: Record<string,string>, peerDependencies?: Record<string,string>, dependencies?: Record<string,string>}} manifest
  */
 export function familyPins(manifest) {
-  const family = (m) => Object.entries(m ?? {}).filter(([name]) => name.startsWith('resvg-napi'));
+  const family = (m) => Object.entries(m ?? {}).filter(([name]) => name.startsWith(npmName));
   return Object.fromEntries([
     ...family(manifest.optionalDependencies),
     ...family(manifest.peerDependencies),
@@ -278,7 +279,7 @@ async function main() {
   const root = JSON.parse(readFileSync('package.json', 'utf8'));
   const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
   const drift = mismatched(root.version, familyPins(root), platforms);
-  const wasi = platforms['resvg-napi-wasm32-wasi'];
+  const wasi = platforms[`${npmName}-wasm32-wasi`];
   const shared = wasi ? wasiDeps(root.dependencies, wasi.dependencies) : [];
   const bare = anonymous([
     { name: root.name, manifest: root },

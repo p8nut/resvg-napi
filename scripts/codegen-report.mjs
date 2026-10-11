@@ -14,6 +14,9 @@
 
 import { readFileSync, writeFileSync, utimesSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { crateName } from './lib/project.mjs';
+
+const warning = `warning: ${crateName}@`;
 
 const SNAPSHOT = 'codegen-report.txt';
 
@@ -30,8 +33,8 @@ export function normalise(stderr) {
     // Belt as well as braces: the spawn forces colour off, but a line that
     // arrives decorated anyway must not be dropped on the floor.
     .map((l) => l.replace(/\u001b\[[0-9;]*m/g, ''))
-    .filter((l) => l.startsWith('warning: resvg-napi@'))
-    .map((l) => l.replace(/^warning: resvg-napi@[^ ]* /, ''))
+    .filter((l) => l.startsWith(warning))
+    .map((l) => l.slice(l.indexOf(' ', warning.length) + 1))
     .map((l) => l.replace(/(usvg sources: ).*[/\\]([^/\\]+)[/\\]src$/, '$1$2'))
     .sort()
     .join('\n')

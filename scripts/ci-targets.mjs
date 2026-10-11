@@ -16,6 +16,7 @@
 // waits for the merge, the tag, a manual dispatch, or a `full-matrix` label
 // when you want the proof before merging rather than after.
 import { readFileSync } from 'node:fs';
+import { binaryName } from './lib/project.mjs';
 
 /** Host and cross-compilation flag per target. See https://napi.rs/docs/cross-build. */
 const TARGETS = {
@@ -41,7 +42,7 @@ const TARGETS = {
   'armv7-linux-androideabi': { host: 'ubuntu-latest' },
   'wasm32-wasip1-threads': {
     host: 'ubuntu-latest',
-    artifact: ['*.wasm', 'resvg-napi.wasi*.*js', 'resvg-napi.wasi.d.cts', 'wasi-worker*.mjs'].join('\n'),
+    artifact: ['*.wasm', `${binaryName}.wasi*.*js`, `${binaryName}.wasi.d.cts`, 'wasi-worker*.mjs'].join('\n'),
   },
 };
 

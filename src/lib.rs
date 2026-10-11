@@ -4003,7 +4003,11 @@ impl PositionedGlyph {
     }
 }
 #[doc = " A parsed tree with the image and font hrefs it could not resolve."]
-type Parsed = (usvg::Tree, Vec<String>, Vec<String>);
+type Parsed = (
+    usvg::Tree,
+    std::sync::Arc<[String]>,
+    std::sync::Arc<[String]>,
+);
 #[doc = " usvg's own name for a parse failure, carried as `error.code`."]
 #[napi(string_enum)]
 pub enum ParseErrorCode {
@@ -4514,8 +4518,8 @@ pub struct Resvg {
     fonts: std::sync::Arc<usvg::fontdb::Database>,
     #[doc = " Copied on write, by `resolveImage` only."]
     images: std::sync::Arc<ImageMap>,
-    pending_images: Vec<String>,
-    pending_fonts: Vec<String>,
+    pending_images: std::sync::Arc<[String]>,
+    pending_fonts: std::sync::Arc<[String]>,
     logs: Logs,
 }
 #[napi]
@@ -4554,7 +4558,7 @@ impl Resvg {
     #[doc = " filesystem could resolve. Feed them back with `resolveImage`."]
     #[napi]
     pub fn pending_images(&self) -> Vec<String> {
-        self.pending_images.clone()
+        self.pending_images.to_vec()
     }
     #[doc = " Drains what usvg and resvg reported while parsing and rendering"]
     #[doc = " this document, async twins included, and nothing from any other."]
@@ -4568,7 +4572,7 @@ impl Resvg {
     #[doc = " `FontDatabase` and re-parse to fix the output."]
     #[napi]
     pub fn pending_fonts(&self) -> Vec<String> {
-        self.pending_fonts.clone()
+        self.pending_fonts.to_vec()
     }
     #[doc = " The face that actually drew a glyph, from the database this"]
     #[doc = " document was parsed with."]
@@ -4939,8 +4943,8 @@ impl Resvg {
         };
         Ok(Ok((
             tree,
-            std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())),
-            std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())),
+            std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())).into(),
+            std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())).into(),
         )))
     }
     fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {

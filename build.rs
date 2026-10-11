@@ -3,13 +3,15 @@
 //!
 //! One phase per file, and this one orchestrates them:
 //!
+//!   build/config.rs    the resvg-specific lists: renames, reserved names,
+//!                      hand-wired fields. What another crate would rewrite
 //!   build/sources.rs   finding and parsing upstream
 //!                      (env override -> git submodule -> cargo registry)
 //!   build/vocab.rs     what a Rust type means on the JS side -- newtypes,
 //!                      aliases, `Deref` chains, payload enums, naming
 //!   build/emit.rs      turning those answers into tokens napi can expand
-//!   build/template.rs  the API decisions, written by hand. The only file here
-//!                      that is not describing upstream
+//!   build/template.rs  the API decisions, written by hand. With config.rs,
+//!                      the only files here not describing upstream
 //!   build.rs           this: the passes, their order, the fixpoints, the
 //!                      assertions, and writing src/lib.rs
 //!
@@ -41,6 +43,8 @@ macro_rules! report {
 // Each phase in its own file. `#[path]` because Cargo compiles this one as a
 // crate root, so a plain `mod` would look for the file beside it -- in the
 // repository root.
+#[path = "build/config.rs"]
+mod config;
 #[path = "build/emit.rs"]
 mod emit;
 #[path = "build/sources.rs"]
@@ -50,6 +54,7 @@ mod template;
 #[path = "build/vocab.rs"]
 mod vocab;
 
+use config::*;
 use emit::*;
 use sources::*;
 use template::*;
@@ -58,21 +63,6 @@ use vocab::*;
 // ---------------------------------------------------------------------------
 // 1. source discovery
 // ---------------------------------------------------------------------------
-
-/// Upstream names the template exposes under a *different* one. A rule cannot
-/// find these -- the rename is the decision -- so they are declared, and
-/// checked: a stale entry fails the build instead of rotting in a log line.
-const RENAMED: &[(&str, &str)] = &[
-    ("from_data", "new"),
-    ("from_str", "new"),
-    ("from_xmltree", "new"),
-    ("from_data_nested", "new"),
-    ("node_by_id", "node"),
-    // `to_string` in Rust would collide with `Display::to_string`
-    ("to_string", "to_svg_string"),
-    ("root", "children"),
-    ("with_face_data", "face_data"),
-];
 
 fn assert_free_fn(files: &[syn::File], name: &str, want: &[&str]) {
     let f = files
@@ -147,10 +137,10 @@ fn main() {
         "calls() matches inside a longer identifier"
     );
     println!("cargo::rerun-if-changed=build.rs");
-    // The generator is five files now, and Cargo watches only what it is told:
+    // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the
     // CI drift check would fail on someone else's machine rather than here.
-    for m in ["sources", "vocab", "emit", "template"] {
+    for m in ["config", "sources", "vocab", "emit", "template"] {
         println!("cargo::rerun-if-changed=build/{m}.rs");
     }
     // The generated file is also an *input* to watch: if someone deletes or
@@ -298,8 +288,8 @@ fn main() {
     report!("usvg precision clamp derived from POW_VEC: {precision_max}");
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
-    let mut referenced = struct_field_types(&usvg_files, "Options");
-    referenced.extend(struct_field_types(&usvg_files, "WriteOptions"));
+    let mut referenced = struct_field_types(&usvg_files, PARSE_OPTIONS);
+    referenced.extend(struct_field_types(&usvg_files, WRITE_OPTIONS));
     referenced.extend(returned_types(&usvg_files, &[]));
     referenced.extend(returned_types(&fontdb_files, &[]));
     referenced.extend(field_types(&fontdb_files));
@@ -359,7 +349,7 @@ fn main() {
         .collect();
 
     let mut vocab = Vocab::default();
-    let extra: Vec<syn::File> = ["tiny-skia-path", "strict-num"]
+    let extra: Vec<syn::File> = VOCAB_CRATES
         .iter()
         .flat_map(|c| parse_crate(&locate(c, "lib.rs", &locked)))
         .map(|(_, f)| f)
@@ -617,9 +607,9 @@ fn main() {
         }
     }
 
-    let (fields, skipped_fields, _) = map_struct(&usvg_files, "Options", &vocab, precision_max);
+    let (fields, skipped_fields, _) = map_struct(&usvg_files, PARSE_OPTIONS, &vocab, precision_max);
     let (write_fields, skipped_write, clamped) =
-        map_struct(&usvg_files, "WriteOptions", &vocab, precision_max);
+        map_struct(&usvg_files, WRITE_OPTIONS, &vocab, precision_max);
     // WriteOptions is where the POW_VEC indices live, and the fields are found
     // by a `_precision` suffix. A rename upstream would match nothing, fall
     // through to u8::MAX, and hand usvg an index 242 places past the end of a
@@ -634,16 +624,6 @@ fn main() {
     // Fixpoint: start from the handle types the wrapped impls return, generate a
     // class for each, then follow the handles *those* classes return. The type
     // graph is finite; the cap is only a runaway guard.
-    const RESERVED: [&str; 8] = [
-        "Resvg",
-        "SvgNode",
-        "BBox",
-        "Matrix",
-        "Dimensions",
-        "RawImage",
-        "RenderOptions",
-        "RenderParams",
-    ];
     let handles_of = |set: &BTreeSet<String>| -> BTreeSet<String> {
         set.iter()
             .filter_map(|t| match vocab.classify(t) {
@@ -675,7 +655,7 @@ fn main() {
             continue;
         }
         // `fontdb::Database` maps onto the hand-written FontDatabase class.
-        if t == "fontdb::Database" {
+        if HAND_WRAPPED.iter().any(|(h, _)| *h == t) {
             continue;
         }
         let src = defines(&t).unwrap_or(&sources[0]);

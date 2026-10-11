@@ -85,6 +85,17 @@ jobs:
               'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(t=>t.target).join("\n")))'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # The scripts' own selftests: pure JS on node builtins, no binary and no
+      # install, so once here rather than on every test-matrix entry. Offline:
+      # check-pins covers its decision, including the path where it reports the
+      # pins as obsolete; the networked half runs on a schedule in `pins`.
+      - run: npm run check:pins:selftest
+      - run: npm run check:package:selftest
+      - run: npm run licenses:selftest
+      - run: npm run report:selftest
+      - run: npm run conformance:selftest
+      - run: npm run check:resvg:selftest
+      - run: npm run ci:targets:selftest
 
   build:
     name: ${{ matrix.target }}
@@ -173,12 +184,23 @@ jobs:
             exit 1
           fi
 
-      # build.rs regenerates src/lib.rs from the upstream sources. It is
-      # committed, and the generator is deterministic, so any diff here means the
-      # checked-in bindings no longer match what the pinned usvg/resvg produce.
-      - name: Generated bindings are up to date
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: git diff --exit-code -- src/lib.rs index.d.ts index.js browser.js
+      # The build regenerates committed files: src/lib.rs and index.d.ts from
+      # the upstream sources (build.rs), index.js and browser.js, and on wasm the
+      # WASI loader shims. The generators are deterministic, so anything the
+      # build left changed -- or added -- means the checked-in files no longer
+      # match what the pinned versions produce. The whole tree rather than a
+      # list of paths, so a newly generated file cannot slip past.
+      # package-lock.json is the exception: `npm install` above may rewrite it
+      # on a release commit, as explained there.
+      - name: Generated files are up to date
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'wasm32-wasip1-threads'
+        run: |
+          changed=$(git status --porcelain -- . ':!package-lock.json')
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            git diff -- . ':!package-lock.json'
+            exit 1
+          fi
 
       # The codegen's report -- what it derived, and what it left alone with the
       # reason -- is documentation now: the README points at it as the answer to
@@ -207,24 +229,6 @@ jobs:
           cargo fetch --locked
           npm run licenses
 
-      # The WASI loader shims are generated and committed too, but only the
-      # wasm build emits them (they are this job's upload-artifact payload
-      # below), so the linux-gnu job above cannot see them drift.
-      - name: Generated WASI shims are up to date
-        if: matrix.target == 'wasm32-wasip1-threads'
-        run: git diff --exit-code -- resvg-napi.wasi.cjs resvg-napi.wasi.d.cts resvg-napi.wasi-browser.js wasi-worker.mjs wasi-worker-browser.mjs
-
-      - name: WASI smoke test
-        if: matrix.target == 'wasm32-wasip1-threads'
-        run: |
-          node -e "
-            const m = require('./resvg-napi.wasi.cjs');
-            const svg = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"><rect width=\"8\" height=\"8\" fill=\"teal\"/></svg>';
-            const png = new m.Resvg(svg).renderPng();
-            if (png.subarray(0, 4).toString('hex') !== '89504e47') throw new Error('not a PNG');
-            console.log('wasm renders:', png.length, 'bytes');
-          "
-
       # esbuild has exactly one consumer -- demo/build.mjs -- and pages.yml runs
       # only on main, so an esbuild bump was provable only after merging, in the
       # deploy. `demo:build` is not used here: it would rebuild the wasm this
@@ -247,17 +251,15 @@ jobs:
       #   gh run download <run-id> -p 'regen-*' -D regen
       #   for p in regen/*/regen.patch; do git apply "$p"; done
       # Nothing here commits it: this job runs the freshly bumped packages, and
-      # its token stays read-only. Same file sets as the drift checks above.
+      # its token stays read-only. Same whole-tree rule as the drift check.
       - name: Keep the regenerated files
         if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
         run: |
           if [ "${{ matrix.target }}" = x86_64-unknown-linux-gnu ]; then
             npm run report -- -w || true
             npm run licenses -- -w || true
-            git diff --binary -- src/lib.rs index.d.ts index.js browser.js codegen-report.txt THIRD-PARTY-NOTICES.md 'npm/*/THIRD-PARTY-NOTICES.md' > regen.patch
-          elif [ "${{ matrix.target }}" = wasm32-wasip1-threads ]; then
-            git diff --binary -- resvg-napi.wasi.cjs resvg-napi.wasi.d.cts resvg-napi.wasi-browser.js wasi-worker.mjs wasi-worker-browser.mjs > regen.patch
           fi
+          git diff --binary -- . ':!package-lock.json' > regen.patch
       - if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
         uses: actions/upload-artifact@v7
         with:
@@ -301,16 +303,6 @@ jobs:
       # index.d.ts is generated, so a type regression is a build product
       # regression: cheap to catch here.
       - run: npm run typecheck
-      # Offline: covers the decision in scripts/check-pins.mjs, including the
-      # path where it reports the pins as obsolete. The networked half runs on
-      # a schedule in the `pins` job.
-      - run: npm run check:pins:selftest
-      - run: npm run check:package:selftest
-      - run: npm run licenses:selftest
-      - run: npm run report:selftest
-      - run: npm run conformance:selftest
-      - run: npm run check:resvg:selftest
-      - run: npm run ci:targets:selftest
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform

@@ -22,7 +22,6 @@ import { basename, dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 
 const SNAPSHOT = 'THIRD-PARTY-NOTICES.md';
-const SELF = 'resvg-napi';
 
 // Apache-2.0 and MIT ship beside this file; the rest have to be quoted here.
 const ALREADY_SHIPPED = ['Apache-2.0', 'MIT'];
@@ -128,10 +127,10 @@ function graph() {
   const out = execFileSync('cargo', ['metadata', '--format-version', '1', '--offline'],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const meta = JSON.parse(out);
-  const rootId = meta.resolve?.root ?? meta.packages.find((p) => p.name === SELF)?.id;
+  const rootId = meta.resolve.root;
   const linked = linkedIds(meta.resolve, rootId);
   return meta.packages
-    .filter((p) => p.name !== SELF && linked.has(p.id))
+    .filter((p) => p.id !== rootId && linked.has(p.id))
     .map((p) => {
       const dir = dirname(p.manifest_path);
       const texts = licenceFiles(dir).map((f) => ({ file: basename(f), text: readFileSync(f, 'utf8') }));

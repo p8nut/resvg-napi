@@ -14,8 +14,14 @@ updates:
       actions:
         patterns: ['*']
 
+  # The wasm package declares the runtime the root installs, and check:package
+  # wants both to name the same version. Listed together, one grouped pull
+  # request bumps both; on its own the root moved and the wasm package stayed
+  # behind (#109). `increase` because the wasm side is a `~` range: the default
+  # would keep `~1.2.5` once 1.2.6 is out, since 1.2.6 still satisfies it.
   - package-ecosystem: npm
-    directory: /
+    directories: [/, /npm/wasm32-wasi]
+    versioning-strategy: increase
     schedule:
       interval: weekly
     allow:

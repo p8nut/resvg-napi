@@ -651,6 +651,20 @@ pub fn template(
 
         const LOG_CAP: usize = 500;
 
+        #[doc = " Appends `line` unless the buffer is full. The last slot is kept for"]
+        #[doc = " a marker saying so: 500 lines with nothing after them would read as"]
+        #[doc = " everything there was."]
+        fn push_capped(buf: &mut Vec<String>, line: String) {
+            if buf.len() + 1 < LOG_CAP {
+                buf.push(line);
+            } else if buf.len() + 1 == LOG_CAP {
+                buf.push(format!(
+                    "WARN {}: log buffer full ({LOG_CAP} entries), later messages dropped",
+                    env!("CARGO_PKG_NAME")
+                ));
+            }
+        }
+
         thread_local! {
             #[doc = " Set while a document parses or renders on this thread, so its"]
             #[doc = " messages can be told apart from a concurrent render's."]
@@ -669,8 +683,9 @@ pub fn template(
                 let out = f();
                 let got = LOG_SINK.with(|s| s.replace(outer)).unwrap_or_default();
                 let mut buf = self.0.lock().unwrap_or_else(|e| e.into_inner());
-                let room = LOG_CAP.saturating_sub(buf.len());
-                buf.extend(got.into_iter().take(room));
+                for line in got {
+                    push_capped(&mut buf, line);
+                }
                 out
             }
         }
@@ -687,17 +702,13 @@ pub fn template(
                 let line = format!("{} {}: {}", record.level(), record.target(), record.args());
                 LOG_SINK.with(|s| {
                     if let Some(buf) = s.borrow_mut().as_mut() {
-                        if buf.len() < LOG_CAP {
-                            buf.push(line.clone());
-                        }
+                        push_capped(buf, line.clone());
                     }
                 });
-                if let Ok(mut buf) = LOGS.lock() {
-                    // Bounded: a pathological document must not grow this forever.
-                    if buf.len() < LOG_CAP {
-                        buf.push(line);
-                    }
-                }
+                // Bounded: a pathological document must not grow this forever.
+                // Poison-tolerant like every other diagnostics lock: a panic
+                // elsewhere must not switch logging off for the process.
+                push_capped(&mut LOGS.lock().unwrap_or_else(|e| e.into_inner()), line);
             }
 
             fn flush(&self) {}
@@ -727,9 +738,7 @@ pub fn template(
         #[doc = " document's own `takeLogs()` holds only its messages."]
         #[napi]
         pub fn take_logs() -> Vec<String> {
-            LOGS.lock()
-                .map(|mut buf| std::mem::take(&mut *buf))
-                .unwrap_or_default()
+            std::mem::take(&mut *LOGS.lock().unwrap_or_else(|e| e.into_inner()))
         }
 
         #[doc = " Anything that owns a content group: the document, or a def such as a"]

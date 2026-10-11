@@ -281,7 +281,8 @@ takeLogs()
 ```
 
 `takeLogs()` drains the buffer, which is capped at 500 entries so a pathological
-document cannot grow it without end. It collects from every document and thread,
+document cannot grow it without end. A full buffer ends with a
+`WARN resvg-napi: log buffer full (500 entries), later messages dropped` line. It collects from every document and thread,
 so concurrent renders interleave there. A document's own `takeLogs()` holds only
 what its parse and renders reported, its nodes' `renderPng` and async ones included:
 

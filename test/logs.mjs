@@ -48,6 +48,20 @@ new Resvg(many).renderPng();
 const bounded = takeLogs();
 assert.ok(bounded.length > 100, `the document did produce warnings, got ${bounded.length}`);
 assert.equal(bounded.length, 500, 'capped at exactly 500, not merely under it');
+// ...and says so: without a marker, 500 lines read as everything there was.
+assert.match(bounded.at(-1), /^WARN resvg-napi: log buffer full .*dropped$/, 'truncation is marked');
+assert.ok(!bounded.slice(0, -1).some((l) => /buffer full/.test(l)), 'one marker, last');
+{
+  // a document's own buffer: parse and render each fill a thread sink that is
+  // capped too, and both land in it -- still one marker, still last
+  const d = new Resvg(many);
+  d.renderPng();
+  const own = d.takeLogs();
+  assert.equal(own.length, 500, 'per-document buffer capped');
+  assert.match(own.at(-1), /buffer full/, 'per-document truncation is marked');
+  assert.equal(own.filter((l) => /buffer full/.test(l)).length, 1, 'one marker per document');
+}
+takeLogs();
 setLogLevel('off');
 
 // 7. per document: each holds its own messages, async twins included, even

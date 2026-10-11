@@ -1,8 +1,9 @@
 // Image resolution: two-pass hook (Send+Sync forbids a JS callback inside usvg).
 import assert from 'node:assert/strict';
-import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 const { Resvg } = createRequire(import.meta.url)('../index.js');
 
@@ -147,6 +148,41 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
   assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: root }).pendingImages(), [], 'reached under resourcesRoot');
   assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [up], 'a root equal to resourcesDir changes nothing');
   assert.deepEqual(new Resvg(doc(secret), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [secret], 'absolute path outside the root');
+}
+
+// 8. a file past the read cap (256 MiB) is refused from its size alone. The
+//    file is sparse, so the test costs no disk; a read that ignored the cap
+//    would allocate the whole of it before anything could refuse it.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'resvg-big-'));
+  writeFileSync(join(dir, 'big.png'), red);
+  truncateSync(join(dir, 'big.png'), 256 * 1024 * 1024 + 1);
+  assert.deepEqual(new Resvg(doc('big.png'), { resourcesDir: dir }).pendingImages(), ['big.png'], 'oversized file refused');
+}
+
+// 9. only regular files are read: a FIFO or a device is a stream, and usvg's
+//    fs::read would never return on it. A FIFO with no writer blocks without
+//    growing memory, so a lost regular-file check hangs instead of eating RAM.
+//    The read is synchronous native code that no in-process timeout can
+//    interrupt, hence the child process, killed after 5s.
+//    Both FIFOs are our own, nothing from /dev: one beside the SVG, one
+//    reached by absolute path from outside resourcesDir. Linux only: mkfifo.
+if (process.platform === 'linux') {
+  const dir = mkdtempSync(join(tmpdir(), 'resvg-fifo-'));
+  const away = join(mkdtempSync(join(tmpdir(), 'resvg-fifo-out-')), 'pipe.png');
+  execFileSync('mkfifo', [join(dir, 'pipe.png'), away]);
+  const hrefs = ['pipe.png', away];
+  const script = `
+    const { Resvg } = require(${JSON.stringify(createRequire(import.meta.url).resolve('../index.js'))});
+    const doc = ${doc};
+    const out = ${JSON.stringify(hrefs)}.map((h) => new Resvg(doc(h), { resourcesDir: ${JSON.stringify(dir)} }).pendingImages());
+    process.stdout.write(JSON.stringify(out));`;
+  const child = spawnSync(process.execPath, ['-e', script], { timeout: 5000, encoding: 'utf8' });
+  assert.equal(child.signal, null, 'parse blocked reading a stream (regular-file check lost?)');
+  assert.equal(child.status, 0, child.stderr);
+  assert.deepEqual(JSON.parse(child.stdout), hrefs.map((h) => [h]), 'streams refused');
+} else {
+  console.log('skip — stream hrefs: Linux only');
 }
 
 console.log('ok — image resolution: all checks passed');

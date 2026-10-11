@@ -138,5 +138,8 @@
     "resvg-napi-wasm32-wasi": {
       "optional": true
     }
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

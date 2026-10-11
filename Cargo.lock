@@ -525,6 +525,7 @@ dependencies = [
 name = "resvg-napi"
 version = "0.5.1"
 dependencies = [
+ "libc",
  "log",
  "napi",
  "napi-build",

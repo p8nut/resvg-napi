@@ -39,6 +39,11 @@ svgtypes = "0.16.1"
 # default, so the messages are lost. We install a collector.
 log = "0.4"
 
+# O_NOFOLLOW and O_NONBLOCK for reading images off disk; std names neither.
+# Already in the graph through memmap2.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [build-dependencies]
 napi-build = "=2.3.2"
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }

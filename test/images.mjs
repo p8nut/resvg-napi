@@ -1,6 +1,6 @@
 // Image resolution: two-pass hook (Send+Sync forbids a JS callback inside usvg).
 import assert from 'node:assert/strict';
-import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -147,6 +147,16 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
   assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: root }).pendingImages(), [], 'reached under resourcesRoot');
   assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [up], 'a root equal to resourcesDir changes nothing');
   assert.deepEqual(new Resvg(doc(secret), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [secret], 'absolute path outside the root');
+}
+
+// 8. a file past the read cap (256 MiB) is refused from its size alone. The
+//    file is sparse, so the test costs no disk; a read that ignored the cap
+//    would allocate the whole of it before anything could refuse it.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'resvg-big-'));
+  writeFileSync(join(dir, 'big.png'), red);
+  truncateSync(join(dir, 'big.png'), 256 * 1024 * 1024 + 1);
+  assert.deepEqual(new Resvg(doc('big.png'), { resourcesDir: dir }).pendingImages(), ['big.png'], 'oversized file refused');
 }
 
 console.log('ok — image resolution: all checks passed');

@@ -986,7 +986,6 @@ fn href_resolver(
     misses: Misses,
     root: Option<std::path::PathBuf>,
 ) -> usvg::ImageHrefResolver<'static> {
-    let from_disk = usvg::ImageHrefResolver::default_string_resolver();
     let sniff = usvg::ImageHrefResolver::default_data_resolver();
     usvg::ImageHrefResolver {
         resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
@@ -995,8 +994,14 @@ fn href_resolver(
                 return sniff("text/plain", data.clone(), opts);
             }
             if let Some(path) = under_resources_dir(href, opts, root.as_deref()) {
-                if let Some(kind) = from_disk(&path.to_string_lossy(), opts) {
-                    return Some(kind);
+                if let Some(data) = read_regular(&path) {
+                    let svg = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                        e.eq_ignore_ascii_case("svg") || e.eq_ignore_ascii_case("svgz")
+                    });
+                    let mime = if svg { "image/svg+xml" } else { "text/plain" };
+                    if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
+                        return Some(kind);
+                    }
                 }
             }
             misses
@@ -1008,9 +1013,10 @@ fn href_resolver(
         }),
     }
 }
-#[doc = " `href` resolved against `resourcesDir`, if it names a regular file"]
-#[doc = " inside `root` (default: `resourcesDir` itself). Canonicalised, so"]
-#[doc = " `..` and symlinks cannot step outside it."]
+#[doc = " `href` resolved against `resourcesDir`, if it lands inside `root`"]
+#[doc = " (default: `resourcesDir` itself). Canonicalised, so `..` and"]
+#[doc = " symlinks cannot step outside it. What the path names is checked"]
+#[doc = " by `read_regular`, on the open descriptor."]
 fn under_resources_dir(
     href: &str,
     opts: &usvg::Options,
@@ -1019,7 +1025,34 @@ fn under_resources_dir(
     let dir = opts.resources_dir.as_deref()?;
     let root = root.unwrap_or(dir).canonicalize().ok()?;
     let path = dir.join(href).canonicalize().ok()?;
-    (path.starts_with(&root) && path.is_file()).then_some(path)
+    path.starts_with(&root).then_some(path)
+}
+#[doc = " Largest image file read off disk: 256 MiB."]
+const MAX_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
+#[doc = " The bytes of `path` if it is a regular file of at most"]
+#[doc = " `MAX_IMAGE_BYTES`. Opened once and judged on the descriptor, so a"]
+#[doc = " file swapped for a FIFO or a device after `under_resources_dir`"]
+#[doc = " is refused instead of blocking (`O_NONBLOCK`), and a last"]
+#[doc = " component swapped for a symlink is not followed (`O_NOFOLLOW`)."]
+#[doc = ""]
+#[doc = " A directory higher up swapped for a symlink between the check"]
+#[doc = " and the open is still followed: closing that needs"]
+#[doc = " `openat2(RESOLVE_BENEATH)` or cap-std. Exploiting it takes write"]
+#[doc = " access to `resourcesDir` during a parse."]
+fn read_regular(path: &std::path::Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut open = std::fs::OpenOptions::new();
+    open.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    let file = open.open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    if !meta.is_file() || meta.len() > MAX_IMAGE_BYTES {
+        return None;
+    }
+    let mut data = Vec::with_capacity(meta.len() as usize);
+    file.take(MAX_IMAGE_BYTES + 1).read_to_end(&mut data).ok()?;
+    (data.len() as u64 <= MAX_IMAGE_BYTES).then_some(data)
 }
 impl FontFace {
     #[doc = " This face's ID in `db`, or one that matches nothing."]

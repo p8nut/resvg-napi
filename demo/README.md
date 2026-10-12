@@ -3,11 +3,19 @@
 # Browser demo
 
 **[Open it without installing anything](https://p8nut.github.io/resvg-napi/)** --
-the same page, deployed from `main` on every push.
+the same pages, deployed from `main` on every push.
 
 ```bash
 npm run demo      # builds the wasm, bundles the loaders, serves on :8787
 ```
+
+Two pages:
+
+- **`index.html`** -- the first thing a visitor sees: an SVG editor, the PNG
+  resvg draws from it, four plain examples (shapes, text, gradient, filter) and
+  the Node.js call that does the same. No templates, no options beyond scale.
+- **`bench.html`** -- the proof bench, linked from the simple page and
+  described below: everything else the API can do.
 
 ![the proof bench](assets/screenshot.png)
 
@@ -249,7 +257,7 @@ stripped in `source()`.
 ## Browser specifics
 
 Three things the demo has to handle, all visible in
-`index.html`:
+`bench.html`:
 
 - **COOP + COEP headers.** The wasm is built for `wasm32-wasip1-threads`, so it
   wants a shared memory, so it needs `SharedArrayBuffer`, so the page must be

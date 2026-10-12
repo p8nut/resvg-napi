@@ -333,8 +333,10 @@ rather than claiming `'native'`.
 
 ## Demo
 
-A browser proof bench for the same bindings compiled to WASI: Liquid templating,
-an array editor, per-element export, live diagnostics. Deployed from `main` at
+The same bindings compiled to WASI, in the browser: a simple page (edit an SVG,
+see the PNG resvg draws, copy the Node.js call) and, behind it, a proof bench
+with Liquid templating, an array editor, per-element export and live
+diagnostics. Deployed from `main` at
 **[p8nut.github.io/resvg-napi](https://p8nut.github.io/resvg-napi/)**, and it
 runs locally too:
 

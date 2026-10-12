@@ -1,1780 +1,197 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>resvg proof bench</title>
-<!-- Adds COOP/COEP to its own responses, because GitHub Pages sends no headers
-     and the threaded wasm needs cross-origin isolation. First visit reloads. -->
+<title>resvg-napi demo</title>
+<!-- Same isolation trick as bench.html: GitHub Pages sends no COOP/COEP
+     headers and the threaded wasm needs them. First visit reloads. -->
 <script src="./coi-serviceworker.js"></script>
 <style>
-  /* Self-hosted: COEP require-corp is needed for SharedArrayBuffer, and it
-     blocks cross-origin fonts that carry no CORP header. */
-  @font-face { font-family: 'Space Mono'; src: url('fonts/space-mono-latin-400-normal.woff2') format('woff2');
-               font-weight: 400; font-display: swap; }
-  @font-face { font-family: 'Space Mono'; src: url('fonts/space-mono-latin-700-normal.woff2') format('woff2');
-               font-weight: 700; font-display: swap; }
   @font-face { font-family: 'IBM Plex Sans'; src: url('fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
                font-weight: 400; font-display: swap; }
   @font-face { font-family: 'IBM Plex Sans'; src: url('fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
                font-weight: 600; font-display: swap; }
+  @font-face { font-family: 'Space Mono'; src: url('fonts/space-mono-latin-400-normal.woff2') format('woff2');
+               font-weight: 400; font-display: swap; }
 
-  /* A blueline proof: the paper prepress used to check a job before it ran.
-     Cyan carries structure, magenta marks anything unresolved. */
   :root {
-    --proof: #dce4ea;
-    --plate: #16222e;
-    --rule: #93a7b6;
-    --tint: #cbd8e1;
-    --cyan: #0091b4;
-    --mag: #c8005e;
-    --amber: #a8630a;
-    --mono: 'Space Mono', ui-monospace, monospace;
+    --bg: #f4f6f8; --fg: #16222e; --dim: #5b6b78; --line: #cbd8e1;
+    --accent: #0091b4; --err: #c8005e; --panel: #fff;
     --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
-    --gap: clamp(.75rem, 2vw, 1.5rem);
+    --mono: 'Space Mono', ui-monospace, monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --proof: #0c141c; --plate: #d9e4ec; --rule: #3d5567; --tint: #16222e;
-            --cyan: #35c6e8; --mag: #ff5d97; --amber: #e2a33f; }
-  }
-
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--proof); color: var(--plate); font: 400 14px/1.55 var(--sans);
-         -webkit-font-smoothing: antialiased; }
-
-  /* Crop corners: the page is a plate. */
-  .sheet { position: relative; min-height: 100vh; padding: var(--gap); }
-  .sheet::before, .sheet::after,
-  .sheet > .corners::before, .sheet > .corners::after {
-    content: ''; position: absolute; width: 14px; height: 14px; pointer-events: none;
-    border: 1px solid var(--rule);
-  }
-  .sheet::before { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
-  .sheet::after { top: 6px; right: 6px; border-left: 0; border-bottom: 0; }
-  .sheet > .corners::before { bottom: 6px; left: 6px; border-right: 0; border-top: 0; }
-  .sheet > .corners::after { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
-
-  /* Slug line: what a printer stamps in the margin. */
-  .slug { display: flex; flex-wrap: wrap; gap: .1rem 1.25rem; align-items: baseline;
-          border-bottom: 1px solid var(--rule); padding-bottom: .55rem; margin-bottom: var(--gap);
-          font: 400 11px/1.7 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
-  .slug h1 { font: 700 11px/1.7 var(--mono); letter-spacing: .16em; margin: 0;
-             padding-right: 1rem; border-right: 1px solid var(--rule); }
-  .slug h1 em { font-style: normal; color: var(--cyan); }
-  .slug dl { display: flex; gap: .4rem; margin: 0; }
-  .slug dt { color: var(--rule); }
-  .slug dd { margin: 0; }
-
-  .bench { display: grid; grid-template-columns: minmax(0, 26rem) minmax(0, 1fr); gap: var(--gap); }
-  @media (max-width: 62rem) { .bench { grid-template-columns: minmax(0, 1fr); } }
-
-  /* Legends read like plate labels. */
-  .legend { font: 700 10px/1 var(--mono); text-transform: uppercase; letter-spacing: .18em;
-            color: var(--rule); display: flex; align-items: center; gap: .5rem; margin: 0 0 .5rem; }
-  .legend::after { content: ''; flex: 1; height: 1px; background: var(--rule); opacity: .5; }
-  .legend b { color: var(--plate); font-weight: 700; }
-
-  section + section { margin-top: var(--gap); }
-
-  textarea, input, button { font: inherit; color: inherit; background: transparent;
-                            border: 1px solid var(--rule); border-radius: 0; }
-  textarea { width: 100%; height: 15rem; padding: .6rem .7rem; resize: vertical;
-             font: 400 12px/1.6 var(--mono); overflow: auto; }
-  textarea:focus-visible, input:focus-visible, button:focus-visible,
-  [tabindex]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-
-  .controls { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: end; margin: .7rem 0; }
-  label { display: grid; gap: .2rem; font: 400 10px/1.4 var(--mono);
-          text-transform: uppercase; letter-spacing: .1em; color: var(--rule); }
-  label.inline { display: flex; align-items: center; gap: .4rem; text-transform: none;
-                 letter-spacing: 0; font-size: 12px; color: inherit; font-family: var(--sans); }
-  input[type=number], input[type=text] { width: 6.5rem; padding: .3rem .45rem;
-                                         font: 400 12px var(--mono); }
-  button { padding: .45rem 1.1rem; cursor: pointer; font: 700 11px var(--mono);
-           text-transform: uppercase; letter-spacing: .12em;
-           border-color: var(--plate); }
-  button:hover:not(:disabled) { background: var(--plate); color: var(--proof); }
-  button:disabled { opacity: .4; cursor: default; }
-  button.grab { padding: .1rem .45rem; font: 700 9px var(--mono); margin-left: .5rem;
-                text-transform: uppercase; letter-spacing: .08em; vertical-align: 1px; }
-
-  /* The proof: registration marks and a tick rule around the output. */
-  .frame { position: relative; padding: 18px 0 0 18px; }
-  .ticks { position: absolute; background-repeat: repeat; opacity: .8; }
-  .ticks.top { top: 4px; left: 18px; width: var(--plate-w, 0); height: 8px;
-               background-image: repeating-linear-gradient(to right,
-                 var(--rule) 0 1px, transparent 1px 10px); }
-  .ticks.left { left: 4px; top: 18px; height: var(--plate-h, 0); width: 8px;
-                background-image: repeating-linear-gradient(to bottom,
-                  var(--rule) 0 1px, transparent 1px 10px); }
-  /* Shrink to the render: the registration marks must sit on the proof's own
-     corners, not on the column's. */
-  .plate { position: relative; display: inline-block; vertical-align: top;
-           border: 1px solid var(--rule);
-           background-image: linear-gradient(45deg, var(--tint) 25%, transparent 25% 75%, var(--tint) 75%),
-                             linear-gradient(45deg, var(--tint) 25%, transparent 25% 75%, var(--tint) 75%);
-           background-size: 16px 16px; background-position: 0 0, 8px 8px;
-           opacity: 1; }
-  .plate img { display: block; max-width: 100%; height: auto; }
-  .frame { display: inline-block; }
-  .plate.fresh img { animation: expose 160ms ease-out; }
-  @keyframes expose { from { opacity: .25; } to { opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .plate.fresh img { animation: none; } }
-  /* Registration crosses, one per corner of the proof. */
-  .reg { position: absolute; width: 13px; height: 13px; pointer-events: none; color: var(--cyan); }
-  .reg::before, .reg::after { content: ''; position: absolute; background: currentColor; }
-  .reg::before { left: 6px; top: 0; width: 1px; height: 100%; }
-  .reg::after { top: 6px; left: 0; height: 1px; width: 100%; }
-  .reg.tl { left: -7px; top: -7px; } .reg.tr { right: -7px; top: -7px; }
-  .reg.bl { left: -7px; bottom: -7px; } .reg.br { right: -7px; bottom: -7px; }
-  /* The bounding box, drawn from absLayerBoundingBox(). */
-  #bboxOverlay { position: absolute; border: 1px dashed var(--mag); pointer-events: none;
-                 display: none; }
-  #bboxOverlay[data-on] { display: block; }
-  #bboxOverlay span { position: absolute; top: 3px; left: 4px; white-space: nowrap;
-                      font: 400 10px var(--mono); color: var(--mag);
-                      background: color-mix(in oklab, var(--proof) 75%, transparent);
-                      padding: 0 .25rem; }
-
-  /* Measurements: a data list, not prose. */
-  .measure { margin: var(--gap) 0 0; display: grid; grid-template-columns: auto 1fr;
-             gap: .1rem .9rem; font: 400 12px/1.6 var(--mono); }
-  .measure dt { color: var(--rule); text-transform: uppercase; font-size: 10px;
-                letter-spacing: .1em; align-self: center; }
-  .measure dd { margin: 0; overflow-wrap: anywhere; }
-
-  /* Unresolved: the missing plates. */
-  .unresolved { border-left: 2px solid var(--mag); padding-left: .8rem; }
-  .unresolved p { margin: 0 0 .4rem; font-size: 13px; }
-  .unresolved ul { margin: 0; padding: 0; list-style: none; }
-  .unresolved li { display: flex; align-items: center; gap: .5rem; margin: .3rem 0;
-                   font: 400 12px var(--mono); }
-  .unresolved li.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
-  .unresolved code { color: var(--mag); }
-  input[type=file] { font: 400 11px var(--mono); border: 0; padding: 0; max-width: 13rem; }
-  input[type=file]::file-selector-button { font: 700 10px var(--mono); text-transform: uppercase;
-    letter-spacing: .1em; padding: .25rem .6rem; margin-right: .5rem; cursor: pointer;
-    color: inherit; background: transparent; border: 1px solid var(--rule); border-radius: 0; }
-
-  #drop { border: 1px dashed var(--rule); padding: .8rem; text-align: center;
-          display: grid; gap: .15rem; }
-  #drop b { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
-  #drop span { font-size: 11px; color: var(--rule); }
-  #drop.over { border-color: var(--cyan); border-style: solid; }
-
-  /* Variables. One row per variable, name above its control: a long filter
-     chain in the label column used to squeeze every input to a sliver. */
-  #varsList { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-              gap: .6rem 1rem; align-items: start; min-width: 0; }
-  #varsList .row { display: grid; gap: .15rem; min-width: 0; }
-  #varsList .row.wide { grid-column: 1 / -1; }
-  #varsList .row.hit code { color: var(--cyan); }
-  /* min-width:0 or the grid item sizes itself to the nowrap chain and spills
-     out of the panel instead of ellipsizing. */
-  #varsList code { font: 400 12px var(--mono); overflow-wrap: anywhere;
-                   min-width: 0; overflow: hidden; }
-  /* The chain can be a whole sentence (`default: "..."`); one line, hover for
-     the rest. */
-  #varsList .chain { display: block; color: var(--cyan); font-size: 11px;
-                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #varsList .chain.stub { color: var(--amber); }
-  #example { font: 400 11px var(--mono); padding: .15rem .3rem;
-             border: 1px solid var(--rule); background: transparent; color: inherit; }
-  #varsFind { margin-left: auto; font: 400 11px var(--mono); width: 9rem;
-              padding: .15rem .35rem; border: 1px solid var(--rule);
-              background: transparent; color: inherit; }
-  #varsList input[type=text], #varsList textarea { width: 100%; }
-  #varsList textarea { font: 400 11px/1.5 var(--mono); padding: .3rem .45rem;
-                       border: 1px solid var(--rule); background: transparent;
-                       color: inherit; resize: vertical; }
-  #varsList .imgvar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-  #varsList .imgvar span { font: 400 11px var(--mono); color: var(--rule); }
-  #varsList .imgvar input.href { width: 8rem; }
-  #varsList .imgvar.over { outline: 2px dashed var(--cyan); outline-offset: 3px; }
-  #varsNote { margin: .5rem 0 0; font-size: 11px; color: var(--rule); }
-  /* The node tree: one row per element, indented by depth. */
-  #treeList { margin: 0; padding: 0; list-style: none; font: 400 11px var(--mono); }
-  /* max-width, or the export button sits a panel-width away from its row. */
-  #treeList li { display: flex; align-items: center; gap: .5rem; padding: .1rem 0;
-                 max-width: 26rem; }
-  #treeList button.pick { flex: 1; text-align: left; border: 0; background: none;
-                          color: inherit; font: inherit; cursor: pointer; padding: .1rem .2rem; }
-  #treeList button.pick:hover { color: var(--cyan); }
-  #treeList li[data-on] button.pick { color: var(--mag); }
-  #treeList .kind { color: var(--plate); }
-  #treeList .ident { color: var(--cyan); }
-  #treeList .size { color: var(--rule); }
-  #treeList button.save { font: 400 9px var(--mono); text-transform: uppercase;
-                          letter-spacing: .1em; padding: .1rem .35rem;
-                          border: 1px solid var(--rule); background: transparent;
-                          color: inherit; cursor: pointer; }
-  #resolvedWrap { margin: .35rem 0 0; font: 400 10px var(--mono); color: var(--rule); }
-  #resolvedWrap summary { cursor: pointer; text-transform: uppercase; letter-spacing: .1em; }
-  #resolvedTree { max-height: 12rem; overflow: auto; margin: .35rem 0 0;
-                  padding: .4rem .5rem; border: 1px solid var(--rule);
-                  color: var(--plate); white-space: pre; }
-  /* What Liquid produced, which is what resvg was handed. */
-  #renderedWrap { margin: .5rem 0 0; font: 400 10px var(--mono); color: var(--rule); }
-  #renderedWrap summary { cursor: pointer; text-transform: uppercase; letter-spacing: .1em; }
-  #renderedSource { max-height: 12rem; overflow: auto; margin: .35rem 0 0;
-                    padding: .4rem .5rem; border: 1px solid var(--rule);
-                    color: var(--plate); white-space: pre; tab-size: 2; }
-  .collection table { border-collapse: collapse; width: 100%; }
-  .collection th, .collection td { padding: 0; border: 1px solid var(--rule); }
-  .collection thead td { font: 700 9px var(--mono); text-transform: uppercase;
-                         letter-spacing: .08em; color: var(--rule); padding: .2rem .3rem;
-                         border: 1px solid var(--rule); }
-  .collection td input[type=text], .collection td input[type=number] {
-    width: 100%; border: 0; padding: .25rem .35rem; font: 400 11px var(--mono); }
-  .collection td input[type=checkbox] { margin: .3rem .4rem; }
-  .collection td:last-child { width: 1.6rem; text-align: center; }
-  .collection td button { border: 0; padding: .1rem .3rem; font: 400 12px var(--mono);
-                          color: var(--rule); cursor: pointer; }
-  .collection td button:hover { color: var(--mag); background: transparent; }
-  .collection .add { margin-top: .35rem; padding: .2rem .6rem; font-size: 10px; }
-  .collection details { margin-top: .4rem; }
-  .collection summary { font: 700 9px var(--mono); text-transform: uppercase;
-                        letter-spacing: .08em; color: var(--rule); cursor: pointer; }
-  .collection textarea { width: 100%; margin-top: .3rem; font: 400 11px/1.5 var(--mono);
-                         padding: .3rem; border: 1px solid var(--rule);
-                         background: transparent; color: inherit; resize: vertical; }
-  .collection .hint { margin: 0; font-size: 11px; color: var(--rule); }
-
-  /* Diagnostics: everything both engines had to say. */
-  #diag { margin-top: var(--gap); }
-  #diagList { margin: 0; padding: 0; list-style: none; max-height: 14rem; overflow: auto;
-              border-top: 1px solid var(--rule); }
-  #diagList li { display: grid; grid-template-columns: 4.5rem 5rem 1fr; gap: .8rem;
-                 padding: .3rem 0; border-bottom: 1px solid color-mix(in oklab, var(--rule) 40%, transparent);
-                 font: 400 12px/1.5 var(--mono); }
-  #diagList .lvl { font-weight: 700; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
-  #diagList .error .lvl { color: var(--mag); }
-  #diagList .warn .lvl { color: var(--amber); }
-  #diagList .info .lvl { color: var(--cyan); }
-  #diagList .src { color: var(--rule); }
-  #diagList .msg { overflow-wrap: anywhere; }
-  #diagList li.stale { opacity: .4; }
-  #diagEmpty { font-size: 12px; color: var(--rule); padding: .4rem 0; }
-  .diagbar { display: flex; align-items: center; gap: .8rem; }
-  .diagbar button { padding: .2rem .6rem; font-size: 10px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15px/1.55 var(--sans); }
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .3rem; }
+  .lede { color: var(--dim); margin: 0 0 1.5rem; max-width: 60ch; }
+  a { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .8rem; min-width: 0; }
+  .panel h2 { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 0 0 .6rem; }
+  .bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .6rem; }
+  .bar button { font: inherit; font-size: .85rem; padding: .25rem .7rem; border: 1px solid var(--line);
+                border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
+  .bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  textarea { width: 100%; height: 340px; font: 13px/1.5 var(--mono); border: 1px solid var(--line);
+             border-radius: 4px; padding: .6rem; resize: vertical; color: var(--fg); background: var(--bg); }
+  label { font-size: .85rem; color: var(--dim); }
+  input[type="number"] { width: 4.5rem; font: inherit; padding: .15rem .3rem; }
+  .out { display: grid; place-items: center; min-height: 340px; border-radius: 4px;
+         background: repeating-conic-gradient(#e9eef2 0 25%, #fff 0 50%) 0 0 / 16px 16px; overflow: auto; }
+  .out img { max-width: 100%; height: auto; }
+  .status { font-size: .85rem; color: var(--dim); margin-top: .5rem; min-height: 1.4em; }
+  .status.err { color: var(--err); }
+  pre { margin: 0; font: 13px/1.6 var(--mono); overflow-x: auto; }
+  .code { margin-top: 1rem; }
+  .more { margin-top: 1.5rem; color: var(--dim); }
 </style>
 
-<div class="sheet">
-  <div class="corners"></div>
+<main>
+  <h1>resvg-napi</h1>
+  <p class="lede">SVG in, PNG out. <a href="https://github.com/linebender/resvg">resvg</a> compiled
+    for Node.js and, on this page, for the browser as WebAssembly. Pick an example or edit the
+    SVG: the image on the right is what resvg draws, not what your browser does.</p>
 
-  <div class="slug">
-    <h1>resvg <em>proof bench</em></h1>
-    <dl><dt>engine</dt><dd id="slugEngine">loading…</dd></dl>
-    <dl><dt>target</dt><dd>wasm32-wasip1-threads</dd></dl>
-    <dl><dt>fonts</dt><dd id="slugFonts">0</dd></dl>
-    <dl><dt>plate</dt><dd id="slugPlate">—</dd></dl>
-    <dl><dt>last run</dt><dd id="log">loading wasm…</dd></dl>
-    <dl><dt>issues</dt><dd id="slugIssues">0</dd></dl>
+  <div class="grid">
+    <section class="panel">
+      <h2>SVG</h2>
+      <div class="bar" id="examples"></div>
+      <textarea id="src" wrap="off" spellcheck="false" aria-label="SVG source"></textarea>
+    </section>
+    <section class="panel">
+      <h2>PNG rendered by resvg</h2>
+      <div class="bar">
+        <label>scale <input id="scale" type="number" min="0.25" max="8" step="0.25" value="2"></label>
+        <a id="download" download="render.png" hidden>download PNG</a>
+      </div>
+      <div class="out"><img id="out" alt="rendered PNG" hidden></div>
+      <div class="status" id="status">loading the wasm…</div>
+    </section>
   </div>
 
-  <div class="bench">
-    <div>
-      <section>
-        <p class="legend"><b>Source</b> SVG, Liquid allowed
-          <select id="example"><option value="">example…</option></select></p>
-        <textarea id="svg" spellcheck="false" autocomplete="off"></textarea>
-        <details id="renderedWrap">
-          <summary>rendered source</summary>
-          <pre id="renderedSource"></pre>
-        </details>
-        <details id="resolvedWrap">
-          <summary>resolved tree · what usvg understood</summary>
-          <label class="inline"
-            title="Off is what toString() does by default: every glyph becomes a &lt;path&gt;, so the file needs no font installed. On keeps &lt;text&gt;, resolved but not outlined."
-            ><input id="preserveText" type="checkbox" checked> keep text nodes &middot; off = outlines</label>
-          <pre id="resolvedTree"></pre>
-        </details>
-        <div class="controls">
-          <label>scale <input id="scale" type="number" value="2" min="0.1" step="0.5"></label>
-          <label>width px <input id="width" type="number" placeholder="auto" min="1"></label>
-          <label>background <input id="bg" type="text" placeholder="none"></label>
-          <label>lang <input id="lang" type="text" placeholder="en" size="4"></label>
-          <label title="Injected before the document's own &lt;style&gt;, so an equally specific rule loses: use !important or a longer selector. It always beats a presentation attribute."
-            >stylesheet <input id="styleSheet" type="text"
-            placeholder=".value{fill:#c8005e !important}"></label>
-          <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
-          <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
-          <label class="inline"><input id="fit" type="checkbox" checked> fit data-maxwidth</label>
-          <label class="inline"><input id="strict" type="checkbox" checked> strict variables</label>
-          <button id="render" disabled>Render</button>
-        </div>
-      </section>
+  <section class="panel code">
+    <h2>The same thing in Node.js</h2>
+    <pre id="code"></pre>
+  </section>
 
-      <section id="vars" hidden>
-        <p class="legend"><b>Variables</b> <span id="varsCount"></span>
-          <input id="varsFind" type="search" placeholder="filter…" hidden></p>
-        <div id="varsList"></div>
-        <p id="varsNote"></p>
-      </section>
-
-      <section id="wanted" hidden>
-        <p class="legend"><b>Not resolved</b> supply the files</p>
-        <div class="unresolved">
-          <div id="fontsWanted" hidden>
-            <p id="fontsMsg"></p>
-            <ul id="fontsList"></ul>
-            <label>font files <input id="font" type="file" accept=".ttf,.otf,.ttc" multiple></label>
-          </div>
-          <div id="imagesWanted" hidden>
-            <p>Images the renderer could not find. One file per reference:</p>
-            <ul id="imagesList"></ul>
-          </div>
-          <div id="partialsWanted" hidden>
-            <p>Fragments this template renders but the page does not hold. Drop
-              the files with the same names:</p>
-            <ul id="partialsList"></ul>
-          </div>
-        </div>
-      </section>
-
-      <section>
-        <div id="drop">
-          <b>Drop fonts, images, fragments</b>
-          <span>fonts, images, and .liquid or .svg fragments</span>
-        </div>
-          <label>fetch a font <input id="fontName" type="text"
-                 placeholder="Lobster · fontawesome · https://…/any.ttf"></label>
-      </section>
-    </div>
-
-    <div>
-      <section>
-        <p class="legend"><b>Proof</b> rendered by resvg</p>
-        <div class="frame">
-          <div class="ticks top"></div>
-          <div class="ticks left"></div>
-          <div class="plate" id="plate">
-            <span class="reg tl"></span><span class="reg tr"></span>
-            <span class="reg bl"></span><span class="reg br"></span>
-            <img id="out" alt="rendered proof" hidden>
-            <div id="bboxOverlay"><span></span></div>
-          </div>
-        </div>
-        <dl class="measure" id="measure"></dl>
-      </section>
-
-      <section id="nodes" hidden>
-        <p class="legend"><b>Nodes</b> <span id="nodesCount"></span></p>
-        <ul id="treeList"></ul>
-      </section>
-
-      <section id="diag">
-        <p class="legend"><b>Diagnostics</b>
-          <span class="diagbar"><button id="diagClear" type="button">Clear</button></span></p>
-        <p id="diagEmpty">No problems reported.</p>
-        <ul id="diagList"></ul>
-      </section>
-    </div>
-  </div>
-</div>
+  <p class="more">Templates, missing fonts and images, usvg's warnings, the parsed tree:
+    the <a href="./bench.html">full bench →</a> shows the rest of the API.</p>
+</main>
 
 <script type="module">
-
-  // napi's `Buffer` return type is Node's Buffer, and emnapi looks it up on
-  // globalThis -- browsers have no such thing. Node's Buffer is a Uint8Array
-  // subclass, and emnapi only touches `from`, `alloc` and `isBuffer`, so this
-  // is enough. Installed before the wasm module is imported.
+  // napi returns Node's Buffer, which emnapi looks up on globalThis. See
+  // bench.html for why this is enough, and why it must accept a
+  // SharedArrayBuffer.
   class BufferPolyfill extends Uint8Array {
     static from(src, offset, length) {
-      // With wasm threads the module's memory is a SharedArrayBuffer, not an
-      // ArrayBuffer -- missing that case yields empty views.
       const isBuf = src instanceof ArrayBuffer
         || (typeof SharedArrayBuffer !== 'undefined' && src instanceof SharedArrayBuffer);
-      return isBuf
-        ? new BufferPolyfill(src, offset, length)
-        : new BufferPolyfill(Uint8Array.from(src));
+      return isBuf ? new BufferPolyfill(src, offset, length) : new BufferPolyfill(Uint8Array.from(src));
     }
     static alloc(size) { return new BufferPolyfill(size); }
     static isBuffer(value) { return value instanceof BufferPolyfill; }
   }
   globalThis.Buffer ??= BufferPolyfill;
 
-  const { Liquid, qrSvg, fitTextWidths, registerSvgFilters, memoryFs, referencedPartials }
-    = await import('./liquid.js');
-
-  // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
-  // filesystem. Dropped `.liquid` files land here, and so do `.svg` files the
-  // template actually renders.
-  const partials = new Map();
-
-  // Measuring is a render: the filters that need a width ask the engine.
-  const measureText = (text, { fontSize = 12, family } = {}) => {
-    const fam = family ?? fonts?.faces()[0]?.families[0] ?? 'sans-serif';
-    const escaped = String(text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const probe = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">`
-      + `<text id="m" font-family="${fam}" font-size="${fontSize}">${escaped}</text></svg>`;
-    try {
-      return new mod.Resvg(probe, { fontFamily: fam }, fonts).node('m')?.extent()?.width ?? 0;
-    } catch {
-      return 0;
-    }
+  const examples = {
+    shapes: `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect x="10" y="10" width="100" height="100" rx="16" fill="#0091b4"/>
+  <circle cx="160" cy="70" r="55" fill="#c8005e" opacity=".8"/>
+  <path d="M20 145 Q120 95 220 145" stroke="#16222e" stroke-width="4" fill="none"/>
+</svg>`,
+    text: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <rect width="300" height="120" fill="#16222e"/>
+  <text x="20" y="58" font-family="sans-serif" font-size="34" font-weight="600" fill="#fff">Hello, resvg</text>
+  <text x="20" y="92" font-family="sans-serif" font-size="16" fill="#93a7b6">text is shaped and drawn by resvg</text>
+</svg>`,
+    gradient: `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffcc00"/>
+      <stop offset="1" stop-color="#c8005e"/>
+    </linearGradient>
+    <radialGradient id="r">
+      <stop offset="0" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="240" height="160" rx="20" fill="url(#g)"/>
+  <circle cx="80" cy="60" r="50" fill="url(#r)"/>
+</svg>`,
+    filter: `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="6" stdDeviation="5" flood-color="#16222e" flood-opacity=".5"/>
+    </filter>
+    <filter id="blur"><feGaussianBlur stdDeviation="4"/></filter>
+  </defs>
+  <circle cx="70" cy="80" r="40" fill="#0091b4" filter="url(#blur)"/>
+  <rect x="120" y="40" width="90" height="80" rx="10" fill="#ffcc00" filter="url(#shadow)"/>
+</svg>`,
   };
-
-  // Rebuildable, because `strictVariables` is an instance option and the page
-  // offers it as a switch.
-  let liquid;
-  function makeLiquid() {
-    // Filters stay lenient: an unknown one passes its value through instead of
-    // throwing, so a template can be inspected before every filter exists.
-    liquid = new Liquid({
-      strictFilters: false,
-      // getElementById, not the `$` helper: this runs during module evaluation,
-      // above where `$` is declared.
-      strictVariables: document.getElementById('strict')?.checked ?? false,
-      fs: memoryFs(partials),
-    });
-    registerSvgFilters(liquid, { measure: measureText, qrSvg });
-  }
-  makeLiquid();
-  const STUBBED = new Set();
 
   const $ = (id) => document.getElementById(id);
-  const log = (msg) => { $('log').textContent = msg; };
+  const status = (msg, err = false) => { $('status').textContent = msg; $('status').classList.toggle('err', err); };
 
-  // Diagnostics accumulate: a one-line status bar loses everything the engines
-  // said. Newest first, deduplicated by level+source+message so a re-render does
-  // not repeat the same warning ten times.
-  const seen = new Map();
+  function showCode() {
+    const scale = Number($('scale').value) || 1;
+    $('code').textContent = `import { Resvg } from 'resvg-napi'   // npm install resvg-napi
+import { readFileSync, writeFileSync } from 'node:fs'
 
-  // A pass is one refresh: the analyse and the render of the same input. Rows
-  // from an earlier pass are dimmed and stop counting, so the slug line says
-  // what the current render did instead of everything since page load.
-  let pass = 0;
-  function beginPass() {
-    pass += 1;
-    for (const entry of seen.values()) entry.node.classList.add('stale');
-    countIssues();
+const svg = readFileSync('input.svg', 'utf8')
+const png = new Resvg(svg).renderPng({ scale: ${scale} })
+writeFileSync('out.png', png)`;
   }
 
-  function report(level, src, message) {
-    const key = `${level}|${src}|${message}`;
-    const known = seen.get(key);
-    if (known) {
-      known.count += 1;
-      known.node.classList.remove('stale');
-      known.node.querySelector('.msg').textContent = `${message} (×${known.count})`;
-      countIssues();
-      return;
-    }
-    const li = document.createElement('li');
-    li.className = level;
-    const lvl = document.createElement('span');
-    lvl.className = 'lvl';
-    lvl.textContent = level;
-    const source = document.createElement('span');
-    source.className = 'src';
-    source.textContent = src;
-    const msg = document.createElement('span');
-    msg.className = 'msg';
-    msg.textContent = message;
-    li.append(lvl, source, msg);
-    $('diagList').prepend(li);
-    seen.set(key, { count: 1, node: li });
-    $('diagEmpty').hidden = true;
-    countIssues();
+  for (const name of Object.keys(examples)) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => { $('src').value = examples[name]; select(name); render(); };
+    $('examples').append(b);
   }
-
-  // Kept in the slug line so a problem is visible without scrolling to the
-  // bottom of the sheet.
-  function countIssues() {
-    const errors = $('diagList').querySelectorAll('.error:not(.stale)').length;
-    const warns = $('diagList').querySelectorAll('.warn:not(.stale)').length;
-    const parts = [];
-    if (errors) parts.push(`${errors} error${errors > 1 ? 's' : ''}`);
-    if (warns) parts.push(`${warns} warning${warns > 1 ? 's' : ''}`);
-    const out = $('slugIssues');
-    out.textContent = parts.join(' · ') || 'none';
-    out.style.color = errors ? 'var(--mag)' : warns ? 'var(--amber)' : '';
-  }
-
-  // Everything usvg and resvg buffered during the last parse or render.
-  function drainEngineLogs() {
-    if (!mod?.takeLogs) return;
-    for (const line of mod.takeLogs()) {
-      const m = line.match(/^(ERROR|WARN|INFO|DEBUG|TRACE)\s+(\S+):\s*(.*)$/);
-      if (m) {
-        const level = { ERROR: 'error', WARN: 'warn' }[m[1]] ?? 'info';
-        report(level, 'resvg', `${m[3]}  ·  ${m[2]}`);
-      } else {
-        report('info', 'resvg', line);
-      }
-    }
-  }
-
-  const debounce = (fn, ms) => {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), ms);
-    };
+  const select = (name) => {
+    for (const b of $('examples').children) b.setAttribute('aria-pressed', String(b.textContent === name));
   };
-
-  // Deferred variants, declared up here because the wiring below runs during
-  // module evaluation. 200 ms is short enough to feel live, long enough that a
-  // burst of keystrokes parses once instead of once per character. `analyse` and
-  // `render` are function declarations, so referring to them now is fine.
-  const analyseSoon = debounce(() => analyse(), 200);
-  const renderSoon = debounce(() => render(), 350);
-
-  /** Anything that changes the input goes through here, so the two stay in step. */
-  function refresh() {
-    beginPass();
-    analyseSoon();
-    renderSoon();
-  }
-
-  // Images the user supplied, keyed by the href the document uses. Declared up
-  // here because `analyse()` runs during init, above its own definition.
-  const images = new Map();
-
-  // Values typed for the template's variables, keyed by full path
-  // (`user.givenName`, not `user`).
-  const vars = new Map();
-
-  // `globalVariablesSync` only reports roots, so `{{ user.givenName }}` would
-  // show up as one field called `user`. Segments give the whole path, and let a
-  // value be written back into the right place of a nested scope.
-  function templatePaths(raw) {
-    let segments = [];
-    try {
-      segments = liquid.globalVariableSegmentsSync(liquid.parse(raw));
-    } catch {
-      return [];
-    }
-    const out = [];
-    const seenPaths = new Set();
-    for (const parts of segments) {
-      // A dynamic key (`{{ x[y.z] }}`) has a nested array: no fixed field for it.
-      if (!parts.every((p) => typeof p === 'string' || typeof p === 'number')) continue;
-      const path = parts.reduce(
-        (acc, p) => (typeof p === 'number' ? `${acc}[${p}]` : acc ? `${acc}.${p}` : String(p)),
-        '',
-      );
-      if (path && !seenPaths.has(path)) {
-        seenPaths.add(path);
-        out.push({ path, parts });
-      }
-    }
-    return out;
-  }
-
-  // Writes `value` at `parts` in `scope`, creating objects and arrays on the way.
-  function setDeep(scope, parts, value) {
-    let node = scope;
-    parts.forEach((part, i) => {
-      if (i === parts.length - 1) {
-        node[part] = value;
-        return;
-      }
-      if (node[part] == null || typeof node[part] !== 'object') {
-        node[part] = typeof parts[i + 1] === 'number' ? [] : {};
-      }
-      node = node[part];
-    });
-  }
-
-  // The SVG actually handed to resvg: the source rendered through Liquid when it
-  // has variables. A variable left empty renders back to its own `{{ name }}`,
-  // so an image href placeholder stays visible to `pendingImages()` and can be
-  // resolved by an upload.
-  function source() {
-    // usvg rejects an XML declaration that is not at offset 0, and Illustrator
-    // exports routinely arrive with a leading newline.
-    const raw = $('svg').value.replace(/^\s+(?=<\?xml)/, '');
-    const paths = templatePaths(raw);
-    if (!paths.length) return raw;
-    const chains = filterChains(raw);
-    const cols = loopColumns(raw);
-    const scope = {};
-    // Shortest first, so a value given for `staff` is in place before anything
-    // asks about `staff.size`.
-    const ordered = [...paths].sort((a, b) => a.parts.length - b.parts.length);
-    const provided = new Set(ordered.filter((p) => vars.get(p.path)).map((p) => p.path));
-    for (const { path, parts } of ordered) {
-      // `{{ staff.size }}` is reported as its own variable, but `size` belongs to
-      // the array: writing a placeholder there would graft a property onto the
-      // value the user supplied.
-      const ancestorGiven = parts
-        .slice(0, -1)
-        .some((_, i) => provided.has(parts.slice(0, i + 1).join('.')));
-      if (ancestorGiven && !vars.get(path)) continue;
-      // A variable is a value, never a document: an XML declaration pasted into
-      // a field would land mid-file and make the whole SVG invalid.
-      const raw = (vars.get(path) || '').replace(/<\?xml[^>]*\?>/g, '').trim();
-      if (!raw) {
-        // `{{ note | default: "..." }}` left empty should show the template's
-        // default, not the placeholder -- but strict variables still wants the
-        // name to exist, so it is an empty string rather than nothing.
-        const hasDefault = (chains.get(path) ?? [])
-          .some((f) => f.split(':')[0].trim() === 'default');
-        setDeep(scope, parts, hasDefault ? '' : `{{ ${path} }}`);
-        continue;
-      }
-      // A loop needs an array and an object variable needs an object, so a value
-      // that looks like JSON is parsed. Anything else stays a string.
-      let value = raw;
-      if (/^[[{]/.test(raw)) {
-        try {
-          value = JSON.parse(raw);
-        } catch (e) {
-          report('warn', 'liquid', `\`${path}\` looks like JSON but does not parse: ${e.message}`);
-        }
-      }
-      // An entry missing a field the loop reads is an `undefined variable` under
-      // strict -- and `{% render %}` reports it at line 1 of the partial, which
-      // says nothing. Fill the gaps the way an empty field gets a placeholder,
-      // and name what was filled.
-      if (Array.isArray(value)) {
-        const filled = new Map();
-        value.forEach((entry, i) => {
-          if (entry == null || typeof entry !== 'object') return;
-          for (const key of cols.get(path) ?? []) {
-            if (get(entry, key) !== undefined) continue;
-            put(entry, key, '');
-            filled.set(key, [...(filled.get(key) ?? []), i + 1]);
-          }
-        });
-        for (const [key, rows] of filled) {
-          report('warn', 'liquid', `\`${path}\` ${rows.length > 1 ? 'entries' : 'entry'} `
-            + `${rows.join(', ')} have no \`${key}\`: filled with an empty value.`);
-        }
-      }
-      // Liquid does not auto-escape and this lands inside XML, so a raw `&`,
-      // `<` or `>` breaks the document. Escaping the scope would be wrong -- it
-      // would corrupt what a filter receives, and `qr` legitimately returns
-      // markup -- so warn instead. Only for a plain string whose own expression
-      // has no escaping filter: a value nested in a JSON array is printed by a
-      // loop-local expression this cannot see, and guessing there produced false
-      // warnings on a template that does pipe through `escape`.
-      const escapes = new Set(['escape', 'xml_escape', 'escape_once']);
-      const escaped = (chains.get(path) ?? [])
-        .some((f) => escapes.has(f.split(':')[0].trim()));
-      if (typeof value === 'string' && !escaped && /[<>&]/.test(value)
-          && !/^\s*</.test(value) && !value.startsWith('var:')) {
-        report('warn', 'liquid',
-          `\`${path}\` contains <, > or & and lands in XML text. `
-          + `Pipe it through \`escape\` in the template.`);
-      }
-      setDeep(scope, parts, value);
-    }
-    try {
-      const out = liquid.parseAndRenderSync(raw, scope);
-      warnAboutFilters(raw);
-      return out;
-    } catch (e) {
-      // `undefined variable: lead, line:1, col:1` is the strict-mode report from
-      // inside a partial, where the position is useless. Say what it means.
-      const undef = /undefined variable: ([\w.]+)/.exec(e.message);
-      report('error', 'liquid', undef
-        ? `undefined variable \`${undef[1]}\`: strict variables is on, and a `
-          + `{% render %} partial sees only the arguments passed to it. Give `
-          + `\`${undef[1]}\` a value, or untick strict variables.`
-        : e.message);
-      return raw;
-    }
-  }
-
-  // `{{ upn | qr: '#fff', '#000' }}` is a variable *and* a filter chain. The
-  // static analysis API reports variables only, so the chains come off the
-  // parsed template instead: an Output node carries `value.initial` (the
-  // variable) and `value.filters` (name + args), which beats string-splitting
-  // the source -- it handles `{{-`, quoting, newlines and nested arguments.
-  function filterChains(raw) {
-    const chains = new Map();
-    let templates;
-    try {
-      templates = liquid.parse(raw);
-    } catch {
-      return chains;
-    }
-    const visit = (nodes, depth = 0) => {
-      if (!Array.isArray(nodes) || depth > 6) return;
-      for (const node of nodes) {
-        const filters = node?.value?.filters ?? [];
-        if (filters.length) {
-          const path = node.value.initial?.postfix?.[0]?.getText?.() ?? '';
-          if (path) {
-            chains.set(path.trim(), filters.map((f) => {
-              const args = (f.args ?? []).map((a) => a.getText?.() ?? String(a));
-              return args.length ? `${f.name}: ${args.join(', ')}` : f.name;
-            }));
-          }
-        }
-        // blocks: {% if %}, {% for %}, {% case %}...
-        visit(node?.templates, depth + 1);
-        visit(node?.elseTemplates, depth + 1);
-        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
-      }
-    };
-    visit(templates);
-    return chains;
-  }
-
-  // `{% for row in staff %}` means `staff` must be an array, and `row.*` is a
-  // loop local with no field of its own. Read the collections off the AST so the
-  // form can say so.
-  // `{% for row in staff %}` plus the locals the body reads (`row.name`,
-  // `row.dept.code`) tell us the shape of one entry -- so the columns of the
-  // editor come from the template, not from a guess.
-  function loopColumns(raw) {
-    const byCollection = new Map();
-    let templates;
-    let locals = [];
-    try {
-      templates = liquid.parse(raw);
-      locals = liquid.variableSegmentsSync(templates);
-    } catch {
-      return byCollection;
-    }
-    const visit = (nodes, depth = 0) => {
-      if (!Array.isArray(nodes) || depth > 6) return;
-      for (const node of nodes) {
-        const c = node?.collection;
-        if (node?.variable && c?.input && c.begin != null) {
-          const collection = c.input.slice(c.begin, c.end).trim();
-          const columns = [];
-          for (const parts of locals) {
-            if (parts[0] !== node.variable || parts.length < 2) continue;
-            if (!parts.every((p) => typeof p === 'string' || typeof p === 'number')) continue;
-            const key = parts.slice(1).join('.');
-            if (key && !columns.includes(key)) columns.push(key);
-          }
-          byCollection.set(collection, columns);
-        }
-        visit(node?.templates, depth + 1);
-        visit(node?.elseTemplates, depth + 1);
-        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
-      }
-    };
-    visit(templates);
-    return byCollection;
-  }
-
-  const get = (obj, key) => key.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
-  const put = (obj, key, value) => {
-    const parts = key.split('.');
-    let node = obj;
-    parts.forEach((p, i) => {
-      if (i === parts.length - 1) node[p] = value;
-      else node = (node[p] ??= {});
-    });
-  };
-
-  function loopCollections(raw) {
-    const found = new Set();
-    let templates;
-    try {
-      templates = liquid.parse(raw);
-    } catch {
-      return found;
-    }
-    const visit = (nodes, depth = 0) => {
-      if (!Array.isArray(nodes) || depth > 6) return;
-      for (const node of nodes) {
-        const c = node?.collection;
-        if (node?.variable && c?.input && c.begin != null) {
-          found.add(c.input.slice(c.begin, c.end).trim());
-        }
-        visit(node?.templates, depth + 1);
-        visit(node?.elseTemplates, depth + 1);
-        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
-      }
-    };
-    visit(templates);
-    return found;
-  }
-
-  // A variable used as an `<image>` href wants a file, not a string. This one is
-  // an XML question, not a Liquid one, so parse the document; while the source is
-  // being typed it will not be well-formed, hence the fallback scan.
-  function imageHrefVars(raw) {
-    const found = new Set();
-    const add = (href) => {
-      for (const [, expr] of (href ?? '').matchAll(/\{\{-?([\s\S]*?)-?\}\}/g)) {
-        found.add(expr.split('|')[0].trim());
-      }
-    };
-    const doc = new DOMParser().parseFromString(raw, 'image/svg+xml');
-    if (!doc.querySelector('parsererror')) {
-      for (const img of doc.getElementsByTagName('image')) {
-        add(img.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ?? img.getAttribute('href'));
-      }
-      return found;
-    }
-    for (const [, attrs] of raw.matchAll(/<image\b([^>]*)>/gi)) {
-      add(attrs.match(/(?:xlink:)?href\s*=\s*"([^"]*)"/i)?.[1]);
-    }
-    return found;
-  }
-
-  // Files chosen for those variables, by variable name.
-  const imageVars = new Map();
-
-  // Signature of the *shape* of the form. Rebuilding the fields on every
-  // keystroke would blow away the focused input mid-word, so the DOM is only
-  // touched when the variables, their filter chains or their kind change.
-  let varsSignature = null;
-
-  // strictFilters is off, so an unknown filter silently passes its value
-  // through. That is convenient and invisible -- say it out loud instead.
-  function warnAboutFilters(raw) {
-    for (const [, filters] of filterChains(raw)) {
-      for (const f of filters) {
-        const name = f.split(':')[0].trim();
-        // `liquid.filters` is a plain map of name -> implementation; its `has`
-        // is a generator, not a predicate, so test the key.
-        if (typeof liquid.filters[name] !== 'function') {
-          report('warn', 'liquid', `Unknown filter \`${name}\`: its value passes through unchanged.`);
-        }
-      }
-    }
-  }
-
-  // One row per entry, one column per field the loop body reads. The value
-  // stays a JSON array in `vars`, so nothing downstream changes.
-  function collectionEditor(name, columns) {
-    const wrap = document.createElement('div');
-    wrap.className = 'collection';
-
-    const read = () => {
-      try {
-        const parsed = JSON.parse(vars.get(name) || '[]');
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    };
-    let json;   // the escape hatch is a second view of the same value
-    const write = (rows, redraw) => {
-      vars.set(name, JSON.stringify(rows));
-      if (redraw) draw();
-      else if (json) json.value = vars.get(name);
-      refresh();
-    };
-
-    const draw = () => {
-      const rows = read();
-      // One control type per column, from the first entry that has the key: a
-      // row that simply omits `lead` must still get the checkbox, not a text box.
-      const kindOf = new Map(columns.map((col) => {
-        const sample = rows.map((e) => get(e, col)).find((v) => v !== undefined);
-        return [col, typeof sample === 'boolean' ? 'checkbox'
-          : typeof sample === 'number' ? 'number' : 'text'];
-      }));
-      const table = document.createElement('table');
-      const head = table.createTHead().insertRow();
-      for (const col of columns) head.insertCell().textContent = col;
-      head.insertCell().textContent = '';
-
-      const body = table.createTBody();
-      rows.forEach((entry, i) => {
-        const tr = body.insertRow();
-        for (const col of columns) {
-          const value = get(entry, col);
-          const cell = tr.insertCell();
-          const kind = kindOf.get(col);
-          const field = document.createElement('input');
-          field.type = kind;
-          if (kind === 'checkbox') field.checked = value === true;
-          else field.value = value ?? '';
-          field.addEventListener(kind === 'checkbox' ? 'change' : 'input', () => {
-            const next = read();
-            put(next[i], col, kind === 'checkbox' ? field.checked
-              : kind === 'number' ? Number(field.value)
-              : field.value);
-            write(next, false);
-          });
-          cell.append(field);
-        }
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.textContent = '×';
-        remove.title = `Remove entry ${i + 1}`;
-        remove.addEventListener('click', () => {
-          const next = read();
-          next.splice(i, 1);
-          write(next, true);
-        });
-        tr.insertCell().append(remove);
-      });
-
-      const add = document.createElement('button');
-      add.type = 'button';
-      add.className = 'add';
-      add.textContent = '+ entry';
-      add.addEventListener('click', () => {
-        const next = read();
-        const blank = {};
-        // Types come from the first entry that actually has the key: the last
-        // row may simply omit it, which would type a boolean column as text.
-        for (const col of columns) {
-          const sample = next.map((e) => get(e, col)).find((v) => v !== undefined);
-          put(blank, col, typeof sample === 'boolean' ? false
-            : typeof sample === 'number' ? 0 : '');
-        }
-        next.push(blank);
-        write(next, true);
-      });
-
-      const raw = document.createElement('details');
-      const summary = document.createElement('summary');
-      summary.textContent = 'JSON';
-      json = document.createElement('textarea');
-      json.rows = 3;
-      json.spellcheck = false;
-      json.value = vars.get(name) ?? '';
-      json.addEventListener('change', () => {
-        vars.set(name, json.value);
-        draw();
-        beginPass();
-        analyse();
-        render();
-      });
-      raw.append(summary, json);
-
-      wrap.replaceChildren(columns.length ? table : note(), add, raw);
-    };
-
-    const note = () => {
-      const p = document.createElement('p');
-      p.className = 'hint';
-      p.textContent = 'The loop body reads no field of its entries, so there are no columns.';
-      return p;
-    };
-
-    draw();
-    return wrap;
-  }
-
-  function showVariables() {
-    const paths = templatePaths($('svg').value);
-    const names = paths.map((p) => p.path);
-    const chains = filterChains($('svg').value);
-    $('vars').hidden = names.length === 0;
-    if (!names.length) {
-      varsSignature = null;
-      return;
-    }
-    const asImage = imageHrefVars($('svg').value);
-    const asLoop = loopCollections($('svg').value);
-    const columns = loopColumns($('svg').value);
-    const signature = names
-      .map((n) => `${n}:${(chains.get(n) ?? []).join('|')}`
-        + `:${asImage.has(n) ? 'img' : asLoop.has(n) ? `arr(${(columns.get(n) ?? []).join('|')})` : 'txt'}`)
-      .join(',');
-    if (signature === varsSignature) return;
-    varsSignature = signature;
-    $('varsCount').textContent = `— ${names.length} found by liquidjs`;
-    const stubbed = [...chains.values()]
-      .map((c) => c[0].split(':')[0].trim())
-      .filter((f) => STUBBED.has(f));
-    $('varsNote').textContent = 'Strict variables is on: anything the analysis missed '
-      + 'raises `undefined variable` instead of rendering as empty. '
-      + 'An empty field keeps its `{{ name }}` placeholder, so an '
-      + 'image variable stays uploadable -- unless the chain has `default`, '
-      + 'which then supplies the value. Unknown filters pass their value through; '
-      + '`qr` generates a QR code as SVG.'
-      + (stubbed.length ? ` Stubbed: ${[...new Set(stubbed)].join(', ')}.` : '');
-    // One row per variable -- name and chain above the control -- so a long
-    // chain cannot squeeze the input, and the rows tile into columns.
-    const field = (name) => {
-      const code = document.createElement('code');
-      const chain = chains.get(name);
-      code.textContent = name;
-      if (chain) {
-        const pipe = document.createElement('span');
-        pipe.className = 'chain';
-        pipe.textContent = ` | ${chain.join(' | ')}`;
-        // The chain is clipped to one line, so the whole of it lives here.
-        pipe.title = `${chain.join(' | ')}\n`
-          + (STUBBED.has(chain[0].split(':')[0].trim())
-            ? 'filter registered as a stub: returns an empty string'
-            : 'filter applied by liquidjs');
-        if (STUBBED.has(chain[0].split(':')[0].trim())) pipe.classList.add('stub');
-        code.append(pipe);
-      }
-      if (asImage.has(name)) {
-        // Substituting a stable synthetic href and registering the bytes under
-        // it keeps resolution independent of what the placeholder renders to.
-        const href = `var:${name}`;
-        const wrap = document.createElement('div');
-        wrap.className = 'imgvar';
-
-        const status = document.createElement('span');
-        status.textContent = imageVars.get(name)?.name ?? 'drop a file here, or type a URL';
-
-        const use = async (picked) => {
-          const bytes = new Uint8Array(await picked.arrayBuffer());
-          imageVars.set(name, { name: picked.name, bytes });
-          images.set(href, bytes);
-          vars.set(name, href);
-          status.textContent = `${picked.name} (${picked.size.toLocaleString()} bytes)`;
-          beginPass();
-          analyse();
-          render();
-        };
-
-        const file = document.createElement('input');
-        file.type = 'file';
-        file.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
-        file.addEventListener('change', (ev) => {
-          if (ev.target.files[0]) use(ev.target.files[0]);
-        });
-
-        // A file picker is not always available -- a browser under automation
-        // swallows it, for one -- so the row also takes a drop and a typed value.
-        const typed = document.createElement('input');
-        typed.type = 'text';
-        typed.className = 'href';
-        typed.placeholder = 'or data: / file name';
-        typed.value = vars.get(name)?.startsWith('var:') ? '' : (vars.get(name) ?? '');
-        typed.addEventListener('input', () => {
-          imageVars.delete(name);
-          images.delete(href);
-          vars.set(name, typed.value);
-          refresh();
-        });
-
-        for (const type of ['dragenter', 'dragover']) {
-          wrap.addEventListener(type, (e) => { e.preventDefault(); wrap.classList.add('over'); });
-        }
-        wrap.addEventListener('dragleave', () => wrap.classList.remove('over'));
-        wrap.addEventListener('drop', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          wrap.classList.remove('over');
-          if (e.dataTransfer.files[0]) use(e.dataTransfer.files[0]);
-        });
-
-        wrap.append(file, typed, status);
-        return [code, wrap];
-      }
-
-      if (asLoop.has(name)) {
-        const tag = document.createElement('span');
-        tag.className = 'chain';
-        tag.textContent = ' iterated';
-        code.append(tag);
-        return [code, collectionEditor(name, columns.get(name) ?? [])];
-      }
-
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = vars.get(name) ?? '';
-      input.placeholder = `{{ ${name} }}`;
-      // The value is recorded immediately; re-parsing and re-rendering wait
-      // until typing stops.
-      input.addEventListener('input', () => {
-        vars.set(name, input.value);
-        refresh();
-      });
-      input.addEventListener('change', () => {
-        // A paste or an autofill can arrive without a single `input` event.
-        vars.set(name, input.value);
-        beginPass();
-        analyse();
-        render();
-      });
-      return [code, input];
-    };
-
-    $('varsList').replaceChildren(...names.map((name) => {
-      const [code, control] = field(name);
-      const row = document.createElement('div');
-      // A table or a JSON editor needs the full width; a text input does not.
-      row.className = control.classList.contains('collection') ? 'row wide' : 'row';
-      row.dataset.name = name;
-      row.append(code, control);
-      return row;
-    }));
-
-    // A template with twenty variables is a scroll; typing narrows it.
-    const find = $('varsFind');
-    find.hidden = names.length < 8;
-    if (!find.hidden) filterFields();
-  }
-
-  /** Hides the rows whose variable does not contain the typed text. */
-  function filterFields() {
-    const q = $('varsFind').value.trim().toLowerCase();
-    for (const row of $('varsList').children) {
-      const match = !q || row.dataset.name.toLowerCase().includes(q);
-      row.hidden = !match;
-      row.classList.toggle('hit', Boolean(q) && match);
-    }
-  }
-
-  $('svg').value = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0ea5e9"/>
-      <stop offset="1" stop-color="#6366f1"/>
-    </linearGradient>
-    <filter id="blur"><feGaussianBlur stdDeviation="3"/></filter>
-  </defs>
-  <rect x="12" y="12" width="216" height="96" rx="14" fill="url(#g)"/>
-  <circle cx="196" cy="34" r="16" fill="#fff" opacity=".35" filter="url(#blur)"/>
-  <text x="28" y="72" font-family="sans-serif" font-size="30" fill="#fff">resvg</text>
-</svg>`;
-
-  let mod, fonts;
-  try {
-    if (!globalThis.crossOriginIsolated) {
-      report('error', 'page', 'Not cross-origin isolated: SharedArrayBuffer is unavailable, so the '
-        + 'threaded wasm cannot start. Serve this page with demo/serve.mjs, which sets COOP and COEP.');
-      throw new Error('not isolated');
-    }
-    mod = await import('./resvg.js');
-    // usvg/resvg report recoverable problems through the log crate; without this
-    // they are collected nowhere and the page cannot show them.
-    mod.setLogLevel('warn');
-    fonts = new mod.FontDatabase();
-    $('render').disabled = false;
-    // Handy for poking at the API from the devtools console.
-    globalThis.resvg = { mod, fonts };
-    $('slugEngine').textContent = `resvg 0.48 · ${Object.keys(mod).length} exports`;
-    log('idle');
-    report('info', 'page',
-      `Ready. loadSystemFonts() finds ${fonts.len()} faces in this sandbox, so a font has to come from somewhere else.`);
-    // ...and this page ships one, because a first visit that cannot draw text
-    // is a dead end in front of the one thing the bench exists to show. Local
-    // and same-origin: no CDN, no rate limit, and it works offline. Dropping a
-    // font replaces it -- `accept` points the generic families at whatever
-    // arrived last.
-    if (!fonts.len()) {
-      fetch('./fonts/IBMPlexSans-Latin.ttf')
-        .then((r) => r.ok ? r.blob() : Promise.reject(new Error(`HTTP ${r.status}`)))
-        .then((blob) => accept([new File([blob], 'IBMPlexSans-Latin.ttf')]))
-        .then(() => report('info', 'fonts',
-          'IBM Plex Sans (Latin subset) loaded for the generic families. Drop your own to replace it.'))
-        .catch((e) => report('warn', 'fonts', `the bundled font did not load: ${e.message}`));
-    }
-  } catch (e) {
-    if (e.message !== 'not isolated') report('error', 'page', `Could not load the wasm module: ${e.message}`);
-  }
-
-  // Function declaration, not a const arrow: `analyse()` runs from the init
-  // block above, before this point in the module body.
-  function parse() {
-    return new mod.Resvg(source(), defaults(), fonts, Object.fromEntries(images));
-  }
-
-  // Parse once with the current state to find out what the document is missing:
-  // `pendingFonts()` lists named families the database does not have,
-  // `pendingImages()` the hrefs neither the uploads nor the filesystem resolved,
-  // and a look at the source tells us whether there is any text at all
-  // (a generic `font-family` never shows up as a named family).
-  function analyse() {
-    showVariables();
-    let doc;
-    try {
-      doc = parse();
-    } catch (e) {
-      report('error', 'resvg', e.message);
-      drainEngineLogs();
-      $('wanted').hidden = true;
-      return;
-    }
-    drainEngineLogs();
-
-    const missingFonts = doc.pendingFonts();
-    const hasText = /<text[\s>]/.test(source());
-    const needAnyFont = hasText && fonts.len() === 0;
-    const missingImages = doc.pendingImages();
-    const missingPartials = [...referencedPartials(liquid, $('svg').value)]
-      .filter((name) => !partials.has(name));
-
-    // fonts
-    const wantFonts = missingFonts.length > 0 || needAnyFont;
-    $('fontsWanted').hidden = !wantFonts;
-    // A hidden panel keeping its old rows reads as stale state to anyone
-    // inspecting it -- it fooled me once. Empty it when it goes away.
-    if (!wantFonts) $('fontsList').replaceChildren();
-    if (wantFonts) {
-      $('fontsMsg').textContent = missingFonts.length
-        ? `This SVG asks for ${missingFonts.length} font famil`
-          + `${missingFonts.length > 1 ? 'ies' : 'y'} the database does not have:`
-        : 'This SVG has text but no font is loaded — WASI has no system fonts.';
-      $('fontsList').replaceChildren(...(missingFonts.length
-        ? missingFonts
-        : ['(any font, for the generic families)']).map((name) => {
-          const li = document.createElement('li');
-          li.textContent = name;
-          // The name in this row is exactly what the resolver takes.
-          if (missingFonts.length) {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'grab';
-            b.textContent = 'fetch';
-            b.addEventListener('click', () => fetchInto(name, b));
-            li.append(b);
-          }
-          return li;
-        }));
-    }
-
-    // images: one input per href, because the file/href pairing is explicit
-    $('imagesWanted').hidden = missingImages.length === 0;
-    $('imagesList').replaceChildren(...missingImages.map((href) => {
-      const li = document.createElement('li');
-      const code = document.createElement('code');
-      code.textContent = href;
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
-      input.addEventListener('change', async (ev) => {
-        const file = ev.target.files[0];
-        if (!file) return;
-        images.set(href, new Uint8Array(await file.arrayBuffer()));
-        log(`resolved ${href} with ${file.name} (${file.size.toLocaleString()} bytes)`);
-        beginPass();
-        analyse();
-        render();
-      });
-      // Dropping straight onto a row pins the file to that href.
-      for (const type of ['dragenter', 'dragover']) {
-        li.addEventListener(type, (e) => { e.preventDefault(); li.style.opacity = '.6'; });
-      }
-      li.addEventListener('dragleave', () => { li.style.opacity = ''; });
-      li.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        li.style.opacity = '';
-        const file = e.dataTransfer.files[0];
-        if (!file) return;
-        images.set(href, new Uint8Array(await file.arrayBuffer()));
-        log(`resolved ${href} with ${file.name}`);
-        beginPass();
-        analyse();
-        render();
-      });
-      li.append(code, input);
-      return li;
-    }));
-
-    $('partialsWanted').hidden = missingPartials.length === 0;
-    $('partialsList').replaceChildren(...missingPartials.map((name) => {
-      const li = document.createElement('li');
-      const code = document.createElement('code');
-      code.textContent = name;
-      li.append(code);
-      return li;
-    }));
-
-    $('wanted').hidden = $('fontsWanted').hidden && $('imagesWanted').hidden
-      && $('partialsWanted').hidden;
-  }
-
-  function defaults() {
-    const first = fonts.len() ? fonts.faces()[0].families[0] : undefined;
-    // `languages` is what `<switch systemLanguage>` tests against: usvg picks
-    // no branch at all when the list is empty.
-    const lang = $('lang').value.trim();
-    const css = $('styleSheet').value.trim();
-    const opts = {};
-    if (first) opts.fontFamily = first;
-    if (lang) opts.languages = lang.split(/[\s,]+/);
-    // Injected at parse time, so a theme needs no edit to the document. usvg
-    // puts it *before* the document's own <style>, so an equally specific rule
-    // loses -- `!important` or a longer selector wins, and either beats a
-    // presentation attribute.
-    if (css) opts.styleSheet = css;
-    return Object.keys(opts).length ? opts : undefined;
-  }
-
-  // Anything dropped or pasted lands here. A font goes into the database; an
-  // image is matched to a pending href -- by file name when it matches, else to
-  // the first one still waiting.
-  async function accept(fileList) {
-    const files = [...fileList];
-    if (!files.length) return;
-    const isFont = (f) => /\.(ttf|otf|ttc)$/i.test(f.name);
-    // A `.liquid` file is always a fragment; a `.svg` is one only when the
-    // template renders it by that name -- otherwise it is an image.
-    const wanted = referencedPartials(liquid, $('svg').value);
-    const isPartial = (f) => /\.liquid$/i.test(f.name) || wanted.has(f.name);
-    const fontFiles = files.filter(isFont);
-    const partialFiles = files.filter((f) => !isFont(f) && isPartial(f));
-    const imageFiles = files.filter((f) => !isFont(f) && !isPartial(f));
-
-    for (const file of partialFiles) {
-      partials.set(file.name, await file.text());
-    }
-
-    for (const file of fontFiles) {
-      fonts.loadFontData(new Uint8Array(await file.arrayBuffer()));
-    }
-    if (fontFiles.length) {
-      const family = fonts.faces()[0].families[0];
-      for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
-                         'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
-    }
-
-    // Targets for a dropped image: an unresolved href, or an image-href variable
-    // still waiting for a file.
-    let pending = [];
-    try { pending = parse().pendingImages(); } catch { /* unparseable, skip */ }
-    const varTargets = [...imageHrefVars($('svg').value)].filter((n) => !imageVars.has(n));
-    for (const file of imageFiles) {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const href = pending.find((h) => h.endsWith(file.name))
-        ?? pending.find((h) => !images.has(h));
-      if (href) {
-        images.set(href, bytes);
-        pending = pending.filter((h) => h !== href);
-        continue;
-      }
-      const name = varTargets.shift();
-      if (name) {
-        imageVars.set(name, { name: file.name, bytes });
-        images.set(`var:${name}`, bytes);
-        vars.set(name, `var:${name}`);
-        varsSignature = null; // force the field to redraw with the file name
-      }
-    }
-
-    const parts = [];
-    if (fontFiles.length) {
-      parts.push(`${fontFiles.length} font(s) → ${fonts.faces().map((f) => f.families[0]).join(', ')}`);
-    }
-    if (partialFiles.length) {
-      parts.push(`${partialFiles.length} fragment(s) → ${partialFiles.map((f) => f.name).join(', ')}`);
-    }
-    if (imageFiles.length) parts.push(`${images.size} image(s) resolved`);
-    log(parts.join('; ') || 'nothing usable in that drop');
-    beginPass();
-    analyse();
-    render();
-  }
-
-  // Fonts by name, without a file to drop.
-  //
-  // Google's CSS API is no use here: it negotiates on User-Agent and serves a
-  // browser WOFF2, which ttf-parser -- under fontdb, under usvg -- does not
-  // read. The original TTFs live in the google/fonts repo instead, and jsDelivr
-  // serves them with `access-control-allow-origin: *`, which is what lets them
-  // through the COEP the wasm threads force on this page.
-  //
-  // The file name is not derivable: `Lobster-Regular.ttf`, but
-  // `Roboto[wdth,wght].ttf` with the variable axes spelled into the name. So
-  // the directory has to be listed, and that is the one GitHub API call --
-  // capped at 60 an hour per address, hence once per family and never per
-  // render.
-  const FA = 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/webfonts/';
-  const GF = 'https://cdn.jsdelivr.net/gh/google/fonts@main/';
-  // For the files jsdelivr will not serve -- it answers 403 above 20 MB, and
-  // NotoColorEmoji-Regular.ttf is 25 MB, which is the one font a colour-glyph
-  // demo needs. raw.githubusercontent has no such cap and sends
-  // `access-control-allow-origin: *`, which is what a CORS fetch under COEP
-  // require-corp needs.
-  const RAW = 'https://raw.githubusercontent.com/google/fonts/main/';
-
-  async function grab(url, name) {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
-    // A File, so the whole existing drop path handles it -- database, family
-    // setters, re-render -- with nothing duplicated here.
-    return new File([await r.arrayBuffer()], name);
-  }
-
-  async function fetchFonts(query) {
-    const q = query.trim();
-    if (!q) return [];
-    if (/^https?:\/\//i.test(q)) return [await grab(q, q.split('/').pop().split('?')[0])];
-    // Font Awesome is three faces, and the glyphs are in the private use area:
-    // write them as &#xf005; and this is the font that has them.
-    if (/^(fa|font\s*awesome)$/i.test(q)) {
-      return Promise.all(['fa-solid-900', 'fa-brands-400', 'fa-regular-400']
-        .map((n) => grab(`${FA}${n}.ttf`, `${n}.ttf`)));
-    }
-    const slug = q.toLowerCase().replace(/\s+/g, '');
-    for (const lic of ['ofl', 'apache', 'ufl']) {
-      const r = await fetch(`https://api.github.com/repos/google/fonts/contents/${lic}/${slug}`);
-      if (r.status === 403) {
-        throw new Error('GitHub rate limit reached (60/hour) — drop the file instead');
-      }
-      if (!r.ok) continue;
-      const files = (await r.json()).filter((f) => /\.(ttf|otf)$/i.test(f.name));
-      // Upright before italic, then the shortest name: `Roboto[wdth,wght]` over
-      // `Roboto-Italic[wdth,wght]`, and `Lobster-Regular` when that is all there
-      // is. A variable font covers every weight the document may ask for.
-      const pick = files.filter((f) => !/italic/i.test(f.name))
-        .sort((a, b) => a.name.length - b.name.length)[0] ?? files[0];
-      if (!pick) break;
-      const path = `${lic}/${slug}/${encodeURIComponent(pick.name)}`;
-      // The listing already carries each file's size, so the source is chosen
-      // rather than discovered by failing: jsdelivr answers 403 above 20 MB,
-      // and NotoColorEmoji-Regular.ttf is 25 MB. Asking it anyway would put a
-      // red line in the console for a request that was never going to work.
-      // The `catch` stays for the case the cap moves under us.
-      const big = pick.size > 20 * 1024 * 1024;
-      const first = big ? RAW : GF;
-      const second = big ? GF : RAW;
-      return [await grab(`${first}${path}`, pick.name)
-        .catch(() => grab(`${second}${path}`, pick.name))];
-    }
-    // Naming what this box can do beats naming what it just failed at: the
-    // families people reach for first -- Times New Roman, Arial, Calibri -- are
-    // system fonts, and no amount of retyping will find them here.
-    throw new Error(`"${q}" is not in google/fonts, which is all this box can fetch. `
-      + 'A system font (Times New Roman, Arial) has to be dropped as a file.');
-  }
-
-  async function fetchInto(query, button) {
-    const label = button?.textContent;
-    if (button) { button.disabled = true; button.textContent = '…'; }
-    try {
-      const files = await fetchFonts(query);
-      if (files.length) await accept(files);
-    } catch (e) {
-      report('error', 'fonts', e.message);
-    } finally {
-      if (button) { button.disabled = false; button.textContent = label; }
-    }
-  }
-
-  $('fontName').addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Enter') return;
-    ev.preventDefault();
-    fetchInto(ev.target.value);
-    ev.target.value = '';
-  });
-
-  const drop = $('drop');
-  for (const type of ['dragenter', 'dragover']) {
-    drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.add('over'); });
-  }
-  for (const type of ['dragleave', 'drop']) {
-    drop.addEventListener(type, () => drop.classList.remove('over'));
-  }
-  drop.addEventListener('drop', (e) => { e.preventDefault(); accept(e.dataTransfer.files); });
-  window.addEventListener('paste', (e) => {
-    const files = [...e.clipboardData.files];
-    if (files.length) accept(files);
-  });
-
-  $('font').addEventListener('change', (ev) => accept(ev.target.files));
-
-  // Editing the source must move the proof too: variables auto-render, so a
-  // source edit doing nothing until an explicit click was the odd one out.
-  $('svg').addEventListener('input', () => {
-    refresh();
-  });
-
-  $('render').addEventListener('click', () => { beginPass(); render(); });
-
-  $('varsFind').addEventListener('input', filterFields);
-  $('styleSheet').addEventListener('input', () => refresh());
-  $('preserveText').addEventListener('change', () => { beginPass(); render(); });
-
-  // The examples ship with their data and their fragments, and one of them
-  // carries a photo as a data: URI -- pasting that by hand is not a demo.
-  fetch('./examples/index.json')
-    .then((r) => r.json())
-    .then((names) => {
-      for (const name of names) {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name.replace(/\.svg$/, '');
-        $('example').append(option);
-      }
-    })
-    .catch(() => { $('example').hidden = true; });
-
-  $('example').addEventListener('change', async () => {
-    const name = $('example').value;
-    if (!name) return;
-    const src = await (await fetch(`./examples/${name}`)).text();
-    $('svg').value = src;
-
-    // Fragments the template renders, fetched from the same directory.
-    for (const partial of referencedPartials(liquid, src)) {
-      const res = await fetch(`./examples/${partial}`);
-      if (res.ok) partials.set(partial, await res.text());
-    }
-
-    // `<template>.json` holds the sample data, one field per key.
-    const data = await fetch(`./examples/${name.replace(/\.svg$/, '.json')}`);
-    if (data.ok) {
-      vars.clear();
-      imageVars.clear();
-      for (const [key, value] of Object.entries(await data.json())) {
-        vars.set(key, typeof value === 'string' ? value : JSON.stringify(value));
-      }
-    }
-    varsSignature = null; // the field set changed, so the panel has to rebuild
-    log(`loaded ${name}`);
-    refresh();
-  });
-  $('lang').addEventListener('input', () => refresh());
-
-  // Fitting measures and re-renders, so it belongs to the render path only:
-  // `analyse()` is about missing resources, which compression does not change.
-  function fittedSource() {
-    const raw = source();
-    if (!$('fit').checked) return raw;
-    const { svg, adjustments, problems } = fitTextWidths(
-      raw, (s) => new mod.Resvg(s, defaults(), fonts, Object.fromEntries(images)));
-    for (const p of problems) report('warn', 'fit', p);
-    for (const a of adjustments) {
-      report('info', 'fit',
-        `#${a.id} compressed to ${a.measured} of ${a.to} user units (was ${a.from}, ×${a.factor}).`);
-    }
-    return svg;
-  }
-
-  // Which faces actually drew the text, and where that is not the family the
-  // document asked for. `pendingFonts()` reports families nobody had at all;
-  // a substitution inside a family that *is* loaded looks like success until
-  // someone compares the two, which is what `faceOf` makes possible.
-  const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy']);
-
-  function faceUse(doc) {
-    const used = new Set();
-    const swaps = new Set();
-    const walk = (node) => {
-      if (node.kind === 'text') {
-        const text = node.text();
-        const asked = text.chunks.flatMap((c) => c.spans.flatMap((s) => s.font.families));
-        // A generic family names no face: whatever the database points
-        // `sans-serif` at *is* the answer, and reporting it as a substitution
-        // would flag every correctly configured document. A CSS list ending in
-        // one -- `Brand Sans, sans-serif` -- says the same thing out loud.
-        const generic = asked.some((f) => GENERIC.has(f));
-        for (const span of text.layouted) {
-          for (const glyph of span.positionedGlyphs) {
-            const face = doc.faceOf(glyph);
-            if (!face) continue;
-            used.add(face.postScriptName);
-            if (!generic && asked.length && !asked.some((f) => face.families.includes(f))) {
-              swaps.add(`${asked[0]} → ${face.postScriptName}`);
-            }
-          }
-        }
-      }
-      for (const child of node.children()) walk(child);
-    };
-    for (const node of doc.children()) walk(node);
-    return { used: [...used], swaps: [...swaps] };
-  }
-
+  $('src').value = examples.shapes;
+  select('shapes');
+  showCode();
+
+  let mod, fonts, url;
   function render() {
+    if (!mod) return;
     const t0 = performance.now();
     try {
-      const rendered = fittedSource();
-      // The exact string resvg was handed: a template bench without this makes
-      // every Liquid question a guess.
-      $('renderedSource').textContent = rendered;
-      const doc = new mod.Resvg(rendered, defaults(), fonts, Object.fromEntries(images));
-      const params = {
-        scale: Number($('scale').value) || 1,
-        width: $('width').value ? Number($('width').value) : undefined,
-        background: $('bg').value || undefined,
-        crop: $('crop').checked ? doc.absLayerBoundingBox() : undefined,
-      };
-      const png = doc.renderPng(params);
-      const ms = (performance.now() - t0).toFixed(1);
-
-      // The buffer is a view over the wasm module's shared memory, and Blob
-      // refuses shared views -- so copy out first. Same reason applies to
-      // fetch bodies, postMessage and canvas data.
-      const bytes = new Uint8Array(png);
-      $('out').src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
-      $('out').hidden = false;
-      $('plate').classList.remove('fresh');
-      void $('plate').offsetWidth;
-      $('plate').classList.add('fresh');
-
-      const bbox = doc.absLayerBoundingBox();
-      const use = faceUse(doc);
-      for (const swap of use.swaps) report('warn', 'fonts', `substituted ${swap}`);
-      const rows = [
-        ['viewport', `${round(doc.width)} × ${round(doc.height)} user units`],
-        ['content', bbox ? `${round(bbox.width)} × ${round(bbox.height)} at ${round(bbox.x)}, ${round(bbox.y)}` : 'empty'],
-        ['output', `${Math.round(doc.width * scaleOf(params, doc))} px wide · ${png.length.toLocaleString()} bytes`],
-        ['elapsed', `${ms} ms`],
-        ['text', doc.hasTextNodes() ? 'nodes kept' : 'flattened to paths'],
-        ['fonts', [...new Set(fonts.faces().map((f) => f.families[0]))].join(', ') || 'none loaded'],
-        ['drawn with', use.used.join(' · ') || '—'],
-        ['gradients', doc.linearGradients().concat(doc.radialGradients()).map((g) => g.id()).join(' ') || '—'],
-        ['filters', doc.filters().map((f) => f.id()).join(' ') || '—'],
-        ['top level', doc.children().map((n) => `${n.kind}${n.id() ? '#' + n.id() : ''}`).join('  ')],
-      ];
-      $('measure').replaceChildren(...rows.flatMap(([k, v]) => {
-        const dt = document.createElement('dt');
-        dt.textContent = k;
-        const dd = document.createElement('dd');
-        dd.textContent = v;
-        return [dt, dd];
-      }));
-      $('slugPlate').textContent = `${round(doc.width)}×${round(doc.height)}`;
-      $('slugFonts').textContent = String(fonts.len());
-      lastRender = { doc, params };
-      showTree(doc);
-      // The resolved tree: CSS applied, `use` expanded, inheritance settled --
-      // and text either kept or flattened to paths, which is the one thing a
-      // rendered source cannot tell you.
-      $('resolvedTree').textContent = doc.toString({
-        preserveText: $('preserveText').checked,
-        coordinatesPrecision: 2,
-        transformsPrecision: 4,
-      });
-      placeBbox(doc, params);
-      drainEngineLogs();
-      log(`${ms} ms`);
+      const png = new mod.Resvg($('src').value, null, fonts).renderPng({ scale: Number($('scale').value) || 1 });
+      // A view over the wasm's shared memory: Blob refuses it, so copy out.
+      const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(blob);
+      $('out').src = $('download').href = url;
+      $('out').hidden = $('download').hidden = false;
+      status(`${png.length.toLocaleString()} bytes in ${(performance.now() - t0).toFixed(1)} ms`);
     } catch (e) {
-      // No `$('info')` reset here: that element is long gone, and touching it
-      // made the catch throw and hide the error it was reporting.
-      report('error', 'resvg', e.message);
-      drainEngineLogs();
-      log('failed');
+      status(e.message, true);
     }
   }
 
-  const round = (n) => Math.round(n * 100) / 100;
+  let timer;
+  $('src').oninput = () => { select(null); clearTimeout(timer); timer = setTimeout(render, 250); };
+  $('scale').oninput = () => { showCode(); render(); };
 
-  const scaleOf = (p, doc) => p.width ? p.width / doc.width
-    : p.height ? p.height / doc.height
-    : (p.scale ?? 1);
-
-  // The last render, so a click on a node row can measure against the same
-  // scale and origin the proof was drawn with.
-  let lastRender = null;
-  let picked = null;
-
-  // One row per element, depth first. A node handle stays valid after a
-  // re-render (it holds an Arc), but the tree is rebuilt anyway so the rows
-  // always describe what is on the plate.
-  function showTree(doc) {
-    const rows = [];
-    const walk = (nodes, depth) => {
-      if (depth > 8) return;
-      for (const node of nodes) {
-        rows.push(nodeRow(node, depth));
-        walk(node.children(), depth + 1);
-      }
-    };
-    walk(doc.children(), 0);
-    $('nodes').hidden = rows.length === 0;
-    $('nodesCount').textContent = rows.length ? `— ${rows.length} elements` : '';
-    $('treeList').replaceChildren(...rows);
-  }
-
-  function nodeRow(node, depth) {
-    const li = document.createElement('li');
-    li.style.paddingLeft = `${depth * 1.1}rem`;
-    const id = node.id();
-    const box = node.absLayerBoundingBox() ?? node.absBoundingBox();
-
-    const pick = document.createElement('button');
-    pick.type = 'button';
-    pick.className = 'pick';
-    const kind = document.createElement('span');
-    kind.className = 'kind';
-    kind.textContent = node.kind;
-    pick.append(kind);
-    if (id) {
-      const ident = document.createElement('span');
-      ident.className = 'ident';
-      ident.textContent = `#${id}`;
-      pick.append(' ', ident);
-    }
-    if (box) {
-      const size = document.createElement('span');
-      size.className = 'size';
-      size.textContent = ` ${round(box.width)}×${round(box.height)}`;
-      pick.append(size);
-    }
-    pick.addEventListener('click', () => {
-      picked = picked?.li === li ? null : { node, li };
-      for (const row of $('treeList').children) row.removeAttribute('data-on');
-      if (picked) li.setAttribute('data-on', '');
-      if (lastRender) placeBbox(lastRender.doc, lastRender.params);
-    });
-
-    // Every node can render itself, cropped to its own extent -- no id needed.
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.className = 'save';
-    save.textContent = 'png';
-    save.addEventListener('click', () => {
-      try {
-        const png = node.renderPng({ scale: Number($('scale').value) || 1 });
-        const url = URL.createObjectURL(new Blob([new Uint8Array(png)], { type: 'image/png' }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${id || node.kind}.png`;
-        link.click();
-        URL.revokeObjectURL(url);
-        log(`${id || node.kind}.png · ${png.length.toLocaleString()} bytes`);
-      } catch (e) {
-        report('error', 'resvg', `renderPng on ${id || node.kind}: ${e.message}`);
-      }
-    });
-
-    li.append(pick, save);
-    return li;
-  }
-
-  // The bounding box, drawn over the proof in registration magenta. Positions
-  // come from absLayerBoundingBox(), scaled to the rendered pixels.
-  function placeBbox(doc, params) {
-    const overlay = $('bboxOverlay');
-    // A picked node overrides the document box, and shows without the checkbox:
-    // clicking a row is the request.
-    const box = picked
-      ? (picked.node.absLayerBoundingBox() ?? picked.node.absBoundingBox())
-      : doc.absLayerBoundingBox();
-    if ((!picked && !$('showBbox').checked) || !box) {
-      overlay.removeAttribute('data-on');
-      return;
-    }
-    const s = scaleOf(params, doc);
-    const origin = params.crop ?? { x: 0, y: 0 };
-    overlay.style.left = `${(box.x - origin.x) * s}px`;
-    overlay.style.top = `${(box.y - origin.y) * s}px`;
-    overlay.style.width = `${box.width * s}px`;
-    overlay.style.height = `${box.height * s}px`;
-    overlay.querySelector('span').textContent =
-      `${round(box.width)} × ${round(box.height)}`;
-    overlay.setAttribute('data-on', '');
-  }
-
-  // The tick rules measure the proof, so they need its size -- which only
-  // exists once the new image has decoded.
-  $('out').addEventListener('load', () => {
-    const frame = document.querySelector('.frame');
-    frame.style.setProperty('--plate-w', `${$('plate').offsetWidth}px`);
-    frame.style.setProperty('--plate-h', `${$('plate').offsetHeight}px`);
-  });
-
-  $('showBbox').addEventListener('change', () => { beginPass(); render(); });
-  $('fit').addEventListener('change', () => { beginPass(); render(); });
-  $('strict').addEventListener('change', () => {
-    makeLiquid();
-    beginPass();
-    analyse();
+  try {
+    if (!globalThis.crossOriginIsolated) throw new Error('This page needs cross-origin isolation; reload it, or serve it with demo/serve.mjs.');
+    mod = await import('./resvg.js');
+    fonts = new mod.FontDatabase();
+    // The browser sandbox has no system fonts: load one and point the generic
+    // families at it, or the text example draws nothing.
+    const ttf = await fetch('./fonts/IBMPlexSans-Latin.ttf').then((r) => r.arrayBuffer());
+    fonts.loadFontData(new Uint8Array(ttf));
+    const family = fonts.faces()[0].families[0];
+    for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily'])
+      fonts[set](family);
     render();
-  });
-  $('diagClear').addEventListener('click', () => {
-    seen.clear();
-    $('diagList').replaceChildren();
-    $('diagEmpty').hidden = false;
-    countIssues();
-  });
-
-  // Last in the module body on purpose: `function` declarations hoist, `const`
-  // ones do not, so an init call placed higher up hits a TDZ on the first
-  // helper declared below it. The first render happens here too -- an empty
-  // <img> shows a broken icon, and the page should prove itself before it is
-  // asked to.
-  if (mod) {
-    beginPass();
-    analyse();
-    render();
+  } catch (e) {
+    status(`Could not start: ${e.message}`, true);
   }
 </script>

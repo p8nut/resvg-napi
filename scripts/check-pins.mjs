@@ -158,4 +158,8 @@ async function main() {
   );
 }
 
-await (process.argv.includes('--selftest') ? selftest() : main());
+/** Crates `cargo update` must leave alone, for CI's `lock` job (`--held`). */
+const HELD = ['flate2', 'napi-derive-backend', 'napi-sys'];
+
+if (process.argv.includes('--held')) console.log(HELD.join('|'));
+else await (process.argv.includes('--selftest') ? selftest() : main());

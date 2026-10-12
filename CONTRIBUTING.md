@@ -226,6 +226,17 @@ Commit all of it, then push a `v*` tag. CI builds
 every target, publishes the platform packages before the root one, and creates
 the GitHub release with the pull requests merged since the last tag as its body.
 
+Then one more commit, once the packages are on npm:
+
+```bash
+npm install --package-lock-only   # the platform packages, at the new version
+```
+
+The bump ran that command before the new version existed, so npm left the
+twelve `node_modules/resvg-napi-*` entries out of the lockfile, and `npm ci`
+fails on `main` until they are back (0.6.0 shipped that way; #122 restored
+them).
+
 There is no `CHANGELOG.md` any more. It was a file to remember at every pull
 request, and it recorded what a release body is for. The generated list of pull
 requests is the *what*; the *why*, and anything breaking, is written by hand at

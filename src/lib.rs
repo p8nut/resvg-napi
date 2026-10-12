@@ -4635,9 +4635,7 @@ impl Resvg {
     #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
     #[doc = " on a worker thread."]
     fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
-        self.draw(params.unwrap_or_default())?
-            .encode_png()
-            .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+        encode_png(&self.draw(params.unwrap_or_default())?)
     }
     #[doc = " Renders to a PNG buffer."]
     #[napi]
@@ -4972,6 +4970,11 @@ fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
         .map_err(|_| Error::from_reason(format!("{what} panicked")))
 }
+#[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
+fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
+    contained("PNG encoder", || pixmap.encode_png())?
+        .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+}
 fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
     let size = tree.size();
     let (base_w, base_h, off_x, off_y) = match &p.crop {
@@ -5076,9 +5079,7 @@ fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
         )
     })?
     .ok_or_else(|| Error::from_reason("element is empty"))?;
-    pixmap
-        .encode_png()
-        .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+    encode_png(&pixmap)
 }
 #[doc = " Rendered extent of a node."]
 #[doc = ""]
@@ -5173,10 +5174,7 @@ impl<'env> napi::ScopedTask<'env> for RenderTask {
             Ok((tree, _, _)) => tree,
             Err(e) => return Ok(Err(e)),
         };
-        draw(&tree, &self.params)?
-            .encode_png()
-            .map(Ok)
-            .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+        encode_png(&draw(&tree, &self.params)?).map(Ok)
     }
     fn resolve(&mut self, env: &'env Env, png: Self::Output) -> Result<Self::JsValue> {
         match png {

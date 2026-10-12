@@ -1397,9 +1397,7 @@ pub fn template(
             #[doc = " on a worker thread."]
             #[async_twin(render_png_async, Buffer)]
             fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
-                self.draw(params.unwrap_or_default())?
-                    .encode_png()
-                    .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+                encode_png(&self.draw(params.unwrap_or_default())?)
             }
 
             #[doc = " Renders to a PNG buffer."]
@@ -1580,6 +1578,12 @@ pub fn template(
                 .map_err(|_| Error::from_reason(format!("{what} panicked")))
         }
 
+        #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
+        fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
+            contained("PNG encoder", || pixmap.encode_png())?
+                .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+        }
+
         fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
                 let size = tree.size();
                 // A crop replaces the viewport: width/height/scale then size the
@@ -1706,9 +1710,7 @@ pub fn template(
                     &mut pixmap.as_mut(),
                 ))?
                 .ok_or_else(|| Error::from_reason("element is empty"))?;
-                pixmap
-                    .encode_png()
-                    .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+                encode_png(&pixmap)
         }
 
         #[doc = " Rendered extent of a node."]
@@ -1817,10 +1819,7 @@ pub fn template(
                     Ok((tree, _, _)) => tree,
                     Err(e) => return Ok(Err(e)),
                 };
-                draw(&tree, &self.params)?
-                    .encode_png()
-                    .map(Ok)
-                    .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
+                encode_png(&draw(&tree, &self.params)?).map(Ok)
             }
 
             fn resolve(&mut self, env: &'env Env, png: Self::Output) -> Result<Self::JsValue> {

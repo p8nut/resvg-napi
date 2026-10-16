@@ -417,8 +417,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
+          # No `cache: npm` here, unlike every other job: this one holds
+          # id-token and contents write, so it installs from a clean state.
       - run: npm install  # not `npm ci` -- see the build job
       # Trusted publishing: npm trades this job's OIDC token (id-token: write
       # above) for a short-lived publish credential, so no long-lived npm

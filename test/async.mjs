@@ -68,6 +68,16 @@ await assert.rejects(() => aborted, (e) => {
 });
 assert.ok(isPng(await blocker), 'the running task was untouched');
 
+// 4b. a signal aborted before the call is refused up front: napi only listens
+//     for the event, so the whole task used to run and resolve.
+{
+  const gone = new AbortController();
+  gone.abort();
+  await assert.rejects(async () => renderAsync(small, null, null, gone.signal), /already aborted/, 'renderAsync');
+  await assert.rejects(async () => new Resvg(small).renderPngAsync(null, gone.signal), /already aborted/, 'twin');
+  await assert.rejects(async () => Resvg.parseAsync(small, null, null, null, gone.signal), /already aborted/, 'parseAsync');
+}
+
 // 5. parallel renders share the pool without stepping on each other
 const shots = await Promise.all([1, 2, 3, 4].map((n) => renderAsync(small, null, { width: n * 40 })));
 assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);

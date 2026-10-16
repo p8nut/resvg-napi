@@ -531,18 +531,13 @@ pub struct Member {
 ///
 /// `usvg::layout::Span` carries three `Option<Path>` fields, and they shipped
 /// declared as `string` while holding a whole `Path` object.
+///
+/// Only the names an upstream crate could define for itself are listed. A
+/// member typed `String`, `char`, `OsStr` or `PathBuf` *is* the std type, and
+/// napi's `string` is right for it: forcing the name there declared `String`,
+/// the wrapper object type, which a `string` is not assignable to.
 pub fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
-    const CLASHES: [&str; 9] = [
-        "String",
-        "char",
-        "OsStr",
-        "PathBuf",
-        "Path",
-        "BigInt",
-        "Symbol",
-        "Null",
-        "JsFunction",
-    ];
+    const CLASHES: [&str; 5] = ["Path", "BigInt", "Symbol", "Null", "JsFunction"];
     let t = jsty.to_string().replace(' ', "");
     // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
     // -- napi only rewrites the type itself, so only those two shapes need it.
@@ -1227,7 +1222,7 @@ pub fn map_methods(
             let params: Vec<TokenStream> = args
                 .iter()
                 .map(|(pat, kind)| match kind {
-                    Arg::Bytes => quote!(#pat: Buffer),
+                    Arg::Bytes => quote!(#pat: Uint8Array),
                     Arg::Face => quote!(#pat: &FontFace),
                     _ => quote!(#pat: String),
                 })

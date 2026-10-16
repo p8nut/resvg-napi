@@ -200,4 +200,15 @@ if (process.platform === 'linux') {
   console.log('skip — stream hrefs: Linux only');
 }
 
+// 10. an href is pending once, however many elements resolve it: two <image>s
+//     and a <use> of one of them asked three times.
+{
+  const twice = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="10" height="10">
+    <image id="i" href="a.png" width="5" height="5"/><image href="a.png" width="5" height="5"/><use xlink:href="#i"/></svg>`;
+  assert.deepEqual(new Resvg(twice).pendingImages(), ['a.png'], 'deduplicated');
+  // ...and supplied bytes that are not an image are pending, not dropped.
+  const junk = new Resvg(twice, null, null, { 'a.png': Buffer.from('not an image') });
+  assert.deepEqual(junk.pendingImages(), ['a.png'], 'unusable bytes are a miss');
+}
+
 console.log('ok — image resolution: all checks passed');

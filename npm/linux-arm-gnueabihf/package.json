@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi-linux-arm-gnueabihf",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "cpu": [
     "arm"
   ],

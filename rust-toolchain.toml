@@ -1,0 +1,7 @@
+# One compiler for CI and for everyone building locally. `stable` moved under
+# every open pull request: a release with a new clippy lint turned them all red
+# under `-D warnings`, for code none of them touched. The weekly `lock` job in
+# CI.yml says when a newer stable is out; bump this line by hand then.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

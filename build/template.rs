@@ -182,13 +182,19 @@ pub fn template(
             misses: Misses,
             root: Option<std::path::PathBuf>,
         ) -> usvg::ImageHrefResolver<'static> {
-            let sniff = usvg::ImageHrefResolver::default_data_resolver();
+            let sniff = checked(usvg::ImageHrefResolver::default_data_resolver());
             usvg::ImageHrefResolver {
-                resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
+                // Also what a nested SVG's own images go through: usvg forwards
+                // `resolve_data` into the sub-document's options.
+                resolve_data: checked(usvg::ImageHrefResolver::default_data_resolver()),
                 resolve_string: Box::new(move |href: &str, opts: &usvg::Options| {
-                    // 1. buffer supplied by JS -- let usvg sniff the format itself
+                    // 1. buffer supplied by JS -- let usvg sniff the format itself.
+                    // One it cannot use (refused, or not an image at all) is a
+                    // miss like any other, not an image that silently vanishes.
                     if let Some(data) = images.get(href) {
-                        return sniff("text/plain", data.clone(), opts);
+                        if let Some(kind) = sniff("text/plain", data.clone(), opts) {
+                            return Some(kind);
+                        }
                     }
                     // 2. a file under `resourcesDir`, and nowhere else. usvg's
                     // default reads any absolute path, and a relative one off
@@ -218,6 +224,58 @@ pub fn template(
                     None
                 }),
             }
+        }
+
+        #[doc = " Largest raster image accepted, by the size its header declares: 2^28"]
+        #[doc = " px. resvg decodes at render time with no limit of its own, so a 1 KB"]
+        #[doc = " JPEG declaring 65535x65535 would ask for 16 GiB there."]
+        const MAX_IMAGE_PIXELS: u64 = 1 << 28;
+
+        #[doc = " `resolve` behind the two checks usvg and resvg leave out: gzip is"]
+        #[doc = " inflated under `MAX_IMAGE_BYTES`, and a raster image whose header"]
+        #[doc = " declares more than `MAX_IMAGE_PIXELS` is refused. Refusals are logged."]
+        fn checked(resolve: usvg::ImageHrefDataResolverFn<'static>) -> usvg::ImageHrefDataResolverFn<'static> {
+            Box::new(move |mime: &str, data: std::sync::Arc<Vec<u8>>, opts: &usvg::Options| {
+                let data = if data.starts_with(&[0x1f, 0x8b]) {
+                    match gunzip_capped(&data) {
+                        Ok(inflated) => std::sync::Arc::new(inflated),
+                        Err(e) => {
+                            log::warn!("{}: image refused, gzip data {e}", env!("CARGO_PKG_NAME"));
+                            return None;
+                        }
+                    }
+                } else {
+                    data
+                };
+                if let Ok(size) = imagesize::blob_size(&data) {
+                    if size.width as u64 * size.height as u64 > MAX_IMAGE_PIXELS {
+                        log::warn!(
+                            "{}: image refused, {}x{} exceeds {MAX_IMAGE_PIXELS} px",
+                            env!("CARGO_PKG_NAME"),
+                            size.width,
+                            size.height
+                        );
+                        return None;
+                    }
+                }
+                resolve(mime, data, opts)
+            })
+        }
+
+        #[doc = " Inflates gzip data, refusing it past `MAX_IMAGE_BYTES`: usvg's own"]
+        #[doc = " `decompress_svgz` has no cap, so 20 MB of `.svgz` could grow to 20 GB"]
+        #[doc = " and abort the process. Over the cap is `FileTooLarge`."]
+        fn gunzip_capped(data: &[u8]) -> std::io::Result<Vec<u8>> {
+            use std::io::Read;
+            let mut out = Vec::new();
+            flate2::read::GzDecoder::new(data).take(MAX_IMAGE_BYTES + 1).read_to_end(&mut out)?;
+            if out.len() as u64 > MAX_IMAGE_BYTES {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::FileTooLarge,
+                    format!("expands past {MAX_IMAGE_BYTES} bytes"),
+                ));
+            }
+            Ok(out)
         }
 
         #[doc = " `href` resolved against `resourcesDir`, if it lands inside `root`"]
@@ -507,10 +565,15 @@ pub fn template(
             #[doc = " `height` then size the crop, not the full viewport. Feed it"]
             #[doc = " `absLayerBoundingBox()` to trim the document to its content."]
             pub crop: Option<BBox>,
-            #[doc = " Refuse to allocate more than this many pixels (4 bytes each)."]
-            #[doc = " Default: 2^28, a 16384x16384 canvas or 1 GiB. Without a cap a"]
+            #[doc = " Refuse a canvas of more than this many pixels (4 bytes each)."]
+            #[doc = " Default: 2^26, an 8192x8192 canvas or 256 MiB. Without a cap a"]
             #[doc = " document declaring `width=\"200000\"` aborts the whole process"]
             #[doc = " on the failed allocation, which no try/catch can recover."]
+            #[doc = ""]
+            #[doc = " It bounds the canvas only: a group with a filter, opacity, mask or"]
+            #[doc = " clip path renders through a layer of its own, which resvg lets grow"]
+            #[doc = " to 5x the canvas each way. Raise it knowing a render can then"]
+            #[doc = " allocate up to 25x this cap."]
             pub max_pixels: Option<f64>,
         }
 
@@ -1554,6 +1617,21 @@ pub fn template(
                         options.resources_root.as_ref().map(std::path::PathBuf::from),
                     );
                 opts.font_resolver = font_resolver(missing_fonts.clone());
+                let inflated;
+                let svg = if svg.starts_with(&[0x1f, 0x8b]) {
+                    match gunzip_capped(svg) {
+                        Ok(data) => {
+                            inflated = data;
+                            &inflated[..]
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::FileTooLarge => {
+                            return Err(Error::from_reason(format!("SVGZ data {e}")));
+                        }
+                        Err(_) => return Ok(Err(usvg::Error::MalformedGZip)),
+                    }
+                } else {
+                    svg
+                };
                 let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
                     Ok(tree) => tree,
                     Err(e) => return Ok(Err(e)),
@@ -1668,7 +1746,7 @@ pub fn template(
                 if !(scale.is_finite() && scale > 0.0) {
                     return Err(Error::from_reason(format!("invalid scale: {scale}")));
                 }
-                let max = p.max_pixels.unwrap_or(268_435_456.0); // 2^28
+                let max = p.max_pixels.unwrap_or(67_108_864.0); // 2^26
                 if !(max.is_finite() && max > 0.0) {
                     return Err(Error::from_reason(format!("invalid maxPixels: {max}")));
                 }

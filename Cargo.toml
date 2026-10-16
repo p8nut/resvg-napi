@@ -38,6 +38,11 @@ svgtypes = "0.16.1"
 # usvg/resvg report recoverable problems through `log`; nothing consumes it by
 # default, so the messages are lost. We install a collector.
 log = "0.4"
+# Both already in the graph through usvg: gzip is inflated here, under a cap,
+# instead of by usvg's unbounded `read_to_end`; image headers are sized before
+# resvg allocates their pixels.
+flate2 = "1.1"
+imagesize = "0.15"
 
 # O_NOFOLLOW and O_NONBLOCK for reading images off disk; std names neither.
 # Already in the graph through memmap2.

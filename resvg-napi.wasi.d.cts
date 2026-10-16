@@ -1527,10 +1527,15 @@ export interface RenderParams {
    */
   crop?: BBox
   /**
-   * Refuse to allocate more than this many pixels (4 bytes each).
-   * Default: 2^28, a 16384x16384 canvas or 1 GiB. Without a cap a
+   * Refuse a canvas of more than this many pixels (4 bytes each).
+   * Default: 2^26, an 8192x8192 canvas or 256 MiB. Without a cap a
    * document declaring `width="200000"` aborts the whole process
    * on the failed allocation, which no try/catch can recover.
+   *
+   * It bounds the canvas only: a group with a filter, opacity, mask or
+   * clip path renders through a layer of its own, which resvg lets grow
+   * to 5x the canvas each way. Raise it knowing a render can then
+   * allocate up to 25x this cap.
    */
   maxPixels?: number
 }

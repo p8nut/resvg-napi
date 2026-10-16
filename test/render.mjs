@@ -87,6 +87,14 @@ for (const [w, h] of [[100, 50], [100, 33], [37, 91], [1, 1]]) {
   assert.equal(png.readUInt32BE(20), 60, 'IHDR height, from the ratio and not an f32 detour');
 }
 
+// a node render is cropped to the node already: a crop is refused, not ignored
+{
+  const doc = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect id="r" width="80" height="80"/></svg>');
+  const crop = { x: 0, y: 0, width: 10, height: 10 };
+  assert.throws(() => doc.renderNodePng('r', { crop }), /crop is not supported/);
+  assert.throws(() => doc.node('r').renderPng({ crop }), /crop is not supported/);
+}
+
 // maxPixels: an oversized canvas is an error, not an abort
 assert.throws(() => r.renderPng({ scale: 2000 }), /exceeds maxPixels/, 'scale');
 assert.throws(() => new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="200000" height="100000"/>').renderPng(), /exceeds maxPixels/, 'declared size');

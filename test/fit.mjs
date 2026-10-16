@@ -155,4 +155,18 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
     'and its check is unmeasured rather than wrong');
 }
 
+// Attributes are read the way XML writes them: either quote style, and a name
+// only where it starts -- `data-id` is not `id`.
+{
+  const quirky = `<svg xmlns="http://www.w3.org/2000/svg" width='240' height='40' viewBox='0 0 120 20'>
+    <text data-id="zz" id='t' x='5' y='15' transform='translate(1 0)' font-size='10' data-maxwidth='20'>wide text here</text></svg>`;
+  assert.deepEqual(findWidthConstraints(quirky).map((c) => [c.id, c.max]), [['t', 20]], 'single quotes, data-id');
+  const { svg: out, adjustments, problems } = fitTextWidths(quirky, render);
+  assert.deepEqual(problems, []);
+  assert.equal(adjustments.length, 1);
+  assert.ok(Math.abs(adjustments[0].measured - 20) < 0.5, `fitted in the viewBox's units: ${adjustments[0].measured}`);
+  assert.match(out, /transform='translate\(1 0\) translate\(5 0\) scale\([\d.]+ 1\) translate\(-5 0\)'/, 'one transform, same quotes');
+  render(out);
+}
+
 console.log('ok — horizontal fitting: all checks passed');

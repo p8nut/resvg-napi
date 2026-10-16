@@ -119,8 +119,8 @@ pub fn template(
 
         type ImageMap = std::collections::HashMap<String, std::sync::Arc<Vec<u8>>>;
 
-        #[doc = " The bytes of an SVG handed over as text or as a Buffer."]
-        fn svg_bytes(svg: Either<String, Buffer>) -> Vec<u8> {
+        #[doc = " The bytes of an SVG handed over as text or as a Uint8Array (or Buffer)."]
+        fn svg_bytes(svg: Either<String, Uint8Array>) -> Vec<u8> {
             match svg {
                 Either::A(text) => text.into_bytes(),
                 Either::B(data) => data.to_vec(),
@@ -129,7 +129,7 @@ pub fn template(
 
         #[doc = " JS `{ href: Buffer }` -> the map the href resolver reads, copied"]
         #[doc = " off the JS heap so a worker thread can hold it."]
-        fn image_map(images: Option<std::collections::HashMap<String, Buffer>>) -> ImageMap {
+        fn image_map(images: Option<std::collections::HashMap<String, Uint8Array>>) -> ImageMap {
             images
                 .unwrap_or_default()
                 .into_iter()
@@ -220,7 +220,11 @@ pub fn template(
                     // Poison-tolerant: this mutex only accumulates
                     // diagnostics, so a panic elsewhere must not take the
                     // render down with it.
-                    misses.0.lock().unwrap_or_else(|e| e.into_inner()).push(href.to_string());
+                    // Once per href: a `<use>` of an image resolves it again.
+                    let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
+                    if !seen.iter().any(|h| h == href) {
+                        seen.push(href.to_string());
+                    }
                     None
                 }),
             }
@@ -1353,10 +1357,10 @@ pub fn template(
             #[napi(constructor)]
             pub fn new(
                 env: Env,
-                svg: Either<String, Buffer>,
+                svg: Either<String, Uint8Array>,
                 options: Option<RenderOptions>,
                 fonts: Option<&FontDatabase>,
-                images: Option<std::collections::HashMap<String, Buffer>>,
+                images: Option<std::collections::HashMap<String, Uint8Array>>,
             ) -> Result<Self> {
                 let svg = svg_bytes(svg);
                 let options = std::sync::Arc::new(options.unwrap_or_default());
@@ -1430,7 +1434,7 @@ pub fn template(
             #[doc = " Pass everything you already have through the constructor's `images`"]
             #[doc = " argument, or `resolveImages`, instead: this re-parses once per call."]
             #[napi]
-            pub fn resolve_image(&mut self, href: String, data: Buffer) -> Result<()> {
+            pub fn resolve_image(&mut self, href: String, data: Uint8Array) -> Result<()> {
                 std::sync::Arc::make_mut(&mut self.images)
                     .insert(href, std::sync::Arc::new(data.to_vec()));
                 self.reparse()
@@ -1440,7 +1444,7 @@ pub fn template(
             #[doc = " `pendingImages()` asked for, fetched, handed back in one call."]
             #[doc = " An href the document does not use is kept, not an error."]
             #[napi]
-            pub fn resolve_images(&mut self, images: std::collections::HashMap<String, Buffer>) -> Result<()> {
+            pub fn resolve_images(&mut self, images: std::collections::HashMap<String, Uint8Array>) -> Result<()> {
                 std::sync::Arc::make_mut(&mut self.images).extend(image_map(Some(images)));
                 self.reparse()
             }
@@ -1485,10 +1489,10 @@ pub fn template(
             #[doc = " resolved instance still reports `pendingImages` / `pendingFonts`."]
             #[napi(ts_return_type = "Promise<Resvg>")]
             pub fn parse_async(
-                svg: Either<String, Buffer>,
+                svg: Either<String, Uint8Array>,
                 options: Option<RenderOptions>,
                 fonts: Option<&FontDatabase>,
-                images: Option<std::collections::HashMap<String, Buffer>>,
+                images: Option<std::collections::HashMap<String, Uint8Array>>,
                 #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
             ) -> AsyncTask<ParseTask> {
                 AsyncTask::with_optional_signal(
@@ -1664,8 +1668,15 @@ pub fn template(
         #[doc = " unwind reaching napi's extern \"C\" frame aborts the whole process,"]
         #[doc = " and these are the paths an untrusted document drives."]
         fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
-                .map_err(|_| Error::from_reason(format!("{what} panicked")))
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|p| {
+                // The payload is what a bug report needs; panic!() makes it a
+                // &str or a String, anything else is left out.
+                let why = p.downcast_ref::<&str>().copied().or(p.downcast_ref::<String>().map(String::as_str));
+                Error::from_reason(match why {
+                    Some(why) => format!("{what} panicked: {why}"),
+                    None => format!("{what} panicked"),
+                })
+            })
         }
 
         #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
@@ -1782,6 +1793,10 @@ pub fn template(
 
         #[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
         fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
+                if p.crop.is_some() {
+                    // A node render is already cropped to the node's own extent.
+                    return Err(Error::new(Status::InvalidArg, "crop is not supported when rendering a single node"));
+                }
                 let bbox = node_extent(node)
                     .ok_or_else(|| Error::from_reason("element has no visible size"))?;
                 // resvg::render_node renders the node's *local* geometry but
@@ -1884,6 +1899,17 @@ pub fn template(
                 if !is {
                     return Err(Error::new(Status::InvalidArg, "signal must be an AbortSignal"));
                 }
+                // napi listens for the `abort` event, so a signal aborted before
+                // the call would let the whole task run: refuse it here instead.
+                let mut aborted = std::ptr::null_mut();
+                napi::check_status!(unsafe {
+                    napi::sys::napi_get_named_property(env, value, c"aborted".as_ptr(), &mut aborted)
+                })?;
+                let mut already = false;
+                napi::check_status!(unsafe { napi::sys::napi_get_value_bool(env, aborted, &mut already) })?;
+                if already {
+                    return Err(Error::new(Status::Cancelled, "AbortError: the signal was already aborted"));
+                }
                 unsafe { AbortSignal::from_napi_value(env, value) }.map(Signal)
             }
         }
@@ -1927,7 +1953,7 @@ pub fn template(
         #[doc = " the `pendingImages` / `pendingFonts` reports, use `Resvg.parseAsync`."]
         #[napi(ts_return_type = "Promise<Buffer>")]
         pub fn render_async(
-            svg: Either<String, Buffer>,
+            svg: Either<String, Uint8Array>,
             options: Option<RenderOptions>,
             params: Option<RenderParams>,
             #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,

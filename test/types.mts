@@ -120,3 +120,14 @@ try {
     }
   }
 }
+
+// 9. strings are `string`, not the `String` wrapper object type, and binary
+//    inputs take any Uint8Array -- what fetch hands back in a browser or WASI.
+for (const face of fonts.faces()) {
+  const name: string = face.postScriptName;
+  new Map<string, number>().set(face.postScriptName, name.length);
+}
+const bytes = new Uint8Array(Buffer.from(svg));
+new Resvg(bytes, null, fonts, { 'a.png': new Uint8Array(8) }).resolveImages({ 'b.png': bytes });
+fonts.loadFontData(new Uint8Array(0));
+void renderAsync(bytes);

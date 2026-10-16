@@ -106,7 +106,7 @@ export declare class FontDatabase {
    *
    * Will load all font faces in case of a font collection.
    */
-  loadFontData(data: Buffer): void
+  loadFontData(data: Uint8Array): void
   /**
    * Loads a font file into the `Database`.
    *
@@ -191,7 +191,7 @@ export declare class FontDatabase {
 /** Read-only view of a `FaceInfo`. */
 export declare class FontFace {
   get index(): number
-  get postScriptName(): String
+  get postScriptName(): string
   get style(): FontFaceStyle
   get weight(): number
   get stretch(): Stretch
@@ -202,7 +202,7 @@ export declare class FontFace {
 
 /** Read-only view of an `Image`. */
 export declare class Image {
-  get id(): String
+  get id(): string
   get isVisible(): boolean
   get size(): Dimensions
   get renderingMode(): ImageRendering
@@ -340,7 +340,7 @@ export declare class PositionedGlyph {
   get svgTransform(): Matrix
   get colrTransform(): Matrix
   get id(): number
-  get text(): String
+  get text(): string
   /**
    * The face that drew this glyph, from the database its document
    * was parsed with. `null` for a glyph that came from no document.
@@ -387,7 +387,7 @@ export declare class RadialGradient {
 
 /** A parsed SVG, ready to be rendered any number of times. */
 export declare class Resvg {
-  constructor(svg: string | Buffer, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Buffer> | undefined | null)
+  constructor(svg: string | Uint8Array, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Uint8Array> | undefined | null)
   /**
    * Hrefs of `<image>` elements that neither the supplied buffers nor the
    * filesystem could resolve. Feed them back with `resolveImage`.
@@ -426,13 +426,13 @@ export declare class Resvg {
    * Pass everything you already have through the constructor's `images`
    * argument, or `resolveImages`, instead: this re-parses once per call.
    */
-  resolveImage(href: string, data: Buffer): void
+  resolveImage(href: string, data: Uint8Array): void
   /**
    * Supplies several images and re-parses the document once: what
    * `pendingImages()` asked for, fetched, handed back in one call.
    * An href the document does not use is kept, not an error.
    */
-  resolveImages(images: Record<string, Buffer>): void
+  resolveImages(images: Record<string, Uint8Array>): void
   get width(): number
   get height(): number
   /** Renders to a PNG buffer. */
@@ -441,7 +441,7 @@ export declare class Resvg {
    * Parses on a worker thread. Same arguments as the constructor, and the
    * resolved instance still reports `pendingImages` / `pendingFonts`.
    */
-  static parseAsync(svg: string | Buffer, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Buffer> | undefined | null, signal?: AbortSignal | undefined | null): Promise<Resvg>
+  static parseAsync(svg: string | Uint8Array, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Uint8Array> | undefined | null, signal?: AbortSignal | undefined | null): Promise<Resvg>
   /**
    * Bounding box of one element, by `id`, as it will be rendered
    * (contours, filters and transforms included). `null` if there is no
@@ -768,7 +768,7 @@ export declare class SvgNode {
 
 /** Read-only view of a `Text`. */
 export declare class Text {
-  get id(): String
+  get id(): string
   get renderingMode(): TextRendering
   get dx(): Array<number>
   get dy(): Array<number>
@@ -790,7 +790,7 @@ export declare class TextChunk {
   get anchor(): TextAnchor
   get spans(): Array<TextSpan>
   get textFlow(): TextFlowPlain | TextFlowPath
-  get text(): String
+  get text(): string
 }
 
 /** Read-only view of a `TextSpan`. */
@@ -1054,7 +1054,7 @@ export type FontStyle = 'normal' | 'italic' | 'oblique'
 
 /** Plain view of a `FontVariation`. */
 export interface FontVariation {
-  tag: String
+  tag: string
   value: number
 }
 
@@ -1338,7 +1338,7 @@ export type ParseErrorCode = 'NotAnUtf8Str' | 'SvgzFeatureNotEnabled' | 'Malform
 
 /** Plain view of a `Path`. */
 export interface Path {
-  id: String
+  id: string
   isVisible: boolean
   fill?: Fill
   stroke?: Stroke
@@ -1379,7 +1379,7 @@ export interface PointLight {
 export interface Primitive {
   rect: BBox
   colorInterpolation: ColorInterpolation
-  result: String
+  result: string
   kind: KindBlend | KindColorMatrix | KindComponentTransfer | KindComposite | KindConvolveMatrix | KindDiffuseLighting | KindDisplacementMap | KindDropShadow | KindFlood | KindGaussianBlur | KindImage | KindMerge | KindMorphology | KindOffset | KindSpecularLighting | KindTile | KindTurbulence
 }
 
@@ -1397,7 +1397,7 @@ export interface RawImage {
  * filesystem only. For a custom `FontDatabase`, supplied image buffers or
  * the `pendingImages` / `pendingFonts` reports, use `Resvg.parseAsync`.
  */
-export declare function renderAsync(svg: string | Buffer, options?: RenderOptions | undefined | null, params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
+export declare function renderAsync(svg: string | Uint8Array, options?: RenderOptions | undefined | null, params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
 
 /**
  * Mirror of `usvg::Options`. Every field is optional; omitted fields

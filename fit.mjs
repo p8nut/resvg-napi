@@ -23,10 +23,19 @@ const ATTR = 'data-maxwidth';
  * `limit / ratio` gets compressed while it actually fits.
  */
 function unitScale(svg, canvasWidth) {
-  const viewBox = svg.match(/\bviewBox\s*=\s*"\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/);
+  const viewBox = svg.match(/\sviewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/);
   const width = viewBox ? Number(viewBox[1]) : NaN;
   if (!Number.isFinite(width) || width <= 0) return 1;
   return canvasWidth / width;
+}
+
+/**
+ * An attribute's value from a tag's attribute text, either quote style. The
+ * name must start the text or follow whitespace: `\bid` also matched the `id`
+ * of `data-id`.
+ */
+function attr(attrs, name) {
+  return attrs.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(["'])(.*?)\\1`))?.[2];
 }
 
 /** Elements carrying a width constraint, with the tag text needed to rewrite it. */
@@ -34,10 +43,10 @@ export function findWidthConstraints(svg) {
   const found = [];
   for (const match of svg.matchAll(/<([a-zA-Z][\w:.-]*)\b([^>]*?)(\/?)>/g)) {
     const [tag, name, attrs] = match;
-    const max = attrs.match(new RegExp(`${ATTR}\\s*=\\s*"([^"]*)"`))?.[1];
+    const max = attr(attrs, ATTR);
     if (max === undefined) continue;
     const width = Number(max);
-    const id = attrs.match(/\bid\s*=\s*"([^"]*)"/)?.[1];
+    const id = attr(attrs, 'id');
     found.push({ tag, name, attrs, id, max: width, index: match.index });
   }
   return found;
@@ -54,15 +63,17 @@ export function findWidthConstraints(svg) {
  */
 function withHorizontalScale(tag, attrs, factor) {
   // `x` may be a list for per-glyph positioning; the first value is the anchor.
-  const anchor = Number.parseFloat(attrs.match(/\bx\s*=\s*"\s*([-\d.]+)/)?.[1] ?? '0') || 0;
+  const anchor = Number.parseFloat(attr(attrs, 'x')?.trim() ?? '0') || 0;
   const scale = anchor
     ? `translate(${round(anchor)} 0) scale(${round(factor)} 1) translate(${round(-anchor)} 0)`
     : `scale(${round(factor)} 1)`;
-  const existing = attrs.match(/\btransform\s*=\s*"([^"]*)"/);
+  const existing = attrs.match(/(?:^|\s)transform\s*=\s*(["'])(.*?)\1/);
   if (existing) {
     // Composed on the right: the element keeps its position, the glyphs
-    // compress toward the anchor the transform established.
-    return tag.replace(existing[0], `transform="${existing[1].trim()} ${scale}"`);
+    // compress toward the anchor the transform established. Same quotes back,
+    // so a `'` value cannot end up holding a `"` or the other way round.
+    const q = existing[1];
+    return tag.replace(existing[0], `${existing[0].match(/^\s*/)[0]}transform=${q}${existing[2].trim()} ${scale}${q}`);
   }
   return tag.replace(/(\/?)>$/, ` transform="${scale}"$1>`);
 }

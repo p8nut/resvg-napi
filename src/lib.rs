@@ -1038,15 +1038,29 @@ fn checked(
             } else {
                 data
             };
-            if let Ok(size) = imagesize::blob_size(&data) {
-                if size.width as u64 * size.height as u64 > MAX_IMAGE_PIXELS {
-                    log::warn!(
-                        "{}: image refused, {}x{} exceeds {MAX_IMAGE_PIXELS} px",
-                        env!("CARGO_PKG_NAME"),
-                        size.width,
-                        size.height
-                    );
-                    return None;
+            let raster = matches!(
+                mime,
+                "image/jpg" | "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+            ) || matches!(
+                imagesize::image_type(&data),
+                Ok(imagesize::ImageType::Png
+                    | imagesize::ImageType::Jpeg
+                    | imagesize::ImageType::Gif
+                    | imagesize::ImageType::Webp)
+            );
+            if raster {
+                let px = imagesize::blob_size(&data)
+                    .map(|s| (s.width as u64).saturating_mul(s.height as u64));
+                match px {
+                    Ok(px) if px <= MAX_IMAGE_PIXELS => {}
+                    Ok(_) | Err(_) => {
+                        log::warn!(
+                            "{}: image refused, {} exceeds {MAX_IMAGE_PIXELS} px or has no readable size",
+                            env!("CARGO_PKG_NAME"),
+                            px.map_or("header".into(), |px| format!("{px} px")),
+                        );
+                        return None;
+                    }
                 }
             }
             resolve(mime, data, opts)

@@ -64,7 +64,13 @@ const big = new Resvg(img('huge.png'), null, null, { 'huge.png': huge });
 assert.deepEqual(big.pendingImages(), ['huge.png'], 'oversized raster refused');
 big.renderPng();
 new Resvg(img(`data:image/png;base64,${huge.toString('base64')}`)).renderPng();
-assert.ok(takeLogs().filter((l) => /image refused, 65535x65535 exceeds 268435456 px/.test(l)).length >= 2, 'logged');
+assert.ok(takeLogs().filter((l) => /image refused, 4294836225 px exceeds 268435456 px/.test(l)).length >= 2, 'logged');
+
+// ...and one that claims to be PNG but has no readable header is refused too,
+// rather than slipping past the size check to the decoder.
+const headless = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]);
+assert.deepEqual(new Resvg(img('headless.png'), null, null, { 'headless.png': headless }).pendingImages(),
+  ['headless.png'], 'unsized raster refused');
 setLogLevel('off');
 
 // 3. The canvas cap defaults to 2^26 px: 8192x8192 is the largest square.

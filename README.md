@@ -43,8 +43,9 @@ as you like.
 
 `params` carries `width` / `height` / `scale`, a `background` colour, a
 `crop` box and `maxPixels`, the canvas size past which a render throws instead
-of allocating (default 2^28, 1 GiB). `Resvg.parseAsync` moves the parse off the
-loop too.
+of allocating (default 2^26, an 8192×8192 canvas or 256 MiB; a group with a
+filter or opacity can take a layer of up to 25× that, so raise it with care).
+`Resvg.parseAsync` moves the parse off the loop too.
 
 A document usvg refuses throws (or rejects) with usvg's own reason as
 `error.code`: `NotAnUtf8Str`, `SvgzFeatureNotEnabled`, `MalformedGZip`,
@@ -308,8 +309,12 @@ disk is not read at all. `resourcesRoot` widens the fence to an ancestor, so a
 template can still reach `../assets/logo.png`; or hand the bytes over as
 `images` instead. Bytes fetched after the parse go back with
 `resolveImages({ href: buffer, ... })`, one re-parse for all of them;
-`resolveImage(href, buffer)` re-parses once per call. A file of more than
-256 MiB is not read.
+`resolveImage(href, buffer)` re-parses once per call. Refused, because each
+would otherwise be allocated in full: a file of more than 256 MiB, gzip data
+that inflates past 256 MiB, and a raster image whose header declares more than
+2^28 pixels. An image refused this way, or supplied bytes that are not an image
+at all, is listed in `pendingImages()` (a `data:` URI is only logged); an
+`.svgz` document past the cap throws.
 
 **A measurement disagrees with the numbers in the file.** Bounding boxes are in
 the document's own units and usvg normalises the tree, so they are not canvas

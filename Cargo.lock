@@ -525,6 +525,8 @@ dependencies = [
 name = "resvg-napi"
 version = "0.6.0"
 dependencies = [
+ "flate2",
+ "imagesize",
  "libc",
  "log",
  "napi",

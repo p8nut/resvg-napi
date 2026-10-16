@@ -56,7 +56,8 @@ jobs:
             && echo "open=true" >> "$GITHUB_OUTPUT" \
             || echo "open=false" >> "$GITHUB_OUTPUT"
 
-      - uses: dtolnay/rust-toolchain@stable
+      # The toolchain rust-toolchain.toml pins, as in CI.yml.
+      - run: rustup toolchain install
         if: steps.seen.outputs.open == 'false'
       - uses: Swatinem/rust-cache@v2
         if: steps.seen.outputs.open == 'false'

@@ -35,6 +35,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only unless a job says otherwise (publish does). Written here rather
+# than left to the repository's default token setting, which this file cannot
+# see and a settings change could widen.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: '0'
@@ -51,6 +57,10 @@ jobs:
   # package.json's `napi.targets` rather than being a second copy of it.
   plan:
     name: plan
+    # The Monday cron is for `pins` and `lock` alone. Without this it also
+    # rebuilt and retested all thirteen targets on an unchanged main; every job
+    # below `needs` plan, so skipping it skips them.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.p.outputs.targets }}
@@ -61,6 +71,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       - id: p
         env:
           EVENT: ${{ github.event_name }}
@@ -110,9 +121,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+          cache: npm
+      # rustup is on every hosted runner; with no argument it installs the
+      # toolchain rust-toolchain.toml pins, and the target is added to that one.
+      - run: rustup toolchain install && rustup target add ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
@@ -289,6 +301,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
       - run: npm install  # not `npm ci` -- see the build job
       - uses: actions/download-artifact@v8
         with:
@@ -321,6 +334,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       - run: npm install  # not `npm ci` -- see the build job
       # `napi artifacts` walks package.json's napi.targets and wants a binary for
       # every one of the thirteen, so it errors outright on a slim run's two --
@@ -378,6 +392,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       - run: npm install  # not `npm ci` -- see the build job
       - uses: actions/download-artifact@v8
         with:
@@ -403,6 +418,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+          # No `cache: npm` here, unlike every other job: this one holds
+          # id-token and contents write, so it installs from a clean state.
       - run: npm install  # not `npm ci` -- see the build job
       # Trusted publishing: npm trades this job's OIDC token (id-token: write
       # above) for a short-lived publish credential, so no long-lived npm
@@ -480,6 +497,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       - run: npm run check:pins
 
   # Dependabot leaves Cargo alone (see .github/dependabot.yml) and resvg.yml
@@ -488,7 +506,7 @@ jobs:
   # open a pull request. The held crates come from check-pins.mjs, which
   # explains each hold and watches for its end.
   lock:
-    name: Cargo.lock up to date
+    name: Cargo.lock and toolchain up to date
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -497,3 +515,13 @@ jobs:
           held=$(node scripts/check-pins.mjs --held)
           stale=$(cargo update --dry-run 2>&1 | grep -E 'Updating [^ ]+ v' | grep -vE "Updating ($held) " || true)
           if [ -n "$stale" ]; then echo "$stale"; exit 1; fi
+      # rust-toolchain.toml pins the compiler, so nothing else notices a new
+      # stable. Red here means: bump the channel there, fix whatever clippy now
+      # says, in one pull request.
+      - name: rust-toolchain.toml is the latest stable
+        run: |
+          pinned=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          latest=$(curl -fsSL https://static.rust-lang.org/dist/channel-rust-stable.toml \
+            | sed -n '/^\[pkg\.rustc\]/,/^version/s/^version = "\([0-9.]*\).*/\1/p')
+          echo "pinned $pinned, latest stable $latest"
+          [ -n "$latest" ] && [ "$pinned" = "$latest" ]

@@ -132,6 +132,11 @@ npm run ci:targets:selftest      # the build matrix and its tiers
 npm run licenses:selftest        # the licence expression parser, offline
 ```
 
+The compiler is the one `rust-toolchain.toml` pins, locally and in CI: rustup
+installs it on first use. A new stable lands through that file, in its own pull
+request -- the Monday `lock` job goes red when one is out -- so a clippy release
+cannot turn unrelated pull requests red.
+
 CI runs the lint on `x86_64-unknown-linux-gnu` only -- the toolchain is warm
 there and nothing here is target-specific enough to lint thirteen times -- and
 regenerates the committed bindings to fail on any diff: `src/lib.rs`,

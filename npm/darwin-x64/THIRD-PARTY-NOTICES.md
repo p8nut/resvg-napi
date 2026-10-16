@@ -69,7 +69,7 @@ No copyright line in the published crate; Apache-2.0 per its manifest.
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014-2026 Alex Crichton
 
-### font-types 0.12.6
+### font-types 0.12.7
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
@@ -229,7 +229,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### smallvec 1.16.2
+### smallvec 1.16.3
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 The Servo Project Developers
 
@@ -241,7 +241,7 @@ Copyright (c) 2018 Yevhenii Reizner
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
 
-### syn 3.0.6
+### syn 3.0.9
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
 
@@ -253,7 +253,7 @@ Copyright (c) 2019 Daniel "Lokathor" Gee
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2015 The Rust Project Developers
 
-### unicode-ident 1.0.26
+### unicode-ident 1.0.27
 Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Apache-2.0.
 COPYRIGHT AND PERMISSION NOTICE
 Copyright © 1991-2023 Unicode, Inc
@@ -375,7 +375,7 @@ Copyright (c) 2019 Reizner Evgeniy
 
 ## Unicode-3.0
 
-### unicode-ident 1.0.26
+### unicode-ident 1.0.27
 Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Unicode-3.0.
 COPYRIGHT AND PERMISSION NOTICE
 Copyright © 1991-2023 Unicode, Inc

@@ -355,19 +355,33 @@ pub fn map_struct(
                 quote!(Vec<String>),
                 quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } },
             )),
-            Some(Js::Bbox) | Some(Js::OptBbox) => Some(field(
-                &ident,
-                &doc,
-                quote!(BBox),
-                quote! { if let Some(v) = self.#ident {
-                    if let Some(r) = usvg::NonZeroRect::from_xywh(
-                        to_f32(v.x), to_f32(v.y), to_f32(v.width), to_f32(v.height)) {
-                        o.#ident = r;
-                    }
-                } },
-            )),
+            // Three upstream shapes share one JS type: a `Rect` (may be
+            // empty), a `NonZeroRect`, and an optional `NonZeroRect`. Each needs
+            // its own constructor and its own assignment; one arm for all three
+            // assigned a NonZeroRect to the other two, which does not compile.
+            Some(Js::Bbox) | Some(Js::OptBbox) => {
+                let nonzero = ty.contains("NonZeroRect");
+                let ctor = if nonzero { quote!(usvg::NonZeroRect) } else { quote!(usvg::Rect) };
+                let set = if matches!(vocab.classify(&ty), Some(Js::OptBbox)) {
+                    quote!(o.#ident = Some(r);)
+                } else {
+                    quote!(o.#ident = r;)
+                };
+                Some(field(
+                    &ident,
+                    &doc,
+                    quote!(BBox),
+                    quote! { if let Some(v) = self.#ident
+                        && let Some(r) = #ctor::from_xywh(
+                            to_f32(v.x), to_f32(v.y), to_f32(v.width), to_f32(v.height))
+                    {
+                        #set
+                    } },
+                ))
+            }
             Some(Js::Enum) => {
-                let e = format_ident!("{}", vocab.resolve(&ty));
+                // The JS name, after ENUM_RENAMES, as every other site spells it.
+                let e = enum_ident(&vocab.resolve(&ty));
                 Some(field(
                     &ident,
                     &doc,
@@ -407,7 +421,13 @@ pub fn map_struct(
                 &ident,
                 &doc,
                 quote!(u32),
-                quote! { if let Some(v) = self.#ident { o.#ident.0 = v as _; } },
+                // Out of range for the newtype's integer: left at its default
+                // rather than wrapped (`as` turned 65537 into 1 for a u16).
+                quote! { if let Some(v) = self.#ident
+                    && let Ok(v) = v.try_into()
+                {
+                    o.#ident.0 = v;
+                } },
             )),
             // Class instances and nested objects belong on methods, not in a
             // flat config object.

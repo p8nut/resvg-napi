@@ -136,6 +136,48 @@ fn main() {
         calls(&probe, "image_kind_to_js") && !calls(&probe, "kind_to_js"),
         "calls() matches inside a longer identifier"
     );
+    // map_struct arms no upstream option struct exercises today, so a
+    // regression in them would only show the day one does: a struct with a
+    // `Rect`, a `NonZeroRect`, an `Option<NonZeroRect>`, a renamed enum and an
+    // integer newtype, mapped and read back as tokens.
+    {
+        let probe: syn::File = syn::parse_quote! {
+            pub struct Probe { pub r: Rect, pub n: NonZeroRect, pub o: Option<NonZeroRect>, pub e: Style, pub i: ID }
+        };
+        let mut v = Vocab::default();
+        v.enums.insert("Style".into());
+        v.ints.insert("ID".into());
+        let (fields, _, _) = map_struct(&[probe], "Probe", &v, 0);
+        let got: Vec<String> = fields
+            .iter()
+            .map(|f| format!("{} {}", f.decl, f.assign).replace(' ', ""))
+            .collect();
+        assert!(
+            got[0].contains("usvg::Rect::from_xywh") && got[0].contains("o.r=r;"),
+            "Rect: {}",
+            got[0]
+        );
+        assert!(
+            got[1].contains("usvg::NonZeroRect::from_xywh") && got[1].contains("o.n=r;"),
+            "NonZeroRect: {}",
+            got[1]
+        );
+        assert!(
+            got[2].contains("o.o=Some(r);"),
+            "Option<NonZeroRect>: {}",
+            got[2]
+        );
+        assert!(
+            got[3].contains("Option<FontFaceStyle>"),
+            "renamed enum: {}",
+            got[3]
+        );
+        assert!(
+            got[4].contains("try_into()") && !got[4].contains("as_"),
+            "int newtype: {}",
+            got[4]
+        );
+    }
     println!("cargo::rerun-if-changed=build.rs");
     // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the

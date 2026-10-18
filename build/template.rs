@@ -191,10 +191,10 @@ pub fn template(
                     // 1. buffer supplied by JS -- let usvg sniff the format itself.
                     // One it cannot use (refused, or not an image at all) is a
                     // miss like any other, not an image that silently vanishes.
-                    if let Some(data) = images.get(href) {
-                        if let Some(kind) = sniff("text/plain", data.clone(), opts) {
-                            return Some(kind);
-                        }
+                    if let Some(data) = images.get(href)
+                        && let Some(kind) = sniff("text/plain", data.clone(), opts)
+                    {
+                        return Some(kind);
                     }
                     // 2. a file under `resourcesDir`, and nowhere else. usvg's
                     // default reads any absolute path, and a relative one off
@@ -204,16 +204,16 @@ pub fn template(
                     // Read here rather than through usvg's string resolver,
                     // which re-opens the path by name after the checks. Its
                     // format rule is kept: SVG by extension, magic otherwise.
-                    if let Some(path) = under_resources_dir(href, opts, root.as_deref()) {
-                        if let Some(data) = read_regular(&path) {
-                            let svg = path
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .is_some_and(|e| e.eq_ignore_ascii_case("svg") || e.eq_ignore_ascii_case("svgz"));
-                            let mime = if svg { "image/svg+xml" } else { "text/plain" };
-                            if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
-                                return Some(kind);
-                            }
+                    if let Some(path) = under_resources_dir(href, opts, root.as_deref())
+                        && let Some(data) = read_regular(&path)
+                    {
+                        let svg = path
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .is_some_and(|e| e.eq_ignore_ascii_case("svg") || e.eq_ignore_ascii_case("svgz"));
+                        let mime = if svg { "image/svg+xml" } else { "text/plain" };
+                        if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
+                            return Some(kind);
                         }
                     }
                     // 3. give up, but tell JS about it
@@ -1082,10 +1082,10 @@ pub fn template(
                 if child.id() == id {
                     return Some(prefix.clone());
                 }
-                if let usvg::Node::Group(g) = child {
-                    if let Some(found) = path_of_id(g, id, prefix) {
-                        return Some(found);
-                    }
+                if let usvg::Node::Group(g) = child
+                    && let Some(found) = path_of_id(g, id, prefix)
+                {
+                    return Some(found);
                 }
                 prefix.pop();
             }

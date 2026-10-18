@@ -385,10 +385,10 @@ pub fn map_struct(
                         #(#doc)* pub #h: Option<f64>,
                     },
                     assign: quote! {
-                        if let (Some(w), Some(h)) = (self.#w, self.#h) {
-                            if let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h)) {
-                                o.#ident = s;
-                            }
+                        if let (Some(w), Some(h)) = (self.#w, self.#h)
+                            && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
+                        {
+                            o.#ident = s;
                         }
                     },
                 });

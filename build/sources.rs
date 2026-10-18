@@ -27,16 +27,16 @@ pub fn locked_versions() -> BTreeMap<String, String> {
         let line = line.trim();
         if let Some(v) = line.strip_prefix("name = ") {
             name = Some(v.trim_matches('"').to_string());
-        } else if let Some(v) = line.strip_prefix("version = ") {
-            if let Some(n) = name.take() {
-                // Keep the highest version if a crate appears twice in the graph.
-                let v = v.trim_matches('"').to_string();
-                let better = out
-                    .get(&n)
-                    .is_none_or(|old: &String| semver_key(&v) > semver_key(old));
-                if better {
-                    out.insert(n, v);
-                }
+        } else if let Some(v) = line.strip_prefix("version = ")
+            && let Some(n) = name.take()
+        {
+            // Keep the highest version if a crate appears twice in the graph.
+            let v = v.trim_matches('"').to_string();
+            let better = out
+                .get(&n)
+                .is_none_or(|old: &String| semver_key(&v) > semver_key(old));
+            if better {
+                out.insert(n, v);
             }
         }
     }
@@ -198,10 +198,10 @@ fn reexports(root: &syn::File) -> BTreeMap<String, Vec<(String, String)>> {
     }
     let mut out = BTreeMap::new();
     for item in &root.items {
-        if let Item::Use(u) = item {
-            if matches!(u.vis, Visibility::Public(_)) {
-                walk(&u.tree, &mut Vec::new(), &mut out);
-            }
+        if let Item::Use(u) = item
+            && matches!(u.vis, Visibility::Public(_))
+        {
+            walk(&u.tree, &mut Vec::new(), &mut out);
         }
     }
     out
@@ -220,10 +220,10 @@ fn rename(item: &mut Item, from: &str, to: &str) {
         Item::Enum(e) => to_ident(&mut e.ident),
         Item::Type(t) => to_ident(&mut t.ident),
         Item::Impl(im) => {
-            if let syn::Type::Path(p) = &mut *im.self_ty {
-                if let Some(seg) = p.path.segments.last_mut() {
-                    to_ident(&mut seg.ident);
-                }
+            if let syn::Type::Path(p) = &mut *im.self_ty
+                && let Some(seg) = p.path.segments.last_mut()
+            {
+                to_ident(&mut seg.ident);
             }
         }
         _ => {}

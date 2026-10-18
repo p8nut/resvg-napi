@@ -237,10 +237,6 @@ Copyright (c) 2018 The Servo Project Developers
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2018 Yevhenii Reizner
 
-### syn 2.0.119
-Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
-No copyright line in the published crate; Apache-2.0 per its manifest.
-
 ### syn 3.0.9
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
@@ -320,7 +316,7 @@ Copyright (c) 2015 Andrew Gallant
 ### color_quant 1.1.0
 Copyright (c) 2016 PistonDevelopers
 
-### convert_case 0.11.0
+### convert_case 0.12.0
 Copyright (c) 2025 rutrum
 
 ### float-cmp 0.9.0
@@ -343,16 +339,16 @@ Copyright (c) 2017 Maiddog
 Offered as `Unlicense OR MIT`; listed here under MIT.
 Copyright (c) 2015 Andrew Gallant
 
-### napi 3.11.0
+### napi 3.14.2
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive 3.6.0
+### napi-derive 3.6.12
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive-backend 6.0.0
+### napi-derive-backend 6.1.5
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-sys 3.3.0
+### napi-sys 3.4.0
 No copyright line in the published crate; MIT per its manifest.
 
 ### pico-args 0.5.0

@@ -168,17 +168,6 @@ jobs:
           cargo fmt --check
           cargo clippy --release --all-targets -- -D warnings
 
-      # napi-derive-backend is transitive, so Cargo.toml cannot name it and only
-      # Cargo.lock holds it. 6.1.2 began emitting NativeBorrowScope, which needs
-      # napi 3.12, and the wasm target then stops linking. A comment above `napi`
-      # says so; this makes `cargo update` fail here rather than in a build.
-      - name: Cargo.lock still holds the transitive pin
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          grep -A1 '^name = "napi-derive-backend"' Cargo.lock \
-            | grep -q 'version = "6.0.0"' \
-            || { echo "::error::napi-derive-backend moved off 6.0.0 -- see the comment above napi in Cargo.toml"; exit 1; }
-
       - name: Build
         run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
 
@@ -484,10 +473,10 @@ jobs:
           # name reaches the shell verbatim otherwise.
           TAG: ${{ github.ref_name }}
 
-  # Fails when the Rust pins in Cargo.toml are no longer needed: either emnapi
-  # shipped a stable 2.x, or napi-build stopped hard-exporting the emnapi 2
-  # symbols. A red scheduled run is the signal to upgrade -- nothing else
-  # watches for it.
+  # Fails when a dependency hold can be lifted: emnapi off its 2.0 prerelease
+  # (a stable 2.x, or a wasm-runtime that reads the renamed loader API), or
+  # flate2 once png leaves miniz_oxide 0.8. A red scheduled run is the signal
+  # -- nothing else watches for it. scripts/check-pins.mjs explains each.
   pins:
     name: pins still needed
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

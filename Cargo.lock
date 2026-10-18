@@ -406,6 +406,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "napi-support"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "libc",
+ "log",
+ "napi",
+]
+
+[[package]]
 name = "napi-sys"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,13 +536,12 @@ dependencies = [
 name = "resvg-napi"
 version = "0.6.1"
 dependencies = [
- "flate2",
  "imagesize",
- "libc",
  "log",
  "napi",
  "napi-build",
  "napi-derive",
+ "napi-support",
  "proc-macro2",
  "quote",
  "resvg",

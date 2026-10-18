@@ -131,7 +131,7 @@ No copyright line in the published crate; Apache-2.0 per its manifest.
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2018 Raph Levien
 
-### libc 0.2.190
+### libc 0.2.191
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) The Rust Project Developers
 

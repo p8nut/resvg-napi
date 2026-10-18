@@ -101,6 +101,7 @@ jobs:
       # check-pins covers its decision, including the path where it reports the
       # pins as obsolete; the networked half runs on a schedule in `pins`.
       - run: npm run check:pins:selftest
+      - run: npm run wasi-plugins:selftest
       - run: npm run check:package:selftest
       - run: npm run licenses:selftest
       - run: npm run report:selftest
@@ -169,7 +170,11 @@ jobs:
           cargo clippy --release --all-targets -- -D warnings
 
       - name: Build
-        run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
+        # wasi-plugins: the generated WASI loaders take emnapi 2's own plugins,
+        # not wasm-runtime's stale copies -- see the script.
+        run: |
+          npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
+          node scripts/wasi-plugins.mjs
 
       # A glibc binary runs on systems at least as new as the newest symbol
       # version it links. Built on the runner instead of napi-cross, x64 asked

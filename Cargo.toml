@@ -18,9 +18,9 @@ crate-type = ["cdylib"]
 # napi v3: the runtime crate and the derive crate are versioned SEPARATELY.
 # Current napi links the wasm target against the emnapi 2 ABI (napi-build
 # hard-exports `emnapi_create_env`), so package.json pins emnapi, @emnapi/core
-# and @emnapi/runtime to 2.0.0-alpha.6: the betas renamed the loader API that
-# @napi-rs/wasm-runtime still calls by its old name. scripts/check-pins.mjs
-# says when that hold can go.
+# and @emnapi/runtime to 2.0.0-beta.2. scripts/wasi-plugins.mjs covers the
+# beta's renamed plugin API, which @napi-rs/wasm-runtime has not caught up
+# with; scripts/check-pins.mjs says when either can go.
 napi = { version = "3.14.2", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
 napi-derive = "3.6.12"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.

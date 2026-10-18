@@ -2,9 +2,8 @@ import {
   instantiateNapiModuleSync,
   MessageHandler,
   WASI,
-  emnapiAsyncWorkPlugin,
-  emnapiTSFNPlugin,
 } from '@napi-rs/wasm-runtime'
+import { asyncWork as emnapiAsyncWorkPlugin, tsfn as emnapiTSFNPlugin } from '@emnapi/core/plugins'
 
 const handler = new MessageHandler({
   onLoad({ wasmModule, wasmMemory }) {

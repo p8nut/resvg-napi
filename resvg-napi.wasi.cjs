@@ -57,9 +57,8 @@ const __nodePath = require('node:path')
 const { WASI: __nodeWASI } = require('node:wasi')
 const { Worker } = require('node:worker_threads')
 
+const { asyncWork: __emnapiAsyncWorkPlugin, tsfn: __emnapiTSFNPlugin } = require('@emnapi/core/plugins')
 const {
-  emnapiAsyncWorkPlugin: __emnapiAsyncWorkPlugin,
-  emnapiTSFNPlugin: __emnapiTSFNPlugin,
   createOnMessage: __wasmCreateOnMessageForFsProxy,
   instantiateNapiModuleSync: __emnapiInstantiateNapiModuleSync,
 } = require('@napi-rs/wasm-runtime')

@@ -4,16 +4,16 @@
 // stale version. Each exits non-zero once its reason is gone, so the scheduled
 // CI run is the notification.
 //
-// 1. emnapi on a 2.0 prerelease, 2.0.0-alpha.6, in both package.json files.
+// 1. emnapi on a 2.0 prerelease, 2.0.0-beta.2, in both package.json files.
 //    Current napi links the wasm target against the emnapi 2 ABI, so 1.x is
-//    out; and 2.0.0-beta.1 renamed the loader API (`napiModule` became
-//    `addonModule`), which @napi-rs/wasm-runtime 1.2.5 still reads under the
-//    old name -- its plugins throw on load. alpha.6 is the last release before
-//    the rename. Two upstream events end this:
+//    out. The betas renamed the plugin context's `napiModule` to
+//    `addonModule`, which @napi-rs/wasm-runtime 1.2.5 still reads under the
+//    old name, so scripts/wasi-plugins.mjs rewrites the generated loaders to
+//    take emnapi's own plugins instead. Two upstream events end this:
 //
-//      a. emnapi ships a stable 2.x -> move to it (once (b) holds too).
-//      b. @napi-rs/wasm-runtime reads `addonModule` -> the betas, and later
-//         the stable, become usable.
+//      a. emnapi ships a stable 2.x -> move both package.json files to it.
+//      b. @napi-rs/wasm-runtime reads `addonModule` -> delete
+//         scripts/wasi-plugins.mjs and its calls.
 //
 // 2. flate2, held at 1.1.9 in Cargo.lock. 1.1.10 requires miniz_oxide ^0.9
 //    while png still requires ^0.8, so taking it compiles two DEFLATE
@@ -37,11 +37,11 @@ export function assess(emnapiLatest, runtimeVersion, runtimeReadsAddonModule) {
   const reasons = [];
   // A stable 2.x or later: no prerelease tag, major past 1.
   if (/^([2-9]|\d{2,})\.\d+\.\d+$/.test(emnapiLatest)) {
-    reasons.push(`emnapi ${emnapiLatest} is out as latest -- leave the 2.0.0-alpha.6 prerelease for it`);
+    reasons.push(`emnapi ${emnapiLatest} is out as latest -- move off the 2.0.0-beta.2 prerelease`);
   }
   if (runtimeReadsAddonModule) {
     reasons.push(
-      `@napi-rs/wasm-runtime ${runtimeVersion} reads addonModule -- emnapi past beta.1 loads now, move off alpha.6`,
+      `@napi-rs/wasm-runtime ${runtimeVersion} reads addonModule -- delete scripts/wasi-plugins.mjs and its calls`,
     );
   }
   return reasons;
@@ -83,7 +83,7 @@ async function tarballMentions(tarballUrl, name) {
 
 async function selftest() {
   const assert = (await import('node:assert/strict')).default;
-  assert.deepEqual(assess('1.11.3', '1.2.5', false), [], 'today: alpha.6 still needed');
+  assert.deepEqual(assess('1.11.3', '1.2.5', false), [], 'today: the beta and the rewrite still needed');
   assert.deepEqual(assess('2.0.0-beta.2', '1.2.5', false), [], 'a prerelease as latest is not a stable');
 
   const stable = assess('2.0.0', '1.2.5', false);

@@ -4,20 +4,16 @@
 // stale version. Each exits non-zero once its reason is gone, so the scheduled
 // CI run is the notification.
 //
-// 1. The Rust pins in Cargo.toml, which keep the 2026-07-21 release set so that
-//    emnapi stays on a stable 1.x. Three independent upstream events would end
-//    that need:
+// 1. emnapi on a 2.0 prerelease, 2.0.0-beta.2, in both package.json files.
+//    Current napi links the wasm target against the emnapi 2 ABI, so 1.x is
+//    out. The betas renamed the plugin context's `napiModule` to
+//    `addonModule`, which @napi-rs/wasm-runtime 1.2.5 still reads under the
+//    old name, so scripts/wasi-plugins.mjs rewrites the generated loaders to
+//    take emnapi's own plugins instead. Two upstream events end this:
 //
-//      a. emnapi ships a stable 2.x -> take it, and unpin.
-//      b. napi-build stops emitting a hard `--export` for the emnapi 2 symbols
-//         -> emnapi 1.x links against current napi again, and unpin.
-//      c. emnapi backports those symbols into its 1.x archive -> the export is
-//         satisfiable without leaving 1.x, and unpin.
-//
-//    (c) is not implied by (a) or (b): latest would still be 1.x and the export
-//    would still be hard, so the first two probes stay quiet while the pins are
-//    liftable. It is also the direct question -- does the archive define the
-//    symbol -- where the others are proxies for it.
+//      a. emnapi ships a stable 2.x -> move both package.json files to it.
+//      b. @napi-rs/wasm-runtime reads `addonModule` -> delete
+//         scripts/wasi-plugins.mjs and its calls.
 //
 // 2. flate2, held at 1.1.9 in Cargo.lock. 1.1.10 requires miniz_oxide ^0.9
 //    while png still requires ^0.8, so taking it compiles two DEFLATE
@@ -29,32 +25,23 @@
 
 import zlib from 'node:zlib';
 
-const NPM = 'https://registry.npmjs.org/emnapi/latest';
-const WASI_RS =
-  'https://raw.githubusercontent.com/napi-rs/napi-rs/main/crates/build/src/wasi.rs';
+const EMNAPI = 'https://registry.npmjs.org/emnapi/latest';
+const RUNTIME = 'https://registry.npmjs.org/@napi-rs/wasm-runtime/latest';
 const PNG = 'https://crates.io/api/v1/crates/png';
 
 /** What png requires today, and the whole reason flate2 is held. */
 const PNG_MINIZ_OXIDE_REQ = '^0.8';
 
-/** Why the Cargo.toml pins look obsolete. Empty means keep them. */
-export function assess(emnapiLatest, wasiRs, archiveDefinesCreateEnv) {
+/** Why the emnapi prerelease hold looks obsolete. Empty means keep it. */
+export function assess(emnapiLatest, runtimeVersion, runtimeReadsAddonModule) {
   const reasons = [];
-  if (!emnapiLatest.startsWith('1.')) {
-    reasons.push(`emnapi latest is ${emnapiLatest}, no longer 1.x -- move to it and drop the pins`);
+  // A stable 2.x or later: no prerelease tag, major past 1.
+  if (/^([2-9]|\d{2,})\.\d+\.\d+$/.test(emnapiLatest)) {
+    reasons.push(`emnapi ${emnapiLatest} is out as latest -- move off the 2.0.0-beta.2 prerelease`);
   }
-  // The lenient form is what lets emnapi 1.x link: napi-build already uses it
-  // for other optional symbols a few lines below these two.
-  if (!wasiRs.includes('--export=emnapi_create_env')) {
+  if (runtimeReadsAddonModule) {
     reasons.push(
-      wasiRs.includes('--export-if-defined=emnapi_create_env')
-        ? 'napi-build main now uses --export-if-defined for emnapi_create_env -- unpin once released'
-        : 'napi-build main no longer exports emnapi_create_env at all -- re-check the wasm link',
-    );
-  }
-  if (archiveDefinesCreateEnv) {
-    reasons.push(
-      `emnapi ${emnapiLatest} now carries emnapi_create_env -- the hard export is satisfiable on 1.x, so unpin`,
+      `@napi-rs/wasm-runtime ${runtimeVersion} reads addonModule -- delete scripts/wasi-plugins.mjs and its calls`,
     );
   }
   return reasons;
@@ -81,59 +68,44 @@ async function get(url, as) {
 }
 
 /**
- * Does the published emnapi package carry `emnapi_create_env` anywhere?
+ * Does the published package's code mention `name` anywhere?
  *
- * ponytail: a byte search over the unpacked tarball, not a tar walk plus a
- * symbol-table read. 1.11.3 contains the name nowhere at all -- not in an
- * archive, not in the JS -- and 2.0.0-alpha.5 defines it in
- * lib/wasm32-wasip1-threads/libemnapi-napi-rs-mt.a, so a search separates them
- * exactly. If some future 1.x mentions the name without the archive defining
- * it, this reports a liftable pin that is not: a noisy failure, not a silent
- * one, and the fix is to walk the tar and read the archive's index.
+ * ponytail: a byte search over the unpacked tarball, not a parse. 1.2.5
+ * contains `addonModule` nowhere; a runtime that adopted the rename names it
+ * in its plugins. A mention without real support would report a liftable hold
+ * that is not: a noisy failure, not a silent one.
  */
-async function emnapiCarriesCreateEnv(tarballUrl) {
+async function tarballMentions(tarballUrl, name) {
   const r = await fetch(tarballUrl, { headers: { 'user-agent': 'resvg-napi check:pins' } });
   if (!r.ok) throw new Error(`${tarballUrl} -> HTTP ${r.status}`);
-  const unpacked = zlib.gunzipSync(Buffer.from(await r.arrayBuffer()));
-  return unpacked.includes('emnapi_create_env');
+  return zlib.gunzipSync(Buffer.from(await r.arrayBuffer())).includes(name);
 }
 
 async function selftest() {
   const assert = (await import('node:assert/strict')).default;
-  const HARD = 'println!("cargo:rustc-link-arg=--export=emnapi_create_env");';
-  const LENIENT = 'println!("cargo:rustc-link-arg=--export-if-defined=emnapi_create_env");';
+  assert.deepEqual(assess('1.11.3', '1.2.5', false), [], 'today: the beta and the rewrite still needed');
+  assert.deepEqual(assess('2.0.0-beta.2', '1.2.5', false), [], 'a prerelease as latest is not a stable');
 
-  assert.deepEqual(assess('1.11.3', HARD, false), [], 'today: all three pins still needed');
+  const stable = assess('2.0.0', '1.2.5', false);
+  assert.equal(stable.length, 1);
+  assert.match(stable[0], /emnapi 2\.0\.0 is out/);
 
-  const stable2 = assess('2.0.0', HARD, false);
-  assert.equal(stable2.length, 1);
-  assert.match(stable2[0], /no longer 1\.x/);
+  const runtime = assess('1.11.3', '1.3.0', true);
+  assert.equal(runtime.length, 1);
+  assert.match(runtime[0], /wasm-runtime 1\.3\.0 reads addonModule/);
 
-  const fixed = assess('1.11.3', LENIENT, false);
-  assert.equal(fixed.length, 1);
-  assert.match(fixed[0], /--export-if-defined/);
-
-  // the backport path: still 1.x, export still hard, yet liftable
-  const backport = assess('1.12.0', HARD, true);
-  assert.equal(backport.length, 1);
-  assert.match(backport[0], /satisfiable on 1\.x/);
-
-  // a prerelease is not a stable 2.x, and must not fire
-  assert.deepEqual(assess('1.12.0', HARD, false), [], 'a new 1.x is still 1.x');
-
-  assert.equal(assess('2.1.0', LENIENT, true).length, 3, 'all three conditions can hold at once');
-  assert.match(assess('1.11.3', 'nothing here', false).at(0), /no longer exports/);
+  assert.equal(assess('2.1.0', '1.3.0', true).length, 2, 'both can hold at once');
 
   assert.deepEqual(assessFlate2('0.18.1', '^0.8'), [], 'today: png still pins flate2 back');
   const moved = assessFlate2('0.19.0', '^0.9');
   assert.equal(moved.length, 1);
   assert.match(moved[0], /miniz_oxide \^0\.9/);
 
-  console.log('ok — check-pins: 11 checks passed');
+  console.log('ok — check-pins: 9 checks passed');
 }
 
 async function main() {
-  const [emnapi, wasi, png] = await Promise.all([get(NPM, 'json'), get(WASI_RS), get(PNG, 'json')]);
+  const [emnapi, runtime, png] = await Promise.all([get(EMNAPI, 'json'), get(RUNTIME, 'json'), get(PNG, 'json')]);
 
   const pngVersion = png.crate.max_stable_version;
   const pngDeps = await get(`${PNG}/${pngVersion}/dependencies`, 'json');
@@ -143,23 +115,23 @@ async function main() {
   if (!minizOxide) throw new Error(`png ${pngVersion} no longer depends on miniz_oxide at all`);
 
   const reasons = [
-    ...assess(emnapi.version, wasi, await emnapiCarriesCreateEnv(emnapi.dist.tarball)),
+    ...assess(emnapi.version, runtime.version, await tarballMentions(runtime.dist.tarball, 'addonModule')),
     ...assessFlate2(pngVersion, minizOxide.req),
   ];
   if (reasons.length) {
     console.error('A dependency hold looks obsolete:\n');
     for (const r of reasons) console.error(`  - ${r}`);
-    console.error('\nSee the comment at the top of this file, and the one above `napi` in Cargo.toml.');
+    console.error('\nSee the comment at the top of this file.');
     process.exit(1);
   }
   console.log(
-    `holds still needed — emnapi latest ${emnapi.version} without emnapi_create_env, ` +
-      `napi-build still hard-exports it, png ${pngVersion} still on miniz_oxide ${minizOxide.req}`,
+    `holds still needed — emnapi latest ${emnapi.version}, @napi-rs/wasm-runtime ${runtime.version} ` +
+      `without addonModule, png ${pngVersion} still on miniz_oxide ${minizOxide.req}`,
   );
 }
 
 /** Crates `cargo update` must leave alone, for CI's `lock` job (`--held`). */
-const HELD = ['flate2', 'napi-derive-backend', 'napi-sys'];
+const HELD = ['flate2'];
 
 if (process.argv.includes('--held')) console.log(HELD.join('|'));
 else await (process.argv.includes('--selftest') ? selftest() : main());

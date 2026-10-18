@@ -371,10 +371,10 @@ fn main() {
         vocab.aliases.extend(type_aliases(set));
         vocab.payload.extend(payload_enums(set, "", &dups, root));
         for item in set.iter().flat_map(|f| &f.items) {
-            if let Item::Struct(st) = item {
-                if is_pub(&st.vis) {
-                    vocab.structs.insert(st.ident.to_string());
-                }
+            if let Item::Struct(st) = item
+                && is_pub(&st.vis)
+            {
+                vocab.structs.insert(st.ident.to_string());
             }
         }
         vocab.with_id.extend(types_with_id(set));
@@ -523,10 +523,10 @@ fn main() {
     // lands in `skipped`, and `object_struct` refuses any type with a skipped
     // member.
     let source_of = |t: &str| -> &[syn::File] {
-        if let Some((m, _)) = t.rsplit_once("::") {
-            if let Some(files) = by_module.get(m) {
-                return files;
-            }
+        if let Some((m, _)) = t.rsplit_once("::")
+            && let Some(files) = by_module.get(m)
+        {
+            return files;
         }
         // The last source is the fallback rather than an error: a type that
         // reaches here is one the registry already accepted, so the question is

@@ -29,7 +29,7 @@
   "homepage": "https://github.com/p8nut/resvg-napi#readme",
   "license": "Apache-2.0 OR MIT",
   "engines": {
-    "node": ">= 18"
+    "node": ">= 20"
   },
   "repository": {
     "type": "git",

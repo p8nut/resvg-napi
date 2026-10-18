@@ -522,10 +522,9 @@ impl Vocab {
             .strip_prefix('[')
             .and_then(|r| r.strip_suffix(']'))
             .map(|r| self.resolve(r.trim_start_matches('&')))
+            && let Some(p) = self.payload.get(&inner)
         {
-            if let Some(p) = self.payload.get(&inner) {
-                return p.payload_maps(self).then_some(Js::PayloadEnumList(inner));
-            }
+            return p.payload_maps(self).then_some(Js::PayloadEnumList(inner));
         }
         classify_object(&t, &self.objects).or_else(|| match classify_object(&t, &self.values) {
             Some(Js::Object(x)) => Some(Js::Value(x)),
@@ -623,10 +622,9 @@ pub fn classify_object(ty: &str, objects: &BTreeSet<String>) -> Option<Js> {
         .strip_prefix("Option<")
         .and_then(|s| s.strip_suffix('>'))
         .map(|s| s.trim_start_matches('&'))
+        && objects.contains(inner)
     {
-        if objects.contains(inner) {
-            return Some(Js::OptObject(inner.to_string()));
-        }
+        return Some(Js::OptObject(inner.to_string()));
     }
     if objects.contains(bare) {
         return Some(Js::Object(bare.to_string()));
@@ -642,17 +640,17 @@ pub fn int_newtypes(files: &[syn::File]) -> BTreeSet<String> {
         if !is_pub(&s.vis) {
             continue;
         }
-        if let Fields::Unnamed(u) = &s.fields {
-            if u.unnamed.len() == 1 {
-                let f = &u.unnamed[0];
-                if is_pub(&f.vis)
-                    && matches!(
-                        ty_str(&f.ty).as_str(),
-                        "u8" | "u16" | "u32" | "i32" | "usize"
-                    )
-                {
-                    out.insert(s.ident.to_string());
-                }
+        if let Fields::Unnamed(u) = &s.fields
+            && u.unnamed.len() == 1
+        {
+            let f = &u.unnamed[0];
+            if is_pub(&f.vis)
+                && matches!(
+                    ty_str(&f.ty).as_str(),
+                    "u8" | "u16" | "u32" | "i32" | "usize"
+                )
+            {
+                out.insert(s.ident.to_string());
             }
         }
     }
@@ -731,10 +729,10 @@ pub fn returned_types(files: &[syn::File], types: &[&str]) -> BTreeSet<String> {
             continue;
         }
         for it in &imp.items {
-            if let ImplItem::Fn(f) = it {
-                if let (true, ReturnType::Type(_, t)) = (is_pub(&f.vis), &f.sig.output) {
-                    out.insert(ty_str(t));
-                }
+            if let ImplItem::Fn(f) = it
+                && let (true, ReturnType::Type(_, t)) = (is_pub(&f.vis), &f.sig.output)
+            {
+                out.insert(ty_str(t));
             }
         }
     }

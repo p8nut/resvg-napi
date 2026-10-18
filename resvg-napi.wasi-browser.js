@@ -1,6 +1,5 @@
+import { asyncWork as __emnapiAsyncWorkPlugin, tsfn as __emnapiTSFNPlugin } from '@emnapi/core/plugins'
 import {
-  emnapiAsyncWorkPlugin as __emnapiAsyncWorkPlugin,
-  emnapiTSFNPlugin as __emnapiTSFNPlugin,
   createOnMessage as __wasmCreateOnMessageForFsProxy,
   instantiateNapiModule as __emnapiInstantiateNapiModule,
   WASI as __WASI,

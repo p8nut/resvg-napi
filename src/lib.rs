@@ -916,10 +916,10 @@ impl RenderOptions {
         if let Some(v) = self.image_rendering {
             o.image_rendering = v.into();
         }
-        if let (Some(w), Some(h)) = (self.default_size_width, self.default_size_height) {
-            if let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h)) {
-                o.default_size = s;
-            }
+        if let (Some(w), Some(h)) = (self.default_size_width, self.default_size_height)
+            && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
+        {
+            o.default_size = s;
         }
         o.style_sheet = self.style_sheet.clone();
         o.fontdb = fonts;
@@ -990,20 +990,20 @@ fn href_resolver(
     usvg::ImageHrefResolver {
         resolve_data: checked(usvg::ImageHrefResolver::default_data_resolver()),
         resolve_string: Box::new(move |href: &str, opts: &usvg::Options| {
-            if let Some(data) = images.get(href) {
-                if let Some(kind) = sniff("text/plain", data.clone(), opts) {
-                    return Some(kind);
-                }
+            if let Some(data) = images.get(href)
+                && let Some(kind) = sniff("text/plain", data.clone(), opts)
+            {
+                return Some(kind);
             }
-            if let Some(path) = under_resources_dir(href, opts, root.as_deref()) {
-                if let Some(data) = read_regular(&path) {
-                    let svg = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                        e.eq_ignore_ascii_case("svg") || e.eq_ignore_ascii_case("svgz")
-                    });
-                    let mime = if svg { "image/svg+xml" } else { "text/plain" };
-                    if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
-                        return Some(kind);
-                    }
+            if let Some(path) = under_resources_dir(href, opts, root.as_deref())
+                && let Some(data) = read_regular(&path)
+            {
+                let svg = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    e.eq_ignore_ascii_case("svg") || e.eq_ignore_ascii_case("svgz")
+                });
+                let mime = if svg { "image/svg+xml" } else { "text/plain" };
+                if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
+                    return Some(kind);
                 }
             }
             let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -4196,10 +4196,10 @@ fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<usize>) -> Option<
         if child.id() == id {
             return Some(prefix.clone());
         }
-        if let usvg::Node::Group(g) = child {
-            if let Some(found) = path_of_id(g, id, prefix) {
-                return Some(found);
-            }
+        if let usvg::Node::Group(g) = child
+            && let Some(found) = path_of_id(g, id, prefix)
+        {
+            return Some(found);
         }
         prefix.pop();
     }

@@ -422,6 +422,9 @@ pub fn template(
                 let (kind, path) = match source {
                     usvg::fontdb::Source::Binary(_) => ("binary", None),
                     usvg::fontdb::Source::File(path) => ("file", Some(path)),
+                    // fontdb has no SharedFile without its `memmap` feature,
+                    // which Cargo.toml leaves off on wasm (WASI has no mmap).
+                    #[cfg(not(target_family = "wasm"))]
                     usvg::fontdb::Source::SharedFile(path, _) => ("sharedFile", Some(path)),
                 };
                 Some(FaceSource {

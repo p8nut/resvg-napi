@@ -82,6 +82,20 @@ pub const DATA_RENAMES: &[(&str, &str)] = &[("FaceInfo", "FontFace")];
 /// loaded face is.
 pub const ENUM_RENAMES: &[(&str, &str)] = &[("Style", "FontFaceStyle")];
 
+/// Upstream Cargo features an emitted method can be gated on, and what each is
+/// for this crate: `"true"` (always built), `"false"` (never), or a cfg of ours
+/// it is built under. Names are global across the parsed crates (fontdb's
+/// `memmap`, usvg's `text`); one listed nowhere fails the build, so a new gate
+/// upstream is a decision here, not a silent miss. Must agree with Cargo.toml,
+/// which drops resvg's `memmap-fonts` -- fontdb's `memmap` -- on wasm.
+pub const FEATURES: &[(&str, &str)] = &[
+    ("std", "true"),
+    ("text", "true"),
+    ("fs", "true"),
+    ("fontconfig", "true"),
+    ("memmap", "not(target_family = \"wasm\")"),
+];
+
 /// `name` through a rename table, or unchanged.
 pub fn renamed<'a>(table: &[(&str, &'a str)], name: &'a str) -> &'a str {
     table

@@ -218,9 +218,11 @@ a system SDK.
 The WASI build is the same generated bindings on emnapi instead of node-api, and
 it is complete: rendering, `toString`, bounding boxes, the node walk, `renderAsync`
 (threads via `wasm32-wasip1-threads`) and even filesystem image resolution all
-work. One difference: `loadSystemFonts()` finds 0 faces inside the sandbox, so
-fonts must be supplied with `loadFontData(buffer)` — the demo fetches them from
-google/fonts by name rather than making you find a file.
+work. Two differences: `loadSystemFonts()` finds 0 faces inside the sandbox, so
+fonts must be supplied with `loadFontFile(path)`, `loadFontsDir(dir)` or
+`loadFontData(buffer)` — the demo fetches them from google/fonts by name rather
+than making you find a file; and WASI has no mmap, so font files are read into
+memory and `makeFaceDataUnshared` throws.
 
 Adding a target is an entry in `scripts/ci-targets.mjs` — which host builds it
 and which cross-compilation flag it needs — and the triple in `package.json`

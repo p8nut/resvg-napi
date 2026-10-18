@@ -28,14 +28,14 @@ if (wasi) {
   assert.equal(db.isEmpty(), true, 'a new database is empty');
   const file = testFontFile();
   if (file && wasi) {
-    // Known gap, pinned here so a fix shows up as a failure to update: fontdb
-    // is built with `memmap`, and WASI has no mmap, so a font *file* cannot be
-    // loaded there -- loadFontFile throws and loadFontsDir finds nothing. Only
-    // loadFontData works. Dropping the feature on wasm needs the codegen to
-    // honour #[cfg] first (Source::SharedFile, makeFaceDataUnshared).
-    assert.throws(() => db.loadFontFile(file), /unsupported/, 'loadFontFile under WASI');
+    // No mmap under WASI: fontdb is built without `memmap` there, so files
+    // are read into memory, and the one call that needs a mapping throws.
     db.loadFontsDir(join(file, '..'));
-    assert.equal(db.isEmpty(), true, 'loadFontsDir under WASI');
+    assert.equal(db.isEmpty(), false, 'loadFontsDir under WASI');
+    const one = new FontDatabase();
+    one.loadFontFile(file);
+    assert.equal(one.len(), 1, 'loadFontFile under WASI');
+    assert.throws(() => one.makeFaceDataUnshared(one.faces()[0]), /makeFaceDataUnshared is not available on this target/);
   } else if (file) {
     const dir = mkdtempSync(join(tmpdir(), 'resvg-fonts-'));
     copyFileSync(file, join(dir, 'face.ttf'));

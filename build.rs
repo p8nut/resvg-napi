@@ -43,6 +43,8 @@ macro_rules! report {
 // Each phase in its own file. `#[path]` because Cargo compiles this one as a
 // crate root, so a plain `mod` would look for the file beside it -- in the
 // repository root.
+#[path = "build/cfg.rs"]
+mod cfg;
 #[path = "build/config.rs"]
 mod config;
 #[path = "build/emit.rs"]
@@ -178,6 +180,7 @@ fn main() {
             got[4]
         );
     }
+    cfg::selftest();
     println!("cargo::rerun-if-changed=build.rs");
     // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the

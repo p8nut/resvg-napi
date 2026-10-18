@@ -130,7 +130,10 @@ function graph() {
   const rootId = meta.resolve.root;
   const linked = linkedIds(meta.resolve, rootId);
   return meta.packages
-    .filter((p) => p.id !== rootId && linked.has(p.id))
+    // `source` is null for crates built from this checkout -- the root and its
+    // workspace members, e.g. crates/napi-support. Their licence is this
+    // repository's, not a third party's.
+    .filter((p) => p.id !== rootId && p.source !== null && linked.has(p.id))
     .map((p) => {
       const dir = dirname(p.manifest_path);
       const texts = licenceFiles(dir).map((f) => ({ file: basename(f), text: readFileSync(f, 'utf8') }));

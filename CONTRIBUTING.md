@@ -23,6 +23,12 @@ It is five files, one per phase:
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
 
+What the template needs that has nothing to do with resvg lives in its own
+crate, `crates/napi-support`: `contained` (a panic becomes a JS error), the
+bounded `log` collector, capped file and gzip reads, and the checked
+`AbortSignal`. It knows no upstream type, so a binding of another library can
+take it as is; the template only calls into it and keeps the `#[napi]` surface.
+
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen
 report says which member and why.
@@ -121,8 +127,8 @@ there is none. The env-var prefix is POSIX-shell syntax; on Windows use
 ## Lint and guards
 
 ```
-cargo fmt --check
-cargo clippy --release --all-targets -- -D warnings
+cargo fmt --all --check
+cargo clippy --workspace --release --all-targets -- -D warnings
 npm run check:pins:selftest      # the dependency holds, offline half
 npm run wasi-plugins:selftest    # the WASI loader rewrite (emnapi 2 beta)
 npm run check:package:selftest   # what publish would ship, offline half

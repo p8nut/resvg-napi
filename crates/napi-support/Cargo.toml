@@ -1,0 +1,16 @@
+[package]
+name = "napi-support"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0 OR MIT"
+description = "Runtime pieces a napi-rs binding of an untrusted-input library needs: contained panics, bounded logs, capped reads, a checked AbortSignal"
+publish = false
+
+[dependencies]
+napi = { version = "3.14.2", default-features = false, features = ["napi8"] }
+log = "0.4"
+flate2 = "1.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

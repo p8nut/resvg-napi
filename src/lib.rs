@@ -9,6 +9,9 @@
 )]
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use napi_support::fs::{gunzip_capped, read_regular};
+use napi_support::logs::Logs;
+use napi_support::{Signal, contained};
 use resvg::{tiny_skia, usvg};
 #[doc = " A color interpolation mode."]
 #[doc = ""]
@@ -1019,7 +1022,7 @@ fn href_resolver(
 #[doc = " JPEG declaring 65535x65535 would ask for 16 GiB there."]
 const MAX_IMAGE_PIXELS: u64 = 1 << 28;
 #[doc = " `resolve` behind the two checks usvg and resvg leave out: gzip is"]
-#[doc = " inflated under `MAX_IMAGE_BYTES`, and a raster image whose header"]
+#[doc = " inflated under `napi_support::fs::MAX_BYTES`, and a raster image whose header"]
 #[doc = " declares more than `MAX_IMAGE_PIXELS` is refused. Refusals are logged."]
 fn checked(
     resolve: usvg::ImageHrefDataResolverFn<'static>,
@@ -1066,23 +1069,6 @@ fn checked(
         },
     )
 }
-#[doc = " Inflates gzip data, refusing it past `MAX_IMAGE_BYTES`: usvg's own"]
-#[doc = " `decompress_svgz` has no cap, so 20 MB of `.svgz` could grow to 20 GB"]
-#[doc = " and abort the process. Over the cap is `FileTooLarge`."]
-fn gunzip_capped(data: &[u8]) -> std::io::Result<Vec<u8>> {
-    use std::io::Read;
-    let mut out = Vec::new();
-    flate2::read::GzDecoder::new(data)
-        .take(MAX_IMAGE_BYTES + 1)
-        .read_to_end(&mut out)?;
-    if out.len() as u64 > MAX_IMAGE_BYTES {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::FileTooLarge,
-            format!("expands past {MAX_IMAGE_BYTES} bytes"),
-        ));
-    }
-    Ok(out)
-}
 #[doc = " `href` resolved against `resourcesDir`, if it lands inside `root`"]
 #[doc = " (default: `resourcesDir` itself). Canonicalised, so `..` and"]
 #[doc = " symlinks cannot step outside it. What the path names is checked"]
@@ -1096,39 +1082,6 @@ fn under_resources_dir(
     let root = root.unwrap_or(dir).canonicalize().ok()?;
     let path = dir.join(href).canonicalize().ok()?;
     path.starts_with(&root).then_some(path)
-}
-#[doc = " Largest image file read off disk: 256 MiB."]
-const MAX_IMAGE_BYTES: u64 = 256 * 1024 * 1024;
-#[doc = " The bytes of `path` if it is a regular file of at most"]
-#[doc = " `MAX_IMAGE_BYTES`. Opened once and judged on the descriptor, so a"]
-#[doc = " file swapped for a FIFO or a device after `under_resources_dir`"]
-#[doc = " is refused instead of blocking (`O_NONBLOCK`), and a last"]
-#[doc = " component swapped for a symlink is not followed (`O_NOFOLLOW`)."]
-#[doc = " Unix only: on WASI and Windows the path is checked before the"]
-#[doc = " open instead, which leaves that window open."]
-#[doc = ""]
-#[doc = " A directory higher up swapped for a symlink between the check"]
-#[doc = " and the open is still followed: closing that needs"]
-#[doc = " `openat2(RESOLVE_BENEATH)` or cap-std. Exploiting it takes write"]
-#[doc = " access to `resourcesDir` during a parse."]
-fn read_regular(path: &std::path::Path) -> Option<Vec<u8>> {
-    use std::io::Read;
-    let mut open = std::fs::OpenOptions::new();
-    open.read(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut open, libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    #[cfg(not(unix))]
-    if !path.is_file() {
-        return None;
-    }
-    let file = open.open(path).ok()?;
-    let meta = file.metadata().ok()?;
-    if !meta.is_file() || meta.len() > MAX_IMAGE_BYTES {
-        return None;
-    }
-    let mut data = Vec::with_capacity(meta.len() as usize);
-    file.take(MAX_IMAGE_BYTES + 1).read_to_end(&mut data).ok()?;
-    (data.len() as u64 <= MAX_IMAGE_BYTES).then_some(data)
 }
 impl FontFace {
     #[doc = " This face's ID in `db`, or one that matches nothing."]
@@ -3868,81 +3821,20 @@ pub enum NodeKind {
     Image,
     Text,
 }
-#[doc = " Walks a child-index path down from the root group."]
-#[doc = " usvg and resvg report every recoverable problem through the `log` crate"]
-#[doc = " -- unsupported elements, unparsable values, skipped images. Nothing"]
-#[doc = " consumes it by default, so those messages are lost; this buffers them."]
-static LOGS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-const LOG_CAP: usize = 500;
-#[doc = " Appends `line` unless the buffer is full. The last slot is kept for"]
-#[doc = " a marker saying so: 500 lines with nothing after them would read as"]
-#[doc = " everything there was."]
-fn push_capped(buf: &mut Vec<String>, line: String) {
-    if buf.len() + 1 < LOG_CAP {
-        buf.push(line);
-    } else if buf.len() + 1 == LOG_CAP {
-        buf.push(format!(
-            "WARN {}: log buffer full ({LOG_CAP} entries), later messages dropped",
-            env!("CARGO_PKG_NAME")
-        ));
-    }
-}
-thread_local! { # [doc = " Set while a document parses or renders on this thread, so its"] # [doc = " messages can be told apart from a concurrent render's."] static LOG_SINK : std :: cell :: RefCell < Option < Vec < String >> > = const { std :: cell :: RefCell :: new (None) } ; }
-#[doc = " One document's messages, shared with the clones its async twins run on."]
-#[derive(Default, Clone)]
-struct Logs(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
-impl Logs {
-    #[doc = " Runs `f` with this thread's messages routed here as well."]
-    fn scope<T>(&self, f: impl FnOnce() -> T) -> T {
-        let outer = LOG_SINK.with(|s| s.replace(Some(Vec::new())));
-        let out = f();
-        let got = LOG_SINK.with(|s| s.replace(outer)).unwrap_or_default();
-        let mut buf = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        for line in got {
-            push_capped(&mut buf, line);
-        }
-        out
-    }
-}
-struct LogCollector;
-static LOG_COLLECTOR: LogCollector = LogCollector;
-impl log::Log for LogCollector {
-    fn enabled(&self, _: &log::Metadata) -> bool {
-        true
-    }
-    fn log(&self, record: &log::Record) {
-        let line = format!("{} {}: {}", record.level(), record.target(), record.args());
-        LOG_SINK.with(|s| {
-            if let Some(buf) = s.borrow_mut().as_mut() {
-                push_capped(buf, line.clone());
-            }
-        });
-        push_capped(&mut LOGS.lock().unwrap_or_else(|e| e.into_inner()), line);
-    }
-    fn flush(&self) {}
-}
 #[doc = " Starts collecting what usvg and resvg report."]
 #[doc = ""]
 #[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
 #[doc = " call repeatedly: the logger is installed once, the level always applies."]
 #[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
 pub fn set_log_level(level: String) -> Result<()> {
-    let filter: log::LevelFilter = level
-        .parse()
-        .map_err(|_| Error::from_reason(format!("unknown log level: {level:?}")))?;
-    static INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
-    INSTALLED.get_or_init(|| {
-        let _ = log::set_logger(&LOG_COLLECTOR);
-    });
-    log::set_max_level(filter);
-    Ok(())
+    napi_support::logs::set_level(&level, env!("CARGO_PKG_NAME"))
 }
 #[doc = " Drains the messages collected since the last call, from every"]
 #[doc = " document and thread. Concurrent renders interleave here; a"]
 #[doc = " document's own `takeLogs()` holds only its messages."]
 #[napi]
 pub fn take_logs() -> Vec<String> {
-    std::mem::take(&mut *LOGS.lock().unwrap_or_else(|e| e.into_inner()))
+    napi_support::logs::take()
 }
 #[doc = " Anything that owns a content group: the document, or a def such as a"]
 #[doc = " pattern, a mask or a clip path. The generator implements it for every"]
@@ -4637,7 +4529,7 @@ impl Resvg {
     #[doc = " Collected only once `setLogLevel` has set a level."]
     #[napi(js_name = "takeLogs")]
     pub fn take_own_logs(&self) -> Vec<String> {
-        std::mem::take(&mut *self.logs.0.lock().unwrap_or_else(|e| e.into_inner()))
+        self.logs.take()
     }
     #[doc = " Named font families requested by `<text>` that the database does not"]
     #[doc = " carry, so the text was rendered with a fallback face. Load them with"]
@@ -5050,21 +4942,6 @@ impl Resvg {
         self.logs.scope(|| draw(&self.tree, &p))
     }
 }
-#[doc = " Runs a call into usvg/resvg, turning a panic into a JS error. An"]
-#[doc = " unwind reaching napi's extern \"C\" frame aborts the whole process,"]
-#[doc = " and these are the paths an untrusted document drives."]
-fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|p| {
-        let why = p
-            .downcast_ref::<&str>()
-            .copied()
-            .or(p.downcast_ref::<String>().map(String::as_str));
-        Error::from_reason(match why {
-            Some(why) => format!("{what} panicked: {why}"),
-            None => format!("{what} panicked"),
-        })
-    })
-}
 #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
 fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
     contained("PNG encoder", || pixmap.encode_png())?
@@ -5227,45 +5104,6 @@ impl<'env> napi::ScopedTask<'env> for ParseTask {
             pending_fonts,
             logs: std::mem::take(&mut self.logs),
         }))
-    }
-}
-#[doc = " An `AbortSignal`, checked before napi converts it. napi 3.11 takes"]
-#[doc = " whatever object it is handed (GHSA-qr54-xrr9-7575) and unwraps its"]
-#[doc = " native pointer as its own, so an instance of one of this crate's"]
-#[doc = " classes passed as `signal` was read as the wrong type."]
-pub struct Signal(AbortSignal);
-impl FromNapiValue for Signal {
-    unsafe fn from_napi_value(
-        env: napi::sys::napi_env,
-        value: napi::sys::napi_value,
-    ) -> Result<Self> {
-        let mut global = std::ptr::null_mut();
-        napi::check_status!(unsafe { napi::sys::napi_get_global(env, &mut global) })?;
-        let mut ctor = std::ptr::null_mut();
-        napi::check_status!(unsafe {
-            napi::sys::napi_get_named_property(env, global, c"AbortSignal".as_ptr(), &mut ctor)
-        })?;
-        let mut is = false;
-        napi::check_status!(unsafe { napi::sys::napi_instanceof(env, value, ctor, &mut is) })?;
-        if !is {
-            return Err(Error::new(
-                Status::InvalidArg,
-                "signal must be an AbortSignal",
-            ));
-        }
-        let mut aborted = std::ptr::null_mut();
-        napi::check_status!(unsafe {
-            napi::sys::napi_get_named_property(env, value, c"aborted".as_ptr(), &mut aborted)
-        })?;
-        let mut already = false;
-        napi::check_status!(unsafe { napi::sys::napi_get_value_bool(env, aborted, &mut already) })?;
-        if already {
-            return Err(Error::new(
-                Status::Cancelled,
-                "AbortError: the signal was already aborted",
-            ));
-        }
-        unsafe { AbortSignal::from_napi_value(env, value) }.map(Signal)
     }
 }
 #[doc = " Parse, rasterise and PNG-encode in one worker-thread round trip."]

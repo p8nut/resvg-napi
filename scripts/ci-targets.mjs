@@ -50,8 +50,9 @@ const TARGETS = {
 const SLIM = ['x86_64-unknown-linux-gnu', 'wasm32-wasip1-threads'];
 
 const TESTS = [
-  { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 18 },
+  { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 20 },
   { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 22 },
+  { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 24 },
   { target: 'aarch64-apple-darwin', host: 'macos-latest', node: 22 },
   { target: 'x86_64-pc-windows-msvc', host: 'windows-latest', node: 22 },
 ];
@@ -122,8 +123,8 @@ if (process.argv.includes('--selftest')) {
   assert.ok(matrix(true).every((t) => typeof t.build_args === 'string'));
   assert.ok(matrix(true).every((t) => t.artifact_path.length > 0));
   // no test may name a target that was not built
-  assert.equal(tests(false).length, 2);
-  assert.equal(tests(true).length, 4);
+  assert.equal(tests(false).length, 3);
+  assert.equal(tests(true).length, 5);
   assert.ok(tests(false).every((t) => t.target === 'x86_64-unknown-linux-gnu'));
   // the consistency check has to fail when it should
   assert.deepEqual(disagreement(['a', 'b'], ['a', 'b']), []);

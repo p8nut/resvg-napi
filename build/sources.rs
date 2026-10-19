@@ -146,67 +146,6 @@ pub fn is_pub(vis: &Visibility) -> bool {
     matches!(vis, Visibility::Public(_))
 }
 
-/// Parses every `.rs` under a crate's `src`, for crates we only mine for
-/// vocabulary (newtypes, aliases) rather than wrap.
-/// Drops the files a crate keeps to itself.
-///
-/// A `mod x;` without `pub` is an implementation detail, and what it declares
-/// is not reachable by the crate's own path. fontdb vendors a copy of
-/// ttf-parser under one: its `pub enum Style` is not `usvg::fontdb::Style`, and
-/// mapping it emitted `Style` twice and referenced `usvg::fontdb::Width`, a
-/// type that does not exist. Anything the crate wants public it re-exports, and
-/// the re-export is what the root file shows.
-/// What the crate root re-exports, grouped by the module it comes from, and
-/// under the name the root gives it: `pub use ttf_parser::Width as Stretch`
-/// answers `ttf_parser -> [(Width, Stretch)]`.
-fn reexports(root: &syn::File) -> BTreeMap<String, Vec<(String, String)>> {
-    fn walk(
-        tree: &syn::UseTree,
-        path: &mut Vec<String>,
-        out: &mut BTreeMap<String, Vec<(String, String)>>,
-    ) {
-        match tree {
-            syn::UseTree::Path(p) => {
-                path.push(p.ident.to_string());
-                walk(&p.tree, path, out);
-                path.pop();
-            }
-            // `self` and `crate` are where the path starts, not a module it
-            // names; the module is whatever follows.
-            syn::UseTree::Name(n) => {
-                if let Some(m) = path.iter().find(|s| *s != "self" && *s != "crate") {
-                    out.entry(m.clone())
-                        .or_default()
-                        .push((n.ident.to_string(), n.ident.to_string()));
-                }
-            }
-            syn::UseTree::Rename(r) => {
-                if let Some(m) = path.iter().find(|s| *s != "self" && *s != "crate") {
-                    out.entry(m.clone())
-                        .or_default()
-                        .push((r.ident.to_string(), r.rename.to_string()));
-                }
-            }
-            syn::UseTree::Group(g) => {
-                for t in &g.items {
-                    walk(t, path, out);
-                }
-            }
-            // A glob says nothing about which names it carries.
-            syn::UseTree::Glob(_) => {}
-        }
-    }
-    let mut out = BTreeMap::new();
-    for item in &root.items {
-        if let Item::Use(u) = item
-            && matches!(u.vis, Visibility::Public(_))
-        {
-            walk(&u.tree, &mut Vec::new(), &mut out);
-        }
-    }
-    out
-}
-
 /// Renames a kept item to the name the crate root exports it under, so what is
 /// parsed downstream is what a caller of the crate can actually write.
 fn rename(item: &mut Item, from: &str, to: &str) {
@@ -244,64 +183,8 @@ fn declared(item: &Item) -> Option<String> {
     })
 }
 
-pub fn public_only(dir: &Path, files: Vec<(PathBuf, syn::File)>) -> Vec<(PathBuf, syn::File)> {
-    let root = files.iter().find(|(p, _)| {
-        p.file_name().and_then(|n| n.to_str()) == Some("lib.rs") && p.parent() == Some(dir)
-    });
-    let Some((_, root)) = root else { return files };
-    let private: BTreeSet<String> = root
-        .items
-        .iter()
-        .filter_map(|i| match i {
-            Item::Mod(m) if !is_pub(&m.vis) => Some(m.ident.to_string()),
-            _ => None,
-        })
-        .collect();
-    if private.is_empty() {
-        return files;
-    }
-    let exported = reexports(root);
-    files
-        .into_iter()
-        .filter_map(|(path, mut file)| {
-            let rel = path.strip_prefix(dir).unwrap_or(&path);
-            let module = rel
-                .components()
-                .next()
-                .map(|c| {
-                    c.as_os_str()
-                        .to_str()
-                        .unwrap_or_default()
-                        .trim_end_matches(".rs")
-                })
-                .unwrap_or_default()
-                .to_string();
-            if !private.contains(&module) {
-                return Some((path, file));
-            }
-            // A private module is not all-or-nothing: the crate root may lift
-            // individual names out of it, and those names are public API --
-            // `pub use ttf_parser::Width as Stretch` is how a caller writes
-            // `fontdb::Stretch`. Keep exactly those, under the name the root
-            // gives them, and drop the rest of the module. Taking the whole
-            // file instead is the mistake this function was written to stop:
-            // 2857 lines of vendored parser whose `Style` is not fontdb's.
-            let lifted = exported.get(&module)?;
-            file.items.retain_mut(|item| {
-                let Some(name) = declared(item) else {
-                    return false;
-                };
-                let Some((from, to)) = lifted.iter().find(|(from, _)| *from == name) else {
-                    return false;
-                };
-                rename(item, from, to);
-                true
-            });
-            (!file.items.is_empty()).then_some((path, file))
-        })
-        .collect()
-}
-
+/// Every `.rs` under a crate's `src`, parsed. `ModTree` then decides which of
+/// them, and which of their items, are the crate's public API.
 pub fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
     pub fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -348,6 +231,9 @@ pub struct ModTree {
     pub file_ns: BTreeMap<PathBuf, String>,
     /// (file, type name) for every `pub` type no export reaches.
     pub private: BTreeSet<(PathBuf, String)>,
+    /// (file, type name) -> the name an export gives it, when it differs:
+    /// fontdb's `pub use ttf_parser::Width as Stretch`.
+    pub renamed: BTreeMap<(PathBuf, String), String>,
 }
 
 impl ModTree {
@@ -534,6 +420,7 @@ impl ModTree {
         // Every public namespace, from the root down through exported modules.
         let mut paths: BTreeMap<String, String> = BTreeMap::new();
         let mut reached: BTreeMap<(Vec<String>, String), String> = BTreeMap::new();
+        let mut renames: BTreeMap<(Vec<String>, String), String> = BTreeMap::new();
         let mut todo = vec![(String::new(), Vec::<String>::new())];
         let mut seen = BTreeSet::new();
         while let Some((ns, module)) = todo.pop() {
@@ -543,6 +430,9 @@ impl ModTree {
             for (name, target) in exports(&module, &modules, &files, 0) {
                 match target {
                     Target::Type(def, ty) => {
+                        if name != ty {
+                            renames.insert((def.clone(), ty.clone()), name.clone());
+                        }
                         // The shortest namespace wins, so the root does:
                         // `usvg::Image` is what `Image` means.
                         let better = |old: &String| old.len() > ns.len();
@@ -568,6 +458,7 @@ impl ModTree {
 
         let mut file_ns = BTreeMap::new();
         let mut private = BTreeSet::new();
+        let mut renamed = BTreeMap::new();
         for (module, file) in &modules {
             let Some(f) = files.get(file.as_path()) else {
                 continue;
@@ -579,6 +470,9 @@ impl ModTree {
                     Item::Type(t) if is_pub(&t.vis) => t.ident.to_string(),
                     _ => continue,
                 };
+                if let Some(to) = renames.get(&(module.clone(), name.clone())) {
+                    renamed.insert((file.clone(), name.clone()), to.clone());
+                }
                 match reached.get(&(module.clone(), name.clone())) {
                     Some(ns) => {
                         let prev = file_ns.insert(file.clone(), ns.clone());
@@ -598,6 +492,7 @@ impl ModTree {
             paths,
             file_ns,
             private,
+            renamed,
         }
     }
 
@@ -611,6 +506,15 @@ impl ModTree {
         parsed: &[(PathBuf, syn::File)],
         src: &Path,
     ) -> Vec<(PathBuf, syn::File)> {
+        // An `impl` of a type no export reaches is no API either, and its
+        // signatures would otherwise make what they mention look wanted:
+        // ttf_parser's `Name::language()` pulled fontdb's `Language` in.
+        let hidden: BTreeSet<&str> = self
+            .private
+            .iter()
+            .map(|(_, n)| n.as_str())
+            .filter(|n| !self.paths.contains_key(*n))
+            .collect();
         parsed
             .iter()
             .filter(|(p, _)| {
@@ -623,10 +527,22 @@ impl ModTree {
                         Item::Struct(s) => s.ident.to_string(),
                         Item::Enum(e) => e.ident.to_string(),
                         Item::Type(t) => t.ident.to_string(),
+                        Item::Impl(_) => {
+                            return declared(item).is_none_or(|n| !hidden.contains(n.as_str()));
+                        }
                         _ => return true,
                     };
                     !self.private.contains(&(p.clone(), name))
                 });
+                // Under the name the export gives it, so what is parsed is what
+                // a caller of the crate can write: `Stretch`, not `Width`.
+                for item in &mut f.items {
+                    if let Some(name) = declared(item)
+                        && let Some(to) = self.renamed.get(&(p.clone(), name.clone()))
+                    {
+                        rename(item, &name, to);
+                    }
+                }
                 (p.clone(), f)
             })
             .collect()

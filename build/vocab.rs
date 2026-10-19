@@ -319,7 +319,7 @@ impl PayloadEnum {
 /// The shape is what the mapping was ever about: six numbers in that order are
 /// a matrix whatever the crate that declares them calls itself.
 pub fn matrix_like(files: &[syn::File]) -> BTreeSet<String> {
-    let want: BTreeSet<&str> = ["sx", "kx", "ky", "sy", "tx", "ty"].into_iter().collect();
+    let want: BTreeSet<&str> = crate::config::MATRIX_FIELDS.iter().copied().collect();
     let mut found = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Struct(st) = item else { continue };
@@ -681,10 +681,11 @@ pub fn classify(
         "Vec<u8>" | "&[u8]" | "Arc<Vec<u8>>" | "&Arc<Vec<u8>>" | "std::sync::Arc<Vec<u8>>" => {
             Js::Bytes
         }
-        "Size" | "usvg::Size" => Js::Size,
+        // The template's domain shapes, by the upstream spellings config lists.
+        s if crate::config::SIZE_TYPES.contains(&s) => Js::Size,
         // geometry newtypes over four f32 with public accessors
-        "Rect" | "NonZeroRect" => Js::Bbox,
-        "Option<NonZeroRect>" => Js::OptBbox,
+        s if crate::config::RECT_TYPES.contains(&s) => Js::Bbox,
+        s if crate::config::OPT_RECT_TYPES.contains(&s) => Js::OptBbox,
         s if s.starts_with("Result<(),") => Js::TryUnit,
         // Arc-held definitions can be owned by a wrapper class.
         s if s.starts_with("&[Arc<") && s.ends_with(">]") => {
@@ -694,8 +695,8 @@ pub fn classify(
             Js::Handle(s[5..s.len() - 1].to_string())
         }
         s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
-        "tiny_skia_path::Path" | "&tiny_skia_path::Path" => Js::PathData,
-        "[u8;4]" | "&[u8;4]" | "[u8; 4]" => Js::Tag4,
+        s if crate::config::PATH_DATA_TYPES.contains(&s) => Js::PathData,
+        s if crate::config::TAG4_TYPES.contains(&s) => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
         // Payload enums are classified by name here and given their union
         // further down; `map_enums` only mirrors the unit ones.
@@ -849,14 +850,14 @@ pub fn static_array_len(files: &[syn::File], name: &str) -> usize {
             Item::Static(s) if s.ident == name => Some(s),
             _ => None,
         })
-        .unwrap_or_else(|| panic!("usvg: `static {name}` not found"));
+        .unwrap_or_else(|| panic!("upstream: `static {name}` not found"));
     let expr = match &*s.expr {
         syn::Expr::Reference(r) => &*r.expr,
         other => other,
     };
     match expr {
         syn::Expr::Array(a) => a.elems.len(),
-        _ => panic!("usvg: `{name}` is no longer an array literal"),
+        _ => panic!("upstream: `{name}` is no longer an array literal"),
     }
 }
 
@@ -875,10 +876,10 @@ pub fn struct_fields<'a>(files: &'a [syn::File], ty: &str) -> &'a syn::FieldsNam
             Item::Struct(s) if s.ident == ty && is_pub(&s.vis) => Some(s),
             _ => None,
         })
-        .unwrap_or_else(|| panic!("usvg: `pub struct {ty}` not found"));
+        .unwrap_or_else(|| panic!("upstream: `pub struct {ty}` not found"));
     match &s.fields {
         Fields::Named(named) => named,
-        _ => panic!("usvg::{ty} is no longer a struct with named fields"),
+        _ => panic!("upstream {ty} is no longer a struct with named fields"),
     }
 }
 

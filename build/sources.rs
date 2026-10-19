@@ -328,17 +328,367 @@ pub fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
         .collect()
 }
 
-/// Only the enums actually referenced by `Options` get mirrored — the SVG tree
-/// enums (Paint, Node, ...) carry payloads and stay on the Rust side.
-/// Public module names declared anywhere in the crate (`pub mod filter;`).
-/// A type defined in `filter.rs` is then reachable as `usvg::filter::X`.
-pub fn public_modules(files: &[syn::File]) -> BTreeSet<String> {
-    files
-        .iter()
-        .flat_map(|f| &f.items)
-        .filter_map(|i| match i {
-            Item::Mod(m) if is_pub(&m.vis) => Some(m.ident.to_string()),
-            _ => None,
-        })
-        .collect()
+/// A crate's module tree, read the way rustc reads it: from `lib.rs`, through
+/// `mod x;` (to `x.rs` or `x/mod.rs`, or `#[path]`), with `pub use` resolved --
+/// globs, names, renames, `self::`/`crate::`/`super::`. A type's public module
+/// is where an export puts it, not the stem of the file it is written in: the
+/// stem confused `parser/filter.rs` with `tree/filter.rs`, made every `mod.rs`
+/// a crate root, and took `parser/svgtree/mod.rs`'s private `SvgNode` for a
+/// public type.
+///
+/// ponytail: file modules only. An inline `mod x { .. }` is not followed; no
+/// crate parsed here exports through one. Re-exports of other crates
+/// (`pub use fontdb;`) are left out, as before.
+pub struct ModTree {
+    /// Public type name -> the namespace it is reachable at (`""` the root,
+    /// `"filter"`). Root wins when a type is reachable at both.
+    pub paths: BTreeMap<String, String>,
+    /// File -> the namespace its exported types land in. A file none of whose
+    /// types is exported is absent.
+    pub file_ns: BTreeMap<PathBuf, String>,
+    /// (file, type name) for every `pub` type no export reaches.
+    pub private: BTreeSet<(PathBuf, String)>,
+}
+
+impl ModTree {
+    pub fn load(src: &Path, parsed: &[(PathBuf, syn::File)]) -> ModTree {
+        let files: BTreeMap<&Path, &syn::File> =
+            parsed.iter().map(|(p, f)| (p.as_path(), f)).collect();
+        // Module path -> its file, found by following `mod x;` from lib.rs.
+        let mut modules: BTreeMap<Vec<String>, PathBuf> = BTreeMap::new();
+        let mut stack = vec![(Vec::<String>::new(), src.join("lib.rs"))];
+        while let Some((path, file)) = stack.pop() {
+            let Some(f) = files.get(file.as_path()) else {
+                continue;
+            };
+            // Children of `lib.rs`/`mod.rs` sit beside it; of `x.rs`, in `x/`.
+            let stem = file
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default();
+            let dir = if matches!(stem, "lib" | "mod") {
+                file.parent().unwrap().to_path_buf()
+            } else {
+                file.with_extension("")
+            };
+            for item in &f.items {
+                let Item::Mod(m) = item else { continue };
+                if m.content.is_some() {
+                    continue;
+                }
+                let name = m.ident.to_string();
+                let explicit = m
+                    .attrs
+                    .iter()
+                    .find(|a| a.path().is_ident("path"))
+                    .and_then(|a| match &a.meta {
+                        syn::Meta::NameValue(nv) => match &nv.value {
+                            syn::Expr::Lit(syn::ExprLit {
+                                lit: syn::Lit::Str(s),
+                                ..
+                            }) => Some(s.value()),
+                            _ => None,
+                        },
+                        _ => None,
+                    });
+                let child = match explicit {
+                    Some(p) => file.parent().unwrap().join(p),
+                    None if dir.join(format!("{name}.rs")).exists() => {
+                        dir.join(format!("{name}.rs"))
+                    }
+                    None => dir.join(&name).join("mod.rs"),
+                };
+                let mut p = path.clone();
+                p.push(name);
+                stack.push((p.clone(), child.clone()));
+                modules.insert(p, child);
+            }
+        }
+        modules.insert(Vec::new(), src.join("lib.rs"));
+
+        // What each module exports: (public name, target). A target is a type
+        // defined in a module, or a module.
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+        enum Target {
+            Type(Vec<String>, String),
+            Module(Vec<String>),
+        }
+        fn exports(
+            m: &[String],
+            modules: &BTreeMap<Vec<String>, PathBuf>,
+            files: &BTreeMap<&Path, &syn::File>,
+            depth: usize,
+        ) -> Vec<(String, Target)> {
+            assert!(depth < 32, "re-export cycle through {m:?}");
+            let Some(f) = modules.get(m).and_then(|p| files.get(p.as_path())) else {
+                return Vec::new();
+            };
+            let mut out = Vec::new();
+            // A path in a `use`, made absolute; None when it leaves the crate.
+            let resolve = |segs: &[String]| -> Option<Vec<String>> {
+                let mut at: Vec<String> = m.to_vec();
+                let mut rest = segs;
+                match rest.first().map(String::as_str) {
+                    Some("crate") => {
+                        at.clear();
+                        rest = &rest[1..];
+                    }
+                    Some("self") => rest = &rest[1..],
+                    _ => {}
+                }
+                while rest.first().map(String::as_str) == Some("super") {
+                    at.pop();
+                    rest = &rest[1..];
+                }
+                at.extend(rest.iter().cloned());
+                modules.contains_key(&at).then_some(at)
+            };
+            /// One `use` leaf: its path, and `(name, as)` -- or None for a glob.
+            type Leaf = (Vec<String>, Option<(String, String)>);
+            fn walk(t: &syn::UseTree, path: &mut Vec<String>, out: &mut Vec<Leaf>) {
+                match t {
+                    syn::UseTree::Path(p) => {
+                        path.push(p.ident.to_string());
+                        walk(&p.tree, path, out);
+                        path.pop();
+                    }
+                    syn::UseTree::Name(n) => out.push((
+                        path.clone(),
+                        Some((n.ident.to_string(), n.ident.to_string())),
+                    )),
+                    syn::UseTree::Rename(r) => out.push((
+                        path.clone(),
+                        Some((r.ident.to_string(), r.rename.to_string())),
+                    )),
+                    syn::UseTree::Glob(_) => out.push((path.clone(), None)),
+                    syn::UseTree::Group(g) => g.items.iter().for_each(|i| walk(i, path, out)),
+                }
+            }
+            for item in &f.items {
+                match item {
+                    Item::Struct(s) if is_pub(&s.vis) => out.push((
+                        s.ident.to_string(),
+                        Target::Type(m.to_vec(), s.ident.to_string()),
+                    )),
+                    Item::Enum(e) if is_pub(&e.vis) => out.push((
+                        e.ident.to_string(),
+                        Target::Type(m.to_vec(), e.ident.to_string()),
+                    )),
+                    Item::Type(t) if is_pub(&t.vis) => out.push((
+                        t.ident.to_string(),
+                        Target::Type(m.to_vec(), t.ident.to_string()),
+                    )),
+                    Item::Mod(md) if is_pub(&md.vis) && md.content.is_none() => {
+                        let mut p = m.to_vec();
+                        p.push(md.ident.to_string());
+                        out.push((md.ident.to_string(), Target::Module(p)));
+                    }
+                    Item::Use(u) if is_pub(&u.vis) => {
+                        let mut leaves = Vec::new();
+                        walk(&u.tree, &mut Vec::new(), &mut leaves);
+                        for (path, leaf) in leaves {
+                            match leaf {
+                                // `pub use x::*`: everything x exports.
+                                None => {
+                                    if let Some(target) = resolve(&path) {
+                                        out.extend(exports(&target, modules, files, depth + 1));
+                                    }
+                                }
+                                // `pub use x::N as K`: x's N, as K -- or x::N itself
+                                // when N names a module.
+                                Some((n, k)) => {
+                                    let Some(target) = resolve(&path) else {
+                                        continue;
+                                    };
+                                    // `pub use other_crate;` or `pub use self::Item`:
+                                    // nothing new to read in this module itself.
+                                    if target == m {
+                                        let mut as_module = target.clone();
+                                        as_module.push(n.clone());
+                                        if modules.contains_key(&as_module) {
+                                            out.push((k, Target::Module(as_module)));
+                                        }
+                                        continue;
+                                    }
+                                    let mut as_module = target.clone();
+                                    as_module.push(n.clone());
+                                    if modules.contains_key(&as_module) {
+                                        out.push((k, Target::Module(as_module)));
+                                    } else if let Some((_, t)) =
+                                        exports(&target, modules, files, depth + 1)
+                                            .into_iter()
+                                            .find(|(e, _)| *e == n)
+                                    {
+                                        out.push((k, t));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            out
+        }
+
+        // Every public namespace, from the root down through exported modules.
+        let mut paths: BTreeMap<String, String> = BTreeMap::new();
+        let mut reached: BTreeMap<(Vec<String>, String), String> = BTreeMap::new();
+        let mut todo = vec![(String::new(), Vec::<String>::new())];
+        let mut seen = BTreeSet::new();
+        while let Some((ns, module)) = todo.pop() {
+            if !seen.insert(module.clone()) {
+                continue;
+            }
+            for (name, target) in exports(&module, &modules, &files, 0) {
+                match target {
+                    Target::Type(def, ty) => {
+                        // The shortest namespace wins, so the root does:
+                        // `usvg::Image` is what `Image` means.
+                        let better = |old: &String| old.len() > ns.len();
+                        if paths.get(&name).is_none_or(better) {
+                            paths.insert(name.clone(), ns.clone());
+                        }
+                        let key = (def, ty);
+                        if reached.get(&key).is_none_or(better) {
+                            reached.insert(key, ns.clone());
+                        }
+                    }
+                    Target::Module(m) => {
+                        let sub = if ns.is_empty() {
+                            name
+                        } else {
+                            format!("{ns}::{name}")
+                        };
+                        todo.push((sub, m));
+                    }
+                }
+            }
+        }
+
+        let mut file_ns = BTreeMap::new();
+        let mut private = BTreeSet::new();
+        for (module, file) in &modules {
+            let Some(f) = files.get(file.as_path()) else {
+                continue;
+            };
+            for item in &f.items {
+                let name = match item {
+                    Item::Struct(s) if is_pub(&s.vis) => s.ident.to_string(),
+                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
+                    Item::Type(t) if is_pub(&t.vis) => t.ident.to_string(),
+                    _ => continue,
+                };
+                match reached.get(&(module.clone(), name.clone())) {
+                    Some(ns) => {
+                        let prev = file_ns.insert(file.clone(), ns.clone());
+                        assert!(
+                            prev.is_none_or(|p| p == *ns),
+                            "{}: types exported into two namespaces",
+                            file.display()
+                        );
+                    }
+                    None => {
+                        private.insert((file.clone(), name));
+                    }
+                }
+            }
+        }
+        ModTree {
+            paths,
+            file_ns,
+            private,
+        }
+    }
+
+    /// The files of the crate as the generator should see them: every file
+    /// the module tree reaches (a binary's `main.rs` is not one), with the
+    /// `pub` types no export reaches taken out. Their `impl`s, functions and
+    /// statics stay: `Tree::from_data` is implemented in the private `parser`,
+    /// and `POW_VEC` lives in the private `writer`.
+    pub fn public_view(
+        &self,
+        parsed: &[(PathBuf, syn::File)],
+        src: &Path,
+    ) -> Vec<(PathBuf, syn::File)> {
+        parsed
+            .iter()
+            .filter(|(p, _)| {
+                p.file_name().and_then(|n| n.to_str()) != Some("main.rs") || p.parent() != Some(src)
+            })
+            .map(|(p, f)| {
+                let mut f = f.clone();
+                f.items.retain(|item| {
+                    let name = match item {
+                        Item::Struct(s) => s.ident.to_string(),
+                        Item::Enum(e) => e.ident.to_string(),
+                        Item::Type(t) => t.ident.to_string(),
+                        _ => return true,
+                    };
+                    !self.private.contains(&(p.clone(), name))
+                });
+                (p.clone(), f)
+            })
+            .collect()
+    }
+}
+
+/// `ModTree` on a crate small enough to read: a glob through a private module,
+/// a public submodule, two `filter.rs` in different places, a rename, and pub
+/// types no export reaches. Run by `build.rs` on every build.
+pub fn modtree_selftest(scratch: &Path) {
+    let root = scratch.join("modtree-selftest");
+    let _ = fs::remove_dir_all(&root);
+    let files = [
+        (
+            "lib.rs",
+            "mod tree; mod hidden; mod parser; pub use tree::*; pub use hidden::Lifted as Renamed;",
+        ),
+        (
+            "tree/mod.rs",
+            "pub mod filter; mod geom; pub use self::geom::*; pub use tiny; pub struct Image;",
+        ),
+        ("tree/filter.rs", "pub struct Image; pub struct Blur;"),
+        ("tree/geom.rs", "pub struct Rect;"),
+        ("hidden.rs", "pub struct Lifted; pub struct Secret;"),
+        ("parser/mod.rs", "mod filter;"),
+        ("parser/filter.rs", "pub struct Internal;"),
+        ("main.rs", "pub struct Bin;"),
+    ];
+    let mut parsed = Vec::new();
+    for (rel, text) in files {
+        let p = root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(&p, text).unwrap();
+        parsed.push((p, syn::parse_file(text).unwrap()));
+    }
+    let t = ModTree::load(&root, &parsed);
+    let at = |n: &str| t.paths.get(n).map(String::as_str);
+    assert_eq!(at("Image"), Some(""), "the root wins over filter::Image");
+    assert_eq!(at("Blur"), Some("filter"));
+    assert_eq!(at("Rect"), Some(""), "a glob through a private module");
+    assert_eq!(at("Renamed"), Some(""), "a rename");
+    assert_eq!(at("Secret"), None);
+    assert_eq!(
+        at("Internal"),
+        None,
+        "parser/filter.rs is not tree/filter.rs"
+    );
+    assert_eq!(
+        t.file_ns
+            .get(&root.join("tree/filter.rs"))
+            .map(String::as_str),
+        Some("filter")
+    );
+    assert!(!t.file_ns.contains_key(&root.join("parser/filter.rs")));
+    assert!(
+        t.private
+            .contains(&(root.join("hidden.rs"), "Secret".into()))
+    );
+    let view = t.public_view(&parsed, &root);
+    assert!(
+        view.iter().all(|(p, _)| !p.ends_with("main.rs")),
+        "a binary is not the library"
+    );
+    let _ = fs::remove_dir_all(&root);
 }

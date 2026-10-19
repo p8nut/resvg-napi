@@ -13,7 +13,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
 use crate::config::*;
@@ -900,47 +899,6 @@ pub fn docs(attrs: &[syn::Attribute]) -> Vec<TokenStream> {
         .filter(|a| a.path().is_ident("doc"))
         .map(|a| quote!(#a))
         .collect()
-}
-
-/// Upstream path of each type name, derived from the file it lives in.
-pub fn upstream_modules(
-    parsed: &[(PathBuf, syn::File)],
-    modules: &BTreeSet<String>,
-) -> BTreeMap<String, String> {
-    let mut out = BTreeMap::new();
-    for (path, file) in parsed {
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default();
-        let prefix = if modules.contains(stem) {
-            stem.to_string()
-        } else {
-            String::new()
-        };
-        for item in &file.items {
-            let name = match item {
-                Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
-                Item::Struct(s) if is_pub(&s.vis) => s.ident.to_string(),
-                _ => continue,
-            };
-            // A name declared both at the crate root and inside a module
-            // resolves to the root one: `usvg::Image` is what `Image` means,
-            // and `filter::Image` says its module. First-wins made that depend
-            // on which file the walk reached first, which put `Image` in
-            // `filter` and left the tree's own image type unnameable.
-            match out.entry(name) {
-                std::collections::btree_map::Entry::Vacant(e) => {
-                    e.insert(prefix.clone());
-                }
-                std::collections::btree_map::Entry::Occupied(mut e) if prefix.is_empty() => {
-                    e.insert(String::new());
-                }
-                _ => {}
-            }
-        }
-    }
-    out
 }
 
 /// `usvg::filter::EdgeMode` or `usvg::BlendMode`, as appropriate.

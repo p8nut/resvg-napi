@@ -181,6 +181,9 @@ fn main() {
         );
     }
     cfg::selftest();
+    modtree_selftest(Path::new(
+        &env::var("OUT_DIR").expect("OUT_DIR, set by Cargo for build scripts"),
+    ));
     // map_methods: a name skipped on one pass stays free for the next, and a
     // `where` bound classifies its argument like an inline one does.
     {
@@ -273,7 +276,7 @@ fn main() {
     // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the
     // CI drift check would fail on someone else's machine rather than here.
-    for m in ["config", "sources", "vocab", "emit", "template"] {
+    for m in ["cfg", "config", "sources", "vocab", "emit", "template"] {
         println!("cargo::rerun-if-changed=build/{m}.rs");
     }
     // The generated file is also an *input* to watch: if someone deletes or
@@ -290,26 +293,19 @@ fn main() {
 
     // Whole crates, no per-file list: the `impl` blocks we wrap are spread over
     // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
-    let usvg_parsed = parse_crate(&usvg);
+    // Read through the crate's own module tree: which types are public, and at
+    // which path, is what its `mod`s and `pub use`s say.
+    let usvg_tree = ModTree::load(&usvg, &parse_crate(&usvg));
+    let usvg_parsed = usvg_tree.public_view(&parse_crate(&usvg), &usvg);
     let usvg_files: Vec<syn::File> = usvg_parsed.iter().map(|(_, f)| f.clone()).collect();
-    let public = public_modules(&usvg_files);
-    let modules = upstream_modules(&usvg_parsed, &public);
+    let modules = usvg_tree.paths.clone();
     // usvg files grouped by the module they contribute to. A bare-name lookup
     // over the whole crate takes whichever file was parsed first, which is how
     // `filter::Image` came back with `usvg::Image`'s methods; a qualified key
     // resolves against its own module instead.
     let mut by_module: BTreeMap<String, Vec<syn::File>> = BTreeMap::new();
     for (path, file) in &usvg_parsed {
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let m = if public.contains(&stem) {
-            stem
-        } else {
-            String::new()
-        };
+        let m = usvg_tree.file_ns.get(path).cloned().unwrap_or_default();
         by_module.entry(m).or_default().push(file.clone());
     }
     // Public names usvg defines twice. Exactly one today, `Image`, and the

@@ -181,6 +181,16 @@ fn main() {
         );
     }
     cfg::selftest();
+    for (ty, peeled) in [
+        ("&[Arc<ClipPath>]", "Arc<ClipPath>"),
+        ("Option<&Vec<Stop>>", "Stop"),
+        ("implIterator<Item=&Node>+'_", "Node"),
+        ("&[TextChunk]", "TextChunk"),
+        ("Box<Group>", "Group"),
+        ("usvg::Color", "usvg::Color"),
+    ] {
+        assert_eq!(peel_type(ty), peeled, "peel_type({ty})");
+    }
     println!("cargo::rerun-if-changed=build.rs");
     // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the
@@ -516,13 +526,7 @@ fn main() {
         // A dropped member whose type is itself a public struct is a candidate:
         // that is how `Stop` reaches `Color`.
         for d in &dropped {
-            let raw = d.split(": ").nth(1).unwrap_or_default();
-            let bare = raw
-                .trim_start_matches('&')
-                .trim_start_matches("Option<")
-                .trim_start_matches("Vec<")
-                .trim_end_matches('>')
-                .trim_start_matches('&')
+            let bare = peel_type(d.ty.as_deref().unwrap_or_default())
                 .rsplit("::")
                 .next()
                 .unwrap_or_default()
@@ -609,7 +613,11 @@ fn main() {
                 // that was never a candidate.
                 report!(
                     "{t} dropped: nothing maps, not even read-only ({})",
-                    dropped.join(", ")
+                    dropped
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
         }
@@ -628,7 +636,11 @@ fn main() {
             !code.is_empty(),
             "{t} is still an object candidate but maps only partially ({}). \
              The object/value fixpoint did not settle before emission.",
-            dropped.join(", ")
+            dropped
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
         object_parts.insert(t.clone(), code);
     }
@@ -647,8 +659,12 @@ fn main() {
             data_ident(t)
         );
         for d in dropped {
-            let member = d.split(':').next().unwrap_or_default().to_string();
-            unexposed.push((data_ident(t).to_string(), member, format!("{t} member"), d));
+            unexposed.push((
+                data_ident(t).to_string(),
+                d.name.clone(),
+                format!("{t} member"),
+                d.to_string(),
+            ));
         }
     }
 
@@ -712,15 +728,14 @@ fn main() {
         }
         for s in skipped {
             // `root()` is served by the generated `children()` view above.
-            if s.starts_with("root ") {
+            if s.name == "root" {
                 report!("{}::{t} method covered by the content view: {s}", src.label);
             } else {
-                let method = s.split(' ').next().unwrap_or_default().to_string();
                 unexposed.push((
                     name.clone(),
-                    method,
+                    s.name.clone(),
                     format!("{}::{t} method", src.label),
-                    s,
+                    s.to_string(),
                 ));
             }
         }
@@ -808,7 +823,7 @@ fn main() {
     let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     // Reported once the template exists: whether a skipped method is "covered"
     // is a question about the template, which is built further down.
-    let mut skips: Vec<(&str, Vec<String>)> = Vec::new();
+    let mut skips: Vec<(&str, Vec<Skip>)> = Vec::new();
     for p in &passes {
         let names = taken.entry(p.target).or_default();
         let (code, skipped) = map_methods(
@@ -998,7 +1013,7 @@ fn main() {
     }
     for (label, skipped) in &skips {
         for s in skipped {
-            let name = s.split(' ').next().unwrap_or_default();
+            let name = s.name.as_str();
             let renamed = RENAMED.iter().find(|(from, _)| *from == name);
             let verb = match renamed {
                 Some((_, to)) => format!("covered by the template as `{to}`"),

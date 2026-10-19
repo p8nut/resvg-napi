@@ -264,7 +264,7 @@ pub fn map_struct(
     ty: &str,
     vocab: &Vocab,
     precision_max: u32,
-) -> (Vec<Field>, Vec<String>, usize) {
+) -> (Vec<Field>, Vec<Skip>, usize) {
     let named = struct_fields(files, ty);
 
     let mut out = Vec::new();
@@ -464,9 +464,9 @@ pub fn map_struct(
         // template instead (opaque class, resolver hooks, xmlwriter's
         // `Indent`); the rest is dropped.
         if HAND_WIRED_FIELDS.contains(&name.as_str()) {
-            skipped.push(format!("{name}: {ty} (handled manually by the template)"));
+            skipped.push(Skip::new(&name, Some(&ty), Reason::HandWired));
         } else {
-            skipped.push(format!("{name}: {ty} (dropped)"));
+            skipped.push(Skip::new(&name, Some(&ty), Reason::Dropped));
         }
     }
 
@@ -593,7 +593,7 @@ pub fn data_members(
     // FromNapiValue of a field and a class has neither. So the same member is
     // mappable for `value_class` and not for `object_struct`.
     nested_values: bool,
-) -> (Vec<Member>, Vec<String>, BTreeSet<String>) {
+) -> (Vec<Member>, Vec<Skip>, BTreeSet<String>) {
     let mut out = Vec::new();
     let mut skipped = Vec::new();
     let mut reached = BTreeSet::new();
@@ -611,12 +611,7 @@ pub fn data_members(
         if NOT_DATA.contains(&name) {
             return;
         }
-        let peeled = ty_s
-            .trim_start_matches('&')
-            .trim_start_matches("Box<")
-            .trim_start_matches("Option<")
-            .trim_start_matches('&')
-            .trim_end_matches('>');
+        let peeled = peel_type(ty_s);
         if NOT_DATA_TYPES.contains(&bare(peeled)) {
             return;
         }
@@ -671,7 +666,7 @@ pub fn data_members(
             Some(Js::PayloadEnum(t)) | Some(Js::PayloadEnumList(t))
                 if !nested_values && vocab.payload[&t].holds_class(vocab) =>
             {
-                skipped.push(format!("{name}: {ty_s} (a union with class variants)"));
+                skipped.push(Skip::new(name, Some(ty_s), Reason::UnionWithClasses));
                 return;
             }
             Some(Js::PayloadEnumList(t)) => {
@@ -773,7 +768,7 @@ pub fn data_members(
                         return;
                     }
                     _ => {
-                        skipped.push(format!("{name}: {ty_s}"));
+                        skipped.push(Skip::new(name, Some(ty_s), Reason::Member));
                         return;
                     }
                 }
@@ -863,7 +858,7 @@ pub fn object_struct(
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
-) -> (TokenStream, Vec<String>, BTreeSet<String>) {
+) -> (TokenStream, Vec<Skip>, BTreeSet<String>) {
     let (members, skipped, reached) = data_members(files, bare(ty), vocab, false);
     if members.is_empty() || !skipped.is_empty() {
         return (TokenStream::new(), skipped, reached);
@@ -909,7 +904,7 @@ pub fn value_class(
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
-) -> (TokenStream, Vec<String>, BTreeSet<String>) {
+) -> (TokenStream, Vec<Skip>, BTreeSet<String>) {
     let (members, skipped, reached) = data_members(files, bare(ty), vocab, true);
     if members.is_empty() {
         return (TokenStream::new(), skipped, reached);
@@ -972,7 +967,7 @@ pub fn wrapper_class(
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
-) -> (TokenStream, Vec<String>, BTreeSet<String>) {
+) -> (TokenStream, Vec<Skip>, BTreeSet<String>) {
     let name = wrapper_ident(ty);
     let path = wrapper_path(ty, modules, root);
     // Walk the type itself, then whatever it derefs to, sharing one name set so
@@ -1004,7 +999,7 @@ pub fn wrapper_class(
     let reached = skipped
         .iter()
         .filter_map(|s| {
-            let t = s.split("(returns ").nth(1)?.trim_end_matches(')');
+            let t = s.ty.as_deref().filter(|_| s.reason == Reason::Returns)?;
             match vocab.classify(t) {
                 Some(Js::Handle(x)) | Some(Js::HandleList(x)) => Some(x),
                 _ => None,
@@ -1108,7 +1103,7 @@ pub fn map_methods(
     // Method names already emitted on the target class: two passes can land on
     // the same `impl` block (`Tree::filters` and `Group::filters` both do).
     taken: &mut BTreeSet<String>,
-) -> (TokenStream, Vec<String>) {
+) -> (TokenStream, Vec<Skip>) {
     // Destructured by name so the body below is unchanged from when these were
     // eight parameters.
     let MethodPass {
@@ -1166,9 +1161,7 @@ pub fn map_methods(
             let gate = match crate::cfg::gate(&gated) {
                 crate::cfg::Gate::Always => None,
                 crate::cfg::Gate::Never => {
-                    skipped.push(format!(
-                        "{name} (never built: its upstream cfg is off here)"
-                    ));
+                    skipped.push(Skip::new(&name, None, Reason::NeverBuilt));
                     continue;
                 }
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
@@ -1184,7 +1177,7 @@ pub fn map_methods(
 
             let mut inputs = f.sig.inputs.iter();
             let Some(syn::FnArg::Receiver(recv)) = inputs.next() else {
-                skipped.push(format!("{name} (no receiver)"));
+                skipped.push(Skip::new(&name, None, Reason::NoReceiver));
                 continue;
             };
             // syn 3 moved the `&mut self` marker into `ReceiverKind::Reference`;
@@ -1192,7 +1185,7 @@ pub fn map_methods(
             let mutable = match &recv.kind {
                 syn::ReceiverKind::Reference(_, _, m) => m.is_some(),
                 _ => {
-                    skipped.push(format!("{name} (consumes self)"));
+                    skipped.push(Skip::new(&name, None, Reason::ConsumesSelf));
                     continue;
                 }
             };
@@ -1224,7 +1217,7 @@ pub fn map_methods(
                     Some(k) => args.push((t.pat.clone(), k)),
                     None => {
                         ok = false;
-                        skipped.push(format!("{name} (arg: {ty})"));
+                        skipped.push(Skip::new(&name, Some(&ty), Reason::Arg));
                         break;
                     }
                 }
@@ -1263,7 +1256,7 @@ pub fn map_methods(
                         Some(Js::OptValue(t)) => Ret::OptValue(t),
                         Some(Js::IntNewtype(_)) => Ret::IntNewtype,
                         _ => {
-                            skipped.push(format!("{name} (returns {ty})"));
+                            skipped.push(Skip::new(&name, Some(&ty), Reason::Returns));
                             continue;
                         }
                     }
@@ -1296,7 +1289,7 @@ pub fn map_methods(
                 .map(|(pat, _)| quote!(let #pat = #pat.id_in(&#receiver);))
                 .collect();
             if readonly && mutable {
-                skipped.push(format!("{name} (needs &mut self)"));
+                skipped.push(Skip::new(&name, None, Reason::NeedsMut));
                 continue;
             }
             let recv = if mutable {

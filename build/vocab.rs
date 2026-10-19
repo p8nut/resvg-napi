@@ -457,6 +457,92 @@ pub fn payload_enums(
 
 /// Everything the classifier needs to know about the upstream crates, all of it
 /// derived: enums worth mirroring, `f32` newtypes, and `pub type` aliases.
+/// The type a member is *about*, its wrappers peeled: `&`, `Option<..>`,
+/// `Vec<..>`, `Box<..>`, a slice `[..]` and `implIterator<Item=..>`, as often as
+/// they nest. Stops at `Arc<..>`: that marks a shared handle, and peeling it
+/// would seed the handle's type as data. The path prefix is left on; callers
+/// that want the bare name take it off. `ty_str` has removed the whitespace.
+pub fn peel_type(t: &str) -> &str {
+    let mut t = t;
+    loop {
+        let next = t
+            .strip_prefix('&')
+            .or_else(|| {
+                ["Option<", "Vec<", "Box<"]
+                    .iter()
+                    .find_map(|w| t.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
+            })
+            .or_else(|| t.strip_prefix('[').and_then(|r| r.strip_suffix(']')))
+            .or_else(|| {
+                let r = t.strip_prefix("implIterator<Item=")?;
+                let r = r.strip_suffix("+'_").unwrap_or(r);
+                r.strip_suffix('>')
+            });
+        match next {
+            Some(n) => t = n,
+            None => return t,
+        }
+    }
+}
+
+/// Why a member or method was left out, as a record rather than a sentence:
+/// the discovery fixpoint reads the type off it, the report reads the name,
+/// and neither has to split a formatted string to get them back.
+pub struct Skip {
+    pub name: String,
+    /// The upstream type the decision was about, when there is one.
+    pub ty: Option<String>,
+    pub reason: Reason,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Reason {
+    /// A data member whose type has no JS form.
+    Member,
+    /// A union member some of whose variants are classes: no plain value.
+    UnionWithClasses,
+    /// An options field the template wires itself.
+    HandWired,
+    /// An options field with no JS form.
+    Dropped,
+    NoReceiver,
+    ConsumesSelf,
+    Arg,
+    Returns,
+    NeedsMut,
+    /// Gated on an upstream feature this crate never builds.
+    NeverBuilt,
+}
+
+impl Skip {
+    pub fn new(name: &str, ty: Option<&str>, reason: Reason) -> Skip {
+        Skip {
+            name: name.to_string(),
+            ty: ty.map(str::to_string),
+            reason,
+        }
+    }
+}
+
+/// The report's wording, unchanged from when these were built as strings.
+impl std::fmt::Display for Skip {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let (n, t) = (&self.name, self.ty.as_deref().unwrap_or_default());
+        match self.reason {
+            Reason::Member => write!(f, "{n}: {t}"),
+            Reason::UnionWithClasses => write!(f, "{n}: {t} (a union with class variants)"),
+            Reason::HandWired => write!(f, "{n}: {t} (handled manually by the template)"),
+            Reason::Dropped => write!(f, "{n}: {t} (dropped)"),
+            Reason::NoReceiver => write!(f, "{n} (no receiver)"),
+            Reason::ConsumesSelf => write!(f, "{n} (consumes self)"),
+            Reason::Arg => write!(f, "{n} (arg: {t})"),
+            Reason::Returns => write!(f, "{n} (returns {t})"),
+            Reason::NeedsMut => write!(f, "{n} (needs &mut self)"),
+            Reason::NeverBuilt => write!(f, "{n} (never built: its upstream cfg is off here)"),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Vocab {
     /// Every public struct name upstream, so a payload that names one the
@@ -705,12 +791,7 @@ pub fn field_types(files: &[syn::File]) -> BTreeSet<String> {
         }
         for f in &st.fields {
             let t = ty_str(&f.ty);
-            out.insert(
-                t.trim_start_matches('&')
-                    .trim_start_matches("Option<")
-                    .trim_end_matches('>')
-                    .to_string(),
-            );
+            out.insert(peel_type(&t).to_string());
         }
     }
     out

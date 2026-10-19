@@ -43,9 +43,6 @@ object FontFamily skipped: not a public struct
 object Input skipped: not a public struct
 object Node skipped: not a public struct
 object Source skipped: not a public struct
-object [FontFamily] skipped: not a public struct
-object [TextChunk] skipped: not a public struct
-object [TextSpan] skipped: not a public struct
 object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None

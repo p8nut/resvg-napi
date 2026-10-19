@@ -473,7 +473,7 @@ pub fn map_struct(
                 // panic unwinding out of an `extern "C"` callback, so a process
                 // abort rather than a JS exception. The caller counts what this
                 // matched and fails the build when it matches nothing.
-                let max = if name.ends_with("_precision") {
+                let max = if name.ends_with(CLAMP.0) {
                     clamped += 1;
                     precision_max
                 } else {
@@ -1332,7 +1332,7 @@ pub fn map_methods(
                     match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
-                        _ if ty == "ID" => Some(Arg::Face),
+                        _ if ty == ARG_STANDIN.0 => Some(Arg::Face),
                         _ => None,
                     }
                 };
@@ -1376,7 +1376,10 @@ pub fn map_methods(
                 .iter()
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat: Uint8Array),
-                    Arg::Face => quote!(#pat: &FontFace),
+                    Arg::Face => {
+                        let standin = format_ident!("{}", ARG_STANDIN.1);
+                        quote!(#pat: &#standin)
+                    }
                     _ => quote!(#pat: String),
                 })
                 .collect();

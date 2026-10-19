@@ -34,10 +34,16 @@ use syn::{Fields, ImplItem, Item};
 /// buried under 101 lines of it. Off unless asked for.
 macro_rules! report {
     ($($arg:tt)*) => {
-        if env::var_os("RESVG_NAPI_CODEGEN_LOG").is_some() {
+        if env::var_os($crate::codegen_log_var()).is_some() {
             println!("cargo::warning={}", format!($($arg)*));
         }
     };
+}
+
+/// `RESVG_NAPI_CODEGEN_LOG` for this package: the crate name, upper-cased.
+fn codegen_log_var() -> String {
+    let pkg = env::var("CARGO_PKG_NAME").expect("CARGO_PKG_NAME, set by Cargo");
+    format!("{}_CODEGEN_LOG", pkg.to_uppercase().replace('-', "_"))
 }
 
 // Each phase in its own file. `#[path]` because Cargo compiles this one as a
@@ -115,16 +121,16 @@ fn assert_struct_fields(files: &[syn::File], ty: &str, want: &[&str]) {
     }
 }
 
-fn assert_tree_ctor(files: &[syn::File], name: &str) {
+fn assert_tree_ctor(files: &[syn::File], ty: &str, name: &str) {
     let found = files.iter().flat_map(|f| &f.items).any(|i| match i {
         // upstream writes `impl crate::Tree`, so compare the last path segment
-        Item::Impl(imp) if ty_str(&imp.self_ty).rsplit("::").next() == Some("Tree") => imp
+        Item::Impl(imp) if ty_str(&imp.self_ty).rsplit("::").next() == Some(ty) => imp
             .items
             .iter()
             .any(|it| matches!(it, ImplItem::Fn(f) if f.sig.ident == name && is_pub(&f.vis))),
         _ => false,
     });
-    assert!(found, "usvg: `Tree::{name}` disappeared");
+    assert!(found, "upstream: `{ty}::{name}` disappeared");
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +187,9 @@ fn main() {
         );
     }
     cfg::selftest();
+    modtree_selftest(Path::new(
+        &env::var("OUT_DIR").expect("OUT_DIR, set by Cargo for build scripts"),
+    ));
     // map_methods: a name skipped on one pass stays free for the next, and a
     // `where` bound classifies its argument like an inline one does.
     {
@@ -273,82 +282,88 @@ fn main() {
     // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the
     // CI drift check would fail on someone else's machine rather than here.
-    for m in ["config", "sources", "vocab", "emit", "template"] {
+    for m in ["cfg", "config", "sources", "vocab", "emit", "template"] {
         println!("cargo::rerun-if-changed=build/{m}.rs");
     }
     // The generated file is also an *input* to watch: if someone deletes or
     // stubs src/lib.rs, the script must re-run and regenerate it.
     println!("cargo::rerun-if-changed=src/lib.rs");
-    println!("cargo::rerun-if-env-changed=RESVG_NAPI_EMIT_SRC");
-    println!("cargo::rerun-if-env-changed=RESVG_NAPI_CODEGEN_LOG");
+    println!("cargo::rerun-if-env-changed={}", codegen_log_var());
 
     let locked = locked_versions();
-    let usvg = locate("usvg", "parser/options.rs", &locked);
-    let resvg = locate("resvg", "lib.rs", &locked);
-    let fontdb = locate("fontdb", "lib.rs", &locked);
-    report!("usvg sources: {}", usvg.display());
 
-    // Whole crates, no per-file list: the `impl` blocks we wrap are spread over
-    // tree/mod.rs, tree/filter.rs, parser/, writer.rs...
-    let usvg_parsed = parse_crate(&usvg);
-    let usvg_files: Vec<syn::File> = usvg_parsed.iter().map(|(_, f)| f.clone()).collect();
-    let public = public_modules(&usvg_files);
-    let modules = upstream_modules(&usvg_parsed, &public);
-    // usvg files grouped by the module they contribute to. A bare-name lookup
-    // over the whole crate takes whichever file was parsed first, which is how
-    // `filter::Image` came back with `usvg::Image`'s methods; a qualified key
-    // resolves against its own module instead.
-    let mut by_module: BTreeMap<String, Vec<syn::File>> = BTreeMap::new();
-    for (path, file) in &usvg_parsed {
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default()
-            .to_string();
-        let m = if public.contains(&stem) {
-            stem
-        } else {
-            String::new()
-        };
-        by_module.entry(m).or_default().push(file.clone());
-    }
-    // Public names usvg defines twice. Exactly one today, `Image`, and the
-    // report says so rather than leaving it to be rediscovered.
+    // The crates this generator derives from (config::UPSTREAM), in the order
+    // a bare name is resolved against them. The point of the list is that a
+    // third is a row rather than another arm in five `if` chains -- the bare
+    // name decided the crate in every one of them, which is the assumption
+    // that breaks the moment two crates define `Color`.
     //
-    // Only the crate root for free functions: a module-level `pub fn` elsewhere
-    // is not crate-public (resvg has an internal `render(&Image, ...)`).
-    let resvg_root = vec![parse(&resvg.join("lib.rs"))];
-    let fontdb_files: Vec<syn::File> = public_only(&fontdb, parse_crate(&fontdb))
-        .into_iter()
-        .map(|(_, f)| f)
-        .collect();
-
-    // The crates this generator derives from, in the order a bare name is
-    // resolved against them. Two today; the point of the list is that a third
-    // is a push rather than another arm in five `if` chains -- the bare name
-    // decided the crate in every one of them, which is the assumption that
-    // breaks the moment two crates define `Color`.
+    // Whole crates, no per-file list: the `impl` blocks we wrap are spread over
+    // tree/mod.rs, tree/filter.rs, parser/, writer.rs... Read through each
+    // crate's own module tree: which types are public, and at which path, is
+    // what its `mod`s and `pub use`s say.
     //
     // `label` is not `root.to_string()`: quote! spells a path with spaces
     // around `::`, and this one reaches the report a reader is expected to
     // grep.
     struct Source {
         files: Vec<syn::File>,
+        parsed: Vec<(PathBuf, syn::File)>,
+        tree: ModTree,
         root: TokenStream,
+        root_str: &'static str,
         label: &'static str,
     }
-    let sources = vec![
-        Source {
-            files: usvg_files.clone(),
-            root: quote!(usvg),
-            label: "usvg",
-        },
-        Source {
-            files: fontdb_files.clone(),
-            root: quote!(usvg::fontdb),
-            label: "usvg::fontdb",
-        },
-    ];
+    let sources: Vec<Source> = UPSTREAM
+        .iter()
+        .enumerate()
+        .map(|(i, u)| {
+            let dir = locate(u.pkg, u.marker, &locked);
+            if i == 0 {
+                report!("{} sources: {}", u.label, dir.display());
+            }
+            let all = parse_crate(&dir);
+            let tree = ModTree::load(&dir, &all);
+            let parsed = tree.public_view(&all, &dir);
+            Source {
+                files: parsed.iter().map(|(_, f)| f.clone()).collect(),
+                parsed,
+                tree,
+                root: u
+                    .root
+                    .parse()
+                    .expect("a config::UPSTREAM root that is a path"),
+                root_str: u.root,
+                label: u.label,
+            }
+        })
+        .collect();
+    // The primary crate: options, guards and clamps are read from it.
+    let primary = &sources[0];
+    let primary_files = primary.files.clone();
+    let modules = primary.tree.paths.clone();
+    // Its files grouped by the namespace they export into. A bare-name lookup
+    // over the whole crate takes whichever file was parsed first, which is how
+    // `filter::Image` came back with `usvg::Image`'s methods; a qualified key
+    // resolves against its own module instead.
+    let mut by_module: BTreeMap<String, Vec<syn::File>> = BTreeMap::new();
+    for (path, file) in &primary.parsed {
+        let m = primary.tree.file_ns.get(path).cloned().unwrap_or_default();
+        by_module.entry(m).or_default().push(file.clone());
+    }
+    // Only the crate root for free functions: a module-level `pub fn` elsewhere
+    // is not crate-public (resvg has an internal `render(&Image, ...)`).
+    let renderer_root = vec![parse(
+        &locate(RENDERER.0, RENDERER.1, &locked).join(RENDERER.1),
+    )];
+    let source_files = |label: &str| {
+        &sources
+            .iter()
+            .find(|s| s.label == label)
+            .unwrap_or_else(|| panic!("no config::UPSTREAM labelled {label:?}"))
+            .files
+    };
+
     // Which crate defines a type, by the same probe the chains used: the first
     // source with a public struct of that name.
     let defines = |t: &str| {
@@ -393,39 +408,31 @@ fn main() {
     }
 
     // Guards first: no point generating against a moved API.
-    assert_free_fn(
-        &resvg_root,
-        "render",
-        &[
-            "&usvg::Tree",
-            "tiny_skia::Transform",
-            "&muttiny_skia::PixmapMut",
-        ],
-    );
-    assert_tree_ctor(&usvg_files, "from_data");
-    assert_tree_ctor(&usvg_files, "to_string");
-    assert_struct_fields(
-        &usvg_files,
-        "ImageHrefResolver",
-        &["resolve_data", "resolve_string"],
-    );
-    assert_struct_fields(
-        &usvg_files,
-        "FontResolver",
-        &["select_font", "select_fallback"],
-    );
+    assert_free_fn(&renderer_root, RENDER_FN.0, RENDER_FN.1);
+    for m in TREE.1 {
+        assert_tree_ctor(&primary_files, TREE.0, m);
+    }
+    for (ty, fields) in HAND_FILLED {
+        assert_struct_fields(&primary_files, ty, fields);
+    }
 
-    // POW_VEC has N entries, so the highest usable precision is N - 1.
-    let precision_max =
-        u32::try_from(static_array_len(&usvg_files, "POW_VEC") - 1).expect("POW_VEC fits u32");
-    report!("usvg precision clamp derived from POW_VEC: {precision_max}");
+    // The table has N entries, so the highest usable index is N - 1.
+    let precision_max = u32::try_from(static_array_len(&primary_files, CLAMP.1) - 1)
+        .expect("a clamp table that fits u32");
+    report!(
+        "{} precision clamp derived from {}: {precision_max}",
+        primary.label,
+        CLAMP.1
+    );
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
-    let mut referenced = struct_field_types(&usvg_files, PARSE_OPTIONS);
-    referenced.extend(struct_field_types(&usvg_files, WRITE_OPTIONS));
-    referenced.extend(returned_types(&usvg_files, &[]));
-    referenced.extend(returned_types(&fontdb_files, &[]));
-    referenced.extend(field_types(&fontdb_files));
+    let mut referenced = struct_field_types(&primary_files, PARSE_OPTIONS);
+    referenced.extend(struct_field_types(&primary_files, WRITE_OPTIONS));
+    referenced.extend(returned_types(&primary_files, &[]));
+    for src in &sources[1..] {
+        referenced.extend(returned_types(&src.files, &[]));
+        referenced.extend(field_types(&src.files));
+    }
 
     // Object candidates: a *collection* of values wants a value type, whereas a
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
@@ -434,6 +441,52 @@ fn main() {
     // fragments can be blank. Reused by the pruner further down.
     let nothing = TokenStream::new();
     let probe = template(&Fragments::probe(), &nothing, &nothing, &nothing, &nothing);
+    // The names the generated code spells and the template must define. A
+    // template edit that drops one fails here, by name, instead of as a
+    // compile error deep in src/lib.rs.
+    {
+        let file: syn::File = syn::parse2(probe.clone()).expect("the probe template parses");
+        let mut defined: BTreeSet<String> = file
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Struct(x) => Some(x.ident.to_string()),
+                Item::Enum(x) => Some(x.ident.to_string()),
+                Item::Fn(x) => Some(x.sig.ident.to_string()),
+                Item::Trait(x) => Some(x.ident.to_string()),
+                Item::Type(x) => Some(x.ident.to_string()),
+                _ => None,
+            })
+            .collect();
+        // In scope through an import counts too: `Signal` comes from
+        // napi-support.
+        fn imported(t: &syn::UseTree, out: &mut BTreeSet<String>) {
+            match t {
+                syn::UseTree::Path(p) => imported(&p.tree, out),
+                syn::UseTree::Name(n) => {
+                    out.insert(n.ident.to_string());
+                }
+                syn::UseTree::Rename(r) => {
+                    out.insert(r.rename.to_string());
+                }
+                syn::UseTree::Group(g) => g.items.iter().for_each(|i| imported(i, out)),
+                syn::UseTree::Glob(_) => {}
+            }
+        }
+        for item in &file.items {
+            if let Item::Use(u) = item {
+                imported(&u.tree, &mut defined);
+            }
+        }
+        let missing: Vec<_> = TEMPLATE_CONTRACT
+            .iter()
+            .filter(|n| !defined.contains(**n))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "the template no longer defines {missing:?} (config::TEMPLATE_CONTRACT)"
+        );
+    }
     let object_seeds: BTreeSet<String> = referenced
         .iter()
         .filter_map(|t| {
@@ -453,7 +506,7 @@ fn main() {
         .chain(
             by_module
                 .iter()
-                .flat_map(|(m, files)| payload_enums(files, m, &dups, "usvg"))
+                .flat_map(|(m, files)| payload_enums(files, m, &dups, primary.root_str))
                 .flat_map(|(_, p)| p.variants)
                 .flat_map(|(_, payload)| match payload {
                     Payload::None => Vec::new(),
@@ -461,7 +514,7 @@ fn main() {
                     Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
                 })
                 .filter(|t| !NODE_TYPES.contains(&bare(t)))
-                .filter(|t| struct_fields_opt(&usvg_files, bare(t)).is_some()),
+                .filter(|t| struct_fields_opt(&primary_files, bare(t)).is_some()),
         )
         // Plus whatever the template hands out itself.
         .chain(template_returns(&probe).into_iter().filter(|t| {
@@ -476,8 +529,9 @@ fn main() {
                     == Some(t.as_str())
             });
             !arc_held
-                && (struct_fields_opt(&usvg_files, t).is_some()
-                    || struct_fields_opt(&fontdb_files, t).is_some())
+                && sources
+                    .iter()
+                    .any(|s| struct_fields_opt(&s.files, t).is_some())
         }))
         .collect();
 
@@ -491,11 +545,11 @@ fn main() {
     // for vocabulary only -- what usvg re-exports from tiny-skia-path is
     // reachable as `usvg::Transform`, and what it does not re-export is never
     // emitted, so `usvg` is the honest label for the half that can appear.
-    for (set, root) in [
-        (&usvg_files, "usvg"),
-        (&fontdb_files, "usvg::fontdb"),
-        (&extra, "usvg"),
-    ] {
+    for (set, root) in sources
+        .iter()
+        .map(|s| (&s.files, s.root_str))
+        .chain([(&extra, VOCAB_ROOT)])
+    {
         // tiny-skia-path is parsed for exactly this kind of answer: usvg
         // re-exports its `Transform`, so the struct that decides the mapping is
         // never in usvg's own files.
@@ -519,7 +573,9 @@ fn main() {
         if m.is_empty() {
             continue;
         }
-        vocab.payload.extend(payload_enums(files, m, &dups, "usvg"));
+        vocab
+            .payload
+            .extend(payload_enums(files, m, &dups, primary.root_str));
     }
     report!(
         "payload enums found: {}",
@@ -749,18 +805,20 @@ fn main() {
         }
     }
 
-    let (fields, skipped_fields, _) = map_struct(&usvg_files, PARSE_OPTIONS, &vocab, precision_max);
+    let (fields, skipped_fields, _) =
+        map_struct(&primary_files, PARSE_OPTIONS, &vocab, precision_max);
     let (write_fields, skipped_write, clamped) =
-        map_struct(&usvg_files, WRITE_OPTIONS, &vocab, precision_max);
-    // WriteOptions is where the POW_VEC indices live, and the fields are found
-    // by a `_precision` suffix. A rename upstream would match nothing, fall
+        map_struct(&primary_files, WRITE_OPTIONS, &vocab, precision_max);
+    // The write options are where the clamped indices live (config::CLAMP),
+    // found by a name suffix. A rename upstream would match nothing, fall
     // through to u8::MAX, and hand usvg an index 242 places past the end of a
     // 13-entry table -- an out-of-bounds panic inside an `extern "C"` callback,
     // which aborts the process rather than throwing. Loud here instead.
     assert!(
         clamped > 0,
-        "no WriteOptions field matched `*_precision`: either usvg renamed them, \
-         in which case this clamp now protects nothing, or they are gone"
+        "no {WRITE_OPTIONS} field matched `*{}`: either upstream renamed them, \
+         in which case this clamp now protects nothing, or they are gone",
+        CLAMP.0
     );
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
@@ -827,14 +885,8 @@ fn main() {
         done.iter().cloned().collect::<Vec<_>>().join(", ")
     );
 
-    // One declarative table instead of four call sites: adding a wrapped
-    // `impl` block is a single row.
-    let node_prologue = quote!(let __n = self.node()?;);
-    let group_prologue = quote! {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-    };
+    // One declarative table (config::PASSES) instead of four call sites:
+    // adding a wrapped `impl` block is a single row.
     struct Pass<'a> {
         label: &'a str,
         target: &'a str,
@@ -842,63 +894,27 @@ fn main() {
         ty: &'a str,
         receiver: TokenStream,
         skip: &'a [&'a str],
-        prologue: Option<&'a TokenStream>,
+        prologue: Option<TokenStream>,
         optional: bool,
     }
-    let passes = [
-        Pass {
-            label: "fontdb::Database",
-            target: "FontDatabase",
-            files: &fontdb_files,
-            ty: "Database",
-            receiver: quote!(self.inner),
-            skip: &[],
-            prologue: None,
-            optional: false,
-        },
-        Pass {
-            label: "usvg::Tree",
-            target: "Resvg",
-            files: &usvg_files,
-            ty: "Tree",
-            receiver: quote!(self.tree),
-            skip: &[],
-            prologue: None,
-            optional: false,
-        },
-        Pass {
-            label: "usvg::Group",
-            target: "Resvg",
-            files: &usvg_files,
-            ty: "Group",
-            receiver: quote!(self.tree.root()),
-            skip: &["isolate", "should_isolate", "id"],
-            prologue: None,
-            optional: false,
-        },
-        Pass {
-            label: "usvg::Node",
-            target: "SvgNode",
-            files: &usvg_files,
-            ty: "Node",
-            receiver: quote!(__n),
-            skip: &["subroots"],
-            prologue: Some(&node_prologue),
-            optional: false,
-        },
-        // After the Node pass: what both define (`id`, the boxes) is already
-        // taken there, and stays non-null on every node.
-        Pass {
-            label: "usvg::Group (on SvgNode)",
-            target: "SvgNode",
-            files: &usvg_files,
-            ty: "Group",
-            receiver: quote!(__g),
-            skip: &["filters_bounding_box"],
-            prologue: Some(&group_prologue),
-            optional: true,
-        },
-    ];
+    let passes: Vec<Pass> = PASSES
+        .iter()
+        .map(|p| Pass {
+            label: p.label,
+            target: p.target,
+            files: source_files(p.source),
+            ty: p.ty,
+            receiver: p
+                .receiver
+                .parse()
+                .expect("a config::PASSES receiver that parses"),
+            skip: p.skip,
+            prologue: p
+                .prologue
+                .map(|t| t.parse().expect("a config::PASSES prologue that parses")),
+            optional: p.optional,
+        })
+        .collect();
 
     let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
     let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
@@ -913,7 +929,7 @@ fn main() {
                 ty: p.ty,
                 receiver: &p.receiver,
                 skip: p.skip,
-                prologue: p.prologue,
+                prologue: p.prologue.as_ref(),
                 readonly: false,
                 optional: p.optional,
             },
@@ -923,12 +939,9 @@ fn main() {
         skips.push((p.label, p.target, skipped));
         generated.insert(p.label, code);
     }
-    // `subroots` is a visitor over the groups a node refers to. Each one is
-    // already a handle of its own, so a callback API would add nothing.
-    report!(
-        "usvg::Node method covered by clipPath / mask / filters / imageChildren / paint ids: \
-         subroots (arg: F)"
-    );
+    for (pass, what, by) in COVERED_ELSEWHERE {
+        report!("{pass} method covered by {by}: {what}");
+    }
     // Prune: an object type nothing returns is dead TS surface. Start from the
     // generated method bodies, then follow objects nested in kept objects.
     let mentions = |code: &TokenStream, name: &str| -> bool {
@@ -1049,10 +1062,10 @@ fn main() {
     };
 
     for s in skipped_fields {
-        report!("usvg::Options field not exposed: {s}");
+        report!("{}::{PARSE_OPTIONS} field not exposed: {s}", primary.label);
     }
     for s in skipped_write {
-        report!("usvg::WriteOptions field not exposed: {s}");
+        report!("{}::{WRITE_OPTIONS} field not exposed: {s}", primary.label);
     }
 
     let decls: Vec<_> = fields.iter().map(|f| &f.decl).collect();
@@ -1153,8 +1166,11 @@ fn main() {
         }
     }
 
-    const HEADER: &str = concat!(
-        "// @generated by build.rs from the resvg/usvg/fontdb sources. DO NOT EDIT.\n",
+    let header = format!(
+        "// @generated by build.rs from {GENERATED_FROM}. DO NOT EDIT.\n{}",
+        HEADER_REST
+    );
+    const HEADER_REST: &str = concat!(
         "// Regenerate with `touch build.rs && cargo build`.\n",
         "#![allow(dead_code)]\n",
         // Generated by type text, not type checking: an upstream alias may
@@ -1164,7 +1180,7 @@ fn main() {
         // impl would be dead API. Everything else clippy says applies here too.
         "#![allow(clippy::useless_conversion, clippy::field_reassign_with_default, clippy::type_complexity, clippy::new_without_default)]\n",
     );
-    let text = format!("{HEADER}{}", code);
+    let text = format!("{header}{}", code);
 
     // Staging copy, handy for inspection: $OUT_DIR/bindings.rs
     let staged = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");

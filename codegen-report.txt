@@ -19,7 +19,6 @@ async twin generated: Resvg::raw_pixels -> render_raw_async (Promise<RawImage>)
 async twin generated: Resvg::svg_text -> to_string_async (Promise<String>)
 async twin generated: SvgNode::png_bytes -> render_png_async (Promise<Buffer>)
 data type ID skipped: nothing mappable on it
-data type SvgNode skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
 fontdb::Database method covered by the template as `face_data`: with_face_data (arg: P)

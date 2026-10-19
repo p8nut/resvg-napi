@@ -383,6 +383,55 @@ pub fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
     out
 }
 
+/// An enum's variants as payloads, or why they cannot be read as one. Shared
+/// by the payload registry and by `map_enums`, so an enum neither can use is
+/// refused for one stated reason rather than dropped by both in silence.
+pub fn payload_shape(
+    e: &syn::ItemEnum,
+    qualify: &dyn Fn(String) -> String,
+) -> Result<Vec<(String, Payload)>, String> {
+    // Both the unit-enum `From` impls and the union converter are exhaustive
+    // `match`es, which a `#[non_exhaustive]` enum from another crate refuses.
+    if e.attrs.iter().any(|a| a.path().is_ident("non_exhaustive")) {
+        return Err("#[non_exhaustive], so an exhaustive match cannot be written".into());
+    }
+    let mut out = Vec::new();
+    for v in &e.variants {
+        let name = v.ident.to_string();
+        let payload = match &v.fields {
+            Fields::Unit => Payload::None,
+            Fields::Unnamed(f) if f.unnamed.len() == 1 => {
+                Payload::Value(qualify(ty_str(&f.unnamed[0].ty)))
+            }
+            Fields::Unnamed(f) if f.unnamed.is_empty() => {
+                return Err(format!(
+                    "{name}() has empty parens, which no JS shape mirrors"
+                ));
+            }
+            // A tuple of more than one field has no name to give either half,
+            // so there is nothing honest to call them.
+            Fields::Unnamed(f) => {
+                return Err(format!(
+                    "{name} carries {} unnamed fields, and a tuple has no names to give them",
+                    f.unnamed.len()
+                ));
+            }
+            Fields::Named(f) => Payload::Fields(
+                f.named
+                    .iter()
+                    .filter_map(|x| {
+                        x.ident
+                            .as_ref()
+                            .map(|i| (i.to_string(), qualify(ty_str(&x.ty))))
+                    })
+                    .collect(),
+            ),
+        };
+        out.push((name, payload));
+    }
+    Ok(out)
+}
+
 /// Payload enums, found by shape. Skips any with a variant carrying more than
 /// one field or named fields: those have no single obvious `value`, and saying
 /// so in the report beats guessing.
@@ -410,38 +459,11 @@ pub fn payload_enums(
                 t
             }
         };
-        let mut variants = Vec::new();
-        let mut usable = false;
-        for v in &e.variants {
-            match &v.fields {
-                Fields::Unit => variants.push((v.ident.to_string(), Payload::None)),
-                Fields::Unnamed(f) if f.unnamed.len() == 1 => {
-                    usable = true;
-                    let ty = qualify(ty_str(&f.unnamed[0].ty));
-                    variants.push((v.ident.to_string(), Payload::Value(ty)));
-                }
-                Fields::Named(f) => {
-                    usable = true;
-                    let fields = f
-                        .named
-                        .iter()
-                        .filter(|x| is_pub(&x.vis) || true)
-                        .filter_map(|x| {
-                            x.ident
-                                .as_ref()
-                                .map(|i| (i.to_string(), qualify(ty_str(&x.ty))))
-                        })
-                        .collect();
-                    variants.push((v.ident.to_string(), Payload::Fields(fields)));
-                }
-                // A tuple of more than one field has no name to give either
-                // half, so there is nothing honest to call them.
-                _ => {
-                    usable = false;
-                    break;
-                }
-            }
-        }
+        // Unit variants alone are a plain enum, not a payload one.
+        let Ok(variants) = payload_shape(e, &qualify) else {
+            continue;
+        };
+        let usable = variants.iter().any(|(_, p)| !matches!(p, Payload::None));
         if usable {
             out.insert(
                 e.ident.to_string(),
@@ -951,32 +973,6 @@ pub enum Arg {
     // fontdb's `ID` is an opaque slotmap key with no JS form. A `FontFace`
     // carries the `FaceInfo` it came from, so it can stand in for the key.
     Face,
-}
-
-pub enum Ret {
-    Unit,
-    Bool,
-    Count,
-    TryUnit,
-    Text,
-    Box_,
-    OptBox,
-    Matrix,
-    Scalar,
-    Dims,
-    Enum(proc_macro2::Ident),
-    Handle(String),
-    HandleList(String),
-    Num,
-    Int,
-    SignedInt,
-    Object(String),
-    ObjectList(String),
-    Value(String),
-    ValueList(String),
-    OptObject(String),
-    OptValue(String),
-    IntNewtype,
 }
 
 /// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.

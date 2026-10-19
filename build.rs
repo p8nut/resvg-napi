@@ -181,6 +181,84 @@ fn main() {
         );
     }
     cfg::selftest();
+    // map_methods: a name skipped on one pass stays free for the next, and a
+    // `where` bound classifies its argument like an inline one does.
+    {
+        let a: syn::File = syn::parse_quote! { impl A { pub fn foo(self) {} } };
+        let b: syn::File = syn::parse_quote! {
+            impl B {
+                pub fn foo(&self) -> u32 { 0 }
+                pub fn load<P>(&mut self, p: P) where P: AsRef<Path> {}
+            }
+        };
+        let (v, recv, mut taken) = (Vocab::default(), quote!(self.inner), BTreeSet::new());
+        let pass = |files: &[syn::File], ty: &str, taken: &mut BTreeSet<String>| {
+            map_methods(
+                &MethodPass {
+                    files,
+                    ty,
+                    receiver: &recv,
+                    skip: &[],
+                    prologue: None,
+                    readonly: false,
+                    optional: false,
+                },
+                &v,
+                taken,
+            )
+        };
+        let (_, skipped) = pass(&[a], "A", &mut taken);
+        assert!(
+            skipped.iter().any(|s| s.name == "foo"),
+            "pass 1 skips foo(self)"
+        );
+        let (code, skipped) = pass(&[b], "B", &mut taken);
+        let code = code.to_string().replace(' ', "");
+        assert!(code.contains("pubfnfoo("), "pass 2 still emits foo: {code}");
+        assert!(
+            code.contains("pubfnload(&mutself,p:String)"),
+            "where-bound arg: {code}"
+        );
+        assert!(skipped.is_empty(), "nothing skipped on pass 2");
+        let ne: syn::ItemEnum = syn::parse_quote! { #[non_exhaustive] pub enum E { A } };
+        assert!(
+            payload_shape(&ne, &|t| t).is_err(),
+            "#[non_exhaustive] is refused"
+        );
+    }
+    // One table: a kind that both a getter and a method can return has the
+    // same JS type at both, whatever expression each uses to get there.
+    {
+        let (v, a) = (Vocab::default(), quote!(x));
+        for js in [
+            Js::Bool,
+            Js::I32,
+            Js::F32,
+            Js::F64,
+            Js::U8,
+            Js::U16,
+            Js::U32,
+            Js::Count,
+            Js::Str,
+            Js::Scalar,
+            Js::Bbox,
+            Js::Size,
+            Js::Matrix,
+            Js::IntNewtype("N".into()),
+            Js::Value("V".into()),
+            Js::ValueList("V".into()),
+            Js::OptValue("V".into()),
+            Js::Object("O".into()),
+            Js::ObjectList("O".into()),
+        ] {
+            let ty = |site| js_conv(&js, "T", &v, &a, site).map(|c| c.ty.to_string());
+            assert_eq!(
+                ty(Site::Getter),
+                ty(Site::Method),
+                "{js:?}: getter and method disagree"
+            );
+        }
+    }
     for (ty, peeled) in [
         ("&[Arc<ClipPath>]", "Arc<ClipPath>"),
         ("Option<&Vec<Stop>>", "Stop"),
@@ -465,9 +543,12 @@ fn main() {
     let mut enums = TokenStream::new();
     let mut enum_names: BTreeSet<String> = BTreeSet::new();
     for src in &sources {
-        let (names, code) = map_enums(&src.files, &referenced, &modules, &src.root);
+        let (names, code, rejected) = map_enums(&src.files, &referenced, &modules, &src.root);
         enum_names.extend(names);
         enums.extend(code);
+        for (name, why) in rejected {
+            report!("payload enum {name} not mapped: {why}");
+        }
     }
     // `enum_names` already carries every source's enums, fontdb's included.
     vocab.enums = enum_names.clone();
@@ -823,7 +904,7 @@ fn main() {
     let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     // Reported once the template exists: whether a skipped method is "covered"
     // is a question about the template, which is built further down.
-    let mut skips: Vec<(&str, Vec<Skip>)> = Vec::new();
+    let mut skips: Vec<(&str, &str, Vec<Skip>)> = Vec::new();
     for p in &passes {
         let names = taken.entry(p.target).or_default();
         let (code, skipped) = map_methods(
@@ -839,7 +920,7 @@ fn main() {
             &vocab,
             names,
         );
-        skips.push((p.label, skipped));
+        skips.push((p.label, p.target, skipped));
         generated.insert(p.label, code);
     }
     // `subroots` is a visitor over the groups a node refers to. Each one is
@@ -1011,7 +1092,7 @@ fn main() {
             "RENAMED says `{from}` is covered by `{to}`, but the template defines no `{to}`"
         );
     }
-    for (label, skipped) in &skips {
+    for (label, target, skipped) in &skips {
         for s in skipped {
             let name = s.name.as_str();
             let renamed = RENAMED.iter().find(|(from, _)| *from == name);
@@ -1019,6 +1100,10 @@ fn main() {
                 Some((_, to)) => format!("covered by the template as `{to}`"),
                 None if defined.iter().any(|n| n.as_str() == name) => {
                     "covered by the template, not generated".to_string()
+                }
+                // Another pass emitted a method of that name on the same class.
+                None if taken.get(target).is_some_and(|t| t.contains(name)) => {
+                    "covered by another pass on the same class".to_string()
                 }
                 None => "not exposed".to_string(),
             };

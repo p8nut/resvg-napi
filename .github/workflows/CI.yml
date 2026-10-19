@@ -31,9 +31,15 @@ on:
 # of it. Cancel only for pull_request: a superseded main or tag run may already
 # be publishing, and killing that mid-way is how you get a half-published
 # release.
+#
+# Pushes are grouped by commit, not branch: a release pushes the same commit
+# twice, once as the merge to main and once as the `v*` tag, and both ran the
+# full matrix. The tag run cancels the main run on that commit -- it builds
+# and tests the same thing and is the one that publishes, so the commit keeps
+# a full CI either way. Nothing ever cancels a tag run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/') }}
 
 # Read-only unless a job says otherwise (publish does). Written here rather
 # than left to the repository's default token setting, which this file cannot

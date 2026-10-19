@@ -481,17 +481,26 @@ pub fn map_enums(
     // for the ones fontdb defines. Hardcoding `usvg` meant fontdb's enums could
     // never be mapped, which is why `FaceInfo.style` was missing.
     root: &TokenStream,
-) -> (BTreeSet<String>, TokenStream) {
+) -> (BTreeSet<String>, TokenStream, Vec<(String, String)>) {
     let mut names = BTreeSet::new();
     let mut code = TokenStream::new();
+    // Wanted enums that cannot be emitted, and why: neither a plain enum nor
+    // a payload one. Skipped without a word, they read as never wanted.
+    let mut rejected = Vec::new();
 
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Enum(e) = item else { continue };
         if !is_pub(&e.vis) || !wanted.contains(&e.ident.to_string()) {
             continue;
         }
+        // A payload enum is mapped elsewhere, as a union, when its shape
+        // allows; when it does not, this is the one place that says so.
+        if let Err(why) = payload_shape(e, &|t| t) {
+            rejected.push((e.ident.to_string(), why));
+            continue;
+        }
         if !e.variants.iter().all(|v| matches!(v.fields, Fields::Unit)) {
-            continue; // enum with payload -> no clean JS representation
+            continue; // enum with payload -> mapped as a union, if at all
         }
         let ident = enum_ident(&e.ident.to_string());
         let ident = &ident;
@@ -522,7 +531,7 @@ pub fn map_enums(
         });
     }
 
-    (names, code)
+    (names, code, rejected)
 }
 
 // ---------------------------------------------------------------------------
@@ -977,8 +986,11 @@ pub fn wrapper_class(
     let mut skipped = Vec::new();
     let mut current = Some(ty.rsplit("::").next().unwrap_or(ty).to_string());
     let inner = quote!(self.inner);
-    for _ in 0..4 {
+    for depth in 0.. {
         let Some(t) = current.take() else { break };
+        // A chain this long is upstream changing shape, not a deeper class:
+        // cutting it short dropped the remaining targets' methods silently.
+        assert!(depth < 4, "{ty}: Deref chain longer than 4, reached {t}");
         let (code, sk) = map_methods(
             &MethodPass {
                 files,
@@ -1117,6 +1129,7 @@ pub fn map_methods(
     } = *m;
     let mut code = TokenStream::new();
     let mut skipped = Vec::new();
+    let mut twins = BTreeSet::new();
 
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Impl(imp) = item else { continue };
@@ -1133,8 +1146,13 @@ pub fn map_methods(
             if skip.contains(&name.as_str()) {
                 continue; // renderer internals, no meaning on the JS side
             }
-            if !taken.insert(name.clone()) {
-                continue; // cfg-gated twin, or already emitted by another pass
+            // Already emitted on this class by an earlier pass, or a cfg twin
+            // of one seen in this pass. A name is only reserved once its
+            // method is emitted (below): reserving it on sight let a method
+            // skipped here hide a mappable one of the same name on a later
+            // pass or Deref target, with nothing in the report.
+            if taken.contains(&name) || !twins.insert(name.clone()) {
+                continue;
             }
             // Upstream may gate this method on a feature this crate does not
             // build everywhere. Its twins in the same impl (fontdb's
@@ -1168,12 +1186,29 @@ pub fn map_methods(
             };
 
             // generic param -> bound text, so `P: AsRef<Path>` can be classified
-            let bounds: BTreeMap<String, String> = f
+            // ...and from a `where` clause too, which said nothing before:
+            // `fn f<P>(p: P) where P: AsRef<Path>` had its argument skipped.
+            let mut bounds: BTreeMap<String, String> = f
                 .sig
                 .generics
                 .type_params()
                 .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
                 .collect();
+            for pred in f
+                .sig
+                .generics
+                .where_clause
+                .iter()
+                .flat_map(|w| &w.predicates)
+            {
+                if let syn::WherePredicate::Type(t) = pred {
+                    let b = &t.bounds;
+                    bounds
+                        .entry(ty_str(&t.bounded_ty))
+                        .or_default()
+                        .push_str(&quote!(#b).to_string().replace(' ', ""));
+                }
+            }
 
             let mut inputs = f.sig.inputs.iter();
             let Some(syn::FnArg::Receiver(recv)) = inputs.next() else {
@@ -1195,7 +1230,13 @@ pub fn map_methods(
             for a in inputs {
                 let syn::FnArg::Typed(t) = a else { continue };
                 let ty = ty_str(&t.ty);
-                let bound = bounds.get(&ty).map(String::as_str).unwrap_or("");
+                // `impl AsRef<Path>` in argument position is the same bound,
+                // written in place.
+                let bound = bounds
+                    .get(&ty)
+                    .map(String::as_str)
+                    .or_else(|| ty.strip_prefix("impl"))
+                    .unwrap_or("");
                 // A generic parameter is classified through its bound instead.
                 let kind = if bound.contains("AsRef<std::path::Path>")
                     || bound.contains("AsRef<Path>")
@@ -1404,6 +1445,8 @@ pub fn map_methods(
             } else {
                 quote!(-> #ret_ty)
             };
+            // Every path from here emits the method.
+            taken.insert(name.clone());
             if let Some((p, n)) = gate {
                 let (ret_ty, last) = if optional {
                     let v = if matches!(ret, Ret::TryUnit) {

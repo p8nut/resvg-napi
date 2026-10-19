@@ -181,6 +181,16 @@ fn main() {
         );
     }
     cfg::selftest();
+    for (ty, peeled) in [
+        ("&[Arc<ClipPath>]", "Arc<ClipPath>"),
+        ("Option<&Vec<Stop>>", "Stop"),
+        ("implIterator<Item=&Node>+'_", "Node"),
+        ("&[TextChunk]", "TextChunk"),
+        ("Box<Group>", "Group"),
+        ("usvg::Color", "usvg::Color"),
+    ] {
+        assert_eq!(peel_type(ty), peeled, "peel_type({ty})");
+    }
     println!("cargo::rerun-if-changed=build.rs");
     // The generator is six files now, and Cargo watches only what it is told:
     // without these, editing a phase module would leave src/lib.rs stale and the
@@ -516,13 +526,7 @@ fn main() {
         // A dropped member whose type is itself a public struct is a candidate:
         // that is how `Stop` reaches `Color`.
         for d in &dropped {
-            let raw = d.ty.as_deref().unwrap_or_default();
-            let bare = raw
-                .trim_start_matches('&')
-                .trim_start_matches("Option<")
-                .trim_start_matches("Vec<")
-                .trim_end_matches('>')
-                .trim_start_matches('&')
+            let bare = peel_type(d.ty.as_deref().unwrap_or_default())
                 .rsplit("::")
                 .next()
                 .unwrap_or_default()

@@ -611,7 +611,7 @@ pub fn data_members(
         if NOT_DATA.contains(&name) {
             return;
         }
-        let peeled = peel_type(&ty_s);
+        let peeled = peel_type(ty_s);
         if NOT_DATA_TYPES.contains(&bare(peeled)) {
             return;
         }

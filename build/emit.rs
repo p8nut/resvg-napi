@@ -1141,6 +1141,38 @@ pub fn map_methods(
             if !taken.insert(name.clone()) {
                 continue; // cfg-gated twin, or already emitted by another pass
             }
+            // Upstream may gate this method on a feature this crate does not
+            // build everywhere. Its twins in the same impl (fontdb's
+            // load_font_file, one per memmap setting) count together.
+            let gated = crate::cfg::Pred::Any(
+                imp.items
+                    .iter()
+                    .filter_map(|i| match i {
+                        ImplItem::Fn(g) if g.sig.ident == f.sig.ident => {
+                            Some(crate::cfg::Pred::All(vec![
+                                crate::cfg::of(&imp.attrs),
+                                crate::cfg::of(&g.attrs),
+                            ]))
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+            );
+            // napi-derive registers every method of a `#[napi] impl` whatever
+            // its `#[cfg]`, so a gated method cannot be compiled out. It is
+            // kept on every target, with its body gated instead: where the
+            // upstream item is missing it throws, and the JS surface stays the
+            // same everywhere.
+            let gate = match crate::cfg::gate(&gated) {
+                crate::cfg::Gate::Always => None,
+                crate::cfg::Gate::Never => {
+                    skipped.push(format!(
+                        "{name} (never built: its upstream cfg is off here)"
+                    ));
+                    continue;
+                }
+                crate::cfg::Gate::When(p, n) => Some((p, n)),
+            };
 
             // generic param -> bound text, so `P: AsRef<Path>` can be classified
             let bounds: BTreeMap<String, String> = f
@@ -1379,6 +1411,42 @@ pub fn map_methods(
             } else {
                 quote!(-> #ret_ty)
             };
+            if let Some((p, n)) = gate {
+                let (ret_ty, last) = if optional {
+                    let v = if matches!(ret, Ret::TryUnit) {
+                        quote!(#value.map(Some))
+                    } else {
+                        quote!(Ok(Some(#value)))
+                    };
+                    (quote!(Option<#ret_ty>), v)
+                } else if matches!(ret, Ret::Unit) {
+                    (quote!(#ret_ty), quote! { #value; Ok(()) })
+                } else {
+                    (quote!(#ret_ty), ok_value)
+                };
+                let missing = format!(
+                    "{} is not available on this target: its upstream feature is off here",
+                    lower_camel(&name)
+                );
+                code.extend(quote! {
+                    #(#doc)*
+                    #[napi]
+                    #[cfg_attr(#n, allow(unused_variables))]
+                    pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
+                        #[cfg(#p)]
+                        {
+                            #prologue
+                            #(#lets)*
+                            #last
+                        }
+                        #[cfg(#n)]
+                        {
+                            Err(Error::from_reason(#missing))
+                        }
+                    }
+                });
+                continue;
+            }
             code.extend(if optional {
                 let value = if matches!(ret, Ret::TryUnit) {
                     quote!(#value.map(Some))

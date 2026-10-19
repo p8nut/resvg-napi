@@ -13,13 +13,14 @@ the precision clamp read out of usvg's `POW_VEC` — is derived. The hand-writte
 part is the API shape: what a `Pixmap` becomes, how images and fonts are
 resolved, what runs on a worker thread.
 
-It is five files, one per phase:
+It is a handful of files, one per phase:
 
 | | |
 |---|---|
 | `build/sources.rs` | finding and parsing upstream: env override, then git submodule, then the cargo registry at the version `Cargo.lock` names |
 | `build/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `build/emit.rs` | turning those answers into tokens napi can expand |
+| `build/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `config::FEATURES` |
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
 

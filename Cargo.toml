@@ -24,7 +24,11 @@ crate-type = ["cdylib"]
 napi = { version = "3.14.2", default-features = false, features = ["napi8"] }  # napi8: active la validation de type-tag des classes
 napi-derive = "3.6.12"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.
-resvg = "0.48.1"
+# Its defaults minus `memmap-fonts`, added back below for every target that has
+# mmap: WASI does not, and with it fontdb's load_font_file answered
+# "unsupported" while load_fonts_dir loaded nothing and said nothing. The
+# generator knows (build/config.rs FEATURES) and gates what depends on it.
+resvg = { version = "0.48.1", default-features = false, features = ["svgz", "text", "system-fonts", "raster-images"] }
 # resvg's own CSS colour parser, same version it uses internally.
 svgtypes = "0.16.1"
 # usvg/resvg report recoverable problems through `log`; nothing consumes it by
@@ -37,6 +41,10 @@ imagesize = "0.15"
 # bounded logs, capped reads, the checked AbortSignal.
 napi-support = { path = "crates/napi-support" }
 
+
+# Resolver 2 keeps a target table's features to that target.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+resvg = { version = "0.48.1", features = ["memmap-fonts"] }
 
 [build-dependencies]
 napi-build = "2.6.0"

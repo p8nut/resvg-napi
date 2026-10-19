@@ -226,6 +226,39 @@ fn main() {
             "#[non_exhaustive] is refused"
         );
     }
+    // One table: a kind that both a getter and a method can return has the
+    // same JS type at both, whatever expression each uses to get there.
+    {
+        let (v, a) = (Vocab::default(), quote!(x));
+        for js in [
+            Js::Bool,
+            Js::I32,
+            Js::F32,
+            Js::F64,
+            Js::U8,
+            Js::U16,
+            Js::U32,
+            Js::Count,
+            Js::Str,
+            Js::Scalar,
+            Js::Bbox,
+            Js::Size,
+            Js::Matrix,
+            Js::IntNewtype("N".into()),
+            Js::Value("V".into()),
+            Js::ValueList("V".into()),
+            Js::OptValue("V".into()),
+            Js::Object("O".into()),
+            Js::ObjectList("O".into()),
+        ] {
+            let ty = |site| js_conv(&js, "T", &v, &a, site).map(|c| c.ty.to_string());
+            assert_eq!(
+                ty(Site::Getter),
+                ty(Site::Method),
+                "{js:?}: getter and method disagree"
+            );
+        }
+    }
     for (ty, peeled) in [
         ("&[Arc<ClipPath>]", "Arc<ClipPath>"),
         ("Option<&Vec<Stop>>", "Stop"),

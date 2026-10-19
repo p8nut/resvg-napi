@@ -975,32 +975,6 @@ pub enum Arg {
     Face,
 }
 
-pub enum Ret {
-    Unit,
-    Bool,
-    Count,
-    TryUnit,
-    Text,
-    Box_,
-    OptBox,
-    Matrix,
-    Scalar,
-    Dims,
-    Enum(proc_macro2::Ident),
-    Handle(String),
-    HandleList(String),
-    Num,
-    Int,
-    SignedInt,
-    Object(String),
-    ObjectList(String),
-    Value(String),
-    ValueList(String),
-    OptObject(String),
-    OptValue(String),
-    IntNewtype,
-}
-
 /// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
 /// `receiver` is the expression the call hangs off, so the same pass serves
 /// `fontdb::Database`, `usvg::Tree` and the root `usvg::Group`.

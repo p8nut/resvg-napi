@@ -36,6 +36,195 @@ pub fn field(
     }
 }
 
+/// Where a converted value lands. The mapping from a `Js` kind to a JS type
+/// and the expression producing it is one table (`js_conv`); the sites differ
+/// only where they must, and each difference is an arm below rather than a
+/// second copy of the table.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Site {
+    /// A wrapped method's return value: `access` is the call.
+    Method,
+    /// A read-only class getter, which may hand back another class.
+    Getter,
+    /// An `#[napi(object)]` field, which may not.
+    Field,
+    /// A payload carried by a union variant, bound by reference.
+    Carried,
+}
+
+/// One conversion: the JS type, the expression, the data type it reaches (for
+/// the discovery fixpoint), whether the expression is already a `Result`, and
+/// the field name a carried handle takes instead of `value`.
+pub struct Conv {
+    pub ty: TokenStream,
+    pub expr: TokenStream,
+    pub reached: Option<String>,
+    pub is_result: bool,
+    pub field: Option<&'static str>,
+}
+
+/// The one Js -> JS table. `access` is the Rust expression to convert; `src_ty`
+/// its type text, for the `&` it may already carry. None: no form at this site.
+pub fn js_conv(
+    js: &Js,
+    src_ty: &str,
+    vocab: &Vocab,
+    access: &TokenStream,
+    site: Site,
+) -> Option<Conv> {
+    use Site::*;
+    let a = access;
+    // A carried payload is bound by reference: Copy kinds are read through it.
+    let d = if site == Carried {
+        quote!(*#a)
+    } else {
+        quote!(#a)
+    };
+    let plain = |ty: TokenStream, expr: TokenStream| Conv {
+        ty,
+        expr,
+        reached: None,
+        is_result: false,
+        field: None,
+    };
+    let reaching = |ty: TokenStream, expr: TokenStream, t: &str| Conv {
+        reached: Some(t.to_string()),
+        ..plain(ty, expr)
+    };
+    // `&x` unless the member already is a reference.
+    let by_ref = if src_ty.starts_with('&') {
+        quote!(#a)
+    } else {
+        quote!(&#a)
+    };
+    let saturating = quote!(u32::try_from(#a).unwrap_or(u32::MAX));
+    Some(match (js, site) {
+        (Js::Bool, _) => plain(quote!(bool), d),
+        (Js::I32, _) => plain(quote!(i32), d),
+        (Js::F32, _) => plain(quote!(f64), quote!(f64::from(#d))),
+        (Js::F64, Method) => plain(quote!(f64), quote!(f64::from(#a))),
+        (Js::F64, _) => plain(quote!(f64), d),
+        // A method's integers saturate; a member's widen, which cannot fail.
+        (Js::U8 | Js::U16 | Js::U32, Method) => plain(quote!(u32), saturating),
+        (Js::U8 | Js::U16, _) => plain(quote!(u32), quote!(u32::from(#d))),
+        (Js::U32, _) => plain(quote!(u32), d),
+        (Js::Count, Carried) => return None,
+        (Js::Count, _) => plain(quote!(u32), saturating),
+        (Js::Str, _) => plain(quote!(String), quote!(#a.to_string())),
+        (Js::Scalar, _) => plain(quote!(f64), quote!(f64::from(#a.get()))),
+        (Js::IntNewtype(_), Carried) => return None,
+        (Js::IntNewtype(_), _) => plain(quote!(u32), quote!(u32::from(#a.0))),
+        (Js::Bbox, Carried) => return None,
+        (Js::Bbox, _) => plain(quote!(BBox), quote!(BBox::from(#a))),
+        (Js::OptBbox, Method) => plain(quote!(Option<BBox>), quote!(#a.map(BBox::from))),
+        (Js::Size, Carried) => return None,
+        (Js::Size, _) => plain(quote!(Dimensions), quote!(Dimensions::from(#a))),
+        (Js::Matrix, Carried) => return None,
+        (Js::Matrix, _) => plain(quote!(Matrix), quote!(Matrix::from(#a))),
+        (Js::F32List, Getter | Field) => plain(
+            quote!(Vec<f64>),
+            quote!(#a.iter().map(|v| f64::from(*v)).collect()),
+        ),
+        (Js::F32List, Carried) => plain(
+            quote!(Vec<f64>),
+            quote!(#a.iter().map(|x| f64::from(*x)).collect()),
+        ),
+        (Js::Enum, _) => {
+            let e = enum_ident(&vocab.resolve(src_ty));
+            plain(quote!(#e), quote!(#e::from(#d)))
+        }
+        // A value class owns its upstream value, so a nested one is cloned
+        // into its `wrap`.
+        (Js::Value(t), Getter | Method) => {
+            let c = data_ident(t);
+            reaching(quote!(#c), quote!(#c::wrap(#a.clone(), self.doc())), t)
+        }
+        (Js::ValueList(t), Getter) => {
+            let c = data_ident(t);
+            let e = quote!(#a.iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
+            reaching(quote!(Vec<#c>), e, t)
+        }
+        // `into_iter` covers both a slice of values and an iterator of
+        // references.
+        (Js::ValueList(t), Method) => {
+            let c = data_ident(t);
+            let e = quote!(#a.into_iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
+            reaching(quote!(Vec<#c>), e, t)
+        }
+        (Js::OptValue(t), Getter | Method) => {
+            let c = data_ident(t);
+            reaching(
+                quote!(Option<#c>),
+                quote!(#a.map(|x| #c::wrap(x.clone(), self.doc()))),
+                t,
+            )
+        }
+        (Js::PayloadEnumList(t), Getter | Field) => {
+            let info = &vocab.payload[t];
+            let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
+            plain(quote!(Vec<#ety>), quote!(#a.iter().map(#conv).collect()))
+        }
+        (Js::PayloadEnum(t), Getter | Field) => {
+            let info = &vocab.payload[t];
+            let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
+            plain(quote!(#ety), quote!(#conv(#by_ref)))
+        }
+        (Js::Tag4, Getter | Field) => plain(
+            quote!(String),
+            quote!(String::from_utf8_lossy(&#a).into_owned()),
+        ),
+        (Js::PathData, Getter | Field) => {
+            plain(quote!(Vec<PathSegment>), quote!(path_segments(#a)))
+        }
+        (Js::Object(t), Getter | Field) => {
+            let o = data_ident(t);
+            reaching(quote!(#o), quote!(#o::from(#by_ref)), t)
+        }
+        (Js::Object(t), Method | Carried) => {
+            let o = data_ident(t);
+            reaching(quote!(#o), quote!(#o::from(#a)), t)
+        }
+        (Js::ObjectList(t), Getter | Field | Method) => {
+            let o = data_ident(t);
+            reaching(
+                quote!(Vec<#o>),
+                quote!(#a.iter().map(#o::from).collect()),
+                t,
+            )
+        }
+        (Js::OptObject(t), Method) => {
+            let o = data_ident(t);
+            reaching(quote!(Option<#o>), quote!(#a.map(|x| #o::from(x))), t)
+        }
+        (Js::Handle(t), Method) => {
+            let w = wrapper_ident(t);
+            plain(quote!(#w), quote!(#w::wrap(#a.clone(), self.doc())))
+        }
+        (Js::HandleList(t), Method) => {
+            let w = wrapper_ident(t);
+            plain(
+                quote!(Vec<#w>),
+                quote!(#a.iter().map(|x| #w::wrap(x.clone(), self.doc())).collect()),
+            )
+        }
+        // An Arc-held definition is shared by every element referencing it, so
+        // it is named rather than copied -- and the field is called `id`,
+        // because it should say what it is instead of hiding behind `value`.
+        (Js::Handle(t), Carried) if vocab.with_id.contains(t) => Conv {
+            field: Some("id"),
+            ..plain(quote!(String), quote!(#a.id().to_string()))
+        },
+        (Js::TryUnit, Method) => Conv {
+            is_result: true,
+            ..plain(
+                quote!(()),
+                quote!(#a.map_err(|e| Error::from_reason(e.to_string()))),
+            )
+        },
+        _ => return None,
+    })
+}
+
 /// One carried type as an object field: its JS type, and how to convert the
 /// binding `access` into it. None when it cannot be a field at all --
 /// `payload_blocker` is the authority on *whether*, this is the *how*.
@@ -44,36 +233,8 @@ pub fn carried_field(
     ty: &str,
     access: &TokenStream,
 ) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
-    Some(match vocab.classify(ty) {
-        Some(Js::Str) => (None, quote!(String), quote!(#access.to_string())),
-        Some(Js::F32) => (None, quote!(f64), quote!(f64::from(*#access))),
-        Some(Js::F64) => (None, quote!(f64), quote!(*#access)),
-        Some(Js::U8) | Some(Js::U16) => (None, quote!(u32), quote!(u32::from(*#access))),
-        Some(Js::U32) => (None, quote!(u32), quote!(*#access)),
-        Some(Js::I32) => (None, quote!(i32), quote!(*#access)),
-        Some(Js::F32List) => (
-            None,
-            quote!(Vec<f64>),
-            quote!(#access.iter().map(|x| f64::from(*x)).collect()),
-        ),
-        Some(Js::Scalar) => (None, quote!(f64), quote!(f64::from(#access.get()))),
-        Some(Js::Bool) => (None, quote!(bool), quote!(*#access)),
-        Some(Js::Enum) => {
-            let e = enum_ident(&vocab.resolve(ty));
-            (None, quote!(#e), quote!(#e::from(*#access)))
-        }
-        Some(Js::Object(t)) => {
-            let o = data_ident(&t);
-            (None, quote!(#o), quote!(#o::from(#access)))
-        }
-        // An Arc-held definition is shared by every element referencing it, so
-        // it is named rather than copied -- and the field is called `id`, because
-        // it should say what it is instead of hiding behind `value`.
-        Some(Js::Handle(t)) if vocab.with_id.contains(&t) => {
-            (Some("id"), quote!(String), quote!(#access.id().to_string()))
-        }
-        _ => return None,
-    })
+    let c = js_conv(&vocab.classify(ty)?, ty, vocab, access, Site::Carried)?;
+    Some((c.field, c.ty, c.expr))
 }
 
 /// The union for one payload enum: a struct per payload variant, one shared
@@ -625,165 +786,86 @@ pub fn data_members(
             return;
         }
         let id = format_ident!("{}", name);
-        let (jsty, value) = match vocab.classify(ty_s) {
-            Some(Js::F32) => (quote!(f64), quote!(f64::from(#access))),
-            Some(Js::F64) => (quote!(f64), quote!(#access)),
-            Some(Js::U8) | Some(Js::U16) => (quote!(u32), quote!(u32::from(#access))),
-            Some(Js::U32) => (quote!(u32), quote!(#access)),
-            Some(Js::I32) => (quote!(i32), quote!(#access)),
-            Some(Js::Bool) => (quote!(bool), quote!(#access)),
-            Some(Js::Count) => (
-                quote!(u32),
-                quote!(u32::try_from(#access).unwrap_or(u32::MAX)),
-            ),
-            Some(Js::Str) => (quote!(String), quote!(#access.to_string())),
-            Some(Js::Scalar) => (quote!(f64), quote!(f64::from(#access.get()))),
-            Some(Js::IntNewtype(_)) => (quote!(u32), quote!(u32::from(#access.0))),
-            Some(Js::Bbox) => (quote!(BBox), quote!(BBox::from(#access))),
-            Some(Js::Size) => (quote!(Dimensions), quote!(Dimensions::from(#access))),
-            Some(Js::Matrix) => (quote!(Matrix), quote!(Matrix::from(#access))),
-            Some(Js::F32List) => (
-                quote!(Vec<f64>),
-                quote!(#access.iter().map(|v| f64::from(*v)).collect()),
-            ),
-            // A value class owns its upstream value, so a nested one is cloned
-            // into its `wrap`.
-            Some(Js::Value(t)) if nested_values => {
-                let c = data_ident(&t);
-                reached.insert(t.clone());
-                (quote!(#c), quote!(#c::wrap(#access.clone(), self.doc())))
+        let js = vocab.classify(ty_s);
+        // `Image` was a read-only class only because `size` did not map;
+        // mapping it promoted Image to an object holding `ImageKind`, whose
+        // byte variants are classes. Say so instead of relying on luck.
+        if let Some(Js::PayloadEnum(t) | Js::PayloadEnumList(t)) = &js
+            && !nested_values
+            && vocab.payload[t].holds_class(vocab)
+        {
+            skipped.push(Skip::new(name, Some(ty_s), Reason::UnionWithClasses));
+            return;
+        }
+        let site = if nested_values {
+            Site::Getter
+        } else {
+            Site::Field
+        };
+        if let Some(c) = js
+            .as_ref()
+            .and_then(|j| js_conv(j, ty_s, vocab, &access, site))
+        {
+            reached.extend(c.reached);
+            out.push(Member {
+                id,
+                jsty: c.ty,
+                value: c.expr,
+            });
+            return;
+        }
+        // `Option<T>` where T maps stays optional on the JS side.
+        let raw = ty_s
+            .trim_start_matches('&')
+            .strip_prefix("Option<")
+            .and_then(|s| s.strip_suffix('>'));
+        let is_ref = raw.is_some_and(|s| s.starts_with('&'));
+        let inner = raw.map(|s| s.trim_start_matches('&').to_string());
+        match inner
+            .as_deref()
+            .and_then(|i| vocab.classify(i).map(|j| (i, j)))
+        {
+            Some((_, Js::F32)) | Some((_, Js::F64)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<f64>),
+                    value: quote!(#access.map(f64::from)),
+                });
             }
-            Some(Js::ValueList(t)) if nested_values => {
-                let c = data_ident(&t);
-                reached.insert(t.clone());
-                (
-                    quote!(Vec<#c>),
-                    quote!(#access.iter().map(|x| #c::wrap(x.clone(), self.doc())).collect()),
-                )
+            Some((_, Js::Scalar)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<f64>),
+                    value: quote!(#access.map(|x| f64::from(x.get()))),
+                });
             }
-            Some(Js::OptValue(t)) if nested_values => {
-                let c = data_ident(&t);
-                reached.insert(t.clone());
-                (
-                    quote!(Option<#c>),
-                    quote!(#access.map(|x| #c::wrap(x.clone(), self.doc()))),
-                )
+            Some((_, Js::F32List)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<Vec<f64>>),
+                    value: quote!(
+                        #access.map(|v| v.iter().map(|x| f64::from(*x)).collect())
+                    ),
+                });
             }
-            // `Image` was a read-only class only because `size` did not map;
-            // mapping it promoted Image to an object holding `ImageKind`, whose
-            // byte variants are classes. Say so instead of relying on luck.
-            Some(Js::PayloadEnum(t)) | Some(Js::PayloadEnumList(t))
-                if !nested_values && vocab.payload[&t].holds_class(vocab) =>
-            {
-                skipped.push(Skip::new(name, Some(ty_s), Reason::UnionWithClasses));
-                return;
-            }
-            Some(Js::PayloadEnumList(t)) => {
-                let info = &vocab.payload[&t];
-                let (ety, conv) = (info.either_ty(&t), info.conv_ident(&t));
-                (
-                    quote!(Vec<#ety>),
-                    quote!(#access.iter().map(#conv).collect()),
-                )
-            }
-            Some(Js::PayloadEnum(t)) => {
-                let info = &vocab.payload[&t];
-                let (ety, conv) = (info.either_ty(&t), info.conv_ident(&t));
-                let arg = if ty_s.starts_with('&') {
-                    quote!(#access)
-                } else {
-                    quote!(&#access)
-                };
-                (quote!(#ety), quote!(#conv(#arg)))
-            }
-            Some(Js::Tag4) => (
-                quote!(String),
-                quote!(String::from_utf8_lossy(&#access).into_owned()),
-            ),
-            Some(Js::PathData) => (quote!(Vec<PathSegment>), quote!(path_segments(#access))),
-            Some(Js::Enum) => {
-                let e = enum_ident(&vocab.resolve(ty_s));
-                (quote!(#e), quote!(#e::from(#access)))
-            }
-            Some(Js::Object(t)) => {
+            Some((_, Js::Object(t))) => {
                 let o = data_ident(&t);
-                reached.insert(t.clone());
-                let arg = if ty_s.starts_with('&') {
-                    quote!(#access)
+                reached.insert(t);
+                let value = if is_ref {
+                    quote!(#access.map(#o::from))
                 } else {
-                    quote!(&#access)
+                    quote!(#access.map(|x| #o::from(&x)))
                 };
-                (quote!(#o), quote!(#o::from(#arg)))
-            }
-            Some(Js::ObjectList(t)) => {
-                let o = data_ident(&t);
-                reached.insert(t.clone());
-                (
-                    quote!(Vec<#o>),
-                    quote!(#access.iter().map(#o::from).collect()),
-                )
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<#o>),
+                    value,
+                });
             }
             _ => {
-                // `Option<T>` where T maps stays optional on the JS side.
-                let raw = ty_s
-                    .trim_start_matches('&')
-                    .strip_prefix("Option<")
-                    .and_then(|s| s.strip_suffix('>'));
-                let is_ref = raw.is_some_and(|s| s.starts_with('&'));
-                let inner = raw.map(|s| s.trim_start_matches('&').to_string());
-                match inner
-                    .as_deref()
-                    .and_then(|i| vocab.classify(i).map(|j| (i, j)))
-                {
-                    Some((_, Js::F32)) | Some((_, Js::F64)) => {
-                        out.push(Member {
-                            id,
-                            jsty: quote!(Option<f64>),
-                            value: quote!(#access.map(f64::from)),
-                        });
-                        return;
-                    }
-                    Some((_, Js::Scalar)) => {
-                        out.push(Member {
-                            id,
-                            jsty: quote!(Option<f64>),
-                            value: quote!(#access.map(|x| f64::from(x.get()))),
-                        });
-                        return;
-                    }
-                    Some((_, Js::F32List)) => {
-                        out.push(Member {
-                            id,
-                            jsty: quote!(Option<Vec<f64>>),
-                            value: quote!(
-                                #access.map(|v| v.iter().map(|x| f64::from(*x)).collect())
-                            ),
-                        });
-                        return;
-                    }
-                    Some((_, Js::Object(t))) => {
-                        let o = data_ident(&t);
-                        reached.insert(t);
-                        let value = if is_ref {
-                            quote!(#access.map(#o::from))
-                        } else {
-                            quote!(#access.map(|x| #o::from(&x)))
-                        };
-                        out.push(Member {
-                            id,
-                            jsty: quote!(Option<#o>),
-                            value,
-                        });
-                        return;
-                    }
-                    _ => {
-                        skipped.push(Skip::new(name, Some(ty_s), Reason::Member));
-                        return;
-                    }
-                }
+                skipped.push(Skip::new(name, Some(ty_s), Reason::Member));
             }
-        };
-        out.push(Member { id, jsty, value });
+        }
     };
 
     // Fields and accessors both, not one or the other.
@@ -1267,35 +1349,19 @@ pub fn map_methods(
                 continue;
             }
 
+            // What the method returns, settled before anything is built: a
+            // return with no JS form skips the method.
             let ret = match &f.sig.output {
-                ReturnType::Default => Ret::Unit,
+                ReturnType::Default => None,
                 ReturnType::Type(_, t) => {
                     let ty = ty_str(t);
                     match vocab.classify(&ty) {
-                        Some(Js::Bool) => Ret::Bool,
-                        Some(Js::Count) => Ret::Count,
-                        Some(Js::Str) => Ret::Text,
-                        Some(Js::Bbox) => Ret::Box_,
-                        Some(Js::OptBbox) => Ret::OptBox,
-                        Some(Js::TryUnit) => Ret::TryUnit,
-                        Some(Js::F32) | Some(Js::F64) => Ret::Num,
-                        // The same integers `data_members` maps; i32 apart,
-                        // since the `u32` cast would turn negatives into MAX.
-                        Some(Js::U32) | Some(Js::U8) | Some(Js::U16) => Ret::Int,
-                        Some(Js::I32) => Ret::SignedInt,
-                        Some(Js::Matrix) => Ret::Matrix,
-                        Some(Js::Scalar) => Ret::Scalar,
-                        Some(Js::Size) => Ret::Dims,
-                        Some(Js::Enum) => Ret::Enum(format_ident!("{}", vocab.resolve(&ty))),
-                        Some(Js::Handle(t)) => Ret::Handle(t),
-                        Some(Js::HandleList(t)) => Ret::HandleList(t),
-                        Some(Js::Object(t)) => Ret::Object(t),
-                        Some(Js::ObjectList(t)) => Ret::ObjectList(t),
-                        Some(Js::Value(t)) => Ret::Value(t),
-                        Some(Js::ValueList(t)) => Ret::ValueList(t),
-                        Some(Js::OptObject(t)) => Ret::OptObject(t),
-                        Some(Js::OptValue(t)) => Ret::OptValue(t),
-                        Some(Js::IntNewtype(_)) => Ret::IntNewtype,
+                        Some(js)
+                            if js_conv(&js, &ty, vocab, &TokenStream::new(), Site::Method)
+                                .is_some() =>
+                        {
+                            Some((js, ty))
+                        }
                         _ => {
                             skipped.push(Skip::new(&name, Some(&ty), Reason::Returns));
                             continue;
@@ -1303,6 +1369,7 @@ pub fn map_methods(
                     }
                 }
             };
+            let unit = ret.is_none();
 
             let ident = &f.sig.ident;
             let params: Vec<TokenStream> = args
@@ -1341,121 +1408,33 @@ pub fn map_methods(
             let doc = docs(&f.attrs);
             let call = quote!(#receiver.#ident(#(#fwd),*));
 
-            // One place decides the JS type and the expression producing it.
-            let (ret_ty, value, already_result) = match ret {
-                Ret::Unit => (quote!(()), quote!(#call), false),
-                Ret::Bool => (quote!(bool), quote!(#call), false),
-                Ret::Count => (
-                    quote!(u32),
-                    quote!(u32::try_from(#call).unwrap_or(u32::MAX)),
-                    false,
-                ),
-                Ret::Text => (quote!(String), quote!(#call.to_string()), false),
-                Ret::Box_ => (quote!(BBox), quote!(BBox::from(#call)), false),
-                Ret::OptBox => (quote!(Option<BBox>), quote!(#call.map(BBox::from)), false),
-                Ret::Num => (quote!(f64), quote!(f64::from(#call)), false),
-                Ret::IntNewtype => (quote!(u32), quote!(u32::from(#call.0)), false),
-                Ret::Object(ref t) => {
-                    let o = data_ident(t);
-                    (quote!(#o), quote!(#o::from(#call)), false)
+            // The JS type and the expression producing it: the one table.
+            let (ret_ty, value, already_result) = match &ret {
+                None => (quote!(()), quote!(#call), false),
+                Some((js, ty)) => {
+                    let c = js_conv(js, ty, vocab, &call, Site::Method).expect("checked above");
+                    (c.ty, c.expr, c.is_result)
                 }
-                Ret::ObjectList(ref t) => {
-                    let o = data_ident(t);
-                    (
-                        quote!(Vec<#o>),
-                        quote!(#call.iter().map(#o::from).collect()),
-                        false,
-                    )
-                }
-                Ret::OptObject(ref t) => {
-                    let o = data_ident(t);
-                    (
-                        quote!(Option<#o>),
-                        quote!(#call.map(|x| #o::from(x))),
-                        false,
-                    )
-                }
-                Ret::OptValue(ref t) => {
-                    let w = data_ident(t);
-                    (
-                        quote!(Option<#w>),
-                        quote!(#call.map(|x| #w::wrap(x.clone(), self.doc()))),
-                        false,
-                    )
-                }
-                Ret::Value(ref t) => {
-                    let w = data_ident(t);
-                    (
-                        quote!(#w),
-                        quote!(#w::wrap(#call.clone(), self.doc())),
-                        false,
-                    )
-                }
-                Ret::ValueList(ref t) => {
-                    let w = data_ident(t);
-                    (
-                        quote!(Vec<#w>),
-                        // `into_iter` covers both a slice of values and an
-                        // iterator of references.
-                        quote!(#call.into_iter().map(|x| #w::wrap(x.clone(), self.doc())).collect()),
-                        false,
-                    )
-                }
-                Ret::Int => (
-                    quote!(u32),
-                    quote!(u32::try_from(#call).unwrap_or(u32::MAX)),
-                    false,
-                ),
-                Ret::SignedInt => (quote!(i32), quote!(#call), false),
-                Ret::Matrix => (quote!(Matrix), quote!(Matrix::from(#call)), false),
-                Ret::Scalar => (quote!(f64), quote!(f64::from(#call.get())), false),
-                Ret::Dims => (quote!(Dimensions), quote!(Dimensions::from(#call)), false),
-                Ret::Enum(ref e) => (quote!(#e), quote!(#e::from(#call)), false),
-                Ret::Handle(ref t) => {
-                    let w = wrapper_ident(t);
-                    (
-                        quote!(#w),
-                        quote!(#w::wrap(#call.clone(), self.doc())),
-                        false,
-                    )
-                }
-                Ret::HandleList(ref t) => {
-                    let w = wrapper_ident(t);
-                    (
-                        quote!(Vec<#w>),
-                        quote!(#call.iter().map(|x| #w::wrap(x.clone(), self.doc())).collect()),
-                        false,
-                    )
-                }
-                Ret::TryUnit => (
-                    quote!(()),
-                    quote!(#call.map_err(|e| Error::from_reason(e.to_string()))),
-                    true,
-                ),
             };
 
             // TryUnit's value is already the Result.
-            let ok_value = if matches!(ret, Ret::TryUnit) {
+            let ok_value = if already_result {
                 value.clone()
             } else {
                 quote!(Ok(#value))
             };
-            let arrow = if matches!(ret, Ret::Unit) {
-                quote!()
-            } else {
-                quote!(-> #ret_ty)
-            };
+            let arrow = if unit { quote!() } else { quote!(-> #ret_ty) };
             // Every path from here emits the method.
             taken.insert(name.clone());
             if let Some((p, n)) = gate {
                 let (ret_ty, last) = if optional {
-                    let v = if matches!(ret, Ret::TryUnit) {
+                    let v = if already_result {
                         quote!(#value.map(Some))
                     } else {
                         quote!(Ok(Some(#value)))
                     };
                     (quote!(Option<#ret_ty>), v)
-                } else if matches!(ret, Ret::Unit) {
+                } else if unit {
                     (quote!(#ret_ty), quote! { #value; Ok(()) })
                 } else {
                     (quote!(#ret_ty), ok_value)
@@ -1484,7 +1463,7 @@ pub fn map_methods(
                 continue;
             }
             code.extend(if optional {
-                let value = if matches!(ret, Ret::TryUnit) {
+                let value = if already_result {
                     quote!(#value.map(Some))
                 } else {
                     quote!(Ok(Some(#value)))

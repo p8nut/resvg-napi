@@ -36,7 +36,7 @@ resvg = { version = "0.49.0", default-features = false, features = ["svgz", "tex
 svgtypes = "0.16.1"
 # usvg/resvg report recoverable problems through `log`; nothing consumes it by
 # default, so the messages are lost. We install a collector.
-log = "0.4"
+log = "0.4.8"
 # Image headers are sized before resvg allocates their pixels; already in the
 # graph through usvg.
 imagesize = "0.15"
@@ -52,8 +52,8 @@ resvg = { version = "0.49.0", features = ["memmap-fonts"] }
 [build-dependencies]
 napi-build = "2.6.0"
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
-quote = "1.0"
-proc-macro2 = "1.0"
+quote = "1.0.35"
+proc-macro2 = "1.0.91"
 
 [profile.release]
 lto = true

@@ -102,6 +102,20 @@ jobs:
               'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(t=>t.target).join("\n")))'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # napi-derive's expansion calls napi API without depending on napi, so
+      # cargo happily resolves a pair that does not build: derive 3.6.13 calls
+      # defer_native_borrow_scope, which napi only has from 3.15.0. Holding the
+      # declared minimums to the lockfile keeps them a pair this CI has built;
+      # red here means: raise them in the same pull request as the lock.
+      - name: napi minimums match Cargo.lock
+        run: |
+          for spec in napi:Cargo.toml napi-derive:Cargo.toml napi:crates/napi-support/Cargo.toml; do
+            c=${spec%%:*}; f=${spec#*:}
+            locked=$(awk -v n="$c" '$0 == "name = \"" n "\"" { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
+            declared=$(sed -nE "s/^$c = (\{ version = )?\"([^\"]*)\".*/\2/p" "$f")
+            echo "$f $c: declares $declared, locked $locked"
+            [ "$declared" = "$locked" ] || { echo "::error file=$f::raise $c to $locked"; exit 1; }
+          done
       # The scripts' own selftests: pure JS on node builtins, no binary and no
       # install, so once here rather than on every test-matrix entry. Offline:
       # check-pins covers its decision, including the path where it reports the
@@ -520,3 +534,12 @@ jobs:
             | sed -n '/^\[pkg\.rustc\]/,/^version/s/^version = "\([0-9.]*\).*/\1/p')
           echo "pinned $pinned, latest stable $latest"
           [ -n "$latest" ] && [ "$pinned" = "$latest" ]
+      # The minimums in both Cargo.toml files, not just the lockfile, must
+      # build: each direct dependency at its declared floor, the rest at their
+      # newest. Floors left at "1.0" went unnoticed until one sat below what
+      # syn 3 requires. Nightly only resolves; the pinned toolchain builds.
+      - name: Declared minimum versions build
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo +nightly update -Z direct-minimal-versions
+          cargo check --workspace

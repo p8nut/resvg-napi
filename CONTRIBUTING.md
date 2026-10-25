@@ -133,7 +133,7 @@ cargo fmt --all --check
 cargo clippy --workspace --release --all-targets -- -D warnings
 npm run check:pins:selftest      # the dependency holds, offline half
 npm run check:package:selftest   # what publish would ship, offline half
-npm run check:resvg:selftest     # the version probe the weekly bump uses
+npm run check:resvg:selftest     # the version probe the daily bump uses
 npm run report:selftest          # the codegen report snapshot
 npm run conformance:selftest     # the corpus runner, offline half
 npm run ci:targets:selftest      # the build matrix and its tiers

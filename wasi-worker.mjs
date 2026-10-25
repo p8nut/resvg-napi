@@ -16,8 +16,9 @@ try {
     instantiateNapiModuleSync,
     MessageHandler,
     getDefaultContext,
+    emnapiAsyncWorkPlugin,
+    emnapiTSFNPlugin,
   } = require('@napi-rs/wasm-runtime')
-  const { asyncWork: emnapiAsyncWorkPlugin, tsfn: emnapiTSFNPlugin } = require('@emnapi/core/plugins')
 
   if (parentPort) {
     parentPort.on('message', (data) => {

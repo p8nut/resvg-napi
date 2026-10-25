@@ -132,7 +132,6 @@ there is none. The env-var prefix is POSIX-shell syntax; on Windows use
 cargo fmt --all --check
 cargo clippy --workspace --release --all-targets -- -D warnings
 npm run check:pins:selftest      # the dependency holds, offline half
-npm run wasi-plugins:selftest    # the WASI loader rewrite (emnapi 2 beta)
 npm run check:package:selftest   # what publish would ship, offline half
 npm run check:resvg:selftest     # the version probe the weekly bump uses
 npm run report:selftest          # the codegen report snapshot

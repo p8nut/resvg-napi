@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           # Every `resvg = ...` line, string or table form (there are two).
           sed -i -E 's/^(resvg = (\{ version = )?")[^"]*"/\1${{ steps.probe.outputs.latest }}"/' Cargo.toml
-          npm run build  # napi build, then the WASI plugin rewrite
+          npm run build
           # The report diff is what tells a reviewer whether a red PR means the
           # surface moved benignly or something broke. Captured before the
           # snapshot is rewritten, because afterwards there is nothing to diff.

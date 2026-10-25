@@ -22,8 +22,9 @@ on:
       - '!LICENSE*'
       - '**/THIRD-PARTY-NOTICES.md'
   schedule:
-    # Mondays, 07:00 UTC -- asks upstream whether the Cargo.toml pins can go.
-    - cron: '0 7 * * 1'
+    # Daily, 07:00 UTC -- asks upstream whether the pins can go and whether
+    # Cargo.lock or the toolchain moved. A red run repeats daily until acted on.
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 # A second push to a branch makes the first run's answer worthless, but it kept
@@ -63,7 +64,7 @@ jobs:
   # package.json's `napi.targets` rather than being a second copy of it.
   plan:
     name: plan
-    # The Monday cron is for `pins` and `lock` alone. Without this it also
+    # The daily cron is for `pins` and `lock` alone. Without this it also
     # rebuilt and retested all thirteen targets on an unchanged main; every job
     # below `needs` plan, so skipping it skips them.
     if: github.event_name != 'schedule'
@@ -511,7 +512,7 @@ jobs:
 
   # Dependabot leaves Cargo alone (see .github/dependabot.yml) and resvg.yml
   # only watches resvg, so a semver-compatible transitive fix could sit unused
-  # forever. Red on a Monday means: run `cargo update`, regenerate the notices,
+  # forever. Red means: run `cargo update`, regenerate the notices,
   # open a pull request. The held crates come from check-pins.mjs, which
   # explains each hold and watches for its end.
   lock:

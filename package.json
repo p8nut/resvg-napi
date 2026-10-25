@@ -17,22 +17,21 @@
   ],
   "main": "index.js",
   "scripts": {
-    "build": "napi build --platform --release && node scripts/wasi-plugins.mjs",
+    "build": "napi build --platform --release",
     "test": "npm run test:node && npm run test:examples",
     "test:wasi": "NAPI_RS_NATIVE_LIBRARY_PATH=./resvg-napi.wasi.cjs npm run test:node",
     "test:node": "node --test",
     "test:examples": "node demo/render.mjs examples/roster.svg --strict && node demo/render.mjs examples/badge-sheet.svg --strict && node demo/render.mjs examples/photo-card.svg --strict && node demo/render.mjs examples/sheet.svg --lang fr --strict",
     "typecheck": "tsc",
-    "build:debug": "napi build --platform && node scripts/wasi-plugins.mjs",
+    "build:debug": "napi build --platform",
     "artifacts": "napi artifacts",
     "create-npm-dirs": "napi create-npm-dirs",
     "version": "napi version",
     "demo": "npm run demo:build && node demo/serve.mjs",
     "demo:build": "npm run demo:wasm && node demo/build.mjs",
-    "demo:wasm": "napi build --platform --release --target wasm32-wasip1-threads && node scripts/wasi-plugins.mjs",
+    "demo:wasm": "napi build --platform --release --target wasm32-wasip1-threads",
     "check:pins": "node scripts/check-pins.mjs",
     "check:pins:selftest": "node scripts/check-pins.mjs --selftest",
-    "wasi-plugins:selftest": "node scripts/wasi-plugins.mjs --selftest",
     "check:package": "node scripts/check-package.mjs",
     "check:package:selftest": "node scripts/check-package.mjs --selftest",
     "report": "node scripts/codegen-report.mjs",
@@ -51,7 +50,7 @@
   "devDependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/space-mono": "^5.3.0",
-    "@napi-rs/cli": "^3.10.8",
+    "@napi-rs/cli": "^3.10.9",
     "@types/node": "^26.6.5",
     "emnapi": "2.0.0-beta.2",
     "esbuild": "^0.28.2",
@@ -125,7 +124,7 @@
   "dependencies": {
     "@emnapi/core": "2.0.0-beta.2",
     "@emnapi/runtime": "2.0.0-beta.2",
-    "@napi-rs/wasm-runtime": "1.2.5"
+    "@napi-rs/wasm-runtime": "1.2.6"
   },
   "browser": "browser.js",
   "publishConfig": {

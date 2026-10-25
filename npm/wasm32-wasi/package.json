@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi-wasm32-wasi",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "main": "resvg-napi.wasi.cjs",
   "files": [
     "LICENSE-APACHE",

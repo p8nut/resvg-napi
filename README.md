@@ -48,7 +48,7 @@ as you like.
 `params` carries `width` / `height` / `scale`, a `background` colour, a
 `crop` box and `maxPixels`, the canvas size past which a render throws instead
 of allocating (default 2^26, an 8192×8192 canvas or 256 MiB; a group with a
-filter or opacity can take a layer of up to 25× that, so raise it with care).
+filter or opacity can take a layer of 25× that or more, so raise it with care).
 `Resvg.parseAsync` moves the parse off the loop too.
 
 A document usvg refuses throws (or rejects) with usvg's own reason as

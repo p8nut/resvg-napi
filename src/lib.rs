@@ -1497,8 +1497,9 @@ pub struct RenderParams {
     #[doc = ""]
     #[doc = " It bounds the canvas only: a group with a filter, opacity, mask or"]
     #[doc = " clip path renders through a layer of its own, which resvg lets grow"]
-    #[doc = " to 5x the canvas each way. Raise it knowing a render can then"]
-    #[doc = " allocate up to 25x this cap."]
+    #[doc = " to 5x the canvas each way, measured in the group's own coordinates:"]
+    #[doc = " a rotated or skewed group gets the box around that, larger still."]
+    #[doc = " Raise it knowing a render can then allocate many times this cap."]
     pub max_pixels: Option<f64>,
 }
 #[doc = " An affine transform. Field names and order are tiny-skia's."]

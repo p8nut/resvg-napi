@@ -1536,8 +1536,9 @@ export interface RenderParams {
    *
    * It bounds the canvas only: a group with a filter, opacity, mask or
    * clip path renders through a layer of its own, which resvg lets grow
-   * to 5x the canvas each way. Raise it knowing a render can then
-   * allocate up to 25x this cap.
+   * to 5x the canvas each way, measured in the group's own coordinates:
+   * a rotated or skewed group gets the box around that, larger still.
+   * Raise it knowing a render can then allocate many times this cap.
    */
   maxPixels?: number
 }

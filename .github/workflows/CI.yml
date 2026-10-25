@@ -480,9 +480,9 @@ jobs:
           TAG: ${{ github.ref_name }}
 
   # Fails when a dependency hold can be lifted: emnapi off its 2.0 prerelease
-  # (a stable 2.x, or a wasm-runtime that reads the renamed loader API), or
-  # flate2 once png leaves miniz_oxide 0.8. A red scheduled run is the signal
-  # -- nothing else watches for it. scripts/check-pins.mjs explains each.
+  # once a stable 2.x is out and wasm-runtime accepts it, or flate2 once png
+  # leaves miniz_oxide 0.8. A red scheduled run is the signal -- nothing else
+  # watches for it. scripts/check-pins.mjs explains each.
   pins:
     name: pins still needed
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

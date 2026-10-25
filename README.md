@@ -6,7 +6,7 @@
 
 Render an SVG to PNG, and read back what the renderer made of the document — the
 resolved tree, text metrics, paint, geometry. Node.js bindings for
-[resvg](https://github.com/linebender/resvg) 0.48, generated from the upstream
+[resvg](https://github.com/linebender/resvg) 0.49, generated from the upstream
 Rust sources, so the TypeScript surface is usvg's own, names and doc comments
 included.
 

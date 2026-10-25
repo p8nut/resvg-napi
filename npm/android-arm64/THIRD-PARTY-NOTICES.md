@@ -44,7 +44,7 @@ Copyright (c) 2019 Daniel "Lokathor" Gee
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014 Alex Crichton
 
-### crc32fast 1.5.2
+### crc32fast 1.5.3
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright {yyyy} {name of copyright owner}
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
@@ -139,7 +139,7 @@ Copyright (c) The Rust Project Developers
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014 The Rust Project Developers
 
-### memmap2 0.9.11
+### memmap2 0.9.12
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright [2015] [Dan Burkert]
 Copyright (c) 2020 Yevhenii Reizner
@@ -195,7 +195,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### resvg 0.48.1
+### resvg 0.49.0
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright 2017 the Resvg Authors
 
@@ -203,7 +203,7 @@ Copyright 2017 the Resvg Authors
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 Yevhenii Reizner
 
-### roxmltree 0.21.1
+### roxmltree 0.21.2
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 Yevhenii Reizner
 
@@ -229,7 +229,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### smallvec 1.16.3
+### smallvec 1.16.4
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 The Servo Project Developers
 
@@ -267,7 +267,7 @@ Copyright (c) 2015 The Rust Project Developers
 Offered as `MIT/Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 Reizner Evgeniy
 
-### usvg 0.48.1
+### usvg 0.49.0
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright 2017 the Resvg Authors
 
@@ -339,16 +339,16 @@ Copyright (c) 2017 Maiddog
 Offered as `Unlicense OR MIT`; listed here under MIT.
 Copyright (c) 2015 Andrew Gallant
 
-### napi 3.14.2
+### napi 3.15.0
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive 3.6.12
+### napi-derive 3.6.13
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive-backend 6.1.5
+### napi-derive-backend 6.1.6
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-sys 3.4.0
+### napi-sys 3.4.1
 No copyright line in the published crate; MIT per its manifest.
 
 ### pico-args 0.5.0

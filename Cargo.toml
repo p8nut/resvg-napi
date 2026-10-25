@@ -27,7 +27,7 @@ napi-derive = "3.6.12"
 # mmap: WASI does not, and with it fontdb's load_font_file answered
 # "unsupported" while load_fonts_dir loaded nothing and said nothing. The
 # generator knows (build/config.rs FEATURES) and gates what depends on it.
-resvg = { version = "0.48.1", default-features = false, features = ["svgz", "text", "system-fonts", "raster-images"] }
+resvg = { version = "0.49.0", default-features = false, features = ["svgz", "text", "system-fonts", "raster-images"] }
 # resvg's own CSS colour parser, same version it uses internally.
 svgtypes = "0.16.1"
 # usvg/resvg report recoverable problems through `log`; nothing consumes it by
@@ -43,7 +43,7 @@ napi-support = { path = "crates/napi-support" }
 
 # Resolver 2 keeps a target table's features to that target.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-resvg = { version = "0.48.1", features = ["memmap-fonts"] }
+resvg = { version = "0.49.0", features = ["memmap-fonts"] }
 
 [build-dependencies]
 napi-build = "2.6.0"

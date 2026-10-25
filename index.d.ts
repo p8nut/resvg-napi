@@ -553,6 +553,7 @@ export declare class Resvg {
    *
    * Conceptually, this is `stroke_bounding_box` expanded and/or clipped
    * by `filters_bounding_box`, but also including all the children.
+   * Groups without filters are additionally clipped by their clip path.
    * This is the bounding box `resvg` will later use to allocate layers/pixmaps
    * during isolated groups rendering.
    *
@@ -751,6 +752,7 @@ export declare class SvgNode {
    *
    * Conceptually, this is `stroke_bounding_box` expanded and/or clipped
    * by `filters_bounding_box`, but also including all the children.
+   * Groups without filters are additionally clipped by their clip path.
    * This is the bounding box `resvg` will later use to allocate layers/pixmaps
    * during isolated groups rendering.
    *
@@ -857,7 +859,7 @@ export interface Blend {
  *
  * `mix-blend-mode` attribute in the SVG.
  */
-export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'colorDodge' | 'colorBurn' | 'hardLight' | 'softLight' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity'
+export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'colorDodge' | 'colorBurn' | 'hardLight' | 'softLight' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity' | 'plusLighter'
 
 /** Plain view of a `Color`. */
 export interface Color {
@@ -938,7 +940,7 @@ export interface CompositeOperatorArithmetic {
 /** The payload-free variants of `CompositeOperator`. */
 export interface CompositeOperatorPlain {
   /** Discriminant. Narrow on this. */
-  type: 'over' | 'in' | 'out' | 'atop' | 'xor'
+  type: 'over' | 'in' | 'out' | 'atop' | 'xor' | 'lighter'
 }
 
 /** Plain view of a `ConvolveMatrix`. */

@@ -254,6 +254,7 @@ pub enum BlendMode {
     Saturation,
     Color,
     Luminosity,
+    PlusLighter,
 }
 impl From<BlendMode> for usvg::BlendMode {
     fn from(v: BlendMode) -> Self {
@@ -274,6 +275,7 @@ impl From<BlendMode> for usvg::BlendMode {
             BlendMode::Saturation => <usvg::BlendMode>::Saturation,
             BlendMode::Color => <usvg::BlendMode>::Color,
             BlendMode::Luminosity => <usvg::BlendMode>::Luminosity,
+            BlendMode::PlusLighter => <usvg::BlendMode>::PlusLighter,
         }
     }
 }
@@ -296,6 +298,7 @@ impl From<usvg::BlendMode> for BlendMode {
             <usvg::BlendMode>::Saturation => BlendMode::Saturation,
             <usvg::BlendMode>::Color => BlendMode::Color,
             <usvg::BlendMode>::Luminosity => BlendMode::Luminosity,
+            <usvg::BlendMode>::PlusLighter => BlendMode::PlusLighter,
         }
     }
 }
@@ -2845,7 +2848,7 @@ fn color_matrix_kind_to_js(
 #[derive(Clone)]
 pub struct CompositeOperatorPlain {
     #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'over' | 'in' | 'out' | 'atop' | 'xor'")]
+    #[napi(ts_type = "'over' | 'in' | 'out' | 'atop' | 'xor' | 'lighter'")]
     pub r#type: String,
 }
 #[doc = " `CompositeOperator::Arithmetic`."]
@@ -2878,6 +2881,9 @@ fn composite_operator_to_js(
         }),
         usvg::filter::CompositeOperator::Xor => Either::A(CompositeOperatorPlain {
             r#type: "xor".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Lighter => Either::A(CompositeOperatorPlain {
+            r#type: "lighter".to_string(),
         }),
         usvg::filter::CompositeOperator::Arithmetic { k1, k2, k3, k4 } => {
             Either::B(CompositeOperatorArithmetic {
@@ -4449,6 +4455,7 @@ impl SvgNode {
     #[doc = ""]
     #[doc = " Conceptually, this is `stroke_bounding_box` expanded and/or clipped"]
     #[doc = " by `filters_bounding_box`, but also including all the children."]
+    #[doc = " Groups without filters are additionally clipped by their clip path."]
     #[doc = " This is the bounding box `resvg` will later use to allocate layers/pixmaps"]
     #[doc = " during isolated groups rendering."]
     #[doc = ""]
@@ -4834,6 +4841,7 @@ impl Resvg {
     #[doc = ""]
     #[doc = " Conceptually, this is `stroke_bounding_box` expanded and/or clipped"]
     #[doc = " by `filters_bounding_box`, but also including all the children."]
+    #[doc = " Groups without filters are additionally clipped by their clip path."]
     #[doc = " This is the bounding box `resvg` will later use to allocate layers/pixmaps"]
     #[doc = " during isolated groups rendering."]
     #[doc = ""]

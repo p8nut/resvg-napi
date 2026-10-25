@@ -48,9 +48,9 @@ payload enum Family not mapped: Name carries &'astr, and it maps to None
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
 payload enum Source not mapped: SharedFile carries 2 unnamed fields, and a tuple has no names to give them
 payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, ImageKind, Input, Kind, LightSource, Paint, TextFlow, TransferFunction
-payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(6), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5)
+payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5)
 usvg precision clamp derived from POW_VEC: 12
-usvg sources: usvg-0.48.1
+usvg sources: usvg-0.49.0
 usvg::ClipPath method covered by the content view: root (returns &Group)
 usvg::ClipPath method covered by the template: clip_path (returns Option<&ClipPath>)
 usvg::Group (on SvgNode) method covered by the template, not generated: children (returns &[Node])

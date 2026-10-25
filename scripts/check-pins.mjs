@@ -7,7 +7,9 @@
 // 1. emnapi on a 2.0 prerelease, 2.0.0-beta.2, in both package.json files.
 //    Current napi links the wasm target against the emnapi 2 ABI, so 1.x is
 //    out. It ends when emnapi ships a stable 2.x: move both package.json
-//    files to it.
+//    files to it, together with an @napi-rs/wasm-runtime that accepts it --
+//    1.2.6 takes emnapi 2 as a peer at exactly 2.0.0-beta.2, so emnapi alone
+//    is a peer conflict. Dependabot's `napi` group already moves them as one.
 //
 // 2. flate2, held at 1.1.9 in Cargo.lock. 1.1.10 requires miniz_oxide ^0.9
 //    while png still requires ^0.8, so taking it compiles two DEFLATE

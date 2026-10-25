@@ -15,8 +15,8 @@ name: resvg
 
 on:
   schedule:
-    # Daily, 07:15 UTC -- a quarter hour after Monday's pins check, so a red
-    # run from either is unambiguous. Weekly, a release could wait up to a
+    # Daily, 07:15 UTC -- a quarter hour after CI's pins and lock check, so a
+    # red run from either is unambiguous. Weekly, a release could wait up to a
     # week to be seen; the probe is one crates.io request, and an open bump
     # branch makes the rest a no-op.
     - cron: '15 7 * * *'

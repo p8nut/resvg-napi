@@ -1,6 +1,6 @@
 # Only what nothing else watches. The actions are pinned to major tags and would
 # otherwise sit on v7 forever, and the dev dependencies rot quietly. Cargo is
-# left out on purpose: .github/workflows/resvg.yml asks upstream every Monday
+# left out on purpose: .github/workflows/resvg.yml asks upstream every day
 # whether the resvg version moved, and the `pins` job in CI.yml fails when the
 # emnapi and napi-build pins in Cargo.toml stop being necessary. Dependabot has
 # no way to know that and would only propose breaking them.
@@ -9,7 +9,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
     groups:
       actions:
         patterns: ['*']
@@ -23,7 +23,7 @@ updates:
     directories: [/, /npm/wasm32-wasi]
     versioning-strategy: increase
     schedule:
-      interval: weekly
+      interval: daily
     allow:
       - dependency-type: development
       # Runtime dependencies, and the three the builder insists agree.

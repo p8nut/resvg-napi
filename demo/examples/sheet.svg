@@ -59,14 +59,14 @@
     {%- endcomment -%}
     {% if row.dept != lastDept %}
     <text x="20" y="{{ y | minus: 6 }}" class="accent" font-size="9"
-          letter-spacing=".1em">{{ row.dept | upcase | escape }}</text>
+          letter-spacing=".1em">{{ row.dept | upcase }}</text>
     {% assign lastDept = row.dept %}
     {% endif %}
 
     <text x="20" y="{{ y | plus: 12 }}" class="value" font-size="14"
-          >{{ row.name | fit: 210, 14 | escape }}</text>
+          >{{ row.name | fit: 210, 14 }}</text>
     <text x="238" y="{{ y | plus: 12 }}" class="label" font-size="9"
-          >{{ row.code | escape }}</text>
+          >{{ row.code }}</text>
 
     <!-- the bar is clamped, so bad data cannot draw outside the plate -->
     {%- assign bar = row.score | times: 2.4 | at_most: 250 | at_least: 4 | round -%}
@@ -105,7 +105,7 @@
 
   <text x="200" y="360" class="label">DEPARTMENTS · uniq, sort_natural</text>
   <text x="200" y="380" class="value" font-size="11"
-        >{{ departments | join: " · " | escape }}</text>
+        >{{ departments | join: " · " }}</text>
   {%- comment -%}
     `increment` prints every value it returns, so the counting happens inside a
     capture and only the total is drawn.
@@ -121,7 +121,7 @@
        the QR text -->
   {%- assign target = base | default: "https://example.test/sheet" | append: "?page=" | append: page -%}
   <svg id="qr" x="536" y="348" width="64" height="64"
-    >{{- target | qr: '#e8eff3', '#00000000' -}}</svg>
+    >{{- target | qr: '#e8eff3', '#00000000' | raw -}}</svg>
   <text x="424" y="412" class="label">QR · {{ target | url_encode | truncate: 16 }}</text>
 
   <!-- raw: the only way to print the syntax itself -->

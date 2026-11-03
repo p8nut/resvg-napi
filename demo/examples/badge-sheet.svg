@@ -28,9 +28,9 @@
   <!-- 1. header: measured title, aggregates -->
   <rect width="640" height="42" fill="#0091b4"/>
   <text x="16" y="27" font-family="sans-serif" font-size="17" font-weight="700"
-        fill="#fff">{{ heading | default: "Badge sheet" | upcase | fit: 380, 17 | escape }}</text>
+        fill="#fff">{{ heading | default: "Badge sheet" | upcase | fit: 380, 17 }}</text>
   <text x="624" y="27" text-anchor="end" font-family="sans-serif" font-size="10" fill="#d7f0f8"
-        >{{ staff.size }} entries · avg {{ average | round: 1 }} · {{ leads.size }} lead · top {{ top.name | fit: 90, 10 | escape }}</text>
+        >{{ staff.size }} entries · avg {{ average | round: 1 }} · {{ leads.size }} lead · top {{ top.name | fit: 90, 10 }}</text>
 
   <!-- 2. render: one fragment, two columns, positions computed by Liquid -->
   <text x="16" y="62" font-family="sans-serif" font-size="8" fill="#5d7789">RENDER · one fragment per entry</text>
@@ -52,9 +52,9 @@
   <text x="16" y="210" font-family="sans-serif" font-size="8" fill="#5d7789">FIT VS TRUNCATE · measured against counted</text>
   <rect x="16" y="216" width="150" height="1" fill="#c8005e"/>
   <text x="16" y="234" font-family="sans-serif" font-size="13" fill="#fff"
-        >{{ top.name | append: " and friends" | fit: 150, 13 | escape }}</text>
+        >{{ top.name | append: " and friends" | fit: 150, 13 }}</text>
   <text x="16" y="252" font-family="sans-serif" font-size="13" fill="#93a7b6"
-        >{{ top.name | append: " and friends" | truncate: 18 | escape }}</text>
+        >{{ top.name | append: " and friends" | truncate: 18 }}</text>
   <text x="16" y="266" font-family="sans-serif" font-size="8" fill="#5d7789"
         >the magenta rule is 150 units: only the first line was measured, and both are escaped for XML</text>
 
@@ -63,7 +63,7 @@
   <!-- `x` on a tspan is absolute, so the block is positioned by a transform
        and every line stays at x="0". -->
   <text transform="translate(330 226)" font-family="sans-serif" font-size="10" fill="#e0e9ef"
-        >{{ note | default: "Scores are relative to the period, and the last column is the one that counts." | wrap: 280, 10, 13 }}</text>
+        >{{ note | default: "Scores are relative to the period, and the last column is the one that counts." | wrap: 280, 10, 13 | raw }}</text>
 
   <!-- 5. sparkline + cycle: numbers become geometry, striping without a counter -->
   <text x="16" y="300" font-family="sans-serif" font-size="8" fill="#5d7789">SPARKLINE · numbers to geometry</text>
@@ -86,7 +86,7 @@
 
   <!-- 7. date and qr -->
   <text x="330" y="352" font-family="sans-serif" font-size="8" fill="#5d7789">DATE · {{ issued | default: "now" | date: "%d %b %Y" }}</text>
-  <svg id="qr" x="560" y="356" width="64" height="64">{{ link | default: "https://github.com/linebender/resvg" | qr: '#ffffff', '#00000000' }}</svg>
+  <svg id="qr" x="560" y="356" width="64" height="64">{{ link | default: "https://github.com/linebender/resvg" | qr: '#ffffff', '#00000000' | raw }}</svg>
 
   <text x="16" y="428" font-family="sans-serif" font-size="8" fill="#5d7789"
         >{{ scores | join: " · " }} — {{ scores | size }} values, min {{ scores | sort | first }}, max {{ scores | sort | last }}</text>

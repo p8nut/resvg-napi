@@ -73,10 +73,11 @@ starting with `[` or `{` is parsed, so `staff` can be
 JSON is reported rather than silently used as a string. Loop locals (`row.*`) get
 no field of their own — correctly, they come from the collection.
 
-Liquid does not auto-escape and this output lands inside XML, so a value holding
-`&`, `<` or `>` breaks the document. Escaping the scope would corrupt what a
-filter receives (`qr` legitimately returns markup), so the page reports the exact
-path instead: `` `staff[0].name` contains <, > or & … pipe it through `escape` ``.
+This output lands inside XML, so LiquidJS runs with `outputEscape: 'escape'`:
+every `{{ }}` is escaped, and a value holding `&`, `<` or `>` cannot break the
+document. A filter that returns markup (`qr`, `wrap`) is piped through `raw` in
+the template; anything else piped through `raw` is the template's
+responsibility.
 
 Every upload has three routes, because a file picker is not always usable — a
 browser driven by automation swallows the dialog, for one: drop on the zone or on
@@ -158,12 +159,12 @@ templated document can be previewed:
 - Four filters exist because a renderer is in the room, and all four ask resvg
   how wide a string is (`node('m').extent()`):
   `fit: width, size` cuts a string to an ellipsis that fits, by bisection;
-  `wrap: width, size[, lineHeight]` breaks text into `<tspan>` lines, which SVG
+  `wrap: width, size[, lineHeight] | raw` breaks text into `<tspan>` lines, which SVG
   1.1 will not do for you (place the block with a `transform` — a tspan's `x` is
   absolute); `sparkline: w, h` turns an array of numbers into a `points`
   attribute; `measure: size` returns the width itself. They live in
   `svg-filters.mjs`, next to the `memoryFs` and the partial scanner.
-- `{{ upn | qr: '#ffffff', '#00000000' }}` generates a real QR code, as SVG:
+- `{{ upn | qr: '#ffffff', '#00000000' | raw }}` generates a real QR code, as SVG:
   `qrSvg()` in `liquid-entry.mjs` encodes with `qrcode-generator` and emits
   one `<path>` for the dark modules inside a nested `<svg viewBox="0 0 n n"
   width="100%" height="100%">`, so it scales to whatever viewport the template

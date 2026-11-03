@@ -68,7 +68,11 @@ const measure = (text, { fontSize, family: want }) => {
   return new mod.Resvg(probe, options, fonts).node('m')?.extent()?.width ?? 0;
 };
 
-const liquid = new Liquid({ root: dirname(template), extname: '', relativeReference: false });
+// Output lands inside XML, so every `{{ }}` is escaped; a filter that returns
+// markup (`qr`, `wrap`) is piped through `raw` in the template.
+const liquid = new Liquid({
+  root: dirname(template), extname: '', relativeReference: false, outputEscape: 'escape',
+});
 registerSvgFilters(liquid, { measure, qrSvg });
 
 const source = readFileSync(template, 'utf8');

@@ -44,7 +44,7 @@ export function registerSvgFilters(liquid, { measure, qrSvg }) {
   });
 
   /**
-   * `{{ blurb | wrap: 120, 11 }}` — greedy word wrap into `<tspan>` lines. SVG
+   * `{{ blurb | wrap: 120, 11 | raw }}` — greedy word wrap into `<tspan>` lines. SVG
    * 1.1 does not wrap text at all, so a template otherwise has to hard-code the
    * breaks.
    */

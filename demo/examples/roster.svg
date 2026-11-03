@@ -43,10 +43,10 @@
           fill="#93a7b6">{{ forloop.index }}</text>
 
     <text x="36" y="{{ forloop.index | times: 34 | plus: 27 }}" font-family="sans-serif" font-size="13"
-          fill="#ffffff" data-maxwidth="150">{{ row.name | escape }}</text>
+          fill="#ffffff" data-maxwidth="150">{{ row.name }}</text>
 
     <text x="240" y="{{ forloop.index | times: 34 | plus: 27 }}" font-family="sans-serif" font-size="10"
-          fill="#7fd4ea" data-maxwidth="46">{{ row.dept.code | escape }}</text>
+          fill="#7fd4ea" data-maxwidth="46">{{ row.dept.code }}</text>
 
     <text x="342" y="{{ forloop.index | times: 34 | plus: 27 }}" text-anchor="end"
           font-family="sans-serif" font-size="13" font-weight="700"
@@ -55,5 +55,5 @@
   {% endfor %}
 
   <text x="14" y="232" font-family="sans-serif" font-size="8" fill="#5d7789">{{ staff.size }} entries</text>
-  <svg id="qr" x="316" y="196" width="30" height="30">{{ qrTarget | qr: '#ffffff', '#00000000' }}</svg>
+  <svg id="qr" x="316" y="196" width="30" height="30">{{ qrTarget | qr: '#ffffff', '#00000000' | raw }}</svg>
 </svg>

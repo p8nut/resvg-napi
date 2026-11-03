@@ -4,12 +4,13 @@
 // stale version. Each exits non-zero once its reason is gone, so the scheduled
 // CI run is the notification.
 //
-// 1. emnapi on a 2.0 prerelease, 2.0.0-beta.2, in both package.json files.
+// 1. emnapi on a 2.0 prerelease, 2.0.0-beta.3, in both package.json files.
 //    Current napi links the wasm target against the emnapi 2 ABI, so 1.x is
 //    out. It ends when emnapi ships a stable 2.x AND the latest
-//    @napi-rs/wasm-runtime accepts it as a peer -- 1.2.6 takes emnapi 2 at
-//    exactly 2.0.0-beta.2, so emnapi alone is a peer conflict. Then move both
-//    package.json files to both; dependabot's `napi` group moves them as one.
+//    @napi-rs/wasm-runtime accepts it as a peer -- 1.2.7 takes emnapi 2 only
+//    at exactly 2.0.0-beta.2 or 2.0.0-beta.3, so emnapi alone is a peer
+//    conflict. Then move both package.json files to both; dependabot's `napi`
+//    group moves them as one.
 //
 // 2. flate2, held at 1.1.9 in Cargo.lock. 1.1.10 requires miniz_oxide ^0.9
 //    while png still requires ^0.8, so taking it compiles two DEFLATE
@@ -50,7 +51,7 @@ export function assess(emnapiLatest, runtimeVersion, runtimePeer) {
   if (!admits(runtimePeer, emnapiLatest)) return [];
   return [
     `emnapi ${emnapiLatest} is out as latest and @napi-rs/wasm-runtime ${runtimeVersion} accepts it -- ` +
-      'move both off the 2.0.0-beta.2 prerelease',
+      'move both off the 2.0.0-beta.3 prerelease',
   ];
 }
 
@@ -76,10 +77,10 @@ async function get(url) {
 
 async function selftest() {
   const assert = (await import('node:assert/strict')).default;
-  const today = '^1.7.1 || 2.0.0-beta.2';
-  assert.deepEqual(assess('1.11.3', '1.2.6', today), [], 'today: the beta still needed');
-  assert.deepEqual(assess('2.0.0-beta.2', '1.2.6', today), [], 'a prerelease as latest is not a stable');
-  assert.deepEqual(assess('2.0.0', '1.2.6', today), [], 'stable, but the runtime still pins the beta');
+  const today = '^1.7.1 || 2.0.0-beta.2 || 2.0.0-beta.3';
+  assert.deepEqual(assess('1.11.3', '1.2.7', today), [], 'today: the beta still needed');
+  assert.deepEqual(assess('2.0.0-beta.3', '1.2.7', today), [], 'a prerelease as latest is not a stable');
+  assert.deepEqual(assess('2.0.0', '1.2.7', today), [], 'stable, but the runtime still pins the beta');
   assert.deepEqual(assess('2.0.0', '1.2.5', '^1.7.1 || ^2.0.0-alpha.4'), [], 'a prerelease caret is not taken as ready');
 
   const ready = assess('2.0.0', '1.3.0', '^1.7.1 || ^2.0.0');

@@ -21,6 +21,14 @@ Node.js 20 or later. The WASI build, used where no native binary exists, needs
 20.19+, 22.13+ or 23.5+: its emnapi runtime is ESM-only and the loader
 `require`s it.
 
+The WASI package declares `cpu: ["wasm32"]`, so npm skips it on every real
+host. Where no native binary matches — StackBlitz, WebContainer — ask for it:
+`npm install --cpu=wasm32` (yarn: `supportedArchitectures.cpu`). The same gate
+makes a plain `npm install resvg-napi-wasm32-wasi` on x64 or arm64 fail with
+`EBADPLATFORM`, and the browser entry (`browser.js`) needs that package: a
+bundler build on such a host adds `--force` to that command, or installs
+`resvg-napi` with `--cpu=wasm32` and gives up the native package.
+
 ```js
 import { Resvg, FontDatabase, renderAsync } from 'resvg-napi'
 

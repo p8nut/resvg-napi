@@ -20,12 +20,12 @@ crate-type = ["cdylib"]
 # hard-exports `emnapi_create_env`), so package.json pins emnapi, @emnapi/core
 # and @emnapi/runtime to 2.0.0-beta.2; scripts/check-pins.mjs says when a
 # stable 2.x lets them go.
-# The two minimums move as a pair: napi-derive 3.6.13 expands to
+# The two minimums move as a pair: napi-derive (3.6.13 and up) expands to
 # `defer_native_borrow_scope`, which napi only has from 3.15.0.
 # napi8 turns on class type tags. Without them napi before 3.15 takes another
 # class's instance for this one under WASI; test/errors.mjs checks it is refused.
-napi = { version = "3.15.0", default-features = false, features = ["napi8"] }
-napi-derive = "3.6.13"
+napi = { version = "3.16.1", default-features = false, features = ["napi8"] }
+napi-derive = "3.7.0"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.
 # Its defaults minus `memmap-fonts`, added back below for every target that has
 # mmap: WASI does not, and with it fontdb's load_font_file answered

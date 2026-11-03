@@ -339,13 +339,13 @@ Copyright (c) 2017 Maiddog
 Offered as `Unlicense OR MIT`; listed here under MIT.
 Copyright (c) 2015 Andrew Gallant
 
-### napi 3.15.0
+### napi 3.16.1
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive 3.6.13
+### napi-derive 3.7.0
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive-backend 6.1.6
+### napi-derive-backend 7.0.0
 No copyright line in the published crate; MIT per its manifest.
 
 ### napi-sys 3.4.1

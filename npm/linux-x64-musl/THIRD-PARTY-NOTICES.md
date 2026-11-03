@@ -44,7 +44,7 @@ Copyright (c) 2019 Daniel "Lokathor" Gee
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014 Alex Crichton
 
-### crc32fast 1.5.3
+### crc32fast 1.5.4
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright {yyyy} {name of copyright owner}
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
@@ -254,7 +254,7 @@ Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Apache-2.0.
 COPYRIGHT AND PERMISSION NOTICE
 Copyright © 1991-2023 Unicode, Inc
 
-### unicode-script 0.5.8
+### unicode-script 0.5.9
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2021 The Unicode-rs Developers
 Copyright (c) 2019 Manish Goregaokar

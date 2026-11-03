@@ -22,8 +22,10 @@ crate-type = ["cdylib"]
 # stable 2.x lets them go.
 # The two minimums move as a pair: napi-derive (3.6.13 and up) expands to
 # `defer_native_borrow_scope`, which napi only has from 3.15.0.
-# napi8 turns on class type tags. Without them napi before 3.15 takes another
-# class's instance for this one under WASI; test/errors.mjs checks it is refused.
+# napi8 turns on class type tags on native targets, which also refuse an object
+# wrapped by another copy of this addon. napi compiles them out for wasm: under
+# WASI its class identity check (from 3.15.0) refuses another class's instance
+# instead. test/errors.mjs checks it is refused on both.
 napi = { version = "3.16.1", default-features = false, features = ["napi8"] }
 napi-derive = "3.7.0"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.

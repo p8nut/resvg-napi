@@ -7,6 +7,7 @@
 //!   and per document.
 //! - [`fs`]: reads of caller-named files and gzip data, capped.
 //! - [`Signal`]: an `AbortSignal` argument, checked before napi converts it.
+//! - [`inspect`]: what `console.log` prints for a class instance.
 //!
 //! No Rust tests: a test binary cannot link napi's symbols outside Node. The
 //! binding's JS suite covers each piece through the API that uses it.
@@ -243,4 +244,54 @@ impl FromNapiValue for Signal {
         }
         unsafe { AbortSignal::from_napi_value(env, value) }.map(Signal)
     }
+}
+
+/// The body of a class's `[Symbol.for('nodejs.util.inspect.custom')]`:
+/// `Name { key: value, .. }`, formatted by the `inspect` Node passes in, so
+/// colours, `depth` and nesting behave like any other object. Without it a
+/// class instance prints as `Name {}`: its values live on the prototype.
+///
+/// `getters` are read, `methods` called with no argument, nulls left out; the
+/// binding picks the cheap ones. The printed object stands for `this`, so it does not use a
+/// level: it gets the remaining `depth`, and an instance among its values
+/// comes back here one level lower.
+#[allow(clippy::too_many_arguments)]
+pub fn inspect<'e>(
+    env: &'e Env,
+    this: &Object<'e>,
+    class: &str,
+    getters: &[&str],
+    methods: &[&str],
+    depth: Option<f64>,
+    options: Object<'e>,
+    inspect: Function<'e, FnArgs<(Object<'e>, Object<'e>)>, String>,
+) -> Result<String> {
+    if depth.is_some_and(|d| d < 0.0) {
+        return Ok(format!("[{class}]"));
+    }
+    let mut shown = Object::new(env)?;
+    // A null is a member that does not apply here -- a group's opacity on a
+    // path -- and five of them bury the two values that do.
+    let mut show = |key: &str, value: Unknown<'e>| match value.get_type()? {
+        ValueType::Null => Ok(()),
+        _ => shown.set_named_property(key, value),
+    };
+    for key in getters {
+        show(key, this.get_named_property(key)?)?;
+    }
+    for key in methods {
+        let method: Function<(), Unknown> = this.get_named_property_unchecked(key)?;
+        show(key, method.apply(*this, ())?)?;
+    }
+    let assign: Function<FnArgs<(Object, Object)>, Object> = env
+        .get_global()?
+        .get_named_property_unchecked::<Object>("Object")?
+        .get_named_property("assign")?;
+    let mut remaining = assign.call((Object::new(env)?, options).into())?;
+    // `null` is Node's "no limit", in and out.
+    remaining.set_named_property("depth", depth)?;
+    Ok(format!(
+        "{class} {}",
+        inspect.call((shown, remaining).into())?
+    ))
 }

@@ -26,6 +26,8 @@ export declare class ClipPath {
    * `null` too when the handle came from no document.
    */
   clipPath(): ClipPath | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only handle on a `usvg::filter::Filter`. */
@@ -53,6 +55,8 @@ export declare class Filter {
    * is a plain object, built without the filter its nodes resolve from.
    */
   imageChildren(index: number): Array<SvgNode> | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `Font`. */
@@ -66,6 +70,8 @@ export declare class Font {
    * `RenderOptions.fontFamily` as the last resort.
    */
   get families(): Array<string>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form). */
@@ -186,6 +192,8 @@ export declare class FontDatabase {
    * from a file on disk, then that mapping is closed and the data becomes private to the process again.
    */
   makeFaceDataUnshared(id: FontFace): void
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `FaceInfo`. */
@@ -198,6 +206,8 @@ export declare class FontFace {
   get monospaced(): boolean
   /** Family names of this face, English (US) first when present. */
   get families(): Array<string>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of an `Image`. */
@@ -210,6 +220,8 @@ export declare class Image {
   get absTransform(): Matrix
   get boundingBox(): BBox
   get absBoundingBox(): BBox
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** `ImageKind::GIF`. The bytes are the document's own. */
@@ -218,6 +230,8 @@ export declare class ImageKindGif {
   get type(): 'gif'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
   get bytes(): Buffer
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** `ImageKind::JPEG`. The bytes are the document's own. */
@@ -226,6 +240,8 @@ export declare class ImageKindJpeg {
   get type(): 'jpeg'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
   get bytes(): Buffer
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** `ImageKind::PNG`. The bytes are the document's own. */
@@ -234,6 +250,8 @@ export declare class ImageKindPng {
   get type(): 'png'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
   get bytes(): Buffer
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** `ImageKind::WEBP`. The bytes are the document's own. */
@@ -242,6 +260,8 @@ export declare class ImageKindWebp {
   get type(): 'webp'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
   get bytes(): Buffer
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only handle on a `usvg::LinearGradient`. */
@@ -275,6 +295,8 @@ export declare class LinearGradient {
   spreadMethod(): SpreadMethod
   /** A list of `stop` elements. */
   stops(): Array<Stop>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only handle on a `usvg::Mask`. */
@@ -305,6 +327,8 @@ export declare class Mask {
    * when the handle came from no document.
    */
   mask(): Mask | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only handle on a `usvg::Pattern`. */
@@ -330,6 +354,8 @@ export declare class Pattern {
   rect(): BBox
   /** Children of this definition's content group. */
   children(): Array<SvgNode>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `PositionedGlyph`. */
@@ -346,6 +372,8 @@ export declare class PositionedGlyph {
    * was parsed with. `null` for a glyph that came from no document.
    */
   get font(): FontFace | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only handle on a `usvg::RadialGradient`. */
@@ -383,6 +411,8 @@ export declare class RadialGradient {
   spreadMethod(): SpreadMethod
   /** A list of `stop` elements. */
   stops(): Array<Stop>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** A parsed SVG, ready to be rendered any number of times. */
@@ -597,6 +627,8 @@ export declare class Resvg {
   /** `renderRaw` on a worker thread: the work leaves the event loop, and a
   queued call is dropped when the signal fires. */
   renderRawAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<RawImage>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `Span`. */
@@ -612,6 +644,8 @@ export declare class Span {
   get underline(): Path | null
   get overline(): Path | null
   get lineThrough(): Path | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /**
@@ -766,6 +800,8 @@ export declare class SvgNode {
   /** `renderPng` on a worker thread: the work leaves the event loop, and a
   queued call is dropped when the signal fires. */
   renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `Text`. */
@@ -783,6 +819,8 @@ export declare class Text {
   get strokeBoundingBox(): BBox
   get absStrokeBoundingBox(): BBox
   get layouted(): Array<Span>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `TextChunk`. */
@@ -793,6 +831,8 @@ export declare class TextChunk {
   get spans(): Array<TextSpan>
   get textFlow(): TextFlowPlain | TextFlowPath
   get text(): string
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only view of a `TextSpan`. */
@@ -816,6 +856,8 @@ export declare class TextSpan {
   get wordSpacing(): number
   get textLength(): number | null
   get lengthAdjust(): LengthAdjust
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
 }
 
 /** An alignment baseline property. */

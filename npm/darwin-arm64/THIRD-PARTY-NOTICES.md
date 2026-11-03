@@ -135,7 +135,7 @@ Copyright (c) 2018 Raph Levien
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) The Rust Project Developers
 
-### log 0.4.34
+### log 0.4.35
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014 The Rust Project Developers
 

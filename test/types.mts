@@ -132,8 +132,6 @@ new Resvg(bytes, null, fonts, { 'a.png': new Uint8Array(8) }).resolveImages({ 'b
 fonts.loadFontData(new Uint8Array(0));
 void renderAsync(bytes);
 
-// `using` type-checks: index.d.ts declares `[Symbol.dispose]` on Resvg.
-{
-  using disposable = new Resvg(svg);
-  disposable.width satisfies number;
-}
+// `using` type-checks: index.d.ts declares `[Symbol.dispose]` on Resvg. The
+// `using` syntax itself would not parse before Node 24, and this file runs.
+new Resvg(svg) satisfies Disposable;

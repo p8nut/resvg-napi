@@ -1378,6 +1378,41 @@ pub fn map_methods(
     (code, skipped)
 }
 
+/// The keys of an item's `#[napi(..)]`, with their string values:
+/// `#[napi(getter, js_name = "type")]` is `{getter: None, js_name: "type"}`.
+/// None without a `#[napi]`; a bare one has no keys.
+fn napi_args(attrs: &[syn::Attribute]) -> Option<BTreeMap<String, Option<String>>> {
+    let attr = attrs.iter().find(|a| a.path().is_ident("napi"))?;
+    let mut out = BTreeMap::new();
+    if matches!(attr.meta, syn::Meta::List(_)) {
+        attr.parse_nested_meta(|meta| {
+            let value = if meta.input.peek(syn::Token![=]) {
+                match meta.value()?.parse::<syn::Expr>()? {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }) => Some(s.value()),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            let key = &meta.path;
+            out.insert(quote!(#key).to_string(), value);
+            Ok(())
+        })
+        .unwrap_or_else(|e| panic!("#[napi(..)] that does not parse: {e}"));
+    }
+    Some(out)
+}
+
+/// The name JS sees a method under: its `js_name`, or napi's camelCase.
+fn js_name(f: &syn::ImplItemFn) -> String {
+    napi_args(&f.attrs)
+        .and_then(|mut a| a.remove("js_name").flatten())
+        .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()))
+}
+
 /// One async twin to generate: a Send-safe core the template marked with
 /// `#[async_twin(js_method, JsType)]`.
 pub struct Twin {
@@ -1410,19 +1445,7 @@ pub fn async_twins(file: &mut syn::File) -> Vec<Twin> {
             .filter_map(|it| {
                 let ImplItem::Fn(f) = it else { return None };
                 let body = quote!(#f).to_string();
-                let js = f
-                    .attrs
-                    .iter()
-                    .find(|a| a.path().is_ident("napi"))
-                    .and_then(|a| {
-                        let text = quote!(#a).to_string();
-                        text.split("js_name = \"")
-                            .nth(1)
-                            .and_then(|r| r.split('"').next())
-                            .map(str::to_string)
-                    })
-                    .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()));
-                Some((body, js))
+                Some((body, js_name(f)))
             })
             .collect();
         for it in &mut imp.items {
@@ -1609,9 +1632,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     .into();
     for item in &file.items {
         if let Item::Enum(e) = item
-            && e.attrs
-                .iter()
-                .any(|a| quote!(#a).to_string().contains("string_enum"))
+            && napi_args(&e.attrs).is_some_and(|a| a.contains_key("string_enum"))
         {
             scalars.insert(e.ident.to_string());
         }
@@ -1653,22 +1674,16 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         let members = inherent_impls(std::slice::from_ref(file), &name).flat_map(|imp| &imp.items);
         for it in members {
             let ImplItem::Fn(f) = it else { continue };
-            let Some(attr) = f.attrs.iter().find(|a| a.path().is_ident("napi")) else {
+            let Some(args) = napi_args(&f.attrs) else {
                 continue;
             };
-            let text = quote!(#attr).to_string();
-            let js = text
-                .split("js_name = \"")
-                .nth(1)
-                .and_then(|r| r.split('"').next())
-                .map(str::to_string)
-                .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()));
-            if text.contains("getter") {
+            let js = js_name(f);
+            if args.contains_key("getter") {
                 getters.push(js);
             } else if is_pub(&f.vis)
                 && !["setter", "constructor", "factory"]
                     .iter()
-                    .any(|k| text.contains(k))
+                    .any(|k| args.contains_key(*k))
                 && matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
                 && f.sig.inputs.len() == 1
                 && scalar(&f.sig.output)

@@ -5,7 +5,8 @@
     clippy::useless_conversion,
     clippy::field_reassign_with_default,
     clippy::type_complexity,
-    clippy::new_without_default
+    clippy::new_without_default,
+    clippy::non_minimal_cfg
 )]
 use napi::bindgen_prelude::*;
 use napi_derive::napi;

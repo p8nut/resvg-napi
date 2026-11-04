@@ -33,7 +33,11 @@ napi-derive = "3.7.0"
 # mmap: WASI does not, and with it fontdb's load_font_file answered
 # "unsupported" while load_fonts_dir loaded nothing and said nothing. The
 # generator knows (build/config.rs FEATURES) and gates what depends on it.
-resvg = { version = "0.49.0", default-features = false, features = ["svgz", "text", "system-fonts", "raster-images"] }
+# No `svgz` either: usvg inflates it with no cap, a decompression bomb
+# (linebender/resvg#1138, fix proposed in #1139 with a fixed 1 GiB cap). SVGZ
+# input is refused; callers inflate it themselves, Node's zlib has
+# `maxOutputLength`. Re-check when a resvg release carries a configurable cap.
+resvg = { version = "0.49.0", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 # resvg's own CSS colour parser, same version it uses internally.
 svgtypes = "0.16.1"
 # usvg/resvg report recoverable problems through `log`; nothing consumes it by
@@ -47,9 +51,11 @@ imagesize = "0.15"
 napi-support = { path = "crates/napi-support" }
 
 
-# Resolver 2 keeps a target table's features to that target.
+# Resolver 2 keeps a target table's features to that target. Without
+# `default-features = false` here too, this line turned resvg's defaults --
+# `svgz` included -- back on for every native target.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-resvg = { version = "0.49.0", features = ["memmap-fonts"] }
+resvg = { version = "0.49.0", default-features = false, features = ["memmap-fonts"] }
 
 [build-dependencies]
 napi-build = "2.6.0"

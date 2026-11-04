@@ -59,9 +59,6 @@ if (fonts) {
   skip('text rendering', 'no font in this environment');
 }
 
-// 6. errors surface as JS exceptions
-assert.throws(() => new Resvg('<svg'), /invalid SVG/);
-
 // A requested dimension comes back exactly, at every size and every ratio.
 //
 // It used to not: the scale was an f32 round trip, `(base * (w / base)).ceil()`,

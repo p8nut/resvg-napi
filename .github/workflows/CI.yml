@@ -361,7 +361,8 @@ jobs:
       # publish job does.
       - if: needs.plan.outputs.full == 'true'
         run: npx napi artifacts -d artifacts --npm-dir npm
-      - run: npm run check:package -- ${{ needs.plan.outputs.full == 'true' && '--all' || '--root-only' }}
+      # Empty is falsy in an expression, so the condition is inverted: `x && '' || y` is always y.
+      - run: npm run check:package -- ${{ needs.plan.outputs.full != 'true' && '--root-only' || '' }}
 
       # This is a memory-safety guard, not tidiness -- the 0.3.0 release taught
       # us the difference. `napi8` is on (Cargo.toml), so every #[napi] class

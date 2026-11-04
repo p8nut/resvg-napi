@@ -27,7 +27,7 @@ export function testFonts(FontDatabase) {
   const db = new FontDatabase();
   db.loadSystemFonts();
   if (!db.len()) {
-    const file = CANDIDATES.find((f) => existsSync(f));
+    const file = testFontFile();
     if (!file) return null;
     db.loadFontData(readFileSync(file));
   }
@@ -47,6 +47,19 @@ export function testFonts(FontDatabase) {
 /** The font file the tests can load themselves, or null if there is none. */
 export function testFontFile() {
   return CANDIDATES.find((f) => existsSync(f)) ?? null;
+}
+
+/**
+ * `testFonts`, or the end of the test file: when the environment has no font,
+ * says what was skipped (see `skip`) and exits 0.
+ */
+export function fontsOrSkip(FontDatabase, what) {
+  const fonts = testFonts(FontDatabase);
+  if (!fonts) {
+    skip(what, 'no font in this environment');
+    process.exit(0);
+  }
+  return fonts;
 }
 
 /**

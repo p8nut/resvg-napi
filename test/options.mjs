@@ -10,16 +10,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { testFonts, skip } from './support.mjs';
+import { fontsOrSkip } from './support.mjs';
 import { createRequire } from 'node:module';
 const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 
-const fontsFound = testFonts(FontDatabase);
-if (!fontsFound) {
-  skip('render options', 'no font in this environment');
-  process.exit(0);
-}
-const { db, family } = fontsFound;
+const { db, family } = fontsOrSkip(FontDatabase, 'render options');
 
 const png = (svg, opts) => new Resvg(svg, opts, db).renderPng();
 const size = (svg, opts) => {

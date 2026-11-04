@@ -5,7 +5,7 @@
 //! - [`contained`]: a panic becomes a JS error instead of aborting the process.
 //! - [`logs`]: what the wrapped crates report through `log`, bounded, globally
 //!   and per document.
-//! - [`fs`]: reads of caller-named files and gzip data, capped.
+//! - [`fs`]: reads of caller-named files, capped.
 //! - [`Signal`]: an `AbortSignal` argument, checked before napi converts it.
 //! - [`inspect`]: what `console.log` prints for a class instance.
 //!
@@ -125,10 +125,8 @@ pub mod logs {
             .parse()
             .map_err(|_| Error::from_reason(format!("unknown log level: {level:?}")))?;
         OWNER.get_or_init(|| owner);
-        static INSTALLED: OnceLock<()> = OnceLock::new();
-        INSTALLED.get_or_init(|| {
-            let _ = log::set_logger(&COLLECTOR);
-        });
+        // Fails harmlessly after the first call: the logger installs once.
+        let _ = log::set_logger(&COLLECTOR);
         log::set_max_level(filter);
         Ok(())
     }
@@ -142,9 +140,9 @@ pub mod logs {
 
 pub mod fs {
     //! Reads whose size the caller does not control: a file named by an
-    //! untrusted document, and gzip data that inflates by a factor of 1000.
+    //! untrusted document.
 
-    /// Largest file read, or gzip data inflated: 256 MiB.
+    /// Largest file read: 256 MiB.
     pub const MAX_BYTES: u64 = 256 * 1024 * 1024;
 
     /// The bytes of `path` if it is a regular file of at most [`MAX_BYTES`].
@@ -183,24 +181,6 @@ pub mod fs {
         let mut data = Vec::with_capacity(meta.len() as usize);
         file.take(MAX_BYTES + 1).read_to_end(&mut data).ok()?;
         (data.len() as u64 <= MAX_BYTES).then_some(data)
-    }
-
-    /// Inflates gzip data, refusing it past [`MAX_BYTES`]: an unbounded
-    /// `read_to_end` lets 20 MB grow to 20 GB and abort the process. Over the
-    /// cap is `FileTooLarge`; malformed data is the decoder's own error.
-    pub fn gunzip_capped(data: &[u8]) -> std::io::Result<Vec<u8>> {
-        use std::io::Read;
-        let mut out = Vec::new();
-        flate2::read::GzDecoder::new(data)
-            .take(MAX_BYTES + 1)
-            .read_to_end(&mut out)?;
-        if out.len() as u64 > MAX_BYTES {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::FileTooLarge,
-                format!("expands past {MAX_BYTES} bytes"),
-            ));
-        }
-        Ok(out)
     }
 }
 

@@ -384,7 +384,13 @@ fn main() {
     // Everything asked of the template is written in its own body, so the
     // fragments can be blank. Reused by the pruner further down.
     let nothing = TokenStream::new();
-    let probe = template(&Fragments::probe(), &nothing, &nothing, &nothing, &nothing);
+    let probe = template(
+        &Fragments::default(),
+        &nothing,
+        &nothing,
+        &nothing,
+        &nothing,
+    );
     // The names the generated code spells and the template must define. A
     // template edit that drops one fails here, by name, instead of as a
     // compile error deep in src/lib.rs.

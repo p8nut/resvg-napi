@@ -6,7 +6,8 @@ const { Resvg, renderAsync, FontDatabase } = createRequire(import.meta.url)('../
 
 const cases = {
   NotAnUtf8Str: Buffer.from([0xff, 0xfe, 0x3c]),
-  MalformedGZip: Buffer.from([0x1f, 0x8b, 1, 2]),
+  // Any gzip data, valid or not: SVGZ is refused before usvg inflates it.
+  SvgzFeatureNotEnabled: Buffer.from([0x1f, 0x8b, 1, 2]),
   InvalidSize: '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"/>',
   ParsingFailed: '<svg',
 };

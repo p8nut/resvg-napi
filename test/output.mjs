@@ -1,8 +1,7 @@
 // background (RenderParams) and toString (WriteOptions, AST-mapped).
 import assert from 'node:assert/strict';
 import { fontsOrSkip } from './support.mjs';
-import { createRequire } from 'node:module';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
+import { Resvg, FontDatabase } from '../index.js';
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
 const { db, family } = fontsOrSkip(FontDatabase, 'output shapes');
@@ -83,5 +82,3 @@ assert.notEqual(
 // 9. round trip: the output re-parses to the same pixels
 const again = new Resvg(doc.toString(), opts, db);
 assert.deepEqual([...again.renderRaw().data], [...doc.renderRaw().data], 'lossless round trip');
-
-console.log('ok — background + toString: all checks passed');

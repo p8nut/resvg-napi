@@ -1,9 +1,8 @@
 // Horizontal fitting driven by the template's own `data-maxwidth`.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
+import { Resvg, FontDatabase } from '../index.js';
 import { fontsOrSkip } from './support.mjs';
 import { fitTextWidths, findWidthConstraints } from '../fit.mjs';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds. testFonts also points the
 // generic families at it, so `font-size` on a bare <text> resolves.
@@ -163,5 +162,3 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
   assert.match(out, /transform='translate\(1 0\) translate\(5 0\) scale\([\d.]+ 1\) translate\(-5 0\)'/, 'one transform, same quotes');
   render(out);
 }
-
-console.log('ok — horizontal fitting: all checks passed');

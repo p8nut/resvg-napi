@@ -1,9 +1,8 @@
 // Font resolution: same two-pass shape as images (FontResolver is Send + Sync).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { Resvg, FontDatabase } from '../index.js';
 import { fontsOrSkip, testFontFile, skip } from './support.mjs';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 
 const text = (family) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">
   <text x="10" y="40" font-family="${family}" font-size="24">Bonjour</text>
@@ -208,5 +207,3 @@ assert.equal(glyphs[0].font.postScriptName, used.postScriptName);
     }
   }
 }
-
-console.log('ok — font resolution: all checks passed');

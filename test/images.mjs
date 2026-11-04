@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('../index.js');
+import { Resvg } from '../index.js';
 
 // a 20x20 red PNG, produced by our own renderer
 const red = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').renderPng();
@@ -210,5 +210,3 @@ if (process.platform === 'linux') {
   const junk = new Resvg(twice, null, null, { 'a.png': Buffer.from('not an image') });
   assert.deepEqual(junk.pendingImages(), ['a.png'], 'unusable bytes are a miss');
 }
-
-console.log('ok — image resolution: all checks passed');

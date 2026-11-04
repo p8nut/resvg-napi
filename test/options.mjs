@@ -11,8 +11,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fontsOrSkip } from './support.mjs';
-import { createRequire } from 'node:module';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
+import { Resvg, FontDatabase } from '../index.js';
 
 const { db, family } = fontsOrSkip(FontDatabase, 'render options');
 
@@ -137,5 +136,3 @@ const differs = (a, b) => Buffer.compare(a, b) !== 0;
   assert.deepEqual(px({}), [255, 0, 0], 'the document says red');
   assert.deepEqual(px({ styleSheet: '.a { fill: #00ff00; }' }), [0, 255, 0], 'the stylesheet overrides it');
 }
-
-console.log('ok — render options: all checks passed');

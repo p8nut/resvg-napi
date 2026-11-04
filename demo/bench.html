@@ -101,10 +101,10 @@
   /* The proof: registration marks and a tick rule around the output. */
   .frame { position: relative; padding: 18px 0 0 18px; }
   .ticks { position: absolute; background-repeat: repeat; opacity: .8; }
-  .ticks.top { top: 4px; left: 18px; width: var(--plate-w, 0); height: 8px;
+  .ticks.top { top: 4px; left: 18px; right: 0; height: 8px;
                background-image: repeating-linear-gradient(to right,
                  var(--rule) 0 1px, transparent 1px 10px); }
-  .ticks.left { left: 4px; top: 18px; height: var(--plate-h, 0); width: 8px;
+  .ticks.left { left: 4px; top: 18px; bottom: 0; width: 8px;
                 background-image: repeating-linear-gradient(to bottom,
                   var(--rule) 0 1px, transparent 1px 10px); }
   /* Shrink to the render: the registration marks must sit on the proof's own
@@ -376,27 +376,7 @@
 </div>
 
 <script type="module">
-
-  // napi's `Buffer` return type is Node's Buffer, and emnapi looks it up on
-  // globalThis -- browsers have no such thing. Node's Buffer is a Uint8Array
-  // subclass, and emnapi only touches `from`, `alloc` and `isBuffer`, so this
-  // is enough. Installed before the wasm module is imported.
-  class BufferPolyfill extends Uint8Array {
-    static from(src, offset, length) {
-      // With wasm threads the module's memory is a SharedArrayBuffer, not an
-      // ArrayBuffer -- missing that case yields empty views.
-      const isBuf = src instanceof ArrayBuffer
-        || (typeof SharedArrayBuffer !== 'undefined' && src instanceof SharedArrayBuffer);
-      return isBuf
-        ? new BufferPolyfill(src, offset, length)
-        : new BufferPolyfill(Uint8Array.from(src));
-    }
-    static alloc(size) { return new BufferPolyfill(size); }
-    static isBuffer(value) { return value instanceof BufferPolyfill; }
-  }
-  globalThis.Buffer ??= BufferPolyfill;
-
-  const { Liquid, qrSvg, fitTextWidths, registerSvgFilters, referencedPartials }
+  const { Liquid, eachNode, measureText, fitTextWidths, registerSvgFilters, referencedPartials }
     = await import('./liquid.js');
 
   // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
@@ -406,18 +386,7 @@
   const partials = {};
 
   // Measuring is a render: the filters that need a width ask the engine.
-  const measureText = (text, { fontSize = 12, family } = {}) => {
-    const fam = family ?? fonts?.faces()[0]?.families[0] ?? 'sans-serif';
-    const escaped = String(text)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const probe = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">`
-      + `<text id="m" font-family="${fam}" font-size="${fontSize}">${escaped}</text></svg>`;
-    try {
-      return new mod.Resvg(probe, { fontFamily: fam }, fonts).node('m')?.extent()?.width ?? 0;
-    } catch {
-      return 0;
-    }
-  };
+  const measure = (text, opts) => (mod ? measureText(mod.Resvg, fonts, text, opts) : 0);
 
   // Rebuildable, because `strictVariables` is an instance option and the page
   // offers it as a switch.
@@ -435,7 +404,7 @@
       // returns markup (`qr`, `wrap`) is piped through `raw` in the template.
       outputEscape: 'escape',
     });
-    registerSvgFilters(liquid, { measure: measureText, qrSvg });
+    registerSvgFilters(liquid, { measure });
   }
   makeLiquid();
 
@@ -697,35 +666,19 @@
   // the source -- it handles `{{-`, quoting, newlines and nested arguments.
   function filterChains(raw) {
     const chains = new Map();
-    let templates;
-    try {
-      templates = liquid.parse(raw);
-    } catch {
-      return chains;
-    }
-    const visit = (nodes, depth = 0) => {
-      if (!Array.isArray(nodes) || depth > 6) return;
-      for (const node of nodes) {
-        // outputEscape appends its own filter to every output, named
-        // `toString.call(fn)`: not one the template wrote.
-        const implicit = Object.prototype.toString.call(liquid.options.outputEscape);
-        const filters = (node?.value?.filters ?? []).filter((f) => f.name !== implicit);
-        if (filters.length) {
-          const path = node.value.initial?.postfix?.[0]?.getText?.() ?? '';
-          if (path) {
-            chains.set(path.trim(), filters.map((f) => {
-              const args = (f.args ?? []).map((a) => a.getText?.() ?? String(a));
-              return args.length ? `${f.name}: ${args.join(', ')}` : f.name;
-            }));
-          }
-        }
-        // blocks: {% if %}, {% for %}, {% case %}...
-        visit(node?.templates, depth + 1);
-        visit(node?.elseTemplates, depth + 1);
-        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
-      }
-    };
-    visit(templates);
+    // outputEscape appends its own filter to every output, named
+    // `toString.call(fn)`: not one the template wrote.
+    const implicit = Object.prototype.toString.call(liquid.options.outputEscape);
+    eachNode(liquid, raw, (node) => {
+      const filters = (node.value?.filters ?? []).filter((f) => f.name !== implicit);
+      if (!filters.length) return;
+      const path = node.value.initial?.postfix?.[0]?.getText?.() ?? '';
+      if (!path) return;
+      chains.set(path.trim(), filters.map((f) => {
+        const args = (f.args ?? []).map((a) => a.getText?.() ?? String(a));
+        return args.length ? `${f.name}: ${args.join(', ')}` : f.name;
+      }));
+    });
     return chains;
   }
 
@@ -738,34 +691,26 @@
   function loopColumns(raw) {
     const byCollection = new Map();
     let templates;
-    let locals = [];
+    let locals;
     try {
       templates = liquid.parse(raw);
       locals = liquid.variableSegmentsSync(templates);
     } catch {
       return byCollection;
     }
-    const visit = (nodes, depth = 0) => {
-      if (!Array.isArray(nodes) || depth > 6) return;
-      for (const node of nodes) {
-        const c = node?.collection;
-        if (node?.variable && c?.input && c.begin != null) {
-          const collection = c.input.slice(c.begin, c.end).trim();
-          const columns = [];
-          for (const parts of locals) {
-            if (parts[0] !== node.variable || parts.length < 2) continue;
-            if (!parts.every((p) => typeof p === 'string' || typeof p === 'number')) continue;
-            const key = parts.slice(1).join('.');
-            if (key && !columns.includes(key)) columns.push(key);
-          }
-          byCollection.set(collection, columns);
-        }
-        visit(node?.templates, depth + 1);
-        visit(node?.elseTemplates, depth + 1);
-        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
+    eachNode(liquid, templates, (node) => {
+      const c = node.collection;
+      if (!node.variable || !c?.input || c.begin == null) return;
+      const collection = c.input.slice(c.begin, c.end).trim();
+      const columns = [];
+      for (const parts of locals) {
+        if (parts[0] !== node.variable || parts.length < 2) continue;
+        if (!parts.every((p) => typeof p === 'string' || typeof p === 'number')) continue;
+        const key = parts.slice(1).join('.');
+        if (key && !columns.includes(key)) columns.push(key);
       }
-    };
-    visit(templates);
+      byCollection.set(collection, columns);
+    });
     return byCollection;
   }
 
@@ -1688,14 +1633,6 @@
       `${round(box.width)} × ${round(box.height)}`;
     overlay.setAttribute('data-on', '');
   }
-
-  // The tick rules measure the proof, so they need its size -- which only
-  // exists once the new image has decoded.
-  $('out').addEventListener('load', () => {
-    const frame = document.querySelector('.frame');
-    frame.style.setProperty('--plate-w', `${$('plate').offsetWidth}px`);
-    frame.style.setProperty('--plate-h', `${$('plate').offsetHeight}px`);
-  });
 
   $('showBbox').addEventListener('change', () => { beginPass(); render(); });
   $('fit').addEventListener('change', () => { beginPass(); render(); });

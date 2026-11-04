@@ -2,8 +2,7 @@
 // types are emitted because `SvgNode.path()` hands one out, and the mapper
 // prunes whatever no exposed method returns.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-const { Resvg } = createRequire(import.meta.url)('../index.js');
+import { Resvg } from '../index.js';
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80">
   <defs>
@@ -116,5 +115,3 @@ assert.equal(doc.node('grp').path(), null, 'a group is not a shape');
     assert.equal(rect[m](), null, `${m} on a path`);
   }
 }
-
-console.log('ok — path shape: all checks passed');

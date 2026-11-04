@@ -9,31 +9,28 @@
 // next to the template, fonts from `demo/fonts` plus `demo/DejaVuSans.ttf`.
 import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { Liquid } from 'liquidjs';
-import { registerSvgFilters, referencedPartials } from './svg-filters.mjs';
-import { qrSvg } from './liquid-entry.mjs';
+import mod from '../index.js';
+import { measureText, registerSvgFilters, referencedPartials } from './svg-filters.mjs';
 
 // fileURLToPath, not `.pathname`: on Windows the latter yields
 // `/D:/a/...`, and join() then builds `\D:\a\...` -- a leading separator
 // before the drive letter, which resolves to nothing.
 const here = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(join(here, '..', 'index.js'));
-const mod = require(join(here, '..', 'index.js'));
 
-const argv = process.argv.slice(2);
 // `--lang fr` drives `<switch systemLanguage>`; usvg picks nothing without it.
-const langAt = argv.indexOf('--lang');
-const languages = langAt === -1 ? undefined : [argv[langAt + 1]];
-if (langAt !== -1) argv.splice(langAt, 2);
-// A flag, not an environment variable: `VAR=1 node ...` is POSIX shell syntax
-// and `cmd` on the Windows runner answers "'VAR' is not recognized as an
-// internal or external command", which is how the 0.2.0 tag failed its test job.
-const strictAt = argv.indexOf('--strict');
-const strict = strictAt !== -1;
-if (strict) argv.splice(strictAt, 1);
-const [templateArg, outArg] = argv;
+// `--strict` is a flag, not an environment variable: `VAR=1 node ...` is POSIX
+// shell syntax and `cmd` on the Windows runner answers "'VAR' is not recognized
+// as an internal or external command", which is how the 0.2.0 tag failed its
+// test job.
+const { values: flags, positionals: [templateArg, outArg] } = parseArgs({
+  allowPositionals: true,
+  options: { lang: { type: 'string' }, strict: { type: 'boolean' } },
+});
+const languages = flags.lang === undefined ? undefined : [flags.lang];
+const strict = flags.strict ?? false;
 if (!templateArg) {
   console.error('usage: node demo/render.mjs <template.svg> [out.png] [--lang xx] [--strict]');
   process.exit(2);
@@ -58,34 +55,20 @@ for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
                    'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
 const options = { fontFamily: family, languages };
 
-const escape = (s) => String(s)
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-/** Width of a string, straight from the renderer that will draw it. */
-const measure = (text, { fontSize, family: want }) => {
-  const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
-    + `<text id="m" font-family="${want ?? family}" font-size="${fontSize}">${escape(text)}</text></svg>`;
-  return new mod.Resvg(probe, options, fonts).node('m')?.extent()?.width ?? 0;
-};
+const measure = (text, opts) => measureText(mod.Resvg, fonts, text, opts, options);
 
 // Output lands inside XML, so every `{{ }}` is escaped; a filter that returns
 // markup (`qr`, `wrap`) is piped through `raw` in the template.
 const liquid = new Liquid({
   root: dirname(template), extname: '', relativeReference: false, outputEscape: 'escape',
 });
-registerSvgFilters(liquid, { measure, qrSvg });
+registerSvgFilters(liquid, { measure });
 
 const source = readFileSync(template, 'utf8');
 const varsFile = template.replace(/\.svg$/, '.json');
 const scope = existsSync(varsFile) ? JSON.parse(readFileSync(varsFile, 'utf8')) : {};
 
 const wanted = [...referencedPartials(liquid, source)];
-for (const name of wanted) {
-  if (!existsSync(join(dirname(template), name))) {
-    console.error(`missing partial: ${name}`);
-    process.exit(1);
-  }
-}
 
 const rendered = liquid.parseAndRenderSync(source, scope);
 // An unrendered tag means the template asked for something Liquid did not do,

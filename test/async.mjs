@@ -1,7 +1,6 @@
 // Async rendering: libuv threadpool via napi Task, plus AbortSignal.
 // Run with UV_THREADPOOL_SIZE=1 so the abort case is deterministic.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
 // UV_THREADPOOL_SIZE has to be set before the process starts, so re-exec once
 // when it is not. It cannot live in the npm script: `VAR=1 cmd` is POSIX
@@ -18,7 +17,8 @@ if (process.env.UV_THREADPOOL_SIZE !== '1') {
   process.exit(status ?? 1);
 }
 
-const { Resvg, renderAsync } = createRequire(import.meta.url)('../index.js');
+// Imported after the re-exec, so the parent never loads the binding.
+const { Resvg, renderAsync } = await import('../index.js');
 
 const isPng = (b) => b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
@@ -81,8 +81,6 @@ assert.ok(isPng(await blocker), 'the running task was untouched');
 // 5. parallel renders share the pool without stepping on each other
 const shots = await Promise.all([1, 2, 3, 4].map((n) => renderAsync(small, null, { width: n * 40 })));
 assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
-
-console.log('ok — async rendering: all checks passed');
 
 // --- derived twins ----------------------------------------------------------
 // The five below are generated from a marked core, not written: the point of
@@ -163,5 +161,3 @@ console.log('ok — async rendering: all checks passed');
   }
   assert.ok(isPng(await doc.renderPngAsync(null, new AbortController().signal)), 'a real signal still passes');
 }
-
-console.log('ok — derived async twins: all checks passed');

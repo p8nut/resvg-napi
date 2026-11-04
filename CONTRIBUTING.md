@@ -246,7 +246,7 @@ npm install --package-lock-only   # the platform packages, at the new version
 ```
 
 The bump ran that command before the new version existed, so npm left the
-twelve `node_modules/resvg-napi-*` entries out of the lockfile, and `npm ci`
+thirteen `node_modules/resvg-napi-*` entries out of the lockfile, and `npm ci`
 fails on `main` until they are back (0.6.0 shipped that way; #122 restored
 them).
 

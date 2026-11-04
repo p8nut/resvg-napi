@@ -18,12 +18,13 @@ crate-type = ["cdylib"]
 # napi v3: the runtime crate and the derive crate are versioned SEPARATELY.
 # Current napi links the wasm target against the emnapi 2 ABI (napi-build
 # hard-exports `emnapi_create_env`), so package.json pins emnapi, @emnapi/core
-# and @emnapi/runtime to 2.0.0-beta.2; scripts/check-pins.mjs says when a
+# and @emnapi/runtime to 2.0.0-beta.3; scripts/check-pins.mjs says when a
 # stable 2.x lets them go.
 # The two minimums move as a pair: napi-derive (3.6.13 and up) expands to
 # `defer_native_borrow_scope`, which napi only has from 3.15.0.
-# napi8 turns on class type tags. Without them napi before 3.15 takes another
-# class's instance for this one under WASI; test/errors.mjs checks it is refused.
+# napi8 turns on class type tags on native targets. napi compiles them out for
+# wasm: under WASI its class identity check (from 3.15.0) refuses another
+# class's instance instead. test/errors.mjs checks it is refused on both.
 # napi9 is `Symbol.for` keys: every class's `util.inspect.custom` (emit.rs).
 napi = { version = "3.16.1", default-features = false, features = ["napi8", "napi9"] }
 napi-derive = "3.7.0"

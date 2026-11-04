@@ -46,11 +46,16 @@ export function assess(pkgs) {
 
 /**
  * An optionalDependency with no `os` and no `cpu` is not optional in practice:
- * npm has nothing to match against, so it installs it everywhere. That is why
- * `napi pre-publish` drops the wasm package from the list -- it is reached
- * through `browser.js` and the WASI shim, not through per-platform resolution.
- * Committing it back put a download on every consumer of every platform, and
- * made the published manifest differ from the committed one on every release.
+ * npm has nothing to match against, so it installs it everywhere. The wasm
+ * package was in exactly that state from napi CLI 3.8.0 to 3.10.10, so
+ * `napi pre-publish` left it out of the list and committing it back put a
+ * download on every consumer of every platform. CLI 3.10.11 restored the
+ * gate: the wasm package declares `cpu: ["wasm32"]`, npm skips it on every
+ * real host, and pre-publish lists it again so that `npm install
+ * --cpu=wasm32` can fetch it where no native package exists (StackBlitz,
+ * WebContainer). Listed with that `cpu`, it passes here; listed without it,
+ * it is the old problem back. The committed root lists it too, so the
+ * published manifest is the committed one.
  *
  * @param {Record<string, string>} optional  optionalDependencies
  * @param {Record<string, {os?: string[], cpu?: string[]}>} platforms  by package name
@@ -218,7 +223,10 @@ async function selftest() {
   );
 
   // the invariant that would have caught the wasm package being put back
+  // without its gate
   assert.deepEqual(unconstrained({ a: '1' }, { a: { os: ['linux'], cpu: ['x64'] } }), []);
+  // cpu wasm32 with no os is the gate napi CLI 3.10.11 restored: constrained
+  assert.deepEqual(unconstrained({ w: '1' }, { w: { name: 'w', cpu: ['wasm32'] } }), []);
   assert.deepEqual(unconstrained({ a: '1' }, { a: { os: ['linux'] } }), []);
   assert.deepEqual(unconstrained({ a: '1' }, { a: { cpu: ['x64'] } }), []);
   const loose = unconstrained({ w: '1' }, { w: { name: 'w' } });
@@ -264,7 +272,7 @@ async function selftest() {
 
   assert.equal(mismatched('0.1.1', { a: '0.1.0', b: '0.1.0' },
     { a: { version: '0.1.1' }, b: { version: '0.1.1' } }).length, 2);
-  console.log('ok — check-package: 33 checks passed');
+  console.log('ok — check-package: 34 checks passed');
 }
 
 async function main() {

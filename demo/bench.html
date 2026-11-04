@@ -431,6 +431,9 @@
       // above where `$` is declared.
       strictVariables: document.getElementById('strict')?.checked ?? false,
       fs: memoryFs(partials),
+      // Output lands inside XML: every `{{ }}` is escaped, and a filter that
+      // returns markup (`qr`, `wrap`) is piped through `raw` in the template.
+      outputEscape: 'escape',
     });
     registerSvgFilters(liquid, { measure: measureText, qrSvg });
   }
@@ -647,22 +650,6 @@
           report('warn', 'liquid', `\`${path}\` ${rows.length > 1 ? 'entries' : 'entry'} `
             + `${rows.join(', ')} have no \`${key}\`: filled with an empty value.`);
         }
-      }
-      // Liquid does not auto-escape and this lands inside XML, so a raw `&`,
-      // `<` or `>` breaks the document. Escaping the scope would be wrong -- it
-      // would corrupt what a filter receives, and `qr` legitimately returns
-      // markup -- so warn instead. Only for a plain string whose own expression
-      // has no escaping filter: a value nested in a JSON array is printed by a
-      // loop-local expression this cannot see, and guessing there produced false
-      // warnings on a template that does pipe through `escape`.
-      const escapes = new Set(['escape', 'xml_escape', 'escape_once']);
-      const escaped = (chains.get(path) ?? [])
-        .some((f) => escapes.has(f.split(':')[0].trim()));
-      if (typeof value === 'string' && !escaped && /[<>&]/.test(value)
-          && !/^\s*</.test(value) && !value.startsWith('var:')) {
-        report('warn', 'liquid',
-          `\`${path}\` contains <, > or & and lands in XML text. `
-          + `Pipe it through \`escape\` in the template.`);
       }
       setDeep(scope, parts, value);
     }

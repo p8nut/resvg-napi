@@ -32,19 +32,22 @@ export function registerSvgFilters(liquid, { measure, qrSvg }) {
     if (measure(text, opts) <= width) return text;
 
     // Longest prefix that still fits with the ellipsis, by bisection: measuring
-    // is a render, so keep the number of probes logarithmic.
+    // is a render, so keep the number of probes logarithmic. Cut on code
+    // points: a UTF-16 index can land inside an emoji and leave half of it.
+    const chars = Array.from(text);
+    const prefix = (n) => chars.slice(0, n).join('').trimEnd();
     let lo = 0;
-    let hi = text.length;
+    let hi = chars.length;
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
-      if (measure(`${text.slice(0, mid).trimEnd()}…`, opts) <= width) lo = mid;
+      if (measure(`${prefix(mid)}…`, opts) <= width) lo = mid;
       else hi = mid - 1;
     }
-    return lo > 0 ? `${text.slice(0, lo).trimEnd()}…` : '…';
+    return lo > 0 ? `${prefix(lo)}…` : '…';
   });
 
   /**
-   * `{{ blurb | wrap: 120, 11 }}` — greedy word wrap into `<tspan>` lines. SVG
+   * `{{ blurb | wrap: 120, 11 | raw }}` — greedy word wrap into `<tspan>` lines. SVG
    * 1.1 does not wrap text at all, so a template otherwise has to hard-code the
    * breaks.
    */

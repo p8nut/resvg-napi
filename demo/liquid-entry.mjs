@@ -9,7 +9,7 @@ export { registerSvgFilters, memoryFs, referencedPartials } from './svg-filters.
  * QR code as an SVG fragment, sized to whatever viewport it is dropped into.
  *
  * Returns a nested `<svg>` with a viewBox and `width/height="100%"`, so
- * `<svg id="qr" x=".." y=".." width="39.68" height="39.68">{{ upn | qr }}</svg>`
+ * `<svg id="qr" x=".." y=".." width="39.68" height="39.68">{{ upn | qr | raw }}</svg>`
  * scales it without the template having to know the module count.
  *
  * @param text  value to encode

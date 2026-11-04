@@ -498,6 +498,11 @@ jobs:
     name: Cargo.lock and toolchain up to date
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # The steps grep cargo's output: with the workflow's `always`, "Updating"
+    # arrives wrapped in colour codes and no pattern ever matched, so the lock
+    # check stayed green and the flate2 check said the hold was gone.
+    env:
+      CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@v7
       # Everything but flate2, which the next step holds.
@@ -513,7 +518,10 @@ jobs:
       - name: flate2 hold still needed
         if: ${{ !cancelled() }}
         run: |
-          if ! cargo update -p flate2 --dry-run 2>&1 | grep -q 'Updating flate2 '; then
+          # Kept whole, so a red run shows what cargo answered.
+          out=$(cargo update -p flate2 --dry-run 2>&1)
+          echo "$out"
+          if ! printf '%s\n' "$out" | grep -q 'Updating flate2 '; then
             echo "::error::flate2 is already at its newest: the hold is gone, delete this step"; exit 1
           fi
           cargo update -p flate2 --quiet

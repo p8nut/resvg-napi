@@ -26,6 +26,16 @@ assert.ok(bomb.length < 1024 * 1024, `the bomb is small: ${bomb.length} bytes`);
 assert.throws(() => new Resvg(bomb), /SVGZ data expands past 268435456 bytes/, 'top-level svgz bomb');
 await assert.rejects(Resvg.parseAsync(bomb), /SVGZ data expands past/, 'async too');
 
+// ...and so is a second gzip layer, which usvg's own `svgz` inflate took past
+// the cap: 300 MiB from well under 1 KiB.
+const nested = zlib.gzipSync(await gzipOf(300, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><!--', '--></svg>'));
+assert.ok(nested.length < 4096, `the nested bomb is tiny: ${nested.length} bytes`);
+assert.throws(() => new Resvg(nested), { code: 'MalformedGZip' }, 'gzip inside gzip');
+await assert.rejects(Resvg.parseAsync(nested), { code: 'MalformedGZip' }, 'async too');
+// As an image it is not drawn, rather than inflated.
+const nestedImage = new Resvg(svg(`<image href="data:image/svg+xml;base64,${nested.toString('base64')}" width="10" height="10"/>`));
+assert.equal(nestedImage.renderRaw().data.some((b) => b !== 0), false, 'nested svgz image not drawn');
+
 // ...while a normal one still parses.
 const small = zlib.gzipSync(svg('<rect width="5" height="5"/>'));
 assert.equal(new Resvg(small).width, 10, 'svgz under the cap');

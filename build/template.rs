@@ -1558,6 +1558,11 @@ pub fn template(
                 } else {
                     svg
                 };
+                // A second layer: usvg, built without `svgz`, would call it a
+                // missing feature. It is a malformed SVGZ.
+                if svg.starts_with(&[0x1f, 0x8b]) {
+                    return Ok(Err(usvg::Error::MalformedGZip));
+                }
                 let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
                     Ok(tree) => tree,
                     Err(e) => return Ok(Err(e)),

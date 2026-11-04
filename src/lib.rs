@@ -1348,15 +1348,18 @@ impl FontDatabase {
     #[doc = " of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped"]
     #[doc = " from a file on disk, then that mapping is closed and the data becomes private to the process again."]
     #[napi]
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))]
+    #[cfg_attr(
+        not(any(all(all(), all(all(all(), not(target_family = "wasm")))))),
+        allow(unused_variables)
+    )]
     pub fn make_face_data_unshared(&mut self, id: &FontFace) -> Result<()> {
-        #[cfg(not(target_family = "wasm"))]
+        #[cfg(any(all(all(), all(all(all(), not(target_family = "wasm"))))))]
         {
             let id = id.id_in(&self.inner);
             self.inner.make_face_data_unshared(id);
             Ok(())
         }
-        #[cfg(target_family = "wasm")]
+        #[cfg(not(any(all(all(), all(all(all(), not(target_family = "wasm")))))))]
         {
             Err(Error::from_reason(
                 "makeFaceDataUnshared is not available on this target: its upstream feature is off here",

@@ -512,8 +512,6 @@ pub enum Reason {
     Arg,
     Returns,
     NeedsMut,
-    /// Gated on an upstream feature this crate never builds.
-    NeverBuilt,
 }
 
 impl Skip {
@@ -540,7 +538,6 @@ impl std::fmt::Display for Skip {
             Reason::Arg => write!(f, "{n} (arg: {t})"),
             Reason::Returns => write!(f, "{n} (returns {t})"),
             Reason::NeedsMut => write!(f, "{n} (needs &mut self)"),
-            Reason::NeverBuilt => write!(f, "{n} (never built: its upstream cfg is off here)"),
         }
     }
 }

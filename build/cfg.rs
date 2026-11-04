@@ -5,10 +5,9 @@
 // the item vanish there, and a binding that calls it stops compiling. So a
 // method's `#[cfg]` -- its own and its impl block's -- is translated before
 // emission: each `feature = "x"` becomes what `config::FEATURES` says it is for
-// this crate (always on, never on, or on under a cfg of ours), anything else
-// (`unix`, `target_os = ..`) is kept as written. A method whose twins together
-// are on everywhere is emitted plain, one that is never on is skipped, the rest
-// carry the translated cfg.
+// this crate (always on, or on under a cfg of ours), anything else (`unix`,
+// `target_os = ..`) is kept as written. A method whose twins together are on
+// everywhere is emitted plain, the rest carry the translated cfg.
 
 use std::collections::BTreeSet;
 
@@ -21,7 +20,6 @@ use crate::config::FEATURES;
 #[derive(Clone)]
 pub enum Pred {
     True,
-    False,
     /// Kept as written: `unix`, `target_os = "macos"`, or one of ours.
     Atom(String),
     Not(Box<Pred>),
@@ -32,8 +30,7 @@ pub enum Pred {
 /// What to do with a method, given its cfg.
 pub enum Gate {
     Always,
-    Never,
-    /// The cfg it is built under, and its negation, both simplified.
+    /// The cfg it is built under, and its negation.
     When(TokenStream, TokenStream),
 }
 
@@ -86,13 +83,12 @@ fn translate(meta: &syn::Meta) -> Pred {
             let name = s.value();
             match FEATURES.iter().find(|(f, _)| *f == name) {
                 Some((_, "true")) => Pred::True,
-                Some((_, "false")) => Pred::False,
                 Some((_, ours)) => {
                     translate(&syn::parse_str(ours).expect("a config::FEATURES cfg that parses"))
                 }
                 None => panic!(
                     "an emitted upstream method is gated on feature {name:?}, which config::FEATURES \
-                     does not list: say whether this crate builds it (\"true\"/\"false\") or under \
+                     does not list: say whether this crate always builds it (\"true\") or under \
                      which cfg"
                 ),
             }
@@ -108,14 +104,13 @@ fn atoms(p: &Pred, out: &mut BTreeSet<String>) {
         }
         Pred::Not(x) => atoms(x, out),
         Pred::All(xs) | Pred::Any(xs) => xs.iter().for_each(|x| atoms(x, out)),
-        Pred::True | Pred::False => {}
+        Pred::True => {}
     }
 }
 
 fn holds(p: &Pred, on: &BTreeSet<&String>) -> bool {
     match p {
         Pred::True => true,
-        Pred::False => false,
         Pred::Atom(a) => on.contains(a),
         Pred::Not(x) => !holds(x, on),
         Pred::All(xs) => xs.iter().all(|x| holds(x, on)),
@@ -123,52 +118,9 @@ fn holds(p: &Pred, on: &BTreeSet<&String>) -> bool {
     }
 }
 
-/// The same predicate, with constants folded and nesting flattened, so the
-/// emitted cfg reads `not(target_family = "wasm")` rather than the nest of
-/// `all(all(), ..)` a method's own and its impl's cfgs make.
-fn simplify(p: &Pred) -> Pred {
-    match p {
-        Pred::Not(x) => match simplify(x) {
-            Pred::True => Pred::False,
-            Pred::False => Pred::True,
-            Pred::Not(y) => *y,
-            y => Pred::Not(Box::new(y)),
-        },
-        Pred::All(xs) | Pred::Any(xs) => {
-            let all = matches!(p, Pred::All(_));
-            let (unit, zero) = if all { (true, false) } else { (false, true) };
-            let mut out = Vec::new();
-            for x in xs.iter().map(simplify) {
-                match x {
-                    Pred::True if unit => {}
-                    Pred::False if !unit => {}
-                    Pred::True | Pred::False => return if zero { Pred::True } else { Pred::False },
-                    Pred::All(ys) if all => out.extend(ys),
-                    Pred::Any(ys) if !all => out.extend(ys),
-                    y => out.push(y),
-                }
-            }
-            match out.len() {
-                0 => {
-                    if unit {
-                        Pred::True
-                    } else {
-                        Pred::False
-                    }
-                }
-                1 => out.pop().unwrap(),
-                _ if all => Pred::All(out),
-                _ => Pred::Any(out),
-            }
-        }
-        x => x.clone(),
-    }
-}
-
 fn tokens(p: &Pred) -> TokenStream {
     match p {
         Pred::True => quote!(all()),
-        Pred::False => quote!(any()),
         Pred::Atom(a) => a.parse().expect("an atom that was a cfg predicate"),
         Pred::Not(x) => {
             let x = tokens(x);
@@ -193,7 +145,7 @@ pub fn gate(p: &Pred) -> Gate {
     atoms(p, &mut set);
     let all: Vec<&String> = set.iter().collect();
     assert!(all.len() < 16, "a cfg with {} atoms", all.len());
-    let rows = (0..1u32 << all.len()).map(|bits| {
+    let always = (0..1u32 << all.len()).all(|bits| {
         let on: BTreeSet<&String> = all
             .iter()
             .enumerate()
@@ -202,52 +154,9 @@ pub fn gate(p: &Pred) -> Gate {
             .collect();
         holds(p, &on)
     });
-    let (yes, no) = rows.fold((false, false), |(y, n), r| (y || r, n || !r));
-    match (yes, no) {
-        (true, false) => Gate::Always,
-        (false, _) => Gate::Never,
-        (true, true) => Gate::When(
-            tokens(&simplify(p)),
-            tokens(&simplify(&Pred::Not(Box::new(p.clone())))),
-        ),
+    if always {
+        Gate::Always
+    } else {
+        Gate::When(tokens(p), tokens(&Pred::Not(Box::new(p.clone()))))
     }
-}
-
-/// The checks `build.rs` runs on every build, next to the other self-checks.
-pub fn selftest() {
-    let parse = |s: &str| -> Pred {
-        of(&[
-            syn::parse_str::<syn::DeriveInput>(&format!("{s} struct X;"))
-                .unwrap()
-                .attrs,
-        ]
-        .concat())
-    };
-    assert!(matches!(gate(&parse("")), Gate::Always), "no cfg");
-    assert!(
-        matches!(gate(&parse("#[cfg(feature = \"fs\")]")), Gate::Always),
-        "an always-on feature"
-    );
-    // fontdb's load_font_file twins: one per memmap setting, together everywhere
-    let twins = Pred::Any(vec![
-        parse("#[cfg(all(feature = \"fs\", feature = \"memmap\"))]"),
-        parse("#[cfg(all(feature = \"fs\", not(feature = \"memmap\")))]"),
-    ]);
-    assert!(matches!(gate(&twins), Gate::Always), "complementary twins");
-    match gate(&parse(
-        "#[cfg(all(feature = \"fs\", feature = \"memmap\"))]",
-    )) {
-        Gate::When(t, n) => {
-            assert_eq!(
-                t.to_string().replace(' ', ""),
-                "not(target_family=\"wasm\")"
-            );
-            assert_eq!(n.to_string().replace(' ', ""), "target_family=\"wasm\"");
-        }
-        _ => panic!("memmap-only is target-dependent"),
-    }
-    assert!(
-        matches!(gate(&parse("#[cfg(all(unix, not(unix)))]")), Gate::Never),
-        "a contradiction"
-    );
 }

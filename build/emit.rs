@@ -1200,10 +1200,6 @@ pub fn map_methods(
             // same everywhere.
             let gate = match crate::cfg::gate(&gated) {
                 crate::cfg::Gate::Always => None,
-                crate::cfg::Gate::Never => {
-                    skipped.push(Skip::new(&name, None, Reason::NeverBuilt));
-                    continue;
-                }
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
             };
 
@@ -1784,7 +1780,6 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
 pub fn template_fns(code: &TokenStream) -> BTreeMap<String, Vec<String>> {
     let file: syn::File =
         syn::parse2(code.clone()).expect("the emitter template is not valid Rust on its own");
-    // A Vec, not a Set: the duplicate check below needs the repeats.
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for item in &file.items {
         let Item::Impl(imp) = item else { continue };

@@ -1,16 +1,11 @@
 // BBox (generated from `impl Group` / `impl Tree`), crop, and per-element render.
 import assert from 'node:assert/strict';
-import { testFonts, skip } from './support.mjs';
+import { fontsOrSkip } from './support.mjs';
 import { createRequire } from 'node:module';
 const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
-const fontsFound = testFonts(FontDatabase);
-if (!fontsFound) {
-  skip('bbox + crop', 'no font in this environment');
-  process.exit(0);
-}
-const { db, family } = fontsFound;
+const { db, family } = fontsOrSkip(FontDatabase, 'bbox + crop');
 const opts = { fontFamily: family };
 
 

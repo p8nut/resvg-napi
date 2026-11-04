@@ -1,18 +1,13 @@
 // Horizontal fitting driven by the template's own `data-maxwidth`.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { testFonts, skip } from './support.mjs';
+import { fontsOrSkip } from './support.mjs';
 import { fitTextWidths, findWidthConstraints } from '../fit.mjs';
 const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds. testFonts also points the
 // generic families at it, so `font-size` on a bare <text> resolves.
-const fontsFound = testFonts(FontDatabase);
-if (!fontsFound) {
-  skip('horizontal fitting', 'no font in this environment');
-  process.exit(0);
-}
-const { db: fonts, family } = fontsFound;
+const { db: fonts, family } = fontsOrSkip(FontDatabase, 'horizontal fitting');
 const render = (svg) => new Resvg(svg, { fontFamily: family }, fonts);
 
 // Shaped like a card template: a translate already in place, per-element limits.

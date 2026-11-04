@@ -177,7 +177,6 @@
      the rest. */
   #varsList .chain { display: block; color: var(--cyan); font-size: 11px;
                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #varsList .chain.stub { color: var(--amber); }
   #example { font: 400 11px var(--mono); padding: .15rem .3rem;
              border: 1px solid var(--rule); background: transparent; color: inherit; }
   #varsFind { margin-left: auto; font: 400 11px var(--mono); width: 9rem;
@@ -439,7 +438,6 @@
     registerSvgFilters(liquid, { measure: measureText, qrSvg });
   }
   makeLiquid();
-  const STUBBED = new Set();
 
   const $ = (id) => document.getElementById(id);
   const log = (msg) => { $('log').textContent = msg; };
@@ -534,6 +532,27 @@
     beginPass();
     analyseSoon();
     renderSoon();
+  }
+
+  /** `refresh()` without the wait, for a change that arrives all at once. */
+  function refreshNow() {
+    beginPass();
+    analyse();
+    render();
+  }
+
+  // Files dropped on `el` go to `fn`; `over` marks the target while dragging.
+  function onFiles(el, fn) {
+    for (const type of ['dragenter', 'dragover']) {
+      el.addEventListener(type, (e) => { e.preventDefault(); el.classList.add('over'); });
+    }
+    el.addEventListener('dragleave', () => el.classList.remove('over'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('over');
+      fn(e.dataTransfer.files);
+    });
   }
 
   // Images the user supplied, keyed by the href the document uses. Declared up
@@ -757,30 +776,6 @@
     });
   };
 
-  function loopCollections(raw) {
-    const found = new Set();
-    let templates;
-    try {
-      templates = liquid.parse(raw);
-    } catch {
-      return found;
-    }
-    const visit = (nodes, depth = 0) => {
-      if (!Array.isArray(nodes) || depth > 6) return;
-      for (const node of nodes) {
-        const c = node?.collection;
-        if (node?.variable && c?.input && c.begin != null) {
-          found.add(c.input.slice(c.begin, c.end).trim());
-        }
-        visit(node?.templates, depth + 1);
-        visit(node?.elseTemplates, depth + 1);
-        for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
-      }
-    };
-    visit(templates);
-    return found;
-  }
-
   // A variable used as an `<image>` href wants a file, not a string. This one is
   // an XML question, not a Liquid one, so parse the document; while the source is
   // being typed it will not be well-formed, hence the fallback scan.
@@ -923,9 +918,7 @@
       json.addEventListener('change', () => {
         vars.set(name, json.value);
         draw();
-        beginPass();
-        analyse();
-        render();
+        refreshNow();
       });
       raw.append(summary, json);
 
@@ -953,25 +946,20 @@
       return;
     }
     const asImage = imageHrefVars($('svg').value);
-    const asLoop = loopCollections($('svg').value);
     const columns = loopColumns($('svg').value);
     const signature = names
       .map((n) => `${n}:${(chains.get(n) ?? []).join('|')}`
-        + `:${asImage.has(n) ? 'img' : asLoop.has(n) ? `arr(${(columns.get(n) ?? []).join('|')})` : 'txt'}`)
+        + `:${asImage.has(n) ? 'img' : columns.has(n) ? `arr(${(columns.get(n) ?? []).join('|')})` : 'txt'}`)
       .join(',');
     if (signature === varsSignature) return;
     varsSignature = signature;
     $('varsCount').textContent = `— ${names.length} found by liquidjs`;
-    const stubbed = [...chains.values()]
-      .map((c) => c[0].split(':')[0].trim())
-      .filter((f) => STUBBED.has(f));
     $('varsNote').textContent = 'Strict variables is on: anything the analysis missed '
       + 'raises `undefined variable` instead of rendering as empty. '
       + 'An empty field keeps its `{{ name }}` placeholder, so an '
       + 'image variable stays uploadable -- unless the chain has `default`, '
       + 'which then supplies the value. Unknown filters pass their value through; '
-      + '`qr` generates a QR code as SVG.'
-      + (stubbed.length ? ` Stubbed: ${[...new Set(stubbed)].join(', ')}.` : '');
+      + '`qr` generates a QR code as SVG.';
     // One row per variable -- name and chain above the control -- so a long
     // chain cannot squeeze the input, and the rows tile into columns.
     const field = (name) => {
@@ -983,11 +971,7 @@
         pipe.className = 'chain';
         pipe.textContent = ` | ${chain.join(' | ')}`;
         // The chain is clipped to one line, so the whole of it lives here.
-        pipe.title = `${chain.join(' | ')}\n`
-          + (STUBBED.has(chain[0].split(':')[0].trim())
-            ? 'filter registered as a stub: returns an empty string'
-            : 'filter applied by liquidjs');
-        if (STUBBED.has(chain[0].split(':')[0].trim())) pipe.classList.add('stub');
+        pipe.title = `${chain.join(' | ')}\nfilter applied by liquidjs`;
         code.append(pipe);
       }
       if (asImage.has(name)) {
@@ -1006,9 +990,7 @@
           images.set(href, bytes);
           vars.set(name, href);
           status.textContent = `${picked.name} (${picked.size.toLocaleString()} bytes)`;
-          beginPass();
-          analyse();
-          render();
+          refreshNow();
         };
 
         const file = document.createElement('input');
@@ -1032,22 +1014,13 @@
           refresh();
         });
 
-        for (const type of ['dragenter', 'dragover']) {
-          wrap.addEventListener(type, (e) => { e.preventDefault(); wrap.classList.add('over'); });
-        }
-        wrap.addEventListener('dragleave', () => wrap.classList.remove('over'));
-        wrap.addEventListener('drop', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          wrap.classList.remove('over');
-          if (e.dataTransfer.files[0]) use(e.dataTransfer.files[0]);
-        });
+        onFiles(wrap, (files) => { if (files[0]) use(files[0]); });
 
         wrap.append(file, typed, status);
         return [code, wrap];
       }
 
-      if (asLoop.has(name)) {
+      if (columns.has(name)) {
         const tag = document.createElement('span');
         tag.className = 'chain';
         tag.textContent = ' iterated';
@@ -1068,9 +1041,7 @@
       input.addEventListener('change', () => {
         // A paste or an autofill can arrive without a single `input` event.
         vars.set(name, input.value);
-        beginPass();
-        analyse();
-        render();
+        refreshNow();
       });
       return [code, input];
     };
@@ -1219,32 +1190,15 @@
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg';
-      input.addEventListener('change', async (ev) => {
-        const file = ev.target.files[0];
+      const pin = async (file) => {
         if (!file) return;
         images.set(href, new Uint8Array(await file.arrayBuffer()));
         log(`resolved ${href} with ${file.name} (${file.size.toLocaleString()} bytes)`);
-        beginPass();
-        analyse();
-        render();
-      });
+        refreshNow();
+      };
+      input.addEventListener('change', (ev) => pin(ev.target.files[0]));
       // Dropping straight onto a row pins the file to that href.
-      for (const type of ['dragenter', 'dragover']) {
-        li.addEventListener(type, (e) => { e.preventDefault(); li.style.opacity = '.6'; });
-      }
-      li.addEventListener('dragleave', () => { li.style.opacity = ''; });
-      li.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        li.style.opacity = '';
-        const file = e.dataTransfer.files[0];
-        if (!file) return;
-        images.set(href, new Uint8Array(await file.arrayBuffer()));
-        log(`resolved ${href} with ${file.name}`);
-        beginPass();
-        analyse();
-        render();
-      });
+      onFiles(li, (files) => pin(files[0]));
       li.append(code, input);
       return li;
     }));
@@ -1339,9 +1293,7 @@
     }
     if (imageFiles.length) parts.push(`${images.size} image(s) resolved`);
     log(parts.join('; ') || 'nothing usable in that drop');
-    beginPass();
-    analyse();
-    render();
+    refreshNow();
   }
 
   // Fonts by name, without a file to drop.
@@ -1437,14 +1389,7 @@
     ev.target.value = '';
   });
 
-  const drop = $('drop');
-  for (const type of ['dragenter', 'dragover']) {
-    drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.add('over'); });
-  }
-  for (const type of ['dragleave', 'drop']) {
-    drop.addEventListener(type, () => drop.classList.remove('over'));
-  }
-  drop.addEventListener('drop', (e) => { e.preventDefault(); accept(e.dataTransfer.files); });
+  onFiles($('drop'), accept);
   window.addEventListener('paste', (e) => {
     const files = [...e.clipboardData.files];
     if (files.length) accept(files);
@@ -1555,6 +1500,9 @@
     return { used: [...used], swaps: [...swaps] };
   }
 
+  // The proof's current blob URL, revoked when the next render replaces it.
+  let outUrl = null;
+
   function render() {
     const t0 = performance.now();
     try {
@@ -1576,7 +1524,9 @@
       // refuses shared views -- so copy out first. Same reason applies to
       // fetch bodies, postMessage and canvas data.
       const bytes = new Uint8Array(png);
-      $('out').src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+      if (outUrl) URL.revokeObjectURL(outUrl);
+      outUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+      $('out').src = outUrl;
       $('out').hidden = false;
       $('plate').classList.remove('fresh');
       void $('plate').offsetWidth;
@@ -1630,9 +1580,7 @@
 
   const round = (n) => Math.round(n * 100) / 100;
 
-  const scaleOf = (p, doc) => p.width ? p.width / doc.width
-    : p.height ? p.height / doc.height
-    : (p.scale ?? 1);
+  const scaleOf = (p, doc) => p.width ? p.width / doc.width : (p.scale ?? 1);
 
   // The last render, so a click on a node row can measure against the same
   // scale and origin the proof was drawn with.
@@ -1749,9 +1697,7 @@
   $('fit').addEventListener('change', () => { beginPass(); render(); });
   $('strict').addEventListener('change', () => {
     makeLiquid();
-    beginPass();
-    analyse();
-    render();
+    refreshNow();
   });
   $('diagClear').addEventListener('click', () => {
     seen.clear();
@@ -1766,8 +1712,6 @@
   // <img> shows a broken icon, and the page should prove itself before it is
   // asked to.
   if (mod) {
-    beginPass();
-    analyse();
-    render();
+    refreshNow();
   }
 </script>

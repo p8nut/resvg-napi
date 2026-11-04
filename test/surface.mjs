@@ -8,7 +8,7 @@ import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { testFonts, testFontFile, skip } from './support.mjs';
+import { fontsOrSkip, testFontFile, skip } from './support.mjs';
 const require = createRequire(import.meta.url);
 const binding = require('../index.js');
 const { Resvg, FontDatabase } = binding;
@@ -52,11 +52,7 @@ if (wasi) {
 }
 
 // 3. the walk
-const fonts = testFonts(FontDatabase);
-if (!fonts) {
-  skip('generated getters', 'no font in this environment');
-  process.exit(0);
-}
+const fonts = fontsOrSkip(FontDatabase, 'generated getters');
 const png = readFileSync(new URL('../demo/assets/roster.png', import.meta.url)).toString('base64');
 const doc = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="320" height="240">
   <defs>

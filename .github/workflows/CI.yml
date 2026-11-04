@@ -324,8 +324,10 @@ jobs:
         env:
           RESVG_REQUIRE_FONTS: '1'
       # index.d.ts is generated, so a type regression is a build product
-      # regression: cheap to catch here.
-      - run: npm run typecheck
+      # regression: cheap to catch here. Not on the 20.3.0 floor: TypeScript 7's
+      # extensionless bin does not load there, and the types are the same.
+      - if: matrix.node != '20.3.0'
+        run: npm run typecheck
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform

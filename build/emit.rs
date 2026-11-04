@@ -1619,6 +1619,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         let ReturnType::Type(_, t) = ret else {
             return false;
         };
+        // Result and Option only, not peel_type: a list is not cheap.
         let mut name = ty_str(t);
         while let Some(inner) = ["Result<", "Option<"]
             .iter()
@@ -1749,22 +1750,8 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
                 let ReturnType::Type(_, t) = &f.sig.output else {
                     continue;
                 };
-                let mut name = ty_str(t);
                 // Result<Option<Text>> -> Text, in any nesting order.
-                loop {
-                    let before = name.clone();
-                    name = name.trim_start_matches('&').to_string();
-                    for w in ["Result<", "Option<", "Vec<"] {
-                        if let Some(inner) = name.strip_prefix(w).and_then(|r| r.strip_suffix('>'))
-                        {
-                            name = inner.to_string();
-                        }
-                    }
-                    if name == before {
-                        break;
-                    }
-                }
-                out.insert(name);
+                out.insert(peel_type(&ty_str(t)).to_string());
             }
         }
     }

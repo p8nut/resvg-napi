@@ -454,9 +454,9 @@ pub fn payload_enums(
     out
 }
 
-/// The type a member is *about*, its wrappers peeled: `&`, `Option<..>`,
-/// `Vec<..>`, `Box<..>`, a slice `[..]` and `implIterator<Item=..>`, as often as
-/// they nest. Stops at `Arc<..>`: that marks a shared handle, and peeling it
+/// The type a member is *about*, its wrappers peeled: `&`, `Result<..>`,
+/// `Option<..>`, `Vec<..>`, `Box<..>`, a slice `[..]` and
+/// `implIterator<Item=..>`, as often as they nest. Stops at `Arc<..>`: that marks a shared handle, and peeling it
 /// would seed the handle's type as data. The path prefix is left on; callers
 /// that want the bare name take it off. `ty_str` has removed the whitespace.
 pub fn peel_type(t: &str) -> &str {
@@ -465,7 +465,7 @@ pub fn peel_type(t: &str) -> &str {
         let next = t
             .strip_prefix('&')
             .or_else(|| {
-                ["Option<", "Vec<", "Box<"]
+                ["Result<", "Option<", "Vec<", "Box<"]
                     .iter()
                     .find_map(|w| t.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
             })

@@ -249,16 +249,11 @@ fn main() {
     );
     let object_seeds: BTreeSet<String> = referenced
         .iter()
-        .filter_map(|t| {
+        .filter(|t| {
             let b = t.trim_start_matches('&');
-            if let Some(inner) = b.strip_prefix("[").and_then(|s| s.strip_suffix("]")) {
-                return Some(inner.trim_start_matches('&').to_string());
-            }
-            if let Some(rest) = b.strip_prefix("implIterator<Item=") {
-                return Some(rest.split('>').next()?.trim_start_matches('&').to_string());
-            }
-            None
+            b.starts_with('[') || b.starts_with("implIterator<Item=")
         })
+        .map(|t| peel_type(t).to_string())
         // Plus what a payload enum carries. `filter::Kind` names seventeen
         // primitive structs and nothing else does. Safe now on two counts: a
         // duplicated name is keyed by its module, and a member returning a node
@@ -282,10 +277,9 @@ fn main() {
             // `clipPath()` returns the *wrapper class* ClipPath, which shares
             // its name with usvg::ClipPath. Seeding it would emit `wrap` twice.
             let arc_held = referenced.iter().any(|r| {
-                r.trim_start_matches('&')
-                    .trim_start_matches('[')
+                peel_type(r)
                     .strip_prefix("Arc<")
-                    .and_then(|i| i.split('>').next())
+                    .and_then(|i| i.strip_suffix('>'))
                     == Some(t.as_str())
             });
             !arc_held

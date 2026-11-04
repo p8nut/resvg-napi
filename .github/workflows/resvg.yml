@@ -15,7 +15,7 @@ name: resvg
 
 on:
   schedule:
-    # Daily, 07:15 UTC -- a quarter hour after CI's pins and lock check, so a
+    # Daily, 07:15 UTC -- a quarter hour after CI's lock check, so a
     # red run from either is unambiguous. Weekly, a release could wait up to a
     # week to be seen; the probe is one crates.io request, and an open bump
     # branch makes the rest a no-op.
@@ -45,9 +45,32 @@ jobs:
           node-version: 22
       - run: npm install  # not `npm ci` -- see CI.yml
 
+      # Current is the version Cargo.lock builds; latest is what crates.io
+      # lists. `sort -V` because 0.48.10 sorts after 0.48.9, which a string
+      # compare gets backwards, and so a pin ahead of crates.io is never
+      # "bumped" down. A prerelease is not proposed. The runner's stable cargo
+      # answers both, so the pinned toolchain is not installed for a no-op.
       - name: Ask crates.io
         id: probe
-        run: node scripts/check-resvg.mjs >> "$GITHUB_OUTPUT"
+        env:
+          RUSTUP_TOOLCHAIN: stable
+        run: |
+          set -euo pipefail
+          current=$(cargo pkgid resvg | sed 's/.*@//')
+          latest=$(cargo search resvg --limit 1 | sed -n 's/^resvg = "\([^"]*\)".*/\1/p')
+          [ -n "$latest" ] || { echo "::error::cargo search did not list resvg first"; exit 1; }
+          newest=$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -1)
+          bump=false
+          if [ "$latest" != "$current" ] && [ "$newest" = "$latest" ] && [ "${latest#*-}" = "$latest" ]; then
+            bump=true
+          fi
+          echo "current $current, latest $latest, bump $bump"
+          {
+            echo "current=$current"
+            echo "latest=$latest"
+            echo "bump=$bump"
+            echo "branch=chore/resvg-$latest"
+          } >> "$GITHUB_OUTPUT"
 
       # An open PR from a previous week is not a reason to open it again.
       - name: Already proposed?
@@ -76,7 +99,7 @@ jobs:
           # The report diff is what tells a reviewer whether a red PR means the
           # surface moved benignly or something broke. Captured before the
           # snapshot is rewritten, because afterwards there is nothing to diff.
-          npm run report -- -w >/dev/null
+          npm run report >/dev/null
           {
             echo '```diff'
             git diff --no-color -- codegen-report.txt | tail -60

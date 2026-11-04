@@ -22,8 +22,9 @@ on:
       - '!LICENSE*'
       - '**/THIRD-PARTY-NOTICES.md'
   schedule:
-    # Daily, 07:00 UTC -- asks upstream whether the pins can go and whether
-    # Cargo.lock or the toolchain moved. A red run repeats daily until acted on.
+    # Daily, 07:00 UTC -- asks upstream whether the flate2 hold can go and
+    # whether Cargo.lock or the toolchain moved. A red run repeats daily until
+    # acted on.
     - cron: '0 7 * * *'
   workflow_dispatch:
 
@@ -60,11 +61,11 @@ jobs:
   # different code path. The rest waits for the merge, the tag, a manual
   # dispatch, or a `full-matrix` label when the proof is wanted before merging.
   #
-  # The script is also where the target list lives: it asserts against
-  # package.json's `napi.targets` rather than being a second copy of it.
+  # The targets are package.json's `napi.targets`; the script derives each
+  # one's host and cross flag from the triple.
   plan:
     name: plan
-    # The daily cron is for `pins` and `lock` alone. Without this it also
+    # The daily cron is for `lock` alone. Without this it also
     # rebuilt and retested all thirteen targets on an unchanged main; every job
     # below `needs` plan, so skipping it skips them.
     if: github.event_name != 'schedule'
@@ -84,25 +85,6 @@ jobs:
           EVENT: ${{ github.event_name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: node scripts/ci-targets.mjs >> "$GITHUB_OUTPUT"
-      # Two targets where thirteen are expected reads as a broken matrix unless
-      # the run says why it chose that.
-      - name: Say what was chosen
-        run: |
-          {
-            if [ "${{ steps.p.outputs.full }}" = "true" ]; then
-              echo "Full matrix: every target in \`napi.targets\`."
-            else
-              echo "Slim matrix: \`x86_64-unknown-linux-gnu\` and \`wasm32-wasip1-threads\`."
-              echo ""
-              echo "The other targets build on merge, on a \`v*\` tag, on a manual dispatch,"
-              echo "or on this pull request with the \`full-matrix\` label."
-            fi
-            echo ""
-            echo '```json'
-            echo '${{ steps.p.outputs.targets }}' | node -e \
-              'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(t=>t.target).join("\n")))'
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
       # napi-derive's expansion calls napi API without depending on napi, so
       # cargo happily resolves a pair that does not build: derive 3.6.13 calls
       # defer_native_borrow_scope, which napi only has from 3.15.0. Holding the
@@ -117,17 +99,11 @@ jobs:
             echo "$f $c: declares $declared, locked $locked"
             [ "$declared" = "$locked" ] || { echo "::error file=$f::raise $c to $locked"; exit 1; }
           done
-      # The scripts' own selftests: pure JS on node builtins, no binary and no
-      # install, so once here rather than on every test-matrix entry. Offline:
-      # check-pins covers its decision, including the path where it reports the
-      # pins as obsolete; the networked half runs on a schedule in `pins`.
-      - run: npm run check:pins:selftest
-      - run: npm run check:package:selftest
-      - run: npm run licenses:selftest
-      - run: npm run report:selftest
-      - run: npm run conformance:selftest
-      - run: npm run check:resvg:selftest
-      - run: npm run ci:targets:selftest
+      # The scripts' own tests: pure JS on node builtins, no binary and no
+      # install, so once here rather than on every test-matrix entry. `.spec`
+      # rather than `.test`, which `node --test` would also pick up from
+      # `npm test` on every matrix entry.
+      - run: node --test "scripts/*.spec.mjs"
 
   build:
     name: ${{ matrix.target }}
@@ -231,7 +207,9 @@ jobs:
       # diff instead of passing unnoticed in a log nobody reads.
       - name: Codegen report is up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: npm run report
+        run: |
+          npm run report
+          git diff --exit-code -- codegen-report.txt
 
       # The same treatment for what the binary links: every crate whose licence
       # asks to travel with a binary distribution, read from the crate graph.
@@ -245,11 +223,22 @@ jobs:
       # cache hid that until rustc 1.99 changed its key: on a cold one the step
       # died on `failed to download windows-link`. `cargo fetch` without
       # `--target` downloads the whole graph.
+      #
+      # The script rewrites the notice and its copies in every npm/* package,
+      # with their files[] entries; status rather than diff, so a copy written
+      # where none was committed fails too.
       - name: Third-party notices are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           cargo fetch --locked
           npm run licenses
+          changed=$(git status --porcelain -- THIRD-PARTY-NOTICES.md npm)
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            git diff -- THIRD-PARTY-NOTICES.md npm
+            echo "::error::run npm run licenses and commit the result"
+            exit 1
+          fi
 
       # esbuild has exactly one consumer -- demo/build.mjs -- and pages.yml runs
       # only on main, so an esbuild bump was provable only after merging, in the
@@ -278,8 +267,8 @@ jobs:
         if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
         run: |
           if [ "${{ matrix.target }}" = x86_64-unknown-linux-gnu ]; then
-            npm run report -- -w || true
-            npm run licenses -- -w || true
+            npm run report || true
+            npm run licenses || true
           fi
           git diff --binary -- . ':!package-lock.json' > regen.patch
       - if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
@@ -324,19 +313,15 @@ jobs:
         env:
           RESVG_REQUIRE_FONTS: '1'
       # index.d.ts is generated, so a type regression is a build product
-      # regression: cheap to catch here. Not on the 20.3.0 floor: TypeScript 7's
-      # extensionless bin does not load there, and the types are the same.
-      - if: matrix.node != '20.3.0'
+      # regression: cheap to catch here. Once: the types are the same on every
+      # leg (and TypeScript 7's extensionless bin does not load on 20.3.0).
+      - if: matrix.node == 22 && runner.os == 'Linux'
         run: npm run typecheck
 
   # What `npm publish` would ship, on every PR instead of only on a `v*` tag.
   # npm drops a files[] entry that is not on disk *silently*, so a platform
   # package whose binary never arrived publishes as a README and a manifest,
   # and the first person to notice is whoever installs it.
-  #
-  # `napi pre-publish` is deliberately not run here: it rewrites the manifest
-  # and its behaviour without a registry token is unknown, so it stays the one
-  # step of the publish path that the first real tag will exercise for us.
   package:
     name: package (dry run)
     needs: [plan, build]
@@ -348,11 +333,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm install  # not `npm ci` -- see the build job
-      # `napi artifacts` walks package.json's napi.targets and wants a binary for
-      # every one of the thirteen, so it errors outright on a slim run's two --
-      # this is not a check being lenient, it is a step that cannot run at all.
-      # `--root-only` needs no artifacts: the root tarball holds no platform
-      # binary, and the files[] entries npm drops in silence are what it checks.
+      # The root tarball and every manifest. Needs no artifacts: the root
+      # package holds no platform binary.
+      - run: npm run check:package
+      # The platform packages need their binaries, so only on a full run:
+      # `napi artifacts` walks napi.targets and wants all thirteen, and errors
+      # outright on a slim run's two.
       - uses: actions/download-artifact@v8
         if: needs.plan.outputs.full == 'true'
         with:
@@ -361,8 +347,11 @@ jobs:
       # publish job does.
       - if: needs.plan.outputs.full == 'true'
         run: npx napi artifacts -d artifacts --npm-dir npm
-      # Empty is falsy in an expression, so the condition is inverted: `x && '' || y` is always y.
-      - run: npm run check:package -- ${{ needs.plan.outputs.full != 'true' && '--root-only' || '' }}
+      # The publish job's pre-publish, validating without writing: every
+      # files[] entry of every platform package on disk, and the wasm
+      # package's emnapi pins equal to the emnapi the builder used.
+      - if: needs.plan.outputs.full == 'true'
+        run: npx napi pre-publish -t npm --dry-run --no-gh-release --skip-optional-publish
 
       # This is a memory-safety guard, not tidiness -- the 0.3.0 release taught
       # us the difference. `napi8` is on (Cargo.toml), so every #[napi] class
@@ -410,9 +399,13 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-      # Pinned to the tag matching Cargo.toml's resvg: a reference PNG is only a
-      # reference for the version that produced it.
+      # Pinned to the tag matching the resvg Cargo.lock builds (`cargo pkgid`):
+      # a reference PNG is only a reference for the version that produced it.
+      # The runner's stable cargo reads the lockfile as well as the pinned one,
+      # without installing a toolchain for one query.
       - run: npm run conformance:fetch
+        env:
+          RUSTUP_TOOLCHAIN: stable
       - run: npm run conformance
 
   publish:
@@ -497,41 +490,44 @@ jobs:
           # name reaches the shell verbatim otherwise.
           TAG: ${{ github.ref_name }}
 
-  # Fails when a dependency hold can be lifted: emnapi off its 2.0 prerelease
-  # once a stable 2.x is out and wasm-runtime accepts it, or flate2 once png
-  # leaves miniz_oxide 0.8. A red scheduled run is the signal -- nothing else
-  # watches for it. scripts/check-pins.mjs explains each.
-  pins:
-    name: pins still needed
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm run check:pins
-
   # Dependabot leaves Cargo alone (see .github/dependabot.yml) and resvg.yml
   # only watches resvg, so a semver-compatible transitive fix could sit unused
   # forever. Red means: run `cargo update`, regenerate the notices,
-  # open a pull request. The held crates come from check-pins.mjs, which
-  # explains each hold and watches for its end.
+  # open a pull request.
   lock:
     name: Cargo.lock and toolchain up to date
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: |
-          held=$(node scripts/check-pins.mjs --held)
-          stale=$(cargo update --dry-run 2>&1 | grep -E 'Updating [^ ]+ v' | grep -vE "Updating ($held) " || true)
+      # Everything but flate2, which the next step holds.
+      - name: Cargo.lock is up to date
+        run: |
+          stale=$(cargo update --dry-run 2>&1 | grep -E 'Updating [^ ]+ v' | grep -v 'Updating flate2 ' || true)
           if [ -n "$stale" ]; then echo "$stale"; exit 1; fi
+      # flate2 is held at 1.1.9 in Cargo.lock: 1.1.10 requires miniz_oxide ^0.9
+      # while png still requires ^0.8, so taking it compiles two DEFLATE
+      # implementations into every artifact. Red here means the hold is no
+      # longer needed: `cargo update -p flate2`, and delete this step.
+      # Independent of the step above, so a stale lock does not hide it.
+      - name: flate2 hold still needed
+        if: ${{ !cancelled() }}
+        run: |
+          if ! cargo update -p flate2 --dry-run 2>&1 | grep -q 'Updating flate2 '; then
+            echo "::error::flate2 is already at its newest: the hold is gone, delete this step"; exit 1
+          fi
+          cargo update -p flate2 --quiet
+          dup=$(cargo tree -d -e normal --target all | grep miniz_oxide || true)
+          git restore Cargo.lock
+          if [ -z "$dup" ]; then
+            echo "::error::taking flate2's update no longer duplicates miniz_oxide: lift the hold"; exit 1
+          fi
+          echo "still held: the update would link $(echo $dup)"
       # rust-toolchain.toml pins the compiler, so nothing else notices a new
       # stable. Red here means: bump the channel there, fix whatever clippy now
       # says, in one pull request.
       - name: rust-toolchain.toml is the latest stable
+        if: ${{ !cancelled() }}
         run: |
           pinned=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
           latest=$(curl -fsSL https://static.rust-lang.org/dist/channel-rust-stable.toml \

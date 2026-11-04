@@ -10,6 +10,7 @@
 //! places that do name a type say why, and each is an API choice rather than a
 //! description of upstream.
 
+use convert_case::{Case, Casing};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
@@ -131,8 +132,7 @@ impl PayloadEnum {
                 .chars()
                 .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
         {
-            let mut c = variant.chars();
-            c.next().into_iter().collect::<String>() + &c.as_str().to_lowercase()
+            variant.to_case(Case::Pascal)
         } else {
             variant.to_string()
         };
@@ -283,14 +283,7 @@ impl PayloadEnum {
     }
 
     pub fn conv_ident(&self, name: &str) -> proc_macro2::Ident {
-        let mut snake = String::new();
-        for (i, c) in name.chars().enumerate() {
-            if c.is_uppercase() && i > 0 {
-                snake.push('_');
-            }
-            snake.extend(c.to_lowercase());
-        }
-        format_ident!("{snake}_to_js")
+        format_ident!("{}_to_js", name.to_case(Case::Snake))
     }
 }
 
@@ -949,19 +942,7 @@ pub fn bare(key: &str) -> &str {
 pub fn data_ident(ty: &str) -> proc_macro2::Ident {
     if let Some((module, name)) = ty.rsplit_once("::") {
         let head = module.rsplit("::").next().unwrap_or(module);
-        let mut camel = String::new();
-        let mut up = true;
-        for c in head.chars() {
-            if c == '_' {
-                up = true;
-            } else if up {
-                camel.extend(c.to_uppercase());
-                up = false;
-            } else {
-                camel.push(c);
-            }
-        }
-        return format_ident!("{camel}{name}");
+        return format_ident!("{}{name}", head.to_case(Case::Pascal));
     }
     format_ident!("{}", renamed(DATA_RENAMES, ty))
 }
@@ -1017,35 +998,8 @@ pub fn result_inner(ty: &Type) -> Option<Type> {
     })
 }
 
-/// `render_png` -> `renderPng`, the name napi gives it in JS.
+/// `render_png` -> `renderPng`, the name napi gives it in JS. An all-caps
+/// name is an acronym: usvg's `ImageKind::PNG` is `png`.
 pub fn lower_camel(s: &str) -> String {
-    // An all-caps name is an acronym, not camel case: `PNG` is `png`, and
-    // lowering only the first letter would give `pNG`. usvg spells
-    // `ImageKind::PNG`, `JPEG`, `GIF` and `WEBP` that way.
-    if s.len() > 1
-        && s.chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-    {
-        return s.to_lowercase();
-    }
-    let camel = heck_camel(s);
-    let mut c = camel.chars();
-    match c.next() {
-        Some(f) => f.to_lowercase().collect::<String>() + c.as_str(),
-        None => String::new(),
-    }
-}
-
-/// `resvg_png_bytes` -> `ResvgPngBytes`.
-pub fn heck_camel(s: &str) -> String {
-    s.split('_')
-        .filter(|p| !p.is_empty())
-        .map(|p| {
-            let mut c = p.chars();
-            match c.next() {
-                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
+    s.to_case(Case::Camel)
 }

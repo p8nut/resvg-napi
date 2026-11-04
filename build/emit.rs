@@ -9,6 +9,7 @@
 //! of an object and a class has neither, so a partial mapping cannot be a field
 //! of anything, and demoting one type forces every type holding it down too.
 
+use convert_case::Casing;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1488,7 +1489,7 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
         let task = format_ident!(
             "{}{}Task",
             ty_str(&t.target),
-            heck_camel(&t.core.to_string())
+            t.core.to_string().to_case(convert_case::Case::Pascal)
         );
         let (names, types): (Vec<_>, Vec<_>) = t.params.iter().cloned().unzip();
         let core = &t.core;

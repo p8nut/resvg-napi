@@ -5,12 +5,10 @@
 // ones no other test touches were actually read.
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import binding from '../index.js';
 import { fontsOrSkip, testFontFile, skip } from './support.mjs';
-const require = createRequire(import.meta.url);
-const binding = require('../index.js');
 const { Resvg, FontDatabase } = binding;
 
 // 1. which artifact is loaded: the native addon, or the WASI module when
@@ -117,4 +115,3 @@ const wanted = [
 ];
 const missed = wanted.filter((m) => !read.has(m));
 assert.deepEqual(missed, [], 'getters the walk should have reached');
-console.log(`ok — generated surface: ${read.size} members read without a throw`);

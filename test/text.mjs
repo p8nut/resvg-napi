@@ -4,8 +4,7 @@
 // them.
 import assert from 'node:assert/strict';
 import { fontsOrSkip } from './support.mjs';
-import { createRequire } from 'node:module';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
+import { Resvg, FontDatabase } from '../index.js';
 
 const { db, family } = fontsOrSkip(FontDatabase, 'text content');
 
@@ -127,5 +126,3 @@ assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
   assert.ok(flat[0].renderPng().length > 0);
   assert.equal(doc.node('notext').flattenedChildren(), null);
 }
-
-console.log('ok — text content: all checks passed');

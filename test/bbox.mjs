@@ -1,8 +1,7 @@
 // BBox (generated from `impl Group` / `impl Tree`), crop, and per-element render.
 import assert from 'node:assert/strict';
 import { fontsOrSkip } from './support.mjs';
-import { createRequire } from 'node:module';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
+import { Resvg, FontDatabase } from '../index.js';
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
 const { db, family } = fontsOrSkip(FontDatabase, 'bbox + crop');
@@ -69,5 +68,3 @@ assert.deepEqual([...node.data], [...cropped.data], 'renderNodePng ≡ crop to t
 assert.deepEqual([decode(r.renderNodePng('box', { scale: 2 }), 136, 96).width], [136]);
 assert.ok(r.renderNodePng('box', { background: 'teal' }).length > 0);
 assert.throws(() => r.renderNodePng('nope'), /no element with id/);
-
-console.log('ok — bbox + crop + renderNode: all checks passed');

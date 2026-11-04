@@ -2,9 +2,8 @@
 // `[Symbol.dispose]`. Every method after it throws rather than answering
 // from the empty tree left in its place.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
+import { Resvg } from '../index.js';
 import { inspect } from 'node:util';
-const { Resvg } = createRequire(import.meta.url)('../index.js');
 
 const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect id="r" width="5" height="5"/></svg>';
 

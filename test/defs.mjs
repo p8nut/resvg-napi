@@ -1,8 +1,7 @@
 // Generated wrapper classes over usvg's Arc-held definitions.
 import assert from 'node:assert/strict';
 import { fontsOrSkip } from './support.mjs';
-import { createRequire } from 'node:module';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
+import { Resvg, FontDatabase } from '../index.js';
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
 const { db, family } = fontsOrSkip(FontDatabase, 'definition classes');
@@ -127,8 +126,6 @@ assert.equal(resolved.faceData('Nope-Regular'), null);
 // 8. the font database a parse actually resolved
 assert.ok(r.fontdb().len() > 0, 'resolved fontdb reachable from the tree');
 
-console.log('ok — generated definition classes + value objects: all checks passed');
-
 // --- FontFace: the value class that unlocked the ID-gated fontdb methods ------
 {
   const before = db.len();
@@ -210,5 +207,3 @@ console.log('ok — generated definition classes + value objects: all checks pas
   assert.equal(f.imageChildren(1), null, 'not an feImage');
   assert.equal(f.imageChildren(9), null, 'out of range');
 }
-
-console.log('ok — FontFace + strict objects: all checks passed');

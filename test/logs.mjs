@@ -1,8 +1,7 @@
 // The log collector: usvg and resvg report recoverable problems through the
 // `log` crate, and nothing consumed it before.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-const { Resvg, setLogLevel, takeLogs } = createRequire(import.meta.url)('../index.js');
+import { Resvg, setLogLevel, takeLogs } from '../index.js';
 
 const messy = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="50" height="50">
   <rect width="10" height="10" fill="notacolour"/>
@@ -111,5 +110,3 @@ takeLogs();
   assert.ok(all.some((l) => l.includes("'colour-a'")) && all.some((l) => l.includes("'colour-b'")));
 }
 setLogLevel('off');
-
-console.log('ok — log collection: all checks passed');

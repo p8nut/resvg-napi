@@ -20,6 +20,8 @@ use crate::config::FEATURES;
 #[derive(Clone)]
 pub enum Pred {
     True,
+    /// Only `simplify` makes one: `not(all())`.
+    False,
     /// Kept as written: `unix`, `target_os = "macos"`, or one of ours.
     Atom(String),
     Not(Box<Pred>),
@@ -30,7 +32,7 @@ pub enum Pred {
 /// What to do with a method, given its cfg.
 pub enum Gate {
     Always,
-    /// The cfg it is built under, and its negation.
+    /// The cfg it is built under, and its negation, both simplified.
     When(TokenStream, TokenStream),
 }
 
@@ -104,13 +106,14 @@ fn atoms(p: &Pred, out: &mut BTreeSet<String>) {
         }
         Pred::Not(x) => atoms(x, out),
         Pred::All(xs) | Pred::Any(xs) => xs.iter().for_each(|x| atoms(x, out)),
-        Pred::True => {}
+        Pred::True | Pred::False => {}
     }
 }
 
 fn holds(p: &Pred, on: &BTreeSet<&String>) -> bool {
     match p {
         Pred::True => true,
+        Pred::False => false,
         Pred::Atom(a) => on.contains(a),
         Pred::Not(x) => !holds(x, on),
         Pred::All(xs) => xs.iter().all(|x| holds(x, on)),
@@ -118,9 +121,52 @@ fn holds(p: &Pred, on: &BTreeSet<&String>) -> bool {
     }
 }
 
+/// The same predicate, with constants folded and nesting flattened, so the
+/// emitted cfg reads `not(target_family = "wasm")` rather than the nest of
+/// `all(all(), ..)` a method's own and its impl's cfgs make.
+fn simplify(p: &Pred) -> Pred {
+    match p {
+        Pred::Not(x) => match simplify(x) {
+            Pred::True => Pred::False,
+            Pred::False => Pred::True,
+            Pred::Not(y) => *y,
+            y => Pred::Not(Box::new(y)),
+        },
+        Pred::All(xs) | Pred::Any(xs) => {
+            let all = matches!(p, Pred::All(_));
+            let (unit, zero) = if all { (true, false) } else { (false, true) };
+            let mut out = Vec::new();
+            for x in xs.iter().map(simplify) {
+                match x {
+                    Pred::True if unit => {}
+                    Pred::False if !unit => {}
+                    Pred::True | Pred::False => return if zero { Pred::True } else { Pred::False },
+                    Pred::All(ys) if all => out.extend(ys),
+                    Pred::Any(ys) if !all => out.extend(ys),
+                    y => out.push(y),
+                }
+            }
+            match out.len() {
+                0 => {
+                    if unit {
+                        Pred::True
+                    } else {
+                        Pred::False
+                    }
+                }
+                1 => out.pop().unwrap(),
+                _ if all => Pred::All(out),
+                _ => Pred::Any(out),
+            }
+        }
+        x => x.clone(),
+    }
+}
+
 fn tokens(p: &Pred) -> TokenStream {
     match p {
         Pred::True => quote!(all()),
+        Pred::False => quote!(any()),
         Pred::Atom(a) => a.parse().expect("an atom that was a cfg predicate"),
         Pred::Not(x) => {
             let x = tokens(x);
@@ -157,6 +203,9 @@ pub fn gate(p: &Pred) -> Gate {
     if always {
         Gate::Always
     } else {
-        Gate::When(tokens(p), tokens(&Pred::Not(Box::new(p.clone()))))
+        Gate::When(
+            tokens(&simplify(p)),
+            tokens(&simplify(&Pred::Not(Box::new(p.clone())))),
+        )
     }
 }

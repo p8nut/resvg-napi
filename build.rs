@@ -787,10 +787,8 @@ fn main() {
         // already be the target type, option structs are filled field by
         // field from Default, and a 17-variant Either is what napi offers for
         // a JS union; `FontDatabase::new` is a JS constructor, so a Default
-        // impl would be dead API. A gated method's cfg is its own and its impl
-        // block's, translated and left unsimplified. Everything else clippy
-        // says applies here too.
-        "#![allow(clippy::useless_conversion, clippy::field_reassign_with_default, clippy::type_complexity, clippy::new_without_default, clippy::non_minimal_cfg)]\n",
+        // impl would be dead API. Everything else clippy says applies here too.
+        "#![allow(clippy::useless_conversion, clippy::field_reassign_with_default, clippy::type_complexity, clippy::new_without_default)]\n",
     );
     let text = format!("{header}{}", code);
 

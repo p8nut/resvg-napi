@@ -51,6 +51,12 @@ of allocating (default 2^26, an 8192×8192 canvas or 256 MiB; a group with a
 filter or opacity can take a layer of 25× that or more, so raise it with care).
 `Resvg.parseAsync` moves the parse off the loop too.
 
+`dispose()` frees the parsed tree now instead of at garbage collection; any
+later call on that document throws. `using doc = new Resvg(svg)` calls it at the
+end of the block, on runtimes with `using` (Node 24, Chrome 134, Firefox 141).
+Where `Symbol.dispose` is missing (iOS Safari at the time of writing), call
+`dispose()` yourself.
+
 A document usvg refuses throws (or rejects) with usvg's own reason as
 `error.code`: `NotAnUtf8Str`, `SvgzFeatureNotEnabled`, `MalformedGZip`,
 `ElementsLimitReached`, `InvalidSize` or `ParsingFailed`, typed as

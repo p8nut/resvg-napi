@@ -269,6 +269,10 @@ pub fn inspect<'e>(
     if depth.is_some_and(|d| d < 0.0) {
         return Ok(format!("[{class}]"));
     }
+    // `disposed` is printed only once true, and alone: every other getter throws then.
+    if getters.contains(&"disposed") && this.get_named_property::<bool>("disposed")? {
+        return Ok(format!("{class} {{ disposed: true }}"));
+    }
     let mut shown = Object::new(env)?;
     // A null is a member that does not apply here -- a group's opacity on a
     // path -- and five of them bury the two values that do.
@@ -276,7 +280,7 @@ pub fn inspect<'e>(
         ValueType::Null => Ok(()),
         _ => shown.set_named_property(key, value),
     };
-    for key in getters {
+    for key in getters.iter().filter(|k| **k != "disposed") {
         show(key, this.get_named_property(key)?)?;
     }
     for key in methods {

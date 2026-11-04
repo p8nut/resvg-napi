@@ -1149,8 +1149,11 @@ fn main() {
             );
         }
         let ceremony = emit_twins(&twins);
+        let mut file: syn::File =
+            syn::parse2(quote! { #file #ceremony }).expect("the async twins are valid Rust");
+        guard_live(&mut file, "Resvg", &["dispose", "disposed"]);
         let inspect = inspect_members(&file);
-        code = quote! { #file #ceremony #inspect };
+        code = quote! { #file #inspect };
     }
 
     // Nothing above prevents a future upstream method from colliding with a

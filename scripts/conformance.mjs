@@ -13,7 +13,6 @@
 //
 //   npm run conformance             compare against the baseline
 //   npm run conformance -- -w       rewrite the baseline
-//   npm run conformance -- -s       selftest, offline
 
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -106,7 +105,7 @@ export function compare(want, got) {
   return { worse, better, gone };
 }
 
-function parseBaseline(text) {
+export function parseBaseline(text) {
   const m = new Map();
   for (const line of text.split('\n')) {
     const t = line.trim();
@@ -117,7 +116,7 @@ function parseBaseline(text) {
   return m;
 }
 
-function formatBaseline(got) {
+export function formatBaseline(got) {
   const failing = [...got].filter(([, d]) => d > 0).sort(([a], [b]) => (a < b ? -1 : 1));
   const head = [
     '# resvg conformance: files whose render differs from upstream\'s reference,',
@@ -183,69 +182,6 @@ function run() {
   return { got, errors };
 }
 
-async function selftest() {
-  const assert = (await import('node:assert/strict')).default;
-
-  // testList(): the paths upstream asserts on, sorted, `.svg` appended
-  assert.deepEqual(
-    testList('#[test] fn b() { assert_eq!(render("tests/z/b"), 0); }\n' +
-             '#[test] fn a() { assert_eq!(render("tests/a"), 0); }\n' +
-             'render_extra("tests/skipped")'),
-    ['a.svg', 'z/b.svg'],
-    'plain render() only, and sorted',
-  );
-
-  const B = (o) => new Map(Object.entries(o));
-  assert.deepEqual(compare(B({ 'a': 5 }), B({ 'a': 5 })), { worse: [], better: [], gone: [] });
-
-  const w = compare(B({ 'a': 5 }), B({ 'a': 9 }));
-  assert.deepEqual(w.worse, [{ path: 'a', was: 5, now: 9 }]);
-
-  // a case that starts throwing is a regression, whatever it did before
-  assert.deepEqual(
-    compare(B({ 'a': 0 }), B({ 'a': THREW })).worse,
-    [{ path: 'a', was: 0, now: 'threw' }],
-    'matching, then throwing -- the case this used to call an improvement',
-  );
-  assert.deepEqual(compare(B({ 'a': 0 }), B({ 'a': THREW })).better, []);
-  assert.deepEqual(
-    compare(B({}), B({ 'a': THREW })).worse,
-    [{ path: 'a', was: 'new', now: 'threw' }],
-    'and a new one that throws is not silently accepted',
-  );
-  // one that stops throwing is progress
-  assert.deepEqual(
-    compare(B({ 'a': THREW }), B({ 'a': 0 })).better,
-    [{ path: 'a', was: 'threw', now: 0 }],
-  );
-  // still throwing is neither
-  const same = compare(B({ 'a': THREW }), B({ 'a': THREW }));
-  assert.deepEqual([same.worse, same.better], [[], []]);
-
-  const b = compare(B({ 'a': 5 }), B({ 'a': 0 }));
-  assert.deepEqual(b.better, [{ path: 'a', was: 5, now: 0 }]);
-
-  // a file absent from the baseline is only news if it differs
-  assert.deepEqual(compare(B({}), B({ 'n': 0 })).worse, []);
-  assert.deepEqual(compare(B({}), B({ 'n': 3 })).worse, [{ path: 'n', was: 'new', now: 3 }]);
-
-  // a file the corpus no longer has
-  assert.deepEqual(compare(B({ 'x': 1 }), B({})).gone, ['x']);
-
-  // the baseline round-trips, and passing files are not written
-  const text = formatBaseline(B({ 'p': 0, 'f': 7 }));
-  assert.deepEqual([...parseBaseline(text)], [['f', 7]]);
-
-  // the tolerance: 1 is the same pixel, 2 is not
-  const px = (v) => Uint8Array.from(v);
-  assert.equal(diffPixels(px([10, 10, 10, 255]), px([11, 9, 10, 255])), 0, '±1 is the same pixel');
-  assert.equal(diffPixels(px([10, 10, 10, 255]), px([12, 10, 10, 255])), 1, '±2 is not');
-  assert.equal(diffPixels(px([0, 0, 0, 0]), px([0, 0, 0, 0])), 0);
-  assert.equal(diffPixels(px([10, 10, 10, 255]), px([10, 10, 10, 250]), 8), 0, 'alpha counts too');
-
-  console.log('ok — conformance: 17 checks passed');
-}
-
 async function main() {
   if (!existsSync(CORPUS)) {
     console.error(`corpus missing at ${CORPUS}`);
@@ -285,5 +221,4 @@ async function main() {
   process.exit(1);
 }
 
-const sel = process.argv.includes('-s') || process.argv.includes('--selftest');
-await (sel ? selftest() : main());
+if (import.meta.main) await main();

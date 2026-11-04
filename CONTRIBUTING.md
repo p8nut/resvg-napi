@@ -131,14 +131,12 @@ there is none. The env-var prefix is POSIX-shell syntax; on Windows use
 ```
 cargo fmt --all --check
 cargo clippy --workspace --release --all-targets -- -D warnings
-npm run check:pins:selftest      # the dependency holds, offline half
-npm run check:package:selftest   # what publish would ship, offline half
-npm run check:resvg:selftest     # the version probe the daily bump uses
-npm run report:selftest          # the codegen report snapshot
-npm run conformance:selftest     # the corpus runner, offline half
-npm run ci:targets:selftest      # the build matrix and its tiers
-npm run licenses:selftest        # the licence expression parser, offline
+node --test "scripts/*.spec.mjs" # the scripts' own tests, offline
+npm run check:package            # what publish would ship: root tarball, manifests
 ```
+
+The scripts' tests are `*.spec.mjs`, not `*.test.mjs`: plain `node --test`,
+which `npm test` runs, would pick the latter up on every test-matrix entry.
 
 The compiler is the one `rust-toolchain.toml` pins, locally and in CI: rustup
 installs it on first use. A new stable lands through that file, in its own pull
@@ -154,9 +152,9 @@ It does not build all thirteen targets on a pull request. It builds
 `x86_64-unknown-linux-gnu`, which everything above runs on, and
 `wasm32-wasip1-threads`, which is a different code path. The other eleven build
 on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
-`full-matrix`. Adding a target means an entry in `scripts/ci-targets.mjs` and
-the triple in `package.json` under `napi.targets` -- the script fails when the
-two disagree -- then `npm run create-npm-dirs`.
+`full-matrix`. Adding a target means the triple in `package.json` under
+`napi.targets`, then `npm run create-npm-dirs`; `scripts/ci-targets.mjs` reads
+that list and derives the host and cross flag from the triple.
 
 The codegen keeps a report of everything it derived and everything it left
 alone, with the reason. It is off by default, because it rides on
@@ -172,10 +170,10 @@ TypeScript surface: it says which member, and why.
 It is snapshotted in `codegen-report.txt`, and CI fails on a diff -- the same
 treatment the generated bindings get, because the README points at that report
 as the answer to "why is this member missing". After a change that moves the
-derived surface on purpose:
+derived surface on purpose, regenerate it and commit the diff:
 
 ```bash
-npm run report -- -w
+npm run report
 ```
 
 ## Third-party notices
@@ -187,7 +185,7 @@ statically link 91 crates, and MIT, BSD-2, BSD-3, ISC and Unicode-3.0 all ask
 for their notice to travel with a binary. After a dependency changes:
 
 ```bash
-npm run licenses -- -w
+npm run licenses
 ```
 
 That writes the snapshot *and* copies it, with `LICENSE-APACHE` and
@@ -196,7 +194,7 @@ notice about what a `.node` contains has to ship in the package that holds the
 `.node`, and the root package holds none -- it ships JavaScript and type
 declarations. Shipping it only from the root, as 0.3.0 did, put it in the one
 package none of that code is in. `files[]` names all three in every platform
-manifest -- `npm run licenses -- -w` writes that entry as well as the file,
+manifest -- `npm run licenses` writes that entry as well as the file,
 because `napi create-npm-dirs` rewrites those manifests from `napi.targets` and
 would otherwise drop the notices without saying so.
 

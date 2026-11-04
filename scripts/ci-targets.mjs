@@ -1,50 +1,39 @@
 // The build matrix, and the tier of it a given event deserves.
 //
-// Two problems, one file.
+// The targets are package.json's `napi.targets`, the list the CLI emits loaders
+// for and `create-npm-dirs` makes packages for. The host and the cross flag
+// follow from the triple (see https://napi.rs/docs/cross-build), so there is no
+// second list to keep in step with it.
 //
-// **The duplication.** `package.json`'s `napi.targets` drives what the CLI
-// emits and what `create-npm-dirs` makes; the CI matrix drove what actually got
-// built. Adding a platform meant editing both, and nothing checked they agreed
-// -- a target in one and not the other fails at publish, or never gets built at
-// all. The table below is the single list, and it asserts against
-// `napi.targets` rather than trusting itself.
-//
-// **The cost.** Thirteen targets on every push is most of a CPU-hour to learn
-// that a comment changed. A pull request builds the two that can actually tell
-// it something -- the one the tests and the conformance suite run on, and wasm,
-// whose generated shims and test run are a different code path. Everything else
-// waits for the merge, the tag, a manual dispatch, or a `full-matrix` label
-// when you want the proof before merging rather than after.
+// Thirteen targets on every push is most of a CPU-hour to learn that a comment
+// changed. A pull request builds the two that can actually tell it something --
+// the one the tests and the conformance suite run on, and wasm, whose generated
+// shims and test run are a different code path. Everything else waits for the
+// merge, the tag, a manual dispatch, or a `full-matrix` label when you want the
+// proof before merging rather than after.
 import { readFileSync } from 'node:fs';
-import { binaryName } from './lib/project.mjs';
 
-/** Host and cross-compilation flag per target. See https://napi.rs/docs/cross-build. */
-const TARGETS = {
-  // pure-Rust dependency tree, so napi-cross's glibc 2.17 sysroot is enough.
-  // x64 too: built natively it linked against the runner's glibc, and 0.5.0
-  // needed 2.35 -- no RHEL 9, Amazon Linux 2023 or Debian 11 -- with the floor
-  // rising again when ubuntu-latest moves to Ubuntu 26.
-  'x86_64-unknown-linux-gnu': { host: 'ubuntu-latest', args: '--use-napi-cross' },
-  'aarch64-unknown-linux-gnu': { host: 'ubuntu-latest', args: '--use-napi-cross' },
-  'armv7-unknown-linux-gnueabihf': { host: 'ubuntu-latest', args: '--use-napi-cross' },
-  // musl goes through zig: napi-cross is glibc only
-  'x86_64-unknown-linux-musl': { host: 'ubuntu-latest', args: '-x' },
-  'aarch64-unknown-linux-musl': { host: 'ubuntu-latest', args: '-x' },
-  'aarch64-apple-darwin': { host: 'macos-latest' },
-  'x86_64-apple-darwin': { host: 'macos-latest' },
-  // native on a Windows host, so no -x and no cargo-xwin
-  'x86_64-pc-windows-msvc': { host: 'windows-latest' },
-  'i686-pc-windows-msvc': { host: 'windows-latest' },
-  'aarch64-pc-windows-msvc': { host: 'windows-latest' },
-  // the CLI configures the NDK from ANDROID_NDK_LATEST_HOME, which the runner
-  // image ships -- Android needs no cross flag
-  'aarch64-linux-android': { host: 'ubuntu-latest' },
-  'armv7-linux-androideabi': { host: 'ubuntu-latest' },
-  'wasm32-wasip1-threads': {
-    host: 'ubuntu-latest',
-    artifact: ['*.wasm', `${binaryName}.wasi*.*js`, `${binaryName}.wasi.d.cts`, 'wasi-worker*.mjs'].join('\n'),
-  },
-};
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+/** The file stem napi gives the binaries and the WASI shims. */
+const binaryName = pkg.napi?.binaryName ?? pkg.name;
+
+/** Host, cross flag and upload glob for one triple. */
+export function entry(target) {
+  const host = target.includes('-darwin') ? 'macos-latest'
+    : target.includes('-windows') ? 'windows-latest'
+    : 'ubuntu-latest';
+  // glibc goes through napi-cross for its 2.17 sysroot, x64 included: built
+  // natively it linked the runner's glibc, and 0.5.0 needed 2.35. musl goes
+  // through zig, since napi-cross is glibc only. Windows builds natively on a
+  // Windows host, and Android needs no flag: the CLI finds the runner's NDK.
+  const build_args = target.includes('-linux-gnu') ? '--use-napi-cross'
+    : target.includes('-musl') ? '-x'
+    : '';
+  const artifact_path = target.startsWith('wasm32-')
+    ? ['*.wasm', `${binaryName}.wasi*.*js`, `${binaryName}.wasi.d.cts`, 'wasi-worker*.mjs'].join('\n')
+    : '*.node';
+  return { target, host, build_args, artifact_path };
+}
 
 /** What a pull request builds: the two that can fail in a way nothing else catches. */
 const SLIM = ['x86_64-unknown-linux-gnu', 'wasm32-wasip1-threads'];
@@ -64,101 +53,26 @@ export function isFull(event, labels) {
   return labels.includes('full-matrix');
 }
 
-export function matrix(full) {
-  const picked = full ? Object.keys(TARGETS) : SLIM;
-  return picked.map((target) => ({
-    target,
-    host: TARGETS[target].host,
-    build_args: TARGETS[target].args ?? '',
-    artifact_path: TARGETS[target].artifact ?? '*.node',
-  }));
+export function matrix(full, targets = pkg.napi.targets) {
+  return (full ? targets : SLIM).map(entry);
 }
 
 /** Only targets that were built can be tested. */
-export function tests(full) {
-  const built = new Set(matrix(full).map((t) => t.target));
+export function tests(full, targets = pkg.napi.targets) {
+  const built = new Set(matrix(full, targets).map((t) => t.target));
   return TESTS.filter((t) => built.has(t.target));
 }
 
-/** The table and package.json must name the same platforms. */
-export function disagreement(tableTargets, napiTargets) {
-  const a = [...tableTargets].sort(), b = [...napiTargets].sort();
-  const missing = b.filter((t) => !a.includes(t));
-  const extra = a.filter((t) => !b.includes(t));
-  const why = [];
-  if (missing.length) why.push(`in package.json napi.targets but not in this table: ${missing.join(', ')}`);
-  if (extra.length) why.push(`in this table but not in package.json napi.targets: ${extra.join(', ')}`);
-  return why;
-}
-
-/**
- * What the script writes to GITHUB_OUTPUT: one `key=value` per line.
- *
- * Shared with the selftest so what is asserted is what is emitted. It used to
- * assert that `JSON.stringify` escapes newlines, which is a fact about the
- * standard library and stays true however this file changes.
- */
-export function emit(full) {
+/** What the script writes to GITHUB_OUTPUT: one `key=value` per line. */
+export function emit(full, targets = pkg.napi.targets) {
   return [
     `full=${full}`,
-    `targets=${JSON.stringify(matrix(full))}`,
-    `tests=${JSON.stringify(tests(full))}`,
+    `targets=${JSON.stringify(matrix(full, targets))}`,
+    `tests=${JSON.stringify(tests(full, targets))}`,
   ].join('\n') + '\n';
 }
 
-if (process.argv.includes('--selftest')) {
-  const assert = (await import('node:assert/strict')).default;
-  assert.equal(isFull('push', []), true);
-  assert.equal(isFull('schedule', []), true);
-  assert.equal(isFull('workflow_dispatch', []), true);
-  assert.equal(isFull('pull_request', []), false);
-  assert.equal(isFull('pull_request', ['documentation']), false);
-  assert.equal(isFull('pull_request', ['full-matrix']), true);
-  assert.equal(matrix(false).length, 2);
-  assert.equal(matrix(true).length, Object.keys(TARGETS).length);
-  // the slim pair is what the drift checks, the test suite and conformance need
-  assert.deepEqual(matrix(false).map((t) => t.target).sort(),
-    ['wasm32-wasip1-threads', 'x86_64-unknown-linux-gnu']);
-  // a target with no flag must still emit the key, or the workflow interpolates
-  // the literal string "null" onto the command line
-  assert.ok(matrix(true).every((t) => typeof t.build_args === 'string'));
-  assert.ok(matrix(true).every((t) => t.artifact_path.length > 0));
-  // no test may name a target that was not built
-  assert.equal(tests(false).length, 3);
-  assert.equal(tests(true).length, 5);
-  assert.ok(tests(false).every((t) => t.target === 'x86_64-unknown-linux-gnu'));
-  // the consistency check has to fail when it should
-  assert.deepEqual(disagreement(['a', 'b'], ['a', 'b']), []);
-  assert.match(disagreement(['a'], ['a', 'b'])[0], /not in this table: b/);
-  assert.match(disagreement(['a', 'b'], ['a'])[0], /not in package.json.*: b/);
-  // and against the real manifest
-  const real = JSON.parse(readFileSync('package.json', 'utf8')).napi.targets;
-  assert.deepEqual(disagreement(Object.keys(TARGETS), real), [],
-    'the table and package.json napi.targets have diverged');
-  // GITHUB_OUTPUT takes `key=value` one line at a time; a raw newline in the
-  // value silently truncates it and the matrix comes out empty. The wasm
-  // artifact path is a multi-line glob, so this is a live hazard, not a
-  // hypothetical -- JSON.stringify escaping it is what keeps it on one line.
-  // The lines this script actually prints, not `JSON.stringify`'s behaviour --
-  // asserting the latter tested the standard library rather than this file, and
-  // would have kept passing if the emitter stopped using it.
-  for (const line of emit(true).split('\n')) {
-    if (!line) continue;
-    assert.match(line, /^[a-z]+=/, `every line is key=value, got ${line.slice(0, 40)}`);
-  }
-  assert.equal(emit(true).trimEnd().split('\n').length, 3, 'exactly three keys, one line each');
-  assert.ok(matrix(true).find((t) => t.target === 'wasm32-wasip1-threads')
-    .artifact_path.includes('\n'), 'and the wasm glob really is multi-line');
-  console.log('ok — ci-targets: 22 checks passed');
-  process.exit(0);
+if (import.meta.main) {
+  const full = isFull(process.env.EVENT ?? 'push', JSON.parse(process.env.LABELS || '[]'));
+  process.stdout.write(emit(full));
 }
-
-const napiTargets = JSON.parse(readFileSync('package.json', 'utf8')).napi.targets;
-const why = disagreement(Object.keys(TARGETS), napiTargets);
-if (why.length) {
-  for (const w of why) console.error(`::error::${w}`);
-  process.exit(1);
-}
-
-const full = isFull(process.env.EVENT ?? 'push', JSON.parse(process.env.LABELS || '[]'));
-process.stdout.write(emit(full));

@@ -1203,30 +1203,14 @@ pub fn map_methods(
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
             };
 
-            // generic param -> bound text, so `P: AsRef<Path>` can be classified
-            // ...and from a `where` clause too, which said nothing before:
-            // `fn f<P>(p: P) where P: AsRef<Path>` had its argument skipped.
-            let mut bounds: BTreeMap<String, String> = f
+            // generic param -> bound text, so `P: AsRef<std::path::Path>` can
+            // be classified.
+            let bounds: BTreeMap<String, String> = f
                 .sig
                 .generics
                 .type_params()
                 .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
                 .collect();
-            for pred in f
-                .sig
-                .generics
-                .where_clause
-                .iter()
-                .flat_map(|w| &w.predicates)
-            {
-                if let syn::WherePredicate::Type(t) = pred {
-                    let b = &t.bounds;
-                    bounds
-                        .entry(ty_str(&t.bounded_ty))
-                        .or_default()
-                        .push_str(&quote!(#b).to_string().replace(' ', ""));
-                }
-            }
 
             let mut inputs = f.sig.inputs.iter();
             let Some(syn::FnArg::Receiver(recv)) = inputs.next() else {
@@ -1248,21 +1232,11 @@ pub fn map_methods(
             for a in inputs {
                 let syn::FnArg::Typed(t) = a else { continue };
                 let ty = ty_str(&t.ty);
-                // `impl AsRef<Path>` in argument position is the same bound,
-                // written in place.
-                let bound = bounds
-                    .get(&ty)
-                    .map(String::as_str)
-                    .or_else(|| ty.strip_prefix("impl"))
-                    .unwrap_or("");
                 // A generic parameter is classified through its bound instead.
-                let kind = if bound.contains("AsRef<std::path::Path>")
-                    || bound.contains("AsRef<Path>")
-                    || ty == "&std::path::Path"
-                    || ty == "std::path::PathBuf"
-                {
+                let bound = bounds.get(&ty).map(String::as_str).unwrap_or("");
+                let kind = if bound.contains("AsRef<std::path::Path>") {
                     Some(Arg::PathStr)
-                } else if bound.contains("Into<String>") || bound.contains("AsRef<str>") {
+                } else if bound.contains("Into<String>") {
                     Some(Arg::Str)
                 } else {
                     match vocab.classify(&ty) {
@@ -1356,84 +1330,58 @@ pub fn map_methods(
                 }
             };
 
-            // TryUnit's value is already the Result.
-            let ok_value = if already_result {
-                value.clone()
-            } else {
-                quote!(Ok(#value))
-            };
-            let arrow = if unit { quote!() } else { quote!(-> #ret_ty) };
-            // Every path from here emits the method.
-            taken.insert(name.clone());
-            if let Some((p, n)) = gate {
-                let (ret_ty, last) = if optional {
-                    let v = if already_result {
-                        quote!(#value.map(Some))
-                    } else {
-                        quote!(Ok(Some(#value)))
-                    };
-                    (quote!(Option<#ret_ty>), v)
-                } else if unit {
-                    (quote!(#ret_ty), quote! { #value; Ok(()) })
-                } else {
-                    (quote!(#ret_ty), ok_value)
-                };
-                let missing = format!(
-                    "{} is not available on this target: its upstream feature is off here",
-                    lower_camel(&name)
-                );
-                code.extend(quote! {
-                    #(#doc)*
-                    #[napi]
-                    #[cfg_attr(#n, allow(unused_variables))]
-                    pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
-                        #[cfg(#p)]
-                        {
-                            #prologue
-                            #(#lets)*
-                            #last
-                        }
-                        #[cfg(#n)]
-                        {
-                            Err(Error::from_reason(#missing))
-                        }
-                    }
-                });
-                continue;
-            }
-            code.extend(if optional {
-                let value = if already_result {
+            // The signature's return and the body's last expression. A gated
+            // body has an `Err` twin, so it always returns `Result`.
+            let (arrow, last) = if optional {
+                let v = if already_result {
                     quote!(#value.map(Some))
                 } else {
                     quote!(Ok(Some(#value)))
                 };
-                quote! {
-                    #(#doc)*
-                    #[napi]
-                    pub fn #ident(#recv, #(#params),*) -> Result<Option<#ret_ty>> {
-                        #prologue
-                        #(#lets)*
-                        #value
-                    }
-                }
-            } else if already_result || prologue.is_some() {
-                quote! {
-                    #(#doc)*
-                    #[napi]
-                    pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
-                        #prologue
-                        #(#lets)*
-                        #ok_value
-                    }
-                }
+                (quote!(-> Result<Option<#ret_ty>>), v)
+            } else if unit && gate.is_some() {
+                (quote!(-> Result<#ret_ty>), quote! { #value; Ok(()) })
+            } else if already_result {
+                // TryUnit's value is already the Result.
+                (quote!(-> Result<#ret_ty>), value)
+            } else if prologue.is_some() || gate.is_some() {
+                (quote!(-> Result<#ret_ty>), quote!(Ok(#value)))
+            } else if unit {
+                (quote!(), value)
             } else {
-                quote! {
-                    #(#doc)*
-                    #[napi]
-                    pub fn #ident(#recv, #(#params),*) #arrow {
-                        #(#lets)*
-                        #value
-                    }
+                (quote!(-> #ret_ty), value)
+            };
+            let body = quote! {
+                #prologue
+                #(#lets)*
+                #last
+            };
+            // Every path from here emits the method.
+            taken.insert(name.clone());
+            let (cfg_attr, body) = match gate {
+                None => (None, body),
+                Some((p, n)) => {
+                    let missing = format!(
+                        "{} is not available on this target: its upstream feature is off here",
+                        lower_camel(&name)
+                    );
+                    (
+                        Some(quote!(#[cfg_attr(#n, allow(unused_variables))])),
+                        quote! {
+                            #[cfg(#p)]
+                            { #body }
+                            #[cfg(#n)]
+                            { Err(Error::from_reason(#missing)) }
+                        },
+                    )
+                }
+            };
+            code.extend(quote! {
+                #(#doc)*
+                #[napi]
+                #cfg_attr
+                pub fn #ident(#recv, #(#params),*) #arrow {
+                    #body
                 }
             });
         }

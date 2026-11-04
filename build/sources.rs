@@ -13,11 +13,12 @@ use std::path::{Path, PathBuf};
 use syn::{Item, Visibility};
 
 /// Exact versions picked by the resolver, straight out of our own Cargo.lock.
-/// Cheap hand-rolled scan: no serde/toml build-dependency needed.
-pub fn locked_versions() -> BTreeMap<String, String> {
+/// Cheap hand-rolled scan: no serde/toml build-dependency needed. A crate in
+/// the graph twice keeps every version, and `locate` refuses to pick one.
+pub fn locked_versions() -> BTreeMap<String, Vec<String>> {
     let lock = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("Cargo.lock");
     println!("cargo::rerun-if-changed={}", lock.display());
-    let mut out = BTreeMap::new();
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     // Without it every crate would fall through to whatever the registry
     // cache holds, and the bindings would describe some other version.
     let text = fs::read_to_string(&lock)
@@ -30,28 +31,12 @@ pub fn locked_versions() -> BTreeMap<String, String> {
         } else if let Some(v) = line.strip_prefix("version = ")
             && let Some(n) = name.take()
         {
-            // Keep the highest version if a crate appears twice in the graph.
-            let v = v.trim_matches('"').to_string();
-            let better = out
-                .get(&n)
-                .is_none_or(|old: &String| semver_key(&v) > semver_key(old));
-            if better {
-                out.insert(n, v);
-            }
+            out.entry(n)
+                .or_default()
+                .push(v.trim_matches('"').to_string());
         }
     }
     out
-}
-
-pub fn semver_key(v: &str) -> (u64, u64, u64) {
-    let mut it = v
-        .split(['.', '-', '+'])
-        .map(|p| p.parse::<u64>().unwrap_or(0));
-    (
-        it.next().unwrap_or(0),
-        it.next().unwrap_or(0),
-        it.next().unwrap_or(0),
-    )
 }
 
 pub fn cargo_home() -> PathBuf {
@@ -84,7 +69,7 @@ pub fn registry_src(pkg: &str, want: &str) -> Option<PathBuf> {
 ///
 /// There is no "newest version present" fallback: a registry cache shared
 /// with other projects would hand over sources the resolver never picked.
-pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> PathBuf {
+pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, Vec<String>>) -> PathBuf {
     let key = format!("{}_SRC_DIR", pkg.to_uppercase().replace('-', "_"));
     println!("cargo::rerun-if-env-changed={key}");
     if let Some(dir) = env::var_os(&key) {
@@ -97,9 +82,11 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> Pat
         return p;
     }
 
-    let locked_ver = locked
-        .get(pkg)
-        .unwrap_or_else(|| panic!("`{pkg}` is not in Cargo.lock"));
+    let locked_ver = match locked.get(pkg).map(Vec::as_slice) {
+        Some([v]) => v,
+        Some(vs) => panic!("`{pkg}` is in Cargo.lock twice ({vs:?}): say which one to read"),
+        None => panic!("`{pkg}` is not in Cargo.lock"),
+    };
     registry_src(pkg, locked_ver)
         .filter(|p| p.join(marker).exists())
         .unwrap_or_else(|| {

@@ -372,11 +372,6 @@ pub fn payload_shape(
     e: &syn::ItemEnum,
     qualify: &dyn Fn(String) -> String,
 ) -> Result<Vec<(String, Payload)>, String> {
-    // Both the unit-enum `From` impls and the union converter are exhaustive
-    // `match`es, which a `#[non_exhaustive]` enum from another crate refuses.
-    if e.attrs.iter().any(|a| a.path().is_ident("non_exhaustive")) {
-        return Err("#[non_exhaustive], so an exhaustive match cannot be written".into());
-    }
     let mut out = Vec::new();
     for v in &e.variants {
         let name = v.ident.to_string();

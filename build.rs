@@ -1149,7 +1149,8 @@ fn main() {
             );
         }
         let ceremony = emit_twins(&twins);
-        code = quote! { #file #ceremony };
+        let inspect = inspect_members(&file);
+        code = quote! { #file #ceremony #inspect };
     }
 
     // Nothing above prevents a future upstream method from colliding with a

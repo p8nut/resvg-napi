@@ -25,7 +25,8 @@ crate-type = ["cdylib"]
 # napi8 turns on class type tags on native targets. napi compiles them out for
 # wasm: under WASI its class identity check (from 3.15.0) refuses another
 # class's instance instead. test/errors.mjs checks it is refused on both.
-napi = { version = "3.16.1", default-features = false, features = ["napi8"] }
+# napi9 is `Symbol.for` keys: every class's `util.inspect.custom` (emit.rs).
+napi = { version = "3.16.1", default-features = false, features = ["napi8", "napi9"] }
 napi-derive = "3.7.0"
 # resvg re-exports `usvg`, `usvg::fontdb` and `tiny_skia`, so one dep is enough.
 # Its defaults minus `memmap-fonts`, added back below for every target that has

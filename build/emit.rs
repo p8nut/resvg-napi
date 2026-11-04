@@ -1683,6 +1683,123 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
     out
 }
 
+/// What `console.log` prints, for every class: its getters and its cheap
+/// methods under its name, and the name as `Symbol.toStringTag`. Read off the
+/// finished file, so a class or a member added anywhere -- template or pass --
+/// is covered without a list.
+///
+/// Cheap means no argument and a scalar result: a string, a number, a boolean
+/// or a string enum, possibly null. That leaves out what allocates or renders
+/// (`children`, `renderPng`, `toString`) and whatever needs a parameter.
+pub fn inspect_members(file: &syn::File) -> TokenStream {
+    let mut scalars: BTreeSet<String> = [
+        "String", "bool", "f64", "f32", "u32", "i32", "u8", "u16", "i64", "u64", "usize",
+    ]
+    .map(str::to_string)
+    .into();
+    for item in &file.items {
+        if let Item::Enum(e) = item
+            && e.attrs
+                .iter()
+                .any(|a| quote!(#a).to_string().contains("string_enum"))
+        {
+            scalars.insert(e.ident.to_string());
+        }
+    }
+    let scalar = |ret: &ReturnType| {
+        let ReturnType::Type(_, t) = ret else {
+            return false;
+        };
+        let mut name = ty_str(t);
+        while let Some(inner) = ["Result<", "Option<"]
+            .iter()
+            .find_map(|w| name.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
+        {
+            name = inner.to_string();
+        }
+        scalars.contains(&name)
+    };
+    let classes: Vec<&syn::Ident> = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            // A bare `#[napi]` is a class; `#[napi(object)]` and the enums are
+            // plain values, which print fine already.
+            Item::Struct(s)
+                if s.attrs
+                    .iter()
+                    .any(|a| a.path().is_ident("napi") && matches!(a.meta, syn::Meta::Path(_))) =>
+            {
+                Some(&s.ident)
+            }
+            _ => None,
+        })
+        .collect();
+    let mut out = TokenStream::new();
+    for class in classes {
+        let (mut getters, mut methods) = (Vec::new(), Vec::new());
+        let members = file
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Impl(imp) if imp.trait_.is_none() && *class == ty_str(&imp.self_ty) => {
+                    Some(imp)
+                }
+                _ => None,
+            })
+            .flat_map(|imp| &imp.items);
+        for it in members {
+            let ImplItem::Fn(f) = it else { continue };
+            let Some(attr) = f.attrs.iter().find(|a| a.path().is_ident("napi")) else {
+                continue;
+            };
+            let text = quote!(#attr).to_string();
+            let js = text
+                .split("js_name = \"")
+                .nth(1)
+                .and_then(|r| r.split('"').next())
+                .map(str::to_string)
+                .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()));
+            if text.contains("getter") {
+                getters.push(js);
+            } else if is_pub(&f.vis)
+                && !["setter", "constructor", "factory"]
+                    .iter()
+                    .any(|k| text.contains(k))
+                && matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
+                && f.sig.inputs.len() == 1
+                && scalar(&f.sig.output)
+            {
+                methods.push(js);
+            }
+        }
+        let name = class.to_string();
+        out.extend(quote! {
+            #[napi]
+            impl #class {
+                #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+                #[napi(symbol_for = "nodejs.util.inspect.custom")]
+                pub fn inspect_custom(
+                    &self,
+                    env: Env,
+                    this: This,
+                    depth: Option<f64>,
+                    options: Object,
+                    inspect: Function<FnArgs<(Object, Object)>, String>,
+                ) -> Result<String> {
+                    napi_support::inspect(&env, &this, #name, &[#(#getters),*], &[#(#methods),*], depth, options, inspect)
+                }
+                #[doc = " The class name, for `Object.prototype.toString`."]
+                #[napi(getter, well_known_symbol = "toStringTag")]
+                pub fn to_string_tag(&self) -> String {
+                    #name.to_string()
+                }
+            }
+        });
+    }
+    out
+}
+
 /// Method names the emitter template defines itself, per target type, read off
 /// the template rather than listed by hand: `impl Resvg { pub fn children }`
 /// means the `children` upstream method is covered, and a rule can say so.

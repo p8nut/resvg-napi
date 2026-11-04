@@ -95,7 +95,7 @@
     "wasi-worker.mjs"
   ],
   "engines": {
-    "node": ">= 20"
+    "node": ">= 20.3"
   },
   "license": "Apache-2.0 OR MIT",
   "author": "p8nut <38731495+p8nut@users.noreply.github.com>",

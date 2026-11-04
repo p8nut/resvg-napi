@@ -17,7 +17,7 @@ bindings compiled to WASI, rendering in the page, nothing to install.
 npm install resvg-napi
 ```
 
-Node.js 20 or later. The WASI build, used where no native binary exists, needs
+Node.js 20.3 or later. The WASI build, used where no native binary exists, needs
 20.19+, 22.13+ or 23.5+: its emnapi runtime is ESM-only and the loader
 `require`s it.
 

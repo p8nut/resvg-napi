@@ -6,7 +6,7 @@ import { Liquid } from 'liquidjs';
 import { registerSvgFilters } from '../demo/svg-filters.mjs';
 
 const liquid = new Liquid({ outputEscape: 'escape' });
-registerSvgFilters(liquid, { measure: (text) => text.length * 10, qrSvg: () => '' });
+registerSvgFilters(liquid, { measure: (text) => text.length * 10 });
 const loneSurrogate = /[\uD800-\uDFFF]/u;
 
 for (const [template, s, want] of [

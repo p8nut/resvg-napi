@@ -166,7 +166,7 @@ templated document can be previewed:
   `svg-filters.mjs`, next to the partial scanner. Partials the page holds go
   through liquid's own `templates` option, by the exact name the tag uses.
 - `{{ upn | qr: '#ffffff', '#00000000' | raw }}` generates a real QR code, as SVG:
-  `qrSvg()` in `liquid-entry.mjs` encodes with `qrcode-generator` and emits
+  `qrSvg()` in `svg-filters.mjs` encodes with `qrcode-generator` and emits
   one `<path>` for the dark modules inside a nested `<svg viewBox="0 0 n n"
   width="100%" height="100%">`, so it scales to whatever viewport the template
   drops it into without knowing the module count. Arguments are the module
@@ -267,7 +267,8 @@ Three things the demo has to handle, all visible in
 - **A `Buffer` polyfill.** napi's `Buffer` return type is Node's Buffer and
   emnapi looks it up on `globalThis`. A 6-line `Uint8Array` subclass is enough —
   but its `from` must accept a `SharedArrayBuffer`, or every buffer comes back
-  empty.
+  empty. It lives in `buffer-shim.mjs`, which `build.mjs` injects into the
+  `resvg.js` bundle.
 - **Copy out of shared memory.** `Blob`, `fetch` bodies and `postMessage` all
   refuse views backed by a `SharedArrayBuffer`; `new Uint8Array(buf)` copies.
 

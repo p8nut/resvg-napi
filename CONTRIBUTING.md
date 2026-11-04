@@ -17,7 +17,7 @@ It is a handful of files, one per phase:
 
 | | |
 |---|---|
-| `build/sources.rs` | finding and parsing upstream: env override, then git submodule, then the cargo registry at the version `Cargo.lock` names |
+| `build/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version `Cargo.lock` names |
 | `build/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `build/emit.rs` | turning those answers into tokens napi can expand |
 | `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, the guards, renames, the template contract. Wrapping another crate starts by rewriting this file and `template.rs` |

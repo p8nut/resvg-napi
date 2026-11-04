@@ -19,8 +19,6 @@ pub struct Upstream {
     pub marker: &'static str,
     /// The path its types are reached by from the generated code.
     pub root: &'static str,
-    /// How the report names it.
-    pub label: &'static str,
 }
 
 /// The wrapped crates, in the order a bare name is resolved against them. The
@@ -31,13 +29,11 @@ pub const UPSTREAM: &[Upstream] = &[
         pkg: "usvg",
         marker: "parser/options.rs",
         root: "usvg",
-        label: "usvg",
     },
     Upstream {
         pkg: "fontdb",
         marker: "lib.rs",
         root: "usvg::fontdb",
-        label: "usvg::fontdb",
     },
 ];
 
@@ -93,7 +89,7 @@ pub const ARG_STANDIN: (&str, &str) = ("ID", "FontFace");
 pub struct PassSpec {
     pub label: &'static str,
     pub target: &'static str,
-    /// The `Upstream::label` whose files hold the impl.
+    /// The `Upstream::root` whose files hold the impl.
     pub source: &'static str,
     pub ty: &'static str,
     pub receiver: &'static str,

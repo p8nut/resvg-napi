@@ -102,8 +102,6 @@ pub fn js_conv(
         (Js::Bool, _) => plain(quote!(bool), d),
         (Js::I32, _) => plain(quote!(i32), d),
         (Js::F32, _) => plain(quote!(f64), quote!(f64::from(#d))),
-        (Js::F64, Method) => plain(quote!(f64), quote!(f64::from(#a))),
-        (Js::F64, _) => plain(quote!(f64), d),
         // A method's integers saturate; a member's widen, which cannot fail.
         (Js::U8 | Js::U16 | Js::U32, Method) => plain(quote!(u32), saturating),
         (Js::U8 | Js::U16, _) => plain(quote!(u32), quote!(u32::from(#d))),
@@ -277,12 +275,11 @@ pub fn payload_enum_code(
             }
         });
         let arm = info.either_arm(name, 0);
-        for (n, p) in info
+        for (n, _) in info
             .variants
             .iter()
             .filter(|(_, p)| matches!(p, Payload::None))
         {
-            let _ = p;
             let vid = format_ident!("{}", n);
             let tag = lower_camel(n);
             arms.push(quote!(#up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
@@ -449,18 +446,6 @@ pub fn map_struct(
                 quote!(f64),
                 quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v); } },
             )),
-            Some(Js::F64) => Some(field(
-                &ident,
-                &doc,
-                quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
-            )),
-            Some(Js::U32) => Some(field(
-                &ident,
-                &doc,
-                quote!(u32),
-                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
-            )),
             Some(Js::U8) => {
                 // A `*_precision` field indexes usvg's POW_VEC without a bounds
                 // check, so clamp it to that table's length. Any other u8 just
@@ -516,30 +501,6 @@ pub fn map_struct(
                 quote!(Vec<String>),
                 quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } },
             )),
-            // Three upstream shapes share one JS type: a `Rect` (may be
-            // empty), a `NonZeroRect`, and an optional `NonZeroRect`. Each needs
-            // its own constructor and its own assignment; one arm for all three
-            // assigned a NonZeroRect to the other two, which does not compile.
-            Some(Js::Bbox) | Some(Js::OptBbox) => {
-                let nonzero = ty.contains("NonZeroRect");
-                let ctor = if nonzero { quote!(usvg::NonZeroRect) } else { quote!(usvg::Rect) };
-                let set = if matches!(vocab.classify(&ty), Some(Js::OptBbox)) {
-                    quote!(o.#ident = Some(r);)
-                } else {
-                    quote!(o.#ident = r;)
-                };
-                Some(field(
-                    &ident,
-                    &doc,
-                    quote!(BBox),
-                    quote! { if let Some(v) = self.#ident
-                        && let Some(r) = #ctor::from_xywh(
-                            to_f32(v.x), to_f32(v.y), to_f32(v.width), to_f32(v.height))
-                    {
-                        #set
-                    } },
-                ))
-            }
             Some(Js::Enum) => {
                 // The JS name, after ENUM_RENAMES, as every other site spells it.
                 let e = enum_ident(&vocab.resolve(&ty));
@@ -569,33 +530,18 @@ pub fn map_struct(
                 });
                 continue;
             }
-            // Vocabulary entries that only mean something on a method signature.
-            Some(Js::Scalar) => Some(field(
-                &ident,
-                &doc,
-                quote!(f64),
-                quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v).into(); } },
-            )),
-            // Handles are class instances: they belong on a method, not in a
-            // plain JSON object.
-            Some(Js::IntNewtype(_)) => Some(field(
-                &ident,
-                &doc,
-                quote!(u32),
-                // Out of range for the newtype's integer: left at its default
-                // rather than wrapped (`as` turned 65537 into 1 for a u16).
-                quote! { if let Some(v) = self.#ident
-                    && let Ok(v) = v.try_into()
-                {
-                    o.#ident.0 = v;
-                } },
-            )),
             // Class instances and nested objects belong on methods, not in a
             // flat config object.
             Some(Js::Bytes)
             | Some(Js::Count)
             | Some(Js::TryUnit)
             | Some(Js::Matrix)
+            // Unreached by any upstream option field today.
+            | Some(Js::U32)
+            | Some(Js::Bbox)
+            | Some(Js::OptBbox)
+            | Some(Js::Scalar)
+            | Some(Js::IntNewtype(_))
             // Read-only: a union describes what a document holds, never what a
             // render option sets.
             | Some(Js::U16)
@@ -695,13 +641,6 @@ pub fn map_enums(
     (names, code, rejected)
 }
 
-// ---------------------------------------------------------------------------
-// 2 + 3. fontdb::Database -> opaque #[napi] class
-// ---------------------------------------------------------------------------
-
-/// Emits `#[napi(object)] pub struct X { .. }` plus `From<&upstream>` for a plain
-/// data type: accessors first, public fields if it has no accessors. Members
-/// that do not map are dropped -- the object is deliberately partial.
 /// One mappable member of a data type: its JS name, its JS type, and the
 /// expression that produces it from a binding named `v`.
 pub struct Member {
@@ -774,15 +713,14 @@ pub fn data_members(
     // following one into the data registry drags every definition type behind
     // it -- `Text::flattened` and `filter::Image::root` both hand back a Group.
     // A type rule rather than the two member names, because the next one to
-    // return a Group should need no edit here.
-    const NOT_DATA_TYPES: &[&str] = NODE_TYPES;
+    // return a Group should need no edit here: `NODE_TYPES` (config).
 
     let mut push = |name: &str, ty_s: &str, access: TokenStream| {
         if NOT_DATA.contains(&name) {
             return;
         }
         let peeled = peel_type(ty_s);
-        if NOT_DATA_TYPES.contains(&bare(peeled)) {
+        if NODE_TYPES.contains(&bare(peeled)) {
             return;
         }
         let id = format_ident!("{}", name);
@@ -825,7 +763,7 @@ pub fn data_members(
             .as_deref()
             .and_then(|i| vocab.classify(i).map(|j| (i, j)))
         {
-            Some((_, Js::F32)) | Some((_, Js::F64)) => {
+            Some((_, Js::F32)) => {
                 out.push(Member {
                     id,
                     jsty: quote!(Option<f64>),
@@ -919,7 +857,6 @@ pub fn data_members(
                 vocab.classify(inner),
                 Some(
                     Js::F32
-                        | Js::F64
                         | Js::U8
                         | Js::U16
                         | Js::U32
@@ -1172,9 +1109,9 @@ pub fn wrapper_class(
 }
 
 /// What one mapping pass reads: which sources, which upstream type, how the
-/// wrapper reaches its receiver, and what to leave alone. A struct because the
-/// `Pass` table in `main` already carries these, and unpacking it into
-/// positional arguments was how this grew to eight of them.
+/// wrapper reaches its receiver, and what to leave alone. A struct because
+/// `config::PASSES` already carries these, and unpacking it into positional
+/// arguments was how this grew to eight of them.
 pub struct MethodPass<'a> {
     pub files: &'a [syn::File],
     pub ty: &'a str,
@@ -1191,6 +1128,9 @@ pub struct MethodPass<'a> {
     pub optional: bool,
 }
 
+/// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
+/// `receiver` is the expression the call hangs off, so the same pass serves
+/// `fontdb::Database`, `usvg::Tree` and the root `usvg::Group`.
 pub fn map_methods(
     m: &MethodPass,
     vocab: &Vocab,
@@ -1506,10 +1446,6 @@ pub fn map_methods(
     (code, skipped)
 }
 
-// ---------------------------------------------------------------------------
-// 2. signature guards: fail the build loudly if upstream changed shape
-// ---------------------------------------------------------------------------
-
 /// One async twin to generate: a Send-safe core the template marked with
 /// `#[async_twin(js_method, JsType)]`.
 pub struct Twin {
@@ -1683,14 +1619,6 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
     out
 }
 
-/// What `console.log` prints, for every class: its getters and its cheap
-/// methods under its name, and the name as `Symbol.toStringTag`. Read off the
-/// finished file, so a class or a member added anywhere -- template or pass --
-/// is covered without a list.
-///
-/// Cheap means no argument and a scalar result: a string, a number, a boolean
-/// or a string enum, possibly null. That leaves out what allocates or renders
-/// (`children`, `renderPng`, `toString`) and whatever needs a parameter.
 /// Puts `self.live()?` first in every JS-facing method of `class` but `open`,
 /// so a disposed instance throws instead of answering from the empty tree it
 /// was left with. A method not returning `Result` is made to: napi unwraps it,
@@ -1733,6 +1661,14 @@ pub fn guard_live(file: &mut syn::File, class: &str, open: &[&str]) {
     }
 }
 
+/// What `console.log` prints, for every class: its getters and its cheap
+/// methods under its name, and the name as `Symbol.toStringTag`. Read off the
+/// finished file, so a class or a member added anywhere -- template or pass --
+/// is covered without a list.
+///
+/// Cheap means no argument and a scalar result: a string, a number, a boolean
+/// or a string enum, possibly null. That leaves out what allocates or renders
+/// (`children`, `renderPng`, `toString`) and whatever needs a parameter.
 pub fn inspect_members(file: &syn::File) -> TokenStream {
     let mut scalars: BTreeSet<String> = [
         "String", "bool", "f64", "f32", "u32", "i32", "u8", "u16", "i64", "u64", "usize",

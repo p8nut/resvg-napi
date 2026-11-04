@@ -1,8 +1,8 @@
 //! Finding and parsing the upstream sources.
 //!
 //! Phase 1. Locate the crates the resolver actually picked -- an env override,
-//! then a git submodule, then the cargo registry at the version Cargo.lock
-//! names -- read them off disk, and hand back `syn` trees.
+//! then the cargo registry at the version Cargo.lock names -- read them off
+//! disk, and hand back `syn` trees.
 //!
 //! Nothing here knows anything about napi or JavaScript.
 
@@ -80,12 +80,10 @@ pub fn registry_src(pkg: &str, want: &str) -> Option<PathBuf> {
 
 /// Resolution order, most explicit first:
 ///   1. `<PKG>_SRC_DIR` env var (vendored checkout / git submodule anywhere)
-///   2. `vendor/resvg/crates/<pkg>/src` (the upstream monorepo as a submodule)
-///   3. cargo registry cache, exact locked version
+///   2. cargo registry cache, exact locked version
 ///
-/// A vendored checkout must declare the locked version. There is no
-/// "newest version present" fallback: a registry cache shared with other
-/// projects would hand over sources the resolver never picked.
+/// There is no "newest version present" fallback: a registry cache shared
+/// with other projects would hand over sources the resolver never picked.
 pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> PathBuf {
     let key = format!("{}_SRC_DIR", pkg.to_uppercase().replace('-', "_"));
     println!("cargo::rerun-if-env-changed={key}");
@@ -99,33 +97,9 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> Pat
         return p;
     }
 
-    let vendored = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("vendor/resvg/crates")
-        .join(pkg)
-        .join("src");
     let locked_ver = locked
         .get(pkg)
         .unwrap_or_else(|| panic!("`{pkg}` is not in Cargo.lock"));
-    if vendored.join(marker).exists() {
-        // `version.workspace = true` has no literal to compare; trust it.
-        let manifest = vendored.with_file_name("Cargo.toml");
-        let declared = fs::read_to_string(&manifest).ok().and_then(|t| {
-            t.lines().find_map(|l| {
-                l.trim()
-                    .strip_prefix("version = ")
-                    .map(|v| v.trim_matches('"').to_string())
-            })
-        });
-        if let Some(v) = declared {
-            assert!(
-                &v == locked_ver,
-                "{} declares {pkg} {v}, but Cargo.lock picked {locked_ver}",
-                manifest.display()
-            );
-        }
-        return vendored;
-    }
-
     registry_src(pkg, locked_ver)
         .filter(|p| p.join(marker).exists())
         .unwrap_or_else(|| {
@@ -212,15 +186,15 @@ pub fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
 }
 
 /// A crate's module tree, read the way rustc reads it: from `lib.rs`, through
-/// `mod x;` (to `x.rs` or `x/mod.rs`, or `#[path]`), with `pub use` resolved --
+/// `mod x;` (to `x.rs` or `x/mod.rs`), with `pub use` resolved --
 /// globs, names, renames, `self::`/`crate::`/`super::`. A type's public module
 /// is where an export puts it, not the stem of the file it is written in: the
 /// stem confused `parser/filter.rs` with `tree/filter.rs`, made every `mod.rs`
 /// a crate root, and took `parser/svgtree/mod.rs`'s private `SvgNode` for a
 /// public type.
 ///
-/// ponytail: file modules only. An inline `mod x { .. }` is not followed; no
-/// crate parsed here exports through one. Re-exports of other crates
+/// ponytail: file modules only. An inline `mod x { .. }` is not followed, and
+/// neither is `#[path]`; no crate parsed here uses either. Re-exports of other crates
 /// (`pub use fontdb;`) are left out, as before.
 pub struct ModTree {
     /// Public type name -> the namespace it is reachable at (`""` the root,
@@ -263,26 +237,10 @@ impl ModTree {
                     continue;
                 }
                 let name = m.ident.to_string();
-                let explicit = m
-                    .attrs
-                    .iter()
-                    .find(|a| a.path().is_ident("path"))
-                    .and_then(|a| match &a.meta {
-                        syn::Meta::NameValue(nv) => match &nv.value {
-                            syn::Expr::Lit(syn::ExprLit {
-                                lit: syn::Lit::Str(s),
-                                ..
-                            }) => Some(s.value()),
-                            _ => None,
-                        },
-                        _ => None,
-                    });
-                let child = match explicit {
-                    Some(p) => file.parent().unwrap().join(p),
-                    None if dir.join(format!("{name}.rs")).exists() => {
-                        dir.join(format!("{name}.rs"))
-                    }
-                    None => dir.join(&name).join("mod.rs"),
+                let child = if dir.join(format!("{name}.rs")).exists() {
+                    dir.join(format!("{name}.rs"))
+                } else {
+                    dir.join(&name).join("mod.rs")
                 };
                 let mut p = path.clone();
                 p.push(name);

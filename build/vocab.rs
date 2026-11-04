@@ -23,13 +23,6 @@ pub fn ty_str(ty: &Type) -> String {
     quote!(#ty).to_string().replace(' ', "")
 }
 
-// ---------------------------------------------------------------------------
-// 2 + 3. usvg::Options -> #[napi(object)] RenderOptions
-// ---------------------------------------------------------------------------
-
-/// Length of a `static NAME: &[T] = &[...]` array. usvg indexes `POW_VEC` with
-/// the precision fields *unchecked*, so the bound has to come from upstream
-/// rather than from a magic number here.
 /// What a Rust type becomes on the JS side.
 ///
 /// Recognition of Rust types lives here, once. The field mapper and the method
@@ -39,7 +32,6 @@ pub fn ty_str(ty: &Type) -> String {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Js {
     F32,
-    F64,
     U32,
     U8,
     Bool,
@@ -88,13 +80,6 @@ pub enum Js {
     PayloadEnumList(String),
 }
 
-/// One upstream enum whose variants carry payloads. usvg has sixteen; a rule
-/// cannot invent their JS shape, but it can apply one convention to all of
-/// them, which is what this describes: a discriminated union, tagged `type`,
-/// one struct per payload variant plus one shared struct for the unit ones.
-///
-/// Everything here is syntactic, so it is known before the object registry is:
-/// the payload *types* are classified later, when the structs are emitted.
 /// What one variant of a payload enum carries.
 #[derive(Clone)]
 pub enum Payload {
@@ -107,6 +92,13 @@ pub enum Payload {
     Fields(Vec<(String, String)>),
 }
 
+/// One upstream enum whose variants carry payloads. usvg has sixteen; a rule
+/// cannot invent their JS shape, but it can apply one convention to all of
+/// them, which is what this describes: a discriminated union, tagged `type`,
+/// one struct per payload variant plus one shared struct for the unit ones.
+///
+/// Everything here is syntactic, so it is known before the object registry is:
+/// the payload *types* are classified later, when the structs are emitted.
 #[derive(Clone)]
 pub struct PayloadEnum {
     /// Variant name and what it carries.
@@ -201,17 +193,13 @@ impl PayloadEnum {
         }
     }
 
-    /// Whether every payload maps to something an object field can hold. The
-    /// generator's match is the authority on *how*; this answers *whether*, so
-    /// a union that cannot be built whole is never classified in the first
-    /// place and its member is reported unexposed instead.
-    pub fn payload_maps(&self, vocab: &Vocab) -> bool {
-        self.payload_blocker(vocab).is_none()
-    }
-
     /// The first payload that stops the union being built, and why. Reported
     /// rather than silently dropped: a usvg upgrade adding a mappable payload
     /// should show up as a union appearing, not as a mystery.
+    ///
+    /// The generator's match is the authority on *how*; this answers
+    /// *whether*, so a union that cannot be built whole is never classified in
+    /// the first place and its member is reported unexposed instead.
     pub fn payload_blocker(&self, vocab: &Vocab) -> Option<String> {
         /// Whether one carried type can be a field of an `#[napi(object)]`.
         /// `sole` says the variant carries this and nothing else, which is the
@@ -242,7 +230,6 @@ impl PayloadEnum {
                 Some(
                     Js::Str
                     | Js::F32
-                    | Js::F64
                     | Js::U32
                     | Js::U8
                     | Js::U16
@@ -256,16 +243,12 @@ impl PayloadEnum {
                 // A read-only class is not a field: napi needs Clone and
                 // FromNapiValue of one, and a class has neither.
                 Some(Js::Value(t)) => Err(format!("{t} maps only partially")),
-                // A union variant is an `#[napi(object)]`, and napi wants Clone
-                // of every field. `Buffer` is a handle into the JS heap and has
-                // none, so image bytes cannot be a field of one -- they would
-                // need the variant to be a read-only class with a getter, which
-                // the union machinery does not build.
                 // Bytes cannot be an object *field* -- neither `Buffer` nor
                 // `Uint8Array` is `Clone`, and napi requires that of every
                 // field. They can be a getter, so the variant carrying them is
                 // emitted as a read-only class instead. See
                 // `payload_enum_code`.
+                //
                 // Bytes alone become a read-only class with a getter. Bytes
                 // beside other named fields have nowhere to go, and saying
                 // otherwise here left `classify` committed to a union that
@@ -476,8 +459,6 @@ pub fn payload_enums(
     out
 }
 
-/// Everything the classifier needs to know about the upstream crates, all of it
-/// derived: enums worth mirroring, `f32` newtypes, and `pub type` aliases.
 /// The type a member is *about*, its wrappers peeled: `&`, `Option<..>`,
 /// `Vec<..>`, `Box<..>`, a slice `[..]` and `implIterator<Item=..>`, as often as
 /// they nest. Stops at `Arc<..>`: that marks a shared handle, and peeling it
@@ -590,8 +571,6 @@ impl Vocab {
         // `crate::FontVariation` and `FontVariation` are the same type: usvg
         // spells some of its own members with the prefix and the rest without,
         // and nothing downstream cares which.
-        // `crate::FontVariation` and `FontVariation` are the same type: usvg
-        // spells some of its own members with the prefix and the rest without.
         //
         // Lifetimes are *not* stripped here on purpose: `ty_str` drops
         // whitespace, so `&'a str` arrives as `&'astr` and there is no way to
@@ -621,7 +600,10 @@ impl Vocab {
         // `&Paint` and `Paint` are the same enum; the registry is keyed bare.
         let bare = t.trim_start_matches('&').to_string();
         if let Some(p) = self.payload.get(&bare) {
-            return p.payload_maps(self).then_some(Js::PayloadEnum(bare));
+            return p
+                .payload_blocker(self)
+                .is_none()
+                .then_some(Js::PayloadEnum(bare));
         }
         // `&[BaselineShift]`: a list of one, which reads the same way.
         if let Some(inner) = t
@@ -631,7 +613,10 @@ impl Vocab {
             .map(|r| self.resolve(r.trim_start_matches('&')))
             && let Some(p) = self.payload.get(&inner)
         {
-            return p.payload_maps(self).then_some(Js::PayloadEnumList(inner));
+            return p
+                .payload_blocker(self)
+                .is_none()
+                .then_some(Js::PayloadEnumList(inner));
         }
         classify_object(&t, &self.objects).or_else(|| match classify_object(&t, &self.values) {
             Some(Js::Object(x)) => Some(Js::Value(x)),
@@ -663,7 +648,6 @@ pub fn classify(
         // No `Transform` arm: `Vocab::matrices` answers that one by shape,
         // before this function is reached.
         "f32" => Js::F32,
-        "f64" => Js::F64,
         "u32" => Js::U32,
         "u8" => Js::U8,
         "u16" => Js::U16,
@@ -795,8 +779,6 @@ pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
     out
 }
 
-/// Every type named by a return of the impl blocks we wrap. Drives which enums
-/// get mirrored, so the set follows the wrapped surface instead of a list.
 /// Every type named by a field of a public struct.
 ///
 /// `returned_types` finds what methods hand back, which is how usvg's enums get
@@ -819,16 +801,15 @@ pub fn field_types(files: &[syn::File]) -> BTreeSet<String> {
     out
 }
 
-pub fn returned_types(files: &[syn::File], types: &[&str]) -> BTreeSet<String> {
+/// Every type named by a return of a public method, in every inherent impl.
+/// Drives which enums get mirrored, so the set follows the wrapped surface
+/// instead of a list -- and an accessor on a generated wrapper class gets its
+/// enum mirrored too.
+pub fn returned_types(files: &[syn::File]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Impl(imp) = item else { continue };
-        // An empty filter means "every impl": used for enum discovery, so an
-        // accessor on a generated wrapper class gets its enum mirrored too.
-        if imp.trait_.is_some()
-            || (!types.is_empty()
-                && !types.contains(&ty_str(&imp.self_ty).rsplit("::").next().unwrap_or_default()))
-        {
+        if imp.trait_.is_some() {
             continue;
         }
         for it in &imp.items {
@@ -842,6 +823,9 @@ pub fn returned_types(files: &[syn::File], types: &[&str]) -> BTreeSet<String> {
     out
 }
 
+/// Length of a `static NAME: &[T] = &[...]` array. usvg indexes `POW_VEC` with
+/// the precision fields *unchecked*, so the bound has to come from upstream
+/// rather than from a magic number here.
 pub fn static_array_len(files: &[syn::File], name: &str) -> usize {
     let s = files
         .iter()
@@ -869,17 +853,10 @@ pub fn struct_fields_opt<'a>(files: &'a [syn::File], ty: &str) -> Option<&'a Fie
 }
 
 pub fn struct_fields<'a>(files: &'a [syn::File], ty: &str) -> &'a syn::FieldsNamed {
-    let s = files
-        .iter()
-        .flat_map(|f| &f.items)
-        .find_map(|i| match i {
-            Item::Struct(s) if s.ident == ty && is_pub(&s.vis) => Some(s),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("upstream: `pub struct {ty}` not found"));
-    match &s.fields {
-        Fields::Named(named) => named,
-        _ => panic!("upstream {ty} is no longer a struct with named fields"),
+    match struct_fields_opt(files, ty) {
+        Some(Fields::Named(named)) => named,
+        Some(_) => panic!("upstream {ty} is no longer a struct with named fields"),
+        None => panic!("upstream: `pub struct {ty}` not found"),
     }
 }
 
@@ -934,9 +911,6 @@ pub enum Arg {
     Face,
 }
 
-/// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
-/// `receiver` is the expression the call hangs off, so the same pass serves
-/// `fontdb::Database`, `usvg::Tree` and the root `usvg::Group`.
 /// `impl Deref for X { type Target = Y }` -> Y. Upstream uses it as inheritance
 /// (`LinearGradient` derefs to `BaseGradient`), and a per-impl scan cannot see
 /// through it, so the chain has to be walked explicitly.
@@ -946,8 +920,10 @@ pub fn deref_target(files: &[syn::File], ty: &str) -> Option<String> {
         // syn 3: `trait_` is `(Path, Token![for])`; in syn 2 the path sat at `.1`
         // behind the negative-impl bang, which has moved into `modifiers`.
         let (trait_path, _) = imp.trait_.as_ref()?;
-        let trait_name = quote!(#trait_path).to_string().replace(' ', "");
-        if trait_name.rsplit("::").next() != Some("Deref")
+        if !trait_path
+            .segments
+            .last()
+            .is_some_and(|s| s.ident == "Deref")
             || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty)
         {
             return None;

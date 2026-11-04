@@ -131,3 +131,8 @@ const bytes = new Uint8Array(Buffer.from(svg));
 new Resvg(bytes, null, fonts, { 'a.png': new Uint8Array(8) }).resolveImages({ 'b.png': bytes });
 fonts.loadFontData(new Uint8Array(0));
 void renderAsync(bytes);
+
+// A Resvg is a `Disposable`, what `using` asks of its value: index.d.ts
+// declares `[Symbol.dispose]`. No `using` statement here: this file also runs,
+// and Node parses one only from 24.
+new Resvg(svg) satisfies Disposable;

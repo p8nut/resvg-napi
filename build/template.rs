@@ -1223,6 +1223,8 @@ pub fn template(
             pending_images: std::sync::Arc<[String]>,
             pending_fonts: std::sync::Arc<[String]>,
             logs: Logs,
+            #[doc = " Set by `dispose`: every method in `impl Resvg` checks it (emit.rs)."]
+            disposed: bool,
         }
 
         #[napi]
@@ -1255,7 +1257,34 @@ pub fn template(
                     pending_images,
                     pending_fonts,
                     logs,
+                    disposed: false,
                 })
+            }
+
+            #[doc = " Frees the parsed tree, the source and the images now, not at garbage"]
+            #[doc = " collection; every later call throws. Also `[Symbol.dispose]` where"]
+            #[doc = " the runtime has it, so `using doc = new Resvg(svg)` frees it at the"]
+            #[doc = " end of the block. A node or async call holding the tree keeps it."]
+            #[napi]
+            pub fn dispose(&mut self) {
+                static EMPTY: std::sync::OnceLock<std::sync::Arc<usvg::Tree>> = std::sync::OnceLock::new();
+                self.tree = EMPTY
+                    .get_or_init(|| {
+                        let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/>";
+                        std::sync::Arc::new(usvg::Tree::from_str(svg, &usvg::Options::default()).expect("a constant SVG parses"))
+                    })
+                    .clone();
+                self.svg = Default::default();
+                self.images = Default::default();
+                self.pending_images = Vec::new().into();
+                self.pending_fonts = Vec::new().into();
+                self.disposed = true;
+            }
+
+            #[doc = " Whether `dispose` has been called."]
+            #[napi(getter)]
+            pub fn disposed(&self) -> bool {
+                self.disposed
             }
 
             #[doc = " Hrefs of `<image>` elements that neither the supplied buffers nor the"]
@@ -1480,6 +1509,14 @@ pub fn template(
         }
 
         impl Resvg {
+            #[doc = " The check emit.rs puts first in every `Resvg` method."]
+            fn live(&self) -> Result<()> {
+                if self.disposed {
+                    return Err(Error::from_reason("this Resvg was disposed"));
+                }
+                Ok(())
+            }
+
             fn doc(&self) -> Doc {
                 Doc {
                     tree: Some(TreeRef::Root(self.tree.clone())),
@@ -1535,6 +1572,22 @@ pub fn template(
             fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
                 self.logs.scope(|| draw(&self.tree, &p))
             }
+        }
+
+        #[doc = " `Resvg.prototype[Symbol.dispose]`, only where the runtime has the"]
+        #[doc = " symbol: napi's `well_known_symbol` fails the whole module without it"]
+        #[doc = " (iOS Safari, as of 2026). The type is declared by `napi.dtsHeader`."]
+        #[napi(module_exports)]
+        pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+            let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
+            let key: Unknown = symbol.get_named_property("dispose")?;
+            if key.get_type()? != ValueType::Symbol {
+                return Ok(());
+            }
+            let class: Object = exports.get_named_property_unchecked("Resvg")?;
+            let mut proto: Object = class.get_named_property_unchecked("prototype")?;
+            let dispose: Unknown = proto.get_named_property("dispose")?;
+            proto.set_property(key, dispose)
         }
 
         #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
@@ -1726,6 +1779,7 @@ pub fn template(
                     pending_images,
                     pending_fonts,
                     logs: std::mem::take(&mut self.logs),
+                    disposed: false,
                 }))
             }
         }

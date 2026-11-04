@@ -82,10 +82,10 @@ const doc = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http
 </svg>`, { fontFamily: fonts.family }, fonts.db);
 
 // Zero-argument methods are read off index.d.ts, so a method the codegen adds
-// is walked too; renders, serialisers and async twins are not reads.
+// is walked too; renders, serialisers, async twins and dispose are not reads.
 const dts = readFileSync(new URL('../index.d.ts', import.meta.url), 'utf8');
 const zeroArg = new Set([...dts.matchAll(/^ {2}(\w+)\(\): /gm)].map((m) => m[1])
-  .filter((n) => !/^(render|to|take)|Async$/.test(n)));
+  .filter((n) => !/^(render|to|take|dispose$)|Async$/.test(n)));
 
 const read = new Set();
 const seen = new WeakSet();

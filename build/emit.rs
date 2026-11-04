@@ -1691,6 +1691,48 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
 /// Cheap means no argument and a scalar result: a string, a number, a boolean
 /// or a string enum, possibly null. That leaves out what allocates or renders
 /// (`children`, `renderPng`, `toString`) and whatever needs a parameter.
+/// Puts `self.live()?` first in every JS-facing method of `class` but `open`,
+/// so a disposed instance throws instead of answering from the empty tree it
+/// was left with. A method not returning `Result` is made to: napi unwraps it,
+/// so the `.d.ts` does not change.
+pub fn guard_live(file: &mut syn::File, class: &str, open: &[&str]) {
+    for item in &mut file.items {
+        let Item::Impl(imp) = item else { continue };
+        if imp.trait_.is_some() || ty_str(&imp.self_ty) != class {
+            continue;
+        }
+        for it in &mut imp.items {
+            let ImplItem::Fn(f) = it else { continue };
+            if !f.attrs.iter().any(|a| a.path().is_ident("napi"))
+                || !matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
+                || open.contains(&f.sig.ident.to_string().as_str())
+            {
+                continue;
+            }
+            let body = &f.block;
+            let returns_result =
+                matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t).starts_with("Result<"));
+            f.block = match &f.sig.output {
+                _ if returns_result => {
+                    let stmts = &body.stmts;
+                    syn::parse_quote!({ self.live()?; #(#stmts)* })
+                }
+                // A closure, so the body's own `return` and `?` keep their meaning.
+                _ => {
+                    syn::parse_quote!({ self.live()?; #[allow(clippy::redundant_closure_call)] Ok((|| #body)()) })
+                }
+            };
+            if !returns_result {
+                let t = match &f.sig.output {
+                    ReturnType::Type(_, t) => quote!(#t),
+                    ReturnType::Default => quote!(()),
+                };
+                f.sig.output = syn::parse_quote!(-> Result<#t>);
+            }
+        }
+    }
+}
+
 pub fn inspect_members(file: &syn::File) -> TokenStream {
     let mut scalars: BTreeSet<String> = [
         "String", "bool", "f64", "f32", "u32", "i32", "u8", "u16", "i64", "u64", "usize",

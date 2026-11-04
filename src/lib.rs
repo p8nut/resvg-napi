@@ -4505,6 +4505,8 @@ pub struct Resvg {
     pending_images: std::sync::Arc<[String]>,
     pending_fonts: std::sync::Arc<[String]>,
     logs: Logs,
+    #[doc = " Set by `dispose`: every method in `impl Resvg` checks it (emit.rs)."]
+    disposed: bool,
 }
 #[napi]
 impl Resvg {
@@ -4536,27 +4538,61 @@ impl Resvg {
             pending_images,
             pending_fonts,
             logs,
+            disposed: false,
         })
+    }
+    #[doc = " Frees the parsed tree, the source and the images now, not at garbage"]
+    #[doc = " collection; every later call throws. Also `[Symbol.dispose]` where"]
+    #[doc = " the runtime has it, so `using doc = new Resvg(svg)` frees it at the"]
+    #[doc = " end of the block. A node or async call holding the tree keeps it."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        static EMPTY: std::sync::OnceLock<std::sync::Arc<usvg::Tree>> = std::sync::OnceLock::new();
+        self.tree = EMPTY
+            .get_or_init(|| {
+                let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/>";
+                std::sync::Arc::new(
+                    usvg::Tree::from_str(svg, &usvg::Options::default())
+                        .expect("a constant SVG parses"),
+                )
+            })
+            .clone();
+        self.svg = Default::default();
+        self.images = Default::default();
+        self.pending_images = Vec::new().into();
+        self.pending_fonts = Vec::new().into();
+        self.disposed = true;
+    }
+    #[doc = " Whether `dispose` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.disposed
     }
     #[doc = " Hrefs of `<image>` elements that neither the supplied buffers nor the"]
     #[doc = " filesystem could resolve. Feed them back with `resolveImage`."]
     #[napi]
-    pub fn pending_images(&self) -> Vec<String> {
-        self.pending_images.to_vec()
+    pub fn pending_images(&self) -> Result<Vec<String>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.pending_images.to_vec())())
     }
     #[doc = " Drains what usvg and resvg reported while parsing and rendering"]
     #[doc = " this document, async twins included, and nothing from any other."]
     #[doc = " Collected only once `setLogLevel` has set a level."]
     #[napi(js_name = "takeLogs")]
-    pub fn take_own_logs(&self) -> Vec<String> {
-        self.logs.take()
+    pub fn take_own_logs(&self) -> Result<Vec<String>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.logs.take())())
     }
     #[doc = " Named font families requested by `<text>` that the database does not"]
     #[doc = " carry, so the text was rendered with a fallback face. Load them with"]
     #[doc = " `FontDatabase` and re-parse to fix the output."]
     #[napi]
-    pub fn pending_fonts(&self) -> Vec<String> {
-        self.pending_fonts.to_vec()
+    pub fn pending_fonts(&self) -> Result<Vec<String>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.pending_fonts.to_vec())())
     }
     #[doc = " The face that actually drew a glyph, from the database this"]
     #[doc = " document was parsed with."]
@@ -4571,12 +4607,16 @@ impl Resvg {
     #[doc = " a slotmap key, meaningless outside the database that issued it,"]
     #[doc = " and read against this one it could name an unrelated face."]
     #[napi]
-    pub fn face_of(&self, glyph: &PositionedGlyph) -> Option<FontFace> {
-        let fonts = glyph.doc.fonts.as_ref()?;
-        if !std::sync::Arc::ptr_eq(fonts, &self.fonts) {
-            return None;
-        }
-        glyph.font()
+    pub fn face_of(&self, glyph: &PositionedGlyph) -> Result<Option<FontFace>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            let fonts = glyph.doc.fonts.as_ref()?;
+            if !std::sync::Arc::ptr_eq(fonts, &self.fonts) {
+                return None;
+            }
+            glyph.font()
+        })())
     }
     #[doc = " Supplies one image and re-parses the document."]
     #[doc = ""]
@@ -4584,6 +4624,7 @@ impl Resvg {
     #[doc = " argument, or `resolveImages`, instead: this re-parses once per call."]
     #[napi]
     pub fn resolve_image(&mut self, href: String, data: Uint8Array) -> Result<()> {
+        self.live()?;
         std::sync::Arc::make_mut(&mut self.images).insert(href, std::sync::Arc::new(data.to_vec()));
         self.reparse()
     }
@@ -4595,6 +4636,7 @@ impl Resvg {
         &mut self,
         images: std::collections::HashMap<String, Uint8Array>,
     ) -> Result<()> {
+        self.live()?;
         std::sync::Arc::make_mut(&mut self.images).extend(image_map(Some(images)));
         self.reparse()
     }
@@ -4609,12 +4651,16 @@ impl Resvg {
         Ok(())
     }
     #[napi(getter)]
-    pub fn width(&self) -> f64 {
-        self.tree.size().width().into()
+    pub fn width(&self) -> Result<f64> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.tree.size().width().into())())
     }
     #[napi(getter)]
-    pub fn height(&self) -> f64 {
-        self.tree.size().height().into()
+    pub fn height(&self) -> Result<f64> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.tree.size().height().into())())
     }
     #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
     #[doc = " on a worker thread."]
@@ -4624,6 +4670,7 @@ impl Resvg {
     #[doc = " Renders to a PNG buffer."]
     #[napi]
     pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
+        self.live()?;
         self.png_bytes(params).map(IntoJs::into_js)
     }
     #[doc = " Parses on a worker thread. Same arguments as the constructor, and the"]
@@ -4651,17 +4698,22 @@ impl Resvg {
     #[doc = " (contours, filters and transforms included). `null` if there is no"]
     #[doc = " such id or the element has no visible size."]
     #[napi]
-    pub fn node_bbox(&self, id: String) -> Option<BBox> {
-        self.tree
-            .node_by_id(&id)
-            .and_then(node_extent)
-            .map(BBox::from)
+    pub fn node_bbox(&self, id: String) -> Result<Option<BBox>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .node_by_id(&id)
+                .and_then(node_extent)
+                .map(BBox::from)
+        })())
     }
     #[doc = " Renders a single element, by `id`, into its own PNG -- the output is"]
     #[doc = " sized to that element, not to the document. Useful to slice an icon"]
     #[doc = " out of a sprite sheet."]
     #[napi]
     pub fn render_node_png(&self, id: String, params: Option<RenderParams>) -> Result<Buffer> {
+        self.live()?;
         self.node_png_bytes(id, params).map(IntoJs::into_js)
     }
     #[doc = " The Send half of `renderNodePng`."]
@@ -4675,23 +4727,31 @@ impl Resvg {
     }
     #[doc = " Handle on one element, by `id`."]
     #[napi]
-    pub fn node(&self, id: String) -> Option<SvgNode> {
-        path_of_id(self.tree.root(), &id, &mut Vec::new()).map(|path| SvgNode {
-            doc: self.doc(),
-            base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
-            path,
-        })
+    pub fn node(&self, id: String) -> Result<Option<SvgNode>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            path_of_id(self.tree.root(), &id, &mut Vec::new()).map(|path| SvgNode {
+                doc: self.doc(),
+                base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
+                path,
+            })
+        })())
     }
     #[doc = " Direct children of the root group."]
     #[napi]
-    pub fn children(&self) -> Vec<SvgNode> {
-        (0..self.tree.root().children().len())
-            .map(|i| SvgNode {
-                doc: self.doc(),
-                base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
-                path: vec![i],
-            })
-            .collect()
+    pub fn children(&self) -> Result<Vec<SvgNode>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            (0..self.tree.root().children().len())
+                .map(|i| SvgNode {
+                    doc: self.doc(),
+                    base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
+                    path: vec![i],
+                })
+                .collect()
+        })())
     }
     #[doc = " Image size."]
     #[doc = ""]
@@ -4704,84 +4764,120 @@ impl Resvg {
     #[doc = " [`self.root().abs_layer_bounding_box()`](Group::abs_layer_bounding_box)"]
     #[doc = " to retrieve it instead."]
     #[napi]
-    pub fn size(&self) -> Dimensions {
-        Dimensions::from(self.tree.size())
+    pub fn size(&self) -> Result<Dimensions> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| Dimensions::from(self.tree.size()))())
     }
     #[doc = " Checks if the current tree has any text nodes."]
     #[napi]
-    pub fn has_text_nodes(&self) -> bool {
-        self.tree.has_text_nodes()
+    pub fn has_text_nodes(&self) -> Result<bool> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.tree.has_text_nodes())())
     }
     #[doc = " Checks if the current tree has any `defs` nodes."]
     #[napi]
-    pub fn has_defs_nodes(&self) -> bool {
-        self.tree.has_defs_nodes()
+    pub fn has_defs_nodes(&self) -> Result<bool> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.tree.has_defs_nodes())())
     }
     #[doc = " Returns a list of all unique [`LinearGradient`]s in the tree."]
     #[napi]
-    pub fn linear_gradients(&self) -> Vec<LinearGradient> {
-        self.tree
-            .linear_gradients()
-            .iter()
-            .map(|x| LinearGradient::wrap(x.clone(), self.doc()))
-            .collect()
+    pub fn linear_gradients(&self) -> Result<Vec<LinearGradient>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .linear_gradients()
+                .iter()
+                .map(|x| LinearGradient::wrap(x.clone(), self.doc()))
+                .collect()
+        })())
     }
     #[doc = " Returns a list of all unique [`RadialGradient`]s in the tree."]
     #[napi]
-    pub fn radial_gradients(&self) -> Vec<RadialGradient> {
-        self.tree
-            .radial_gradients()
-            .iter()
-            .map(|x| RadialGradient::wrap(x.clone(), self.doc()))
-            .collect()
+    pub fn radial_gradients(&self) -> Result<Vec<RadialGradient>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .radial_gradients()
+                .iter()
+                .map(|x| RadialGradient::wrap(x.clone(), self.doc()))
+                .collect()
+        })())
     }
     #[doc = " Returns a list of all unique [`Pattern`]s in the tree."]
     #[napi]
-    pub fn patterns(&self) -> Vec<Pattern> {
-        self.tree
-            .patterns()
-            .iter()
-            .map(|x| Pattern::wrap(x.clone(), self.doc()))
-            .collect()
+    pub fn patterns(&self) -> Result<Vec<Pattern>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .patterns()
+                .iter()
+                .map(|x| Pattern::wrap(x.clone(), self.doc()))
+                .collect()
+        })())
     }
     #[doc = " Returns a list of all unique [`ClipPath`]s in the tree."]
     #[napi]
-    pub fn clip_paths(&self) -> Vec<ClipPath> {
-        self.tree
-            .clip_paths()
-            .iter()
-            .map(|x| ClipPath::wrap(x.clone(), self.doc()))
-            .collect()
+    pub fn clip_paths(&self) -> Result<Vec<ClipPath>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .clip_paths()
+                .iter()
+                .map(|x| ClipPath::wrap(x.clone(), self.doc()))
+                .collect()
+        })())
     }
     #[doc = " Returns a list of all unique [`Mask`]s in the tree."]
     #[napi]
-    pub fn masks(&self) -> Vec<Mask> {
-        self.tree
-            .masks()
-            .iter()
-            .map(|x| Mask::wrap(x.clone(), self.doc()))
-            .collect()
+    pub fn masks(&self) -> Result<Vec<Mask>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .masks()
+                .iter()
+                .map(|x| Mask::wrap(x.clone(), self.doc()))
+                .collect()
+        })())
     }
     #[doc = " Returns a list of all unique [`Filter`](filter::Filter)s in the tree."]
     #[napi]
-    pub fn filters(&self) -> Vec<Filter> {
-        self.tree
-            .filters()
-            .iter()
-            .map(|x| Filter::wrap(x.clone(), self.doc()))
-            .collect()
+    pub fn filters(&self) -> Result<Vec<Filter>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            self.tree
+                .filters()
+                .iter()
+                .map(|x| Filter::wrap(x.clone(), self.doc()))
+                .collect()
+        })())
     }
     #[doc = " Returns the font database that applies to all text nodes in the tree."]
     #[napi]
-    pub fn fontdb(&self) -> FontDatabase {
-        FontDatabase::wrap(self.tree.fontdb().clone(), self.doc())
+    pub fn fontdb(&self) -> Result<FontDatabase> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            FontDatabase::wrap(self.tree.fontdb().clone(), self.doc())
+        })())
     }
     #[doc = " Element's transform."]
     #[doc = ""]
     #[doc = " This is a relative transform. The one that is set via the `transform` attribute in SVG."]
     #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.tree.root().transform())
+    pub fn transform(&self) -> Result<Matrix> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| Matrix::from(self.tree.root().transform()))())
     }
     #[doc = " Element's absolute transform."]
     #[doc = ""]
@@ -4790,23 +4886,29 @@ impl Resvg {
     #[doc = " Note that subroots, like clipPaths, masks and patterns, have their own root transform,"]
     #[doc = " which isn't affected by the node that references this subroot."]
     #[napi]
-    pub fn abs_transform(&self) -> Matrix {
-        Matrix::from(self.tree.root().abs_transform())
+    pub fn abs_transform(&self) -> Result<Matrix> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| Matrix::from(self.tree.root().abs_transform()))())
     }
     #[doc = " Group opacity."]
     #[doc = ""]
     #[doc = " After the group is rendered we should combine"]
     #[doc = " it with a parent group using the specified opacity."]
     #[napi]
-    pub fn opacity(&self) -> f64 {
-        f64::from(self.tree.root().opacity().get())
+    pub fn opacity(&self) -> Result<f64> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| f64::from(self.tree.root().opacity().get()))())
     }
     #[doc = " Group blend mode."]
     #[doc = ""]
     #[doc = " `mix-blend-mode` in SVG."]
     #[napi]
-    pub fn blend_mode(&self) -> BlendMode {
-        BlendMode::from(self.tree.root().blend_mode())
+    pub fn blend_mode(&self) -> Result<BlendMode> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BlendMode::from(self.tree.root().blend_mode()))())
     }
     #[doc = " Element's object bounding box."]
     #[doc = ""]
@@ -4814,29 +4916,37 @@ impl Resvg {
     #[doc = ""]
     #[doc = " Can be set to `None` in case of an empty group."]
     #[napi]
-    pub fn bounding_box(&self) -> BBox {
-        BBox::from(self.tree.root().bounding_box())
+    pub fn bounding_box(&self) -> Result<BBox> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BBox::from(self.tree.root().bounding_box()))())
     }
     #[doc = " Element's bounding box in canvas coordinates."]
     #[doc = ""]
     #[doc = " `userSpaceOnUse` in SVG terms."]
     #[napi]
-    pub fn abs_bounding_box(&self) -> BBox {
-        BBox::from(self.tree.root().abs_bounding_box())
+    pub fn abs_bounding_box(&self) -> Result<BBox> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BBox::from(self.tree.root().abs_bounding_box()))())
     }
     #[doc = " Element's object bounding box including stroke."]
     #[doc = ""]
     #[doc = " Similar to `bounding_box`, but includes stroke."]
     #[napi]
-    pub fn stroke_bounding_box(&self) -> BBox {
-        BBox::from(self.tree.root().stroke_bounding_box())
+    pub fn stroke_bounding_box(&self) -> Result<BBox> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BBox::from(self.tree.root().stroke_bounding_box()))())
     }
     #[doc = " Element's bounding box including stroke in user coordinates."]
     #[doc = ""]
     #[doc = " Similar to `abs_bounding_box`, but includes stroke."]
     #[napi]
-    pub fn abs_stroke_bounding_box(&self) -> BBox {
-        BBox::from(self.tree.root().abs_stroke_bounding_box())
+    pub fn abs_stroke_bounding_box(&self) -> Result<BBox> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BBox::from(self.tree.root().abs_stroke_bounding_box()))())
     }
     #[doc = " Element's \"layer\" bounding box in object units."]
     #[doc = ""]
@@ -4853,18 +4963,24 @@ impl Resvg {
     #[doc = ""]
     #[doc = " Returns 0x0x1x1 for empty groups."]
     #[napi]
-    pub fn layer_bounding_box(&self) -> BBox {
-        BBox::from(self.tree.root().layer_bounding_box())
+    pub fn layer_bounding_box(&self) -> Result<BBox> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BBox::from(self.tree.root().layer_bounding_box()))())
     }
     #[doc = " Element's \"layer\" bounding box in canvas units."]
     #[napi]
-    pub fn abs_layer_bounding_box(&self) -> BBox {
-        BBox::from(self.tree.root().abs_layer_bounding_box())
+    pub fn abs_layer_bounding_box(&self) -> Result<BBox> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| BBox::from(self.tree.root().abs_layer_bounding_box()))())
     }
     #[doc = " Returns `true` if the group has any children."]
     #[napi]
-    pub fn has_children(&self) -> bool {
-        self.tree.root().has_children()
+    pub fn has_children(&self) -> Result<bool> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.tree.root().has_children())())
     }
     #[doc = " Calculates a node's filter bounding box."]
     #[doc = ""]
@@ -4877,14 +4993,17 @@ impl Resvg {
     #[doc = ""]
     #[doc = " This function is very fast, that's why we do not store this bbox as a `Group` field."]
     #[napi]
-    pub fn filters_bounding_box(&self) -> Option<BBox> {
-        self.tree.root().filters_bounding_box().map(BBox::from)
+    pub fn filters_bounding_box(&self) -> Result<Option<BBox>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| self.tree.root().filters_bounding_box().map(BBox::from))())
     }
     #[doc = " Writes the parsed tree back out as a usvg-simplified SVG string."]
     #[doc = ""]
     #[doc = " Text is converted to paths unless `preserveText` is set."]
     #[napi(js_name = "toString")]
     pub fn to_svg_string(&self, options: Option<WriteOptions>) -> Result<String> {
+        self.live()?;
         self.svg_text(options)
     }
     #[doc = " Serialising a large tree is not free; this is the half a twin runs."]
@@ -4903,10 +5022,18 @@ impl Resvg {
     #[doc = " Renders to raw RGBA8 pixels."]
     #[napi]
     pub fn render_raw(&self, params: Option<RenderParams>) -> Result<RawImage> {
+        self.live()?;
         self.raw_pixels(params).map(IntoJs::into_js)
     }
 }
 impl Resvg {
+    #[doc = " The check emit.rs puts first in every `Resvg` method."]
+    fn live(&self) -> Result<()> {
+        if self.disposed {
+            return Err(Error::from_reason("this Resvg was disposed"));
+        }
+        Ok(())
+    }
     fn doc(&self) -> Doc {
         Doc {
             tree: Some(TreeRef::Root(self.tree.clone())),
@@ -4962,6 +5089,21 @@ impl Resvg {
     fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
         self.logs.scope(|| draw(&self.tree, &p))
     }
+}
+#[doc = " `Resvg.prototype[Symbol.dispose]`, only where the runtime has the"]
+#[doc = " symbol: napi's `well_known_symbol` fails the whole module without it"]
+#[doc = " (iOS Safari, as of 2026). The type is declared by `napi.dtsHeader`."]
+#[napi(module_exports)]
+pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+    let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
+    let key: Unknown = symbol.get_named_property("dispose")?;
+    if key.get_type()? != ValueType::Symbol {
+        return Ok(());
+    }
+    let class: Object = exports.get_named_property_unchecked("Resvg")?;
+    let mut proto: Object = class.get_named_property_unchecked("prototype")?;
+    let dispose: Unknown = proto.get_named_property("dispose")?;
+    proto.set_property(key, dispose)
 }
 #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
 fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
@@ -5124,6 +5266,7 @@ impl<'env> napi::ScopedTask<'env> for ParseTask {
             pending_images,
             pending_fonts,
             logs: std::mem::take(&mut self.logs),
+            disposed: false,
         }))
     }
 }
@@ -5232,14 +5375,18 @@ impl Resvg {
         &self,
         params: Option<RenderParams>,
         #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> AsyncTask<ResvgPngBytesTask> {
-        AsyncTask::with_optional_signal(
-            ResvgPngBytesTask {
-                recv: self.clone(),
-                params,
-            },
-            signal.map(|s| s.0),
-        )
+    ) -> Result<AsyncTask<ResvgPngBytesTask>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            AsyncTask::with_optional_signal(
+                ResvgPngBytesTask {
+                    recv: self.clone(),
+                    params,
+                },
+                signal.map(|s| s.0),
+            )
+        })())
     }
 }
 #[doc = " `renderNodePng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
@@ -5268,15 +5415,19 @@ impl Resvg {
         id: String,
         params: Option<RenderParams>,
         #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> AsyncTask<ResvgNodePngBytesTask> {
-        AsyncTask::with_optional_signal(
-            ResvgNodePngBytesTask {
-                recv: self.clone(),
-                id,
-                params,
-            },
-            signal.map(|s| s.0),
-        )
+    ) -> Result<AsyncTask<ResvgNodePngBytesTask>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            AsyncTask::with_optional_signal(
+                ResvgNodePngBytesTask {
+                    recv: self.clone(),
+                    id,
+                    params,
+                },
+                signal.map(|s| s.0),
+            )
+        })())
     }
 }
 #[doc = " `toString` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
@@ -5302,14 +5453,18 @@ impl Resvg {
         &self,
         options: Option<WriteOptions>,
         #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> AsyncTask<ResvgSvgTextTask> {
-        AsyncTask::with_optional_signal(
-            ResvgSvgTextTask {
-                recv: self.clone(),
-                options,
-            },
-            signal.map(|s| s.0),
-        )
+    ) -> Result<AsyncTask<ResvgSvgTextTask>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            AsyncTask::with_optional_signal(
+                ResvgSvgTextTask {
+                    recv: self.clone(),
+                    options,
+                },
+                signal.map(|s| s.0),
+            )
+        })())
     }
 }
 #[doc = " `renderRaw` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
@@ -5335,14 +5490,18 @@ impl Resvg {
         &self,
         params: Option<RenderParams>,
         #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> AsyncTask<ResvgRawPixelsTask> {
-        AsyncTask::with_optional_signal(
-            ResvgRawPixelsTask {
-                recv: self.clone(),
-                params,
-            },
-            signal.map(|s| s.0),
-        )
+    ) -> Result<AsyncTask<ResvgRawPixelsTask>> {
+        self.live()?;
+        #[allow(clippy::redundant_closure_call)]
+        Ok((|| {
+            AsyncTask::with_optional_signal(
+                ResvgRawPixelsTask {
+                    recv: self.clone(),
+                    params,
+                },
+                signal.map(|s| s.0),
+            )
+        })())
     }
 }
 #[napi]
@@ -6011,7 +6170,7 @@ impl Resvg {
             &env,
             &this,
             "Resvg",
-            &["width", "height"],
+            &["disposed", "width", "height"],
             &[
                 "hasTextNodes",
                 "hasDefsNodes",

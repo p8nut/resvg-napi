@@ -330,11 +330,23 @@ template can still reach `../assets/logo.png`; or hand the bytes over as
 `images` instead. Bytes fetched after the parse go back with
 `resolveImages({ href: buffer, ... })`, one re-parse for all of them;
 `resolveImage(href, buffer)` re-parses once per call. Refused, because each
-would otherwise be allocated in full: a file of more than 256 MiB, gzip data
-that inflates past 256 MiB, and a raster image whose header declares more than
-2^28 pixels. An image refused this way, or supplied bytes that are not an image
-at all, is listed in `pendingImages()` (a `data:` URI is only logged); an
-`.svgz` document past the cap throws.
+would otherwise be allocated in full: a file of more than 256 MiB, SVGZ (see
+below), and a raster image whose header declares more than 2^28 pixels. An
+image refused this way, or supplied bytes that are not an image at all, is
+listed in `pendingImages()` (a `data:` URI is only logged).
+
+**An `.svgz` file throws `SvgzFeatureNotEnabled`.** SVGZ is not supported for
+now: usvg inflates gzip with no size limit, so a few hundred bytes can expand
+to gigabytes ([linebender/resvg#1138](https://github.com/linebender/resvg/issues/1138)).
+Inflate it yourself, with a limit you choose, and pass the result:
+
+```js
+import { gunzipSync } from 'node:zlib'
+const doc = new Resvg(gunzipSync(svgz, { maxOutputLength: 64 << 20 }))
+```
+
+In a browser, `DecompressionStream('gzip')` does the same; stop reading past
+your limit. An SVGZ `<image>` inside a document is not drawn.
 
 **A measurement disagrees with the numbers in the file.** Bounding boxes are in
 the document's own units and usvg normalises the tree, so they are not canvas

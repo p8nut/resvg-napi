@@ -3,16 +3,11 @@
 // returns, and a node payload is not a collection, so nothing else nominates
 // them.
 import assert from 'node:assert/strict';
-import { testFonts, skip } from './support.mjs';
+import { fontsOrSkip } from './support.mjs';
 import { createRequire } from 'node:module';
 const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 
-const fontsFound = testFonts(FontDatabase);
-if (!fontsFound) {
-  skip('text content', 'no font in this environment');
-  process.exit(0);
-}
-const { db, family } = fontsFound;
+const { db, family } = fontsOrSkip(FontDatabase, 'text content');
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="90">
   <text id="one" x="10" y="30" font-size="20" fill="#38bdf8">Hi there</text>

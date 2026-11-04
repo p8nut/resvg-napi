@@ -205,7 +205,7 @@ measured rather than chosen, with the reason recorded in
 [`scripts/conformance.mjs`](scripts/conformance.mjs).
 
 ```bash
-npm run conformance:fetch   # the corpus, at the tag Cargo.toml pins
+npm run conformance:fetch   # the corpus, at the tag Cargo.lock builds
 npm run conformance         # 15 seconds including the fetch
 ```
 
@@ -238,11 +238,9 @@ fonts must be supplied with `loadFontFile(path)`, `loadFontsDir(dir)` or
 than making you find a file; and WASI has no mmap, so font files are read into
 memory and `makeFaceDataUnshared` throws.
 
-Adding a target is an entry in `scripts/ci-targets.mjs` — which host builds it
-and which cross-compilation flag it needs — and the triple in `package.json`
-under `napi.targets`; then `npm run create-npm-dirs`. The two lists used to be
-independent, so a target could sit in one and not the other; the script now
-fails when they disagree.
+Adding a target is the triple in `package.json` under `napi.targets`; then
+`npm run create-npm-dirs`. CI builds that list, and `scripts/ci-targets.mjs`
+derives which host builds each triple and which cross-compilation flag it needs.
 
 CI does not build all thirteen on a pull request. It builds the two that can
 tell it something — `x86_64-unknown-linux-gnu`, which the tests, the drift

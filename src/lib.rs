@@ -9,7 +9,7 @@
 )]
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use napi_support::fs::{gunzip_capped, read_regular};
+use napi_support::fs::read_regular;
 use napi_support::logs::Logs;
 use napi_support::{Signal, contained};
 use resvg::{tiny_skia, usvg};
@@ -1004,9 +1004,10 @@ fn href_resolver(
             if let Some(path) = under_resources_dir(href, opts, root.as_deref())
                 && let Some(data) = read_regular(&path)
             {
-                let svg = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                    e.eq_ignore_ascii_case("svg") || e.eq_ignore_ascii_case("svgz")
-                });
+                let svg = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
                 let mime = if svg { "image/svg+xml" } else { "text/plain" };
                 if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
                     return Some(kind);
@@ -1024,25 +1025,22 @@ fn href_resolver(
 #[doc = " px. resvg decodes at render time with no limit of its own, so a 1 KB"]
 #[doc = " JPEG declaring 65535x65535 would ask for 16 GiB there."]
 const MAX_IMAGE_PIXELS: u64 = 1 << 28;
-#[doc = " `resolve` behind the two checks usvg and resvg leave out: gzip is"]
-#[doc = " inflated under `napi_support::fs::MAX_BYTES`, and a raster image whose header"]
-#[doc = " declares more than `MAX_IMAGE_PIXELS` is refused. Refusals are logged."]
+#[doc = " `resolve` behind the two checks usvg and resvg leave out: gzip data"]
+#[doc = " (SVGZ, unsupported, see Cargo.toml) is refused, and so is a raster"]
+#[doc = " image whose header declares more than `MAX_IMAGE_PIXELS`. Refusals"]
+#[doc = " are logged."]
 fn checked(
     resolve: usvg::ImageHrefDataResolverFn<'static>,
 ) -> usvg::ImageHrefDataResolverFn<'static> {
     Box::new(
         move |mime: &str, data: std::sync::Arc<Vec<u8>>, opts: &usvg::Options| {
-            let data = if data.starts_with(&[0x1f, 0x8b]) {
-                match gunzip_capped(&data) {
-                    Ok(inflated) => std::sync::Arc::new(inflated),
-                    Err(e) => {
-                        log::warn!("{}: image refused, gzip data {e}", env!("CARGO_PKG_NAME"));
-                        return None;
-                    }
-                }
-            } else {
-                data
-            };
+            if data.starts_with(&[0x1f, 0x8b]) {
+                log::warn!(
+                    "{}: image refused, SVGZ is not supported",
+                    env!("CARGO_PKG_NAME")
+                );
+                return None;
+            }
             let raster = matches!(
                 mime,
                 "image/jpg" | "image/jpeg" | "image/png" | "image/gif" | "image/webp"
@@ -4018,7 +4016,8 @@ impl From<&usvg::Error> for ParseErrorCode {
 #[doc = " back from a JS object loses the object on WASI, so both paths below"]
 #[doc = " hand this object to JS themselves."]
 fn parse_error<'e>(env: &'e Env, e: &usvg::Error) -> Result<Object<'e>> {
-    let mut error = env.create_error(Error::from_reason(format!("invalid SVG: {e}")))?;
+    let reason = match e { usvg :: Error :: SvgzFeatureNotEnabled => { "SVGZ is not supported: inflate it first, e.g. zlib.gunzipSync(data, { maxOutputLength })" . to_string () } e => e . to_string () , } ;
+    let mut error = env.create_error(Error::from_reason(format!("invalid SVG: {reason}")))?;
     error.set_named_property("code", ParseErrorCode::from(e))?;
     Ok(error)
 }
@@ -5061,21 +5060,6 @@ impl Resvg {
                 .map(std::path::PathBuf::from),
         );
         opts.font_resolver = font_resolver(missing_fonts.clone());
-        let inflated;
-        let svg = if svg.starts_with(&[0x1f, 0x8b]) {
-            match gunzip_capped(svg) {
-                Ok(data) => {
-                    inflated = data;
-                    &inflated[..]
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::FileTooLarge => {
-                    return Err(Error::from_reason(format!("SVGZ data {e}")));
-                }
-                Err(_) => return Ok(Err(usvg::Error::MalformedGZip)),
-            }
-        } else {
-            svg
-        };
         let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
             Ok(tree) => tree,
             Err(e) => return Ok(Err(e)),

@@ -1,16 +1,11 @@
 // SvgNode: read-only handles on inner elements (Arc<Tree> + index path).
 import assert from 'node:assert/strict';
-import { testFonts, skip } from './support.mjs';
+import { fontsOrSkip } from './support.mjs';
 import { createRequire } from 'node:module';
 const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
-const fontsFound = testFonts(FontDatabase);
-if (!fontsFound) {
-  skip('node wrappers', 'no font in this environment');
-  process.exit(0);
-}
-const { db, family } = fontsFound;
+const { db, family } = fontsOrSkip(FontDatabase, 'node wrappers');
 const opts = { fontFamily: family };
 
 

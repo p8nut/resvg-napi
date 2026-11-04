@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { testFonts, testFontFile, skip } from './support.mjs';
+import { fontsOrSkip, testFontFile, skip } from './support.mjs';
 const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 
 const text = (family) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">
@@ -11,12 +11,7 @@ const text = (family) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" he
 
 // Whatever this environment has, by name: WASI has no system fonts at all, so
 // nothing here can assume a family is installed.
-const fonts = testFonts(FontDatabase);
-if (!fonts) {
-  skip('font resolution', 'no font in this environment');
-  process.exit(0);
-}
-const { db, family } = fonts;
+const { db, family } = fontsOrSkip(FontDatabase, 'font resolution');
 const opts = { fontFamily: family };
 
 // 1. a family nobody has is reported, and the text still renders with a fallback

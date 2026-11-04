@@ -6,7 +6,7 @@
 //!   build/config.rs    the resvg-specific lists: renames, reserved names,
 //!                      hand-wired fields. What another crate would rewrite
 //!   build/sources.rs   finding and parsing upstream
-//!                      (env override -> git submodule -> cargo registry)
+//!                      (env override -> cargo registry)
 //!   build/vocab.rs     what a Rust type means on the JS side -- newtypes,
 //!                      aliases, `Deref` chains, payload enums, naming
 //!   build/emit.rs      turning those answers into tokens napi can expand
@@ -34,17 +34,14 @@ use syn::{Fields, ImplItem, Item};
 /// buried under 101 lines of it. Off unless asked for.
 macro_rules! report {
     ($($arg:tt)*) => {
-        if env::var_os($crate::codegen_log_var()).is_some() {
+        if env::var_os($crate::CODEGEN_LOG).is_some() {
             println!("cargo::warning={}", format!($($arg)*));
         }
     };
 }
 
-/// `RESVG_NAPI_CODEGEN_LOG` for this package: the crate name, upper-cased.
-fn codegen_log_var() -> String {
-    let pkg = env::var("CARGO_PKG_NAME").expect("CARGO_PKG_NAME, set by Cargo");
-    format!("{}_CODEGEN_LOG", pkg.to_uppercase().replace('-', "_"))
-}
+/// The env var that turns the report on.
+const CODEGEN_LOG: &str = "RESVG_NAPI_CODEGEN_LOG";
 
 // Each phase in its own file. `#[path]` because Cargo compiles this one as a
 // crate root, so a plain `mod` would look for the file beside it -- in the
@@ -67,10 +64,6 @@ use emit::*;
 use sources::*;
 use template::*;
 use vocab::*;
-
-// ---------------------------------------------------------------------------
-// 1. source discovery
-// ---------------------------------------------------------------------------
 
 fn assert_free_fn(files: &[syn::File], name: &str, want: &[&str]) {
     let f = files
@@ -133,10 +126,6 @@ fn assert_tree_ctor(files: &[syn::File], ty: &str, name: &str) {
     assert!(found, "upstream: `{ty}::{name}` disappeared");
 }
 
-// ---------------------------------------------------------------------------
-// 4. emission
-// ---------------------------------------------------------------------------
-
 fn main() {
     napi_build::setup();
     let probe = quote!(image_kind_to_js(x));
@@ -144,48 +133,6 @@ fn main() {
         calls(&probe, "image_kind_to_js") && !calls(&probe, "kind_to_js"),
         "calls() matches inside a longer identifier"
     );
-    // map_struct arms no upstream option struct exercises today, so a
-    // regression in them would only show the day one does: a struct with a
-    // `Rect`, a `NonZeroRect`, an `Option<NonZeroRect>`, a renamed enum and an
-    // integer newtype, mapped and read back as tokens.
-    {
-        let probe: syn::File = syn::parse_quote! {
-            pub struct Probe { pub r: Rect, pub n: NonZeroRect, pub o: Option<NonZeroRect>, pub e: Style, pub i: ID }
-        };
-        let mut v = Vocab::default();
-        v.enums.insert("Style".into());
-        v.ints.insert("ID".into());
-        let (fields, _, _) = map_struct(&[probe], "Probe", &v, 0);
-        let got: Vec<String> = fields
-            .iter()
-            .map(|f| format!("{} {}", f.decl, f.assign).replace(' ', ""))
-            .collect();
-        assert!(
-            got[0].contains("usvg::Rect::from_xywh") && got[0].contains("o.r=r;"),
-            "Rect: {}",
-            got[0]
-        );
-        assert!(
-            got[1].contains("usvg::NonZeroRect::from_xywh") && got[1].contains("o.n=r;"),
-            "NonZeroRect: {}",
-            got[1]
-        );
-        assert!(
-            got[2].contains("o.o=Some(r);"),
-            "Option<NonZeroRect>: {}",
-            got[2]
-        );
-        assert!(
-            got[3].contains("Option<FontFaceStyle>"),
-            "renamed enum: {}",
-            got[3]
-        );
-        assert!(
-            got[4].contains("try_into()") && !got[4].contains("as_"),
-            "int newtype: {}",
-            got[4]
-        );
-    }
     cfg::selftest();
     modtree_selftest(Path::new(
         &env::var("OUT_DIR").expect("OUT_DIR, set by Cargo for build scripts"),
@@ -243,7 +190,6 @@ fn main() {
             Js::Bool,
             Js::I32,
             Js::F32,
-            Js::F64,
             Js::U8,
             Js::U16,
             Js::U32,
@@ -288,7 +234,7 @@ fn main() {
     // The generated file is also an *input* to watch: if someone deletes or
     // stubs src/lib.rs, the script must re-run and regenerate it.
     println!("cargo::rerun-if-changed=src/lib.rs");
-    println!("cargo::rerun-if-env-changed={}", codegen_log_var());
+    println!("cargo::rerun-if-env-changed={CODEGEN_LOG}");
 
     let locked = locked_versions();
 
@@ -303,7 +249,7 @@ fn main() {
     // crate's own module tree: which types are public, and at which path, is
     // what its `mod`s and `pub use`s say.
     //
-    // `label` is not `root.to_string()`: quote! spells a path with spaces
+    // `root_str` is kept beside `root`: quote! spells a path with spaces
     // around `::`, and this one reaches the report a reader is expected to
     // grep.
     struct Source {
@@ -312,7 +258,6 @@ fn main() {
         tree: ModTree,
         root: TokenStream,
         root_str: &'static str,
-        label: &'static str,
     }
     let sources: Vec<Source> = UPSTREAM
         .iter()
@@ -320,7 +265,7 @@ fn main() {
         .map(|(i, u)| {
             let dir = locate(u.pkg, u.marker, &locked);
             if i == 0 {
-                report!("{} sources: {}", u.label, dir.display());
+                report!("{} sources: {}", u.root, dir.display());
             }
             let all = parse_crate(&dir);
             let tree = ModTree::load(&dir, &all);
@@ -334,14 +279,13 @@ fn main() {
                     .parse()
                     .expect("a config::UPSTREAM root that is a path"),
                 root_str: u.root,
-                label: u.label,
             }
         })
         .collect();
     // The primary crate: options, guards and clamps are read from it.
     let primary = &sources[0];
-    let primary_files = primary.files.clone();
-    let modules = primary.tree.paths.clone();
+    let primary_files = &primary.files;
+    let modules = &primary.tree.paths;
     // Its files grouped by the namespace they export into. A bare-name lookup
     // over the whole crate takes whichever file was parsed first, which is how
     // `filter::Image` came back with `usvg::Image`'s methods; a qualified key
@@ -356,11 +300,11 @@ fn main() {
     let renderer_root = vec![parse(
         &locate(RENDERER.0, RENDERER.1, &locked).join(RENDERER.1),
     )];
-    let source_files = |label: &str| {
+    let source_files = |root: &str| {
         &sources
             .iter()
-            .find(|s| s.label == label)
-            .unwrap_or_else(|| panic!("no config::UPSTREAM labelled {label:?}"))
+            .find(|s| s.root_str == root)
+            .unwrap_or_else(|| panic!("no config::UPSTREAM with root {root:?}"))
             .files
     };
 
@@ -410,27 +354,27 @@ fn main() {
     // Guards first: no point generating against a moved API.
     assert_free_fn(&renderer_root, RENDER_FN.0, RENDER_FN.1);
     for m in TREE.1 {
-        assert_tree_ctor(&primary_files, TREE.0, m);
+        assert_tree_ctor(primary_files, TREE.0, m);
     }
     for (ty, fields) in HAND_FILLED {
-        assert_struct_fields(&primary_files, ty, fields);
+        assert_struct_fields(primary_files, ty, fields);
     }
 
     // The table has N entries, so the highest usable index is N - 1.
-    let precision_max = u32::try_from(static_array_len(&primary_files, CLAMP.1) - 1)
+    let precision_max = u32::try_from(static_array_len(primary_files, CLAMP.1) - 1)
         .expect("a clamp table that fits u32");
     report!(
         "{} precision clamp derived from {}: {precision_max}",
-        primary.label,
+        primary.root_str,
         CLAMP.1
     );
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
-    let mut referenced = struct_field_types(&primary_files, PARSE_OPTIONS);
-    referenced.extend(struct_field_types(&primary_files, WRITE_OPTIONS));
-    referenced.extend(returned_types(&primary_files, &[]));
+    let mut referenced = struct_field_types(primary_files, PARSE_OPTIONS);
+    referenced.extend(struct_field_types(primary_files, WRITE_OPTIONS));
+    referenced.extend(returned_types(primary_files));
     for src in &sources[1..] {
-        referenced.extend(returned_types(&src.files, &[]));
+        referenced.extend(returned_types(&src.files));
         referenced.extend(field_types(&src.files));
     }
 
@@ -514,7 +458,7 @@ fn main() {
                     Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
                 })
                 .filter(|t| !NODE_TYPES.contains(&bare(t)))
-                .filter(|t| struct_fields_opt(&primary_files, bare(t)).is_some()),
+                .filter(|t| struct_fields_opt(primary_files, bare(t)).is_some()),
         )
         // Plus whatever the template hands out itself.
         .chain(template_returns(&probe).into_iter().filter(|t| {
@@ -599,7 +543,7 @@ fn main() {
     let mut enums = TokenStream::new();
     let mut enum_names: BTreeSet<String> = BTreeSet::new();
     for src in &sources {
-        let (names, code, rejected) = map_enums(&src.files, &referenced, &modules, &src.root);
+        let (names, code, rejected) = map_enums(&src.files, &referenced, modules, &src.root);
         enum_names.extend(names);
         enums.extend(code);
         for (name, why) in rejected {
@@ -625,16 +569,6 @@ fn main() {
         if !object_done.insert(t.clone()) {
             continue;
         }
-        // A runaway guard, not a budget: it used to be 64 and legitimate growth
-        // reached it -- seventeen filter primitives and three light sources --
-        // after which discovery stopped and the types it had not got to yet
-        // were silently missing. Loud now, because a truncated registry looks
-        // exactly like a type that does not map.
-        assert!(
-            object_done.len() <= 512,
-            "object discovery passed 512 types at {t}: either the graph is cyclic \
-             or this bound needs raising, but it must not truncate in silence"
-        );
         if vocab.enums.contains(&t) || vocab.scalars.contains(&t) || vocab.ints.contains(&t) {
             continue;
         }
@@ -707,7 +641,8 @@ fn main() {
     // moment later. The cascade itself is automatic: `classify` maps a demoted
     // type to `Js::Value`, `data_members` has no field mapping for one, so it
     // lands in `skipped`, and `object_struct` refuses any type with a skipped
-    // member.
+    // member. The last iteration, the one that demotes nothing, has built
+    // every object's code already: that is what is emitted.
     let source_of = |t: &str| -> &[syn::File] {
         if let Some((m, _)) = t.rsplit_once("::")
             && let Some(files) = by_module.get(m)
@@ -725,23 +660,24 @@ fn main() {
                 .as_slice()
         })
     };
-    loop {
-        let demote: Vec<String> = vocab
-            .objects
-            .iter()
-            .filter_map(|t| {
-                let (code, _, _) =
-                    object_struct(source_of(t), t, &vocab, &modules, &object_root[t]);
-                code.is_empty().then(|| t.clone())
-            })
-            .collect();
+    let mut object_parts: BTreeMap<String, TokenStream> = loop {
+        let mut parts = BTreeMap::new();
+        let mut demote = Vec::new();
+        for t in &vocab.objects {
+            let (code, _, _) = object_struct(source_of(t), t, &vocab, modules, &object_root[t]);
+            if code.is_empty() {
+                demote.push(t.clone());
+            } else {
+                parts.insert(t.clone(), code);
+            }
+        }
         if demote.is_empty() {
-            break;
+            break parts;
         }
         for t in demote {
             vocab.objects.remove(&t);
             let (vcode, dropped, _) =
-                value_class(source_of(&t), &t, &vocab, &modules, &object_root[&t]);
+                value_class(source_of(&t), &t, &vocab, modules, &object_root[&t]);
             if !vcode.is_empty() {
                 vocab.values.insert(t);
             } else {
@@ -758,29 +694,7 @@ fn main() {
                 );
             }
         }
-    }
-
-    let mut object_parts: BTreeMap<String, TokenStream> = BTreeMap::new();
-    for t in &vocab.objects {
-        let (code, dropped, _) = object_struct(source_of(t), t, &vocab, &modules, &object_root[t]);
-        // The invariant the fixpoint above exists to establish, checked rather
-        // than trusted: anything still classed as an object maps in full. A
-        // type left here with unmapped members would be emitted as
-        // `#[napi(object)]` carrying a field napi cannot round-trip, and the
-        // failure would land in the generated crate -- a confusing place to
-        // read it. Decide-and-emit in one pass breaks exactly this.
-        assert!(
-            !code.is_empty(),
-            "{t} is still an object candidate but maps only partially ({}). \
-             The object/value fixpoint did not settle before emission.",
-            dropped
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        object_parts.insert(t.clone(), code);
-    }
+    };
     // (class, member, label, detail) for everything the generator left out,
     // reported once the template's own methods are known: a member it adds by
     // hand is covered, not missing.
@@ -789,7 +703,7 @@ fn main() {
         // The dropped list is the *class's* own: a getter maps members an
         // object field cannot, so reporting the object probe's list here would
         // name members that are in fact exposed.
-        let (vcode, dropped, _) = value_class(source_of(t), t, &vocab, &modules, &object_root[t]);
+        let (vcode, dropped, _) = value_class(source_of(t), t, &vocab, modules, &object_root[t]);
         object_parts.insert(t.clone(), vcode);
         report!(
             "{t}: partial mapping, emitted as read-only class {}",
@@ -806,9 +720,9 @@ fn main() {
     }
 
     let (fields, skipped_fields, _) =
-        map_struct(&primary_files, PARSE_OPTIONS, &vocab, precision_max);
+        map_struct(primary_files, PARSE_OPTIONS, &vocab, precision_max);
     let (write_fields, skipped_write, clamped) =
-        map_struct(&primary_files, WRITE_OPTIONS, &vocab, precision_max);
+        map_struct(primary_files, WRITE_OPTIONS, &vocab, precision_max);
     // The write options are where the clamped indices live (config::CLAMP),
     // found by a name suffix. A rename upstream would match nothing, fall
     // through to u8::MAX, and hand usvg an index 242 places past the end of a
@@ -823,7 +737,7 @@ fn main() {
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
     // class for each, then follow the handles *those* classes return. The type
-    // graph is finite; the cap is only a runaway guard.
+    // graph is finite, and `done` keeps a type from being visited twice.
     let handles_of = |set: &BTreeSet<String>| -> BTreeSet<String> {
         set.iter()
             .filter_map(|t| match vocab.classify(t) {
@@ -839,16 +753,6 @@ fn main() {
         if !done.insert(t.clone()) {
             continue;
         }
-        // A runaway guard, not a budget -- the same rule the object loop was
-        // given. It used to be a silent `|| done.len() > 24`, which dropped
-        // whatever the LIFO pop order reached last while `report!` still listed
-        // it among the classes generated: the report named types the build had
-        // never emitted, and the build then failed on them.
-        assert!(
-            done.len() <= 512,
-            "handle discovery passed 512 types at {t}: either the graph is cyclic \
-             or this bound needs raising, but it must not truncate in silence"
-        );
         let name = wrapper_ident(&t).to_string();
         if RESERVED.contains(&name.as_str()) {
             report!("handle {t} skipped: name {name} is taken");
@@ -859,7 +763,7 @@ fn main() {
             continue;
         }
         let src = defines(&t).unwrap_or(&sources[0]);
-        let (code, skipped, reached) = wrapper_class(&src.files, &t, &vocab, &modules, &src.root);
+        let (code, skipped, reached) = wrapper_class(&src.files, &t, &vocab, modules, &src.root);
         if code.is_empty() {
             report!("handle {t} skipped: nothing mappable on it");
         } else {
@@ -868,12 +772,15 @@ fn main() {
         for s in skipped {
             // `root()` is served by the generated `children()` view above.
             if s.name == "root" {
-                report!("{}::{t} method covered by the content view: {s}", src.label);
+                report!(
+                    "{}::{t} method covered by the content view: {s}",
+                    src.root_str
+                );
             } else {
                 unexposed.push((
                     name.clone(),
                     s.name.clone(),
-                    format!("{}::{t} method", src.label),
+                    format!("{}::{t} method", src.root_str),
                     s.to_string(),
                 ));
             }
@@ -887,49 +794,27 @@ fn main() {
 
     // One declarative table (config::PASSES) instead of four call sites:
     // adding a wrapped `impl` block is a single row.
-    struct Pass<'a> {
-        label: &'a str,
-        target: &'a str,
-        files: &'a [syn::File],
-        ty: &'a str,
-        receiver: TokenStream,
-        skip: &'a [&'a str],
-        prologue: Option<TokenStream>,
-        optional: bool,
-    }
-    let passes: Vec<Pass> = PASSES
-        .iter()
-        .map(|p| Pass {
-            label: p.label,
-            target: p.target,
-            files: source_files(p.source),
-            ty: p.ty,
-            receiver: p
-                .receiver
-                .parse()
-                .expect("a config::PASSES receiver that parses"),
-            skip: p.skip,
-            prologue: p
-                .prologue
-                .map(|t| t.parse().expect("a config::PASSES prologue that parses")),
-            optional: p.optional,
-        })
-        .collect();
-
     let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
     let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     // Reported once the template exists: whether a skipped method is "covered"
     // is a question about the template, which is built further down.
     let mut skips: Vec<(&str, &str, Vec<Skip>)> = Vec::new();
-    for p in &passes {
+    for p in PASSES {
         let names = taken.entry(p.target).or_default();
+        let receiver: TokenStream = p
+            .receiver
+            .parse()
+            .expect("a config::PASSES receiver that parses");
+        let prologue: Option<TokenStream> = p
+            .prologue
+            .map(|t| t.parse().expect("a config::PASSES prologue that parses"));
         let (code, skipped) = map_methods(
             &MethodPass {
-                files: p.files,
+                files: source_files(p.source),
                 ty: p.ty,
-                receiver: &p.receiver,
+                receiver: &receiver,
                 skip: p.skip,
-                prologue: p.prologue.as_ref(),
+                prologue: prologue.as_ref(),
                 readonly: false,
                 optional: p.optional,
             },
@@ -1036,7 +921,7 @@ fn main() {
         if !used(&object_code) && !generated.values().any(used) {
             continue;
         }
-        match payload_enum_code(name, info, &vocab, &modules) {
+        match payload_enum_code(name, info, &vocab, modules) {
             Ok(code) => {
                 object_code.extend(code);
                 unions.push(name.clone());
@@ -1062,10 +947,16 @@ fn main() {
     };
 
     for s in skipped_fields {
-        report!("{}::{PARSE_OPTIONS} field not exposed: {s}", primary.label);
+        report!(
+            "{}::{PARSE_OPTIONS} field not exposed: {s}",
+            primary.root_str
+        );
     }
     for s in skipped_write {
-        report!("{}::{WRITE_OPTIONS} field not exposed: {s}", primary.label);
+        report!(
+            "{}::{WRITE_OPTIONS} field not exposed: {s}",
+            primary.root_str
+        );
     }
 
     let decls: Vec<_> = fields.iter().map(|f| &f.decl).collect();

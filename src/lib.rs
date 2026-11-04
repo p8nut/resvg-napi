@@ -984,6 +984,21 @@ impl IntoJs for (u32, u32, Vec<u8>) {
 #[doc = " Hrefs no resolver could satisfy during the last parse."]
 #[derive(Default, Clone)]
 struct Misses(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+impl Misses {
+    #[doc = " Records `name`, once: a `<use>` of an image resolves it again."]
+    #[doc = " Poison-tolerant: this mutex only accumulates diagnostics, so a"]
+    #[doc = " panic elsewhere must not take the render down with it."]
+    fn note(&self, name: &str) {
+        let mut seen = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !seen.iter().any(|s| s == name) {
+            seen.push(name.to_string());
+        }
+    }
+    #[doc = " Drains what was recorded."]
+    fn take(&self) -> std::sync::Arc<[String]> {
+        std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner())).into()
+    }
+}
 #[doc = " `usvg::ImageHrefResolver` demands `Send + Sync`, so a JS callback cannot"]
 #[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
 #[doc = " unresolved is reported back to JS for a second pass."]
@@ -1013,10 +1028,7 @@ fn href_resolver(
                     return Some(kind);
                 }
             }
-            let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
-            if !seen.iter().any(|h| h == href) {
-                seen.push(href.to_string());
-            }
+            misses.note(href);
             None
         }),
     }
@@ -1597,10 +1609,7 @@ fn font_resolver(misses: Misses) -> usvg::FontResolver<'static> {
                         .faces()
                         .any(|f| f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)));
                     if !known {
-                        let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
-                        if !seen.iter().any(|s| s == name) {
-                            seen.push(name.clone());
-                        }
+                        misses.note(name);
                     }
                 }
                 select(font, db)
@@ -5064,11 +5073,7 @@ impl Resvg {
             Ok(tree) => tree,
             Err(e) => return Ok(Err(e)),
         };
-        Ok(Ok((
-            tree,
-            std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())).into(),
-            std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())).into(),
-        )))
+        Ok(Ok((tree, missing_images.take(), missing_fonts.take())))
     }
     fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
         self.logs.scope(|| draw(&self.tree, &p))

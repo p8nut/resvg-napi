@@ -125,10 +125,8 @@ pub mod logs {
             .parse()
             .map_err(|_| Error::from_reason(format!("unknown log level: {level:?}")))?;
         OWNER.get_or_init(|| owner);
-        static INSTALLED: OnceLock<()> = OnceLock::new();
-        INSTALLED.get_or_init(|| {
-            let _ = log::set_logger(&COLLECTOR);
-        });
+        // Fails harmlessly after the first call: the logger installs once.
+        let _ = log::set_logger(&COLLECTOR);
         log::set_max_level(filter);
         Ok(())
     }

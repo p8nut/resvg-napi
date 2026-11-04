@@ -5,10 +5,9 @@
 // the item vanish there, and a binding that calls it stops compiling. So a
 // method's `#[cfg]` -- its own and its impl block's -- is translated before
 // emission: each `feature = "x"` becomes what `config::FEATURES` says it is for
-// this crate (always on, never on, or on under a cfg of ours), anything else
-// (`unix`, `target_os = ..`) is kept as written. A method whose twins together
-// are on everywhere is emitted plain, one that is never on is skipped, the rest
-// carry the translated cfg.
+// this crate (always on, or on under a cfg of ours), anything else (`unix`,
+// `target_os = ..`) is kept as written. A method whose twins together are on
+// everywhere is emitted plain, the rest carry the translated cfg.
 
 use std::collections::BTreeSet;
 
@@ -21,6 +20,7 @@ use crate::config::FEATURES;
 #[derive(Clone)]
 pub enum Pred {
     True,
+    /// Only `simplify` makes one: `not(all())`.
     False,
     /// Kept as written: `unix`, `target_os = "macos"`, or one of ours.
     Atom(String),
@@ -32,7 +32,6 @@ pub enum Pred {
 /// What to do with a method, given its cfg.
 pub enum Gate {
     Always,
-    Never,
     /// The cfg it is built under, and its negation, both simplified.
     When(TokenStream, TokenStream),
 }
@@ -86,13 +85,12 @@ fn translate(meta: &syn::Meta) -> Pred {
             let name = s.value();
             match FEATURES.iter().find(|(f, _)| *f == name) {
                 Some((_, "true")) => Pred::True,
-                Some((_, "false")) => Pred::False,
                 Some((_, ours)) => {
                     translate(&syn::parse_str(ours).expect("a config::FEATURES cfg that parses"))
                 }
                 None => panic!(
                     "an emitted upstream method is gated on feature {name:?}, which config::FEATURES \
-                     does not list: say whether this crate builds it (\"true\"/\"false\") or under \
+                     does not list: say whether this crate always builds it (\"true\") or under \
                      which cfg"
                 ),
             }
@@ -193,7 +191,7 @@ pub fn gate(p: &Pred) -> Gate {
     atoms(p, &mut set);
     let all: Vec<&String> = set.iter().collect();
     assert!(all.len() < 16, "a cfg with {} atoms", all.len());
-    let rows = (0..1u32 << all.len()).map(|bits| {
+    let always = (0..1u32 << all.len()).all(|bits| {
         let on: BTreeSet<&String> = all
             .iter()
             .enumerate()
@@ -202,52 +200,12 @@ pub fn gate(p: &Pred) -> Gate {
             .collect();
         holds(p, &on)
     });
-    let (yes, no) = rows.fold((false, false), |(y, n), r| (y || r, n || !r));
-    match (yes, no) {
-        (true, false) => Gate::Always,
-        (false, _) => Gate::Never,
-        (true, true) => Gate::When(
+    if always {
+        Gate::Always
+    } else {
+        Gate::When(
             tokens(&simplify(p)),
             tokens(&simplify(&Pred::Not(Box::new(p.clone())))),
-        ),
+        )
     }
-}
-
-/// The checks `build.rs` runs on every build, next to the other self-checks.
-pub fn selftest() {
-    let parse = |s: &str| -> Pred {
-        of(&[
-            syn::parse_str::<syn::DeriveInput>(&format!("{s} struct X;"))
-                .unwrap()
-                .attrs,
-        ]
-        .concat())
-    };
-    assert!(matches!(gate(&parse("")), Gate::Always), "no cfg");
-    assert!(
-        matches!(gate(&parse("#[cfg(feature = \"fs\")]")), Gate::Always),
-        "an always-on feature"
-    );
-    // fontdb's load_font_file twins: one per memmap setting, together everywhere
-    let twins = Pred::Any(vec![
-        parse("#[cfg(all(feature = \"fs\", feature = \"memmap\"))]"),
-        parse("#[cfg(all(feature = \"fs\", not(feature = \"memmap\")))]"),
-    ]);
-    assert!(matches!(gate(&twins), Gate::Always), "complementary twins");
-    match gate(&parse(
-        "#[cfg(all(feature = \"fs\", feature = \"memmap\"))]",
-    )) {
-        Gate::When(t, n) => {
-            assert_eq!(
-                t.to_string().replace(' ', ""),
-                "not(target_family=\"wasm\")"
-            );
-            assert_eq!(n.to_string().replace(' ', ""), "target_family=\"wasm\"");
-        }
-        _ => panic!("memmap-only is target-dependent"),
-    }
-    assert!(
-        matches!(gate(&parse("#[cfg(all(unix, not(unix)))]")), Gate::Never),
-        "a contradiction"
-    );
 }

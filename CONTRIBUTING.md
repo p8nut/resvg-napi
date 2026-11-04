@@ -20,7 +20,7 @@ It is a handful of files, one per phase:
 | `build/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version `Cargo.lock` names |
 | `build/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `build/emit.rs` | turning those answers into tokens napi can expand |
-| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, the guards, renames, the template contract. Wrapping another crate starts by rewriting this file and `template.rs` |
+| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates. Wrapping another crate starts by rewriting this file and `template.rs` |
 | `build/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `config::FEATURES` |
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
@@ -50,13 +50,12 @@ What that diff cannot show is behaviour: the same bump moves 390 pixels of
 `photo-card.png`, all inside the colour emoji. The examples are there to catch
 that half.
 
-The generator does not take upstream's word for anything it templates against.
-Four guards run before emission — `resvg::render`'s full signature,
-`Tree::from_data`, `Tree::to_string`, and the fields of `ImageHrefResolver` and
-`FontResolver` — so a rename fails the build with
-`usvg::ImageHrefResolver::resolve_string disappeared; update build.rs` instead
-of generating something plausible. Additions need no guard: a new `Options`
-field or enum variant appears in the bindings, and in TypeScript, on its own.
+The generator keeps no signature guards of its own: what the template calls by
+hand (`resvg::render`, `Tree::from_data`, `Tree::to_string`, the resolver
+fields) is checked by rustc when `src/lib.rs` compiles, and an upstream move
+shows up there or as a diff in the committed output. Additions need no edit: a
+new `Options` field or enum variant appears in the bindings, and in TypeScript,
+on its own.
 
 Async is derived too. A method that belongs on a worker thread is marked once,
 where it is defined:
@@ -96,8 +95,8 @@ and eight renames (`from_data` → the constructor, `node_by_id` → `node`,
 `to_string` → `to_svg_string`, because Rust already has `Display::to_string`).
 Everything else about what the template covers is read *off the template*: it is
 built once with no generated methods, parsed with `syn`, and its own method
-names become the "covered" set. A stale rename fails the build; so does a method
-emitted twice.
+names become the "covered" set. A stale rename fails the build; a method
+emitted twice fails it in rustc.
 
 To build against a checkout instead of the crates.io cache:
 

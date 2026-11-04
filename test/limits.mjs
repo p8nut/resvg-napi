@@ -32,9 +32,13 @@ const nested = zlib.gzipSync(await gzipOf(300, '<svg xmlns="http://www.w3.org/20
 assert.ok(nested.length < 4096, `the nested bomb is tiny: ${nested.length} bytes`);
 assert.throws(() => new Resvg(nested), { code: 'MalformedGZip' }, 'gzip inside gzip');
 await assert.rejects(Resvg.parseAsync(nested), { code: 'MalformedGZip' }, 'async too');
-// As an image it is not drawn, rather than inflated.
-const nestedImage = new Resvg(svg(`<image href="data:image/svg+xml;base64,${nested.toString('base64')}" width="10" height="10"/>`));
-assert.equal(nestedImage.renderRaw().data.some((b) => b !== 0), false, 'nested svgz image not drawn');
+// As an image it is not inflated: a red square gzipped twice draws nothing,
+// once draws red (so the check can tell the two apart).
+const red = svg('<rect width="10" height="10" fill="red"/>');
+const drawn = (data) => new Resvg(svg(`<image href="data:image/svg+xml;base64,${data.toString('base64')}" width="10" height="10"/>`))
+  .renderRaw().data.some((b) => b !== 0);
+assert.equal(drawn(zlib.gzipSync(red)), true, 'svgz image drawn');
+assert.equal(drawn(zlib.gzipSync(zlib.gzipSync(red))), false, 'gzip inside gzip image not drawn');
 
 // ...while a normal one still parses.
 const small = zlib.gzipSync(svg('<rect width="5" height="5"/>'));

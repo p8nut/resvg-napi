@@ -50,9 +50,11 @@ imagesize = "0.15"
 napi-support = { path = "crates/napi-support" }
 
 
-# Resolver 2 keeps a target table's features to that target.
+# Resolver 2 keeps a target table's features to that target. Without
+# `default-features = false` here too, this line turned resvg's defaults --
+# `svgz` included -- back on for every native target.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-resvg = { version = "0.49.0", features = ["memmap-fonts"] }
+resvg = { version = "0.49.0", default-features = false, features = ["memmap-fonts"] }
 
 [build-dependencies]
 napi-build = "2.6.0"

@@ -737,7 +737,6 @@ checksum = "d09b73ee83641d390ad7ffd9000f347b16eb128e437675b6ff277ea5c7fcf22c"
 dependencies = [
  "base64",
  "data-url",
- "flate2",
  "fontdb",
  "harfrust",
  "imagesize",

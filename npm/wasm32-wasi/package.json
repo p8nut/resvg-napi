@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi-wasm32-wasi",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "cpu": [
     "wasm32"
   ],

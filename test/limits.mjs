@@ -20,39 +20,32 @@ const gzipOf = (n, head = '', tail = '') => buffer(Readable.from((function* () {
 
 const svg = (body) => `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${body}</svg>`;
 
-// 1. SVGZ that inflates past 256 MiB is refused, at the top level...
-const bomb = await gzipOf(257, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><!--', '--></svg>');
+// 1. SVGZ is not supported: usvg inflates it with no cap (linebender/resvg#1138),
+//    so any gzip data is refused before it gets there, whatever it expands to.
+const bomb = await gzipOf(300, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><!--', '--></svg>');
 assert.ok(bomb.length < 1024 * 1024, `the bomb is small: ${bomb.length} bytes`);
-assert.throws(() => new Resvg(bomb), /SVGZ data expands past 268435456 bytes/, 'top-level svgz bomb');
-await assert.rejects(Resvg.parseAsync(bomb), /SVGZ data expands past/, 'async too');
-
-// ...and so is a second gzip layer, which usvg's own `svgz` inflate took past
-// the cap: 300 MiB from well under 1 KiB.
-const nested = zlib.gzipSync(await gzipOf(300, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><!--', '--></svg>'));
-assert.ok(nested.length < 4096, `the nested bomb is tiny: ${nested.length} bytes`);
-assert.throws(() => new Resvg(nested), { code: 'MalformedGZip' }, 'gzip inside gzip');
-await assert.rejects(Resvg.parseAsync(nested), { code: 'MalformedGZip' }, 'async too');
-// As an image it is not inflated: a red square gzipped twice draws nothing,
-// once draws red (so the check can tell the two apart).
+const nested = zlib.gzipSync(bomb);
 const red = svg('<rect width="10" height="10" fill="red"/>');
-const drawn = (data) => new Resvg(svg(`<image href="data:image/svg+xml;base64,${data.toString('base64')}" width="10" height="10"/>`))
-  .renderRaw().data.some((b) => b !== 0);
-assert.equal(drawn(zlib.gzipSync(red)), true, 'svgz image drawn');
-assert.equal(drawn(zlib.gzipSync(zlib.gzipSync(red))), false, 'gzip inside gzip image not drawn');
+const refused = { code: 'SvgzFeatureNotEnabled', message: /SVGZ is not supported: inflate it first/ };
+for (const [what, data] of [['bomb', bomb], ['gzip inside gzip', nested], ['small svgz', zlib.gzipSync(red)]]) {
+  assert.throws(() => new Resvg(data), refused, what);
+  await assert.rejects(Resvg.parseAsync(data), refused, `${what}, async`);
+}
+// What the message advises works, with a cap of the caller's choosing.
+assert.equal(new Resvg(zlib.gunzipSync(zlib.gzipSync(red), { maxOutputLength: 1 << 20 })).width, 10, 'inflated by the caller');
 
-// ...while a normal one still parses.
-const small = zlib.gzipSync(svg('<rect width="5" height="5"/>'));
-assert.equal(new Resvg(small).width, 10, 'svgz under the cap');
-
-// ...and as an image: supplied, or as a data URI, where usvg's own resolver
-// would have inflated it. Refused images are logged and drawn as nothing.
+// ...and as an image: supplied, from a file, or as a data URI. Refused images
+// are logged and drawn as nothing; a red square tells drawn from not.
 setLogLevel('warn');
 takeLogs();
 const img = (href) => svg(`<image href="${href}" width="10" height="10"/>`);
-const supplied = new Resvg(img('bomb.svgz'), null, null, { 'bomb.svgz': bomb });
-assert.deepEqual(supplied.pendingImages(), ['bomb.svgz'], 'supplied svgz bomb refused');
-new Resvg(img(`data:image/svg+xml;base64,${bomb.toString('base64')}`)).renderPng();
-assert.ok(takeLogs().filter((l) => /image refused, gzip data expands past/.test(l)).length >= 2, 'both refusals logged');
+const drawn = (doc) => doc.renderRaw().data.some((b) => b !== 0);
+assert.equal(drawn(new Resvg(img(`data:image/svg+xml;base64,${Buffer.from(red).toString('base64')}`))), true, 'plain svg image drawn');
+const supplied = new Resvg(img('red.svgz'), null, null, { 'red.svgz': zlib.gzipSync(red) });
+assert.deepEqual(supplied.pendingImages(), ['red.svgz'], 'supplied svgz refused');
+assert.equal(drawn(supplied), false, 'supplied svgz not drawn');
+assert.equal(drawn(new Resvg(img(`data:image/svg+xml;base64,${nested.toString('base64')}`))), false, 'svgz data URI not drawn');
+assert.ok(takeLogs().filter((l) => /image refused, SVGZ is not supported/.test(l)).length >= 2, 'both refusals logged');
 
 // 2. A raster image whose header declares more than 2^28 px is refused before
 //    resvg decodes it: an IHDR claiming 65535x65535 with no pixel data.

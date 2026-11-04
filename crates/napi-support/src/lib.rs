@@ -39,14 +39,12 @@ pub mod logs {
     //! for the whole process ([`take`]) and per document ([`Logs`]).
 
     use napi::{Error, Result};
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex};
 
     /// Entries kept per buffer, the truncation marker included.
     pub const CAP: usize = 500;
 
     static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
-    /// The name the truncation marker carries: the binding's, from [`set_level`].
-    static OWNER: OnceLock<&'static str> = OnceLock::new();
 
     /// Appends `line` unless the buffer is full. The last slot is kept for a
     /// marker saying so: 500 lines with nothing after them would read as
@@ -55,9 +53,9 @@ pub mod logs {
         if buf.len() + 1 < CAP {
             buf.push(line);
         } else if buf.len() + 1 == CAP {
-            let owner = OWNER.get().copied().unwrap_or("napi-support");
             buf.push(format!(
-                "WARN {owner}: log buffer full ({CAP} entries), later messages dropped"
+                "WARN {}: log buffer full ({CAP} entries), later messages dropped",
+                module_path!()
             ));
         }
     }
@@ -118,13 +116,11 @@ pub mod logs {
 
     /// Starts collecting at `level` (`off`, `error`, `warn`, `info`, `debug`,
     /// `trace`). Safe to call repeatedly: the logger is installed once, the
-    /// level always applies. `owner` names the binding in the truncation
-    /// marker; pass `env!("CARGO_PKG_NAME")`.
-    pub fn set_level(level: &str, owner: &'static str) -> Result<()> {
+    /// level always applies.
+    pub fn set_level(level: &str) -> Result<()> {
         let filter: log::LevelFilter = level
             .parse()
             .map_err(|_| Error::from_reason(format!("unknown log level: {level:?}")))?;
-        OWNER.get_or_init(|| owner);
         // Fails harmlessly after the first call: the logger installs once.
         let _ = log::set_logger(&COLLECTOR);
         log::set_max_level(filter);
@@ -196,26 +192,18 @@ impl FromNapiValue for Signal {
         env: napi::sys::napi_env,
         value: napi::sys::napi_value,
     ) -> Result<Self> {
-        let mut global = std::ptr::null_mut();
-        napi::check_status!(unsafe { napi::sys::napi_get_global(env, &mut global) })?;
-        let mut ctor = std::ptr::null_mut();
-        napi::check_status!(unsafe {
-            napi::sys::napi_get_named_property(env, global, c"AbortSignal".as_ptr(), &mut ctor)
-        })?;
-        let mut is = false;
-        napi::check_status!(unsafe { napi::sys::napi_instanceof(env, value, ctor, &mut is) })?;
+        let ctor = Env::from_raw(env)
+            .get_global()?
+            .get_named_property_unchecked::<Function>("AbortSignal")?;
+        let is = unsafe { Unknown::from_napi_value(env, value) }?.instanceof(ctor)?;
         if !is {
             return Err(Error::new(
                 Status::InvalidArg,
                 "signal must be an AbortSignal",
             ));
         }
-        let mut aborted = std::ptr::null_mut();
-        napi::check_status!(unsafe {
-            napi::sys::napi_get_named_property(env, value, c"aborted".as_ptr(), &mut aborted)
-        })?;
-        let mut already = false;
-        napi::check_status!(unsafe { napi::sys::napi_get_value_bool(env, aborted, &mut already) })?;
+        // An instance, so an object: reading it as one is sound.
+        let already: bool = Object::from_raw(env, value).get_named_property("aborted")?;
         if already {
             return Err(Error::new(
                 Status::Cancelled,
@@ -267,11 +255,8 @@ pub fn inspect<'e>(
         let method: Function<(), Unknown> = this.get_named_property_unchecked(key)?;
         show(key, method.apply(*this, ())?)?;
     }
-    let assign: Function<FnArgs<(Object, Object)>, Object> = env
-        .get_global()?
-        .get_named_property_unchecked::<Object>("Object")?
-        .get_named_property("assign")?;
-    let mut remaining = assign.call((Object::new(env)?, options).into())?;
+    // Node builds `options` afresh for each call, so it is ours to change.
+    let mut remaining = options;
     // `null` is Node's "no limit", in and out.
     remaining.set_named_property("depth", depth)?;
     Ok(format!(

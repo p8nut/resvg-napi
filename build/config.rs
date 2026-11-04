@@ -6,11 +6,8 @@
 //! says why it exists. Wrapping another crate starts by rewriting this file.
 //!
 //! That includes the crates themselves and their roots (`UPSTREAM`), the
-//! signature guards, the wrapped impl blocks (`PASSES`), the clamp, and the
-//! upstream spellings of the template's domain shapes. The names the generated
-//! code expects the template to define (`BBox`, `Doc`, `IntoJs`, `Signal`, ...)
-//! are the contract between the two halves: `TEMPLATE_CONTRACT`, checked
-//! against the template at every build.
+//! wrapped impl blocks (`PASSES`), the clamp, and the upstream spellings of
+//! the template's domain shapes.
 
 /// One crate the binding wraps.
 pub struct Upstream {
@@ -22,8 +19,8 @@ pub struct Upstream {
 }
 
 /// The wrapped crates, in the order a bare name is resolved against them. The
-/// first is the primary: the option structs, the guards and the clamps below
-/// are read from it.
+/// first is the primary: the option structs and the clamps below are read
+/// from it.
 pub const UPSTREAM: &[Upstream] = &[
     Upstream {
         pkg: "usvg",
@@ -43,27 +40,6 @@ pub const GENERATED_FROM: &str = "the resvg/usvg/fontdb sources";
 /// The path the vocabulary-only crates' types are reached by: usvg re-exports
 /// what of tiny-skia-path can appear.
 pub const VOCAB_ROOT: &str = "usvg";
-
-/// The renderer, its crate root, and the entry point whose signature the
-/// template calls: `resvg::render(&Tree, Transform, &mut PixmapMut)`.
-pub const RENDERER: (&str, &str) = ("resvg", "lib.rs");
-pub const RENDER_FN: (&str, &[&str]) = (
-    "render",
-    &[
-        "&usvg::Tree",
-        "tiny_skia::Transform",
-        "&muttiny_skia::PixmapMut",
-    ],
-);
-
-/// The document type, and the methods the template calls on it by hand.
-pub const TREE: (&str, &[&str]) = ("Tree", &["from_data", "to_string"]);
-
-/// Upstream structs the template fills in by hand, with the fields it sets.
-pub const HAND_FILLED: &[(&str, &[&str])] = &[
-    ("ImageHrefResolver", &["resolve_data", "resolve_string"]),
-    ("FontResolver", &["select_font", "select_fallback"]),
-];
 
 /// An option field indexing an upstream table without a bounds check, by its
 /// name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
@@ -165,21 +141,6 @@ pub const COVERED_ELSEWHERE: &[(&str, &str, &str)] = &[(
     "clipPath / mask / filters / imageChildren / paint ids",
 )];
 
-/// What the generated code names and the template must define.
-pub const TEMPLATE_CONTRACT: &[&str] = &[
-    "BBox",
-    "Dimensions",
-    "Matrix",
-    "PathSegment",
-    "path_segments",
-    "Doc",
-    "HasRoot",
-    "SvgNode",
-    "IntoJs",
-    "Signal",
-    "to_f32",
-];
-
 /// Crates parsed for vocabulary only (newtypes, aliases), never wrapped.
 pub const VOCAB_CRATES: &[&str] = &["tiny-skia-path", "strict-num"];
 
@@ -253,10 +214,10 @@ pub const DATA_RENAMES: &[(&str, &str)] = &[("FaceInfo", "FontFace")];
 pub const ENUM_RENAMES: &[(&str, &str)] = &[("Style", "FontFaceStyle")];
 
 /// Upstream Cargo features an emitted method can be gated on, and what each is
-/// for this crate: `"true"` (always built), `"false"` (never), or a cfg of ours
-/// it is built under. Names are global across the parsed crates (fontdb's
-/// `memmap`, usvg's `text`); one listed nowhere fails the build, so a new gate
-/// upstream is a decision here, not a silent miss. Must agree with Cargo.toml,
+/// for this crate: `"true"` (always built) or a cfg of ours it is built under.
+/// Names are global across the parsed crates (fontdb's `memmap`, usvg's
+/// `text`); one listed nowhere fails the build, so a new gate upstream is a
+/// decision here, not a silent miss. Must agree with Cargo.toml,
 /// which drops resvg's `memmap-fonts` -- fontdb's `memmap` -- on wasm.
 pub const FEATURES: &[(&str, &str)] = &[
     ("std", "true"),

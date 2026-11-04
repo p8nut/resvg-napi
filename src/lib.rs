@@ -3853,7 +3853,7 @@ pub enum NodeKind {
 #[doc = " call repeatedly: the logger is installed once, the level always applies."]
 #[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
 pub fn set_log_level(level: String) -> Result<()> {
-    napi_support::logs::set_level(&level, env!("CARGO_PKG_NAME"))
+    napi_support::logs::set_level(&level)
 }
 #[doc = " Drains the messages collected since the last call, from every"]
 #[doc = " document and thread. Concurrent renders interleave here; a"]
@@ -3903,11 +3903,7 @@ impl Font {
             .iter()
             .map(|family| match family {
                 usvg::FontFamily::Named(name) => name.clone(),
-                usvg::FontFamily::Serif => "serif".to_string(),
-                usvg::FontFamily::SansSerif => "sans-serif".to_string(),
-                usvg::FontFamily::Cursive => "cursive".to_string(),
-                usvg::FontFamily::Fantasy => "fantasy".to_string(),
-                usvg::FontFamily::Monospace => "monospace".to_string(),
+                generic => generic.to_string(),
             })
             .collect()
     }
@@ -4041,13 +4037,7 @@ fn throw_parse(env: &Env, e: &usvg::Error) -> Error {
 #[doc = " From a worker-thread task: a rejected promise, which the task's"]
 #[doc = " own promise adopts on resolve."]
 fn rejected_parse<'e>(env: &'e Env, e: &usvg::Error) -> Result<Unknown<'e>> {
-    let error = parse_error(env, e)?;
-    let promise = env
-        .get_global()?
-        .get_named_property::<Unknown>("Promise")?
-        .coerce_to_object()?;
-    let reject: Function<Unknown, Unknown> = promise.get_named_property("reject")?;
-    reject.apply(promise, error.to_unknown())
+    PromiseRaw::<Unknown>::reject(env, parse_error(env, e)?).map(|p| p.to_unknown())
 }
 #[doc = " A document's tree: the parsed one, or the SVG an `<image>` node"]
 #[doc = " embeds, re-resolved through that node on each use -- usvg owns it"]

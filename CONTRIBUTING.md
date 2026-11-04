@@ -20,7 +20,7 @@ It is a handful of files, one per phase:
 | `build/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version `Cargo.lock` names |
 | `build/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `build/emit.rs` | turning those answers into tokens napi can expand |
-| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, the guards, renames, the template contract. Wrapping another crate starts by rewriting this file and `template.rs` |
+| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates. Wrapping another crate starts by rewriting this file and `template.rs` |
 | `build/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `config::FEATURES` |
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
@@ -50,13 +50,12 @@ What that diff cannot show is behaviour: the same bump moves 390 pixels of
 `photo-card.png`, all inside the colour emoji. The examples are there to catch
 that half.
 
-The generator does not take upstream's word for anything it templates against.
-Four guards run before emission — `resvg::render`'s full signature,
-`Tree::from_data`, `Tree::to_string`, and the fields of `ImageHrefResolver` and
-`FontResolver` — so a rename fails the build with
-`usvg::ImageHrefResolver::resolve_string disappeared; update build.rs` instead
-of generating something plausible. Additions need no guard: a new `Options`
-field or enum variant appears in the bindings, and in TypeScript, on its own.
+The generator keeps no signature guards of its own: what the template calls by
+hand (`resvg::render`, `Tree::from_data`, `Tree::to_string`, the resolver
+fields) is checked by rustc when `src/lib.rs` compiles, and an upstream move
+shows up there or as a diff in the committed output. Additions need no edit: a
+new `Options` field or enum variant appears in the bindings, and in TypeScript,
+on its own.
 
 Async is derived too. A method that belongs on a worker thread is marked once,
 where it is defined:
@@ -96,8 +95,8 @@ and eight renames (`from_data` → the constructor, `node_by_id` → `node`,
 `to_string` → `to_svg_string`, because Rust already has `Display::to_string`).
 Everything else about what the template covers is read *off the template*: it is
 built once with no generated methods, parsed with `syn`, and its own method
-names become the "covered" set. A stale rename fails the build; so does a method
-emitted twice.
+names become the "covered" set. A stale rename fails the build; a method
+emitted twice fails it in rustc.
 
 To build against a checkout instead of the crates.io cache:
 
@@ -131,14 +130,12 @@ there is none. The env-var prefix is POSIX-shell syntax; on Windows use
 ```
 cargo fmt --all --check
 cargo clippy --workspace --release --all-targets -- -D warnings
-npm run check:pins:selftest      # the dependency holds, offline half
-npm run check:package:selftest   # what publish would ship, offline half
-npm run check:resvg:selftest     # the version probe the daily bump uses
-npm run report:selftest          # the codegen report snapshot
-npm run conformance:selftest     # the corpus runner, offline half
-npm run ci:targets:selftest      # the build matrix and its tiers
-npm run licenses:selftest        # the licence expression parser, offline
+node --test "scripts/*.spec.mjs" # the scripts' own tests, offline
+npm run check:package            # what publish would ship: root tarball, manifests
 ```
+
+The scripts' tests are `*.spec.mjs`, not `*.test.mjs`: plain `node --test`,
+which `npm test` runs, would pick the latter up on every test-matrix entry.
 
 The compiler is the one `rust-toolchain.toml` pins, locally and in CI: rustup
 installs it on first use. A new stable lands through that file, in its own pull
@@ -154,9 +151,9 @@ It does not build all thirteen targets on a pull request. It builds
 `x86_64-unknown-linux-gnu`, which everything above runs on, and
 `wasm32-wasip1-threads`, which is a different code path. The other eleven build
 on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
-`full-matrix`. Adding a target means an entry in `scripts/ci-targets.mjs` and
-the triple in `package.json` under `napi.targets` -- the script fails when the
-two disagree -- then `npm run create-npm-dirs`.
+`full-matrix`. Adding a target means the triple in `package.json` under
+`napi.targets`, then `npm run create-npm-dirs`; `scripts/ci-targets.mjs` reads
+that list and derives the host and cross flag from the triple.
 
 The codegen keeps a report of everything it derived and everything it left
 alone, with the reason. It is off by default, because it rides on
@@ -172,10 +169,10 @@ TypeScript surface: it says which member, and why.
 It is snapshotted in `codegen-report.txt`, and CI fails on a diff -- the same
 treatment the generated bindings get, because the README points at that report
 as the answer to "why is this member missing". After a change that moves the
-derived surface on purpose:
+derived surface on purpose, regenerate it and commit the diff:
 
 ```bash
-npm run report -- -w
+npm run report
 ```
 
 ## Third-party notices
@@ -187,7 +184,7 @@ statically link 91 crates, and MIT, BSD-2, BSD-3, ISC and Unicode-3.0 all ask
 for their notice to travel with a binary. After a dependency changes:
 
 ```bash
-npm run licenses -- -w
+npm run licenses
 ```
 
 That writes the snapshot *and* copies it, with `LICENSE-APACHE` and
@@ -196,7 +193,7 @@ notice about what a `.node` contains has to ship in the package that holds the
 `.node`, and the root package holds none -- it ships JavaScript and type
 declarations. Shipping it only from the root, as 0.3.0 did, put it in the one
 package none of that code is in. `files[]` names all three in every platform
-manifest -- `npm run licenses -- -w` writes that entry as well as the file,
+manifest -- `npm run licenses` writes that entry as well as the file,
 because `napi create-npm-dirs` rewrites those manifests from `napi.targets` and
 would otherwise drop the notices without saying so.
 

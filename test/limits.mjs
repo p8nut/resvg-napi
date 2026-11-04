@@ -2,11 +2,10 @@
 // used to end in a failed allocation, which aborts the process: no try/catch,
 // no rejected promise.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
+import { Resvg, setLogLevel, takeLogs } from '../index.js';
 import { Readable } from 'node:stream';
 import { buffer } from 'node:stream/consumers';
 import zlib from 'node:zlib';
-const { Resvg, setLogLevel, takeLogs } = createRequire(import.meta.url)('../index.js');
 
 const MiB = 1024 * 1024;
 
@@ -86,5 +85,3 @@ assert.throws(
   /8193x8192 exceeds maxPixels \(67108864\)/,
   'default maxPixels',
 );
-
-console.log('ok — limits: all checks passed');

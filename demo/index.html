@@ -80,20 +80,6 @@
 </main>
 
 <script type="module">
-  // napi returns Node's Buffer, which emnapi looks up on globalThis. See
-  // bench.html for why this is enough, and why it must accept a
-  // SharedArrayBuffer.
-  class BufferPolyfill extends Uint8Array {
-    static from(src, offset, length) {
-      const isBuf = src instanceof ArrayBuffer
-        || (typeof SharedArrayBuffer !== 'undefined' && src instanceof SharedArrayBuffer);
-      return isBuf ? new BufferPolyfill(src, offset, length) : new BufferPolyfill(Uint8Array.from(src));
-    }
-    static alloc(size) { return new BufferPolyfill(size); }
-    static isBuffer(value) { return value instanceof BufferPolyfill; }
-  }
-  globalThis.Buffer ??= BufferPolyfill;
-
   const examples = {
     shapes: `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
   <rect x="10" y="10" width="100" height="100" rx="16" fill="#0091b4"/>

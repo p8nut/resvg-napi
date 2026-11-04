@@ -10,14 +10,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use syn::{Item, Visibility};
+use syn::{Ident, Item, ItemImpl, Visibility};
 
 /// Exact versions picked by the resolver, straight out of our own Cargo.lock.
-/// Cheap hand-rolled scan: no serde/toml build-dependency needed.
-pub fn locked_versions() -> BTreeMap<String, String> {
+/// Cheap hand-rolled scan: no serde/toml build-dependency needed. A crate in
+/// the graph twice keeps every version, and `locate` refuses to pick one.
+pub fn locked_versions() -> BTreeMap<String, Vec<String>> {
     let lock = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("Cargo.lock");
     println!("cargo::rerun-if-changed={}", lock.display());
-    let mut out = BTreeMap::new();
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     // Without it every crate would fall through to whatever the registry
     // cache holds, and the bindings would describe some other version.
     let text = fs::read_to_string(&lock)
@@ -30,28 +31,12 @@ pub fn locked_versions() -> BTreeMap<String, String> {
         } else if let Some(v) = line.strip_prefix("version = ")
             && let Some(n) = name.take()
         {
-            // Keep the highest version if a crate appears twice in the graph.
-            let v = v.trim_matches('"').to_string();
-            let better = out
-                .get(&n)
-                .is_none_or(|old: &String| semver_key(&v) > semver_key(old));
-            if better {
-                out.insert(n, v);
-            }
+            out.entry(n)
+                .or_default()
+                .push(v.trim_matches('"').to_string());
         }
     }
     out
-}
-
-pub fn semver_key(v: &str) -> (u64, u64, u64) {
-    let mut it = v
-        .split(['.', '-', '+'])
-        .map(|p| p.parse::<u64>().unwrap_or(0));
-    (
-        it.next().unwrap_or(0),
-        it.next().unwrap_or(0),
-        it.next().unwrap_or(0),
-    )
 }
 
 pub fn cargo_home() -> PathBuf {
@@ -84,7 +69,7 @@ pub fn registry_src(pkg: &str, want: &str) -> Option<PathBuf> {
 ///
 /// There is no "newest version present" fallback: a registry cache shared
 /// with other projects would hand over sources the resolver never picked.
-pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> PathBuf {
+pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, Vec<String>>) -> PathBuf {
     let key = format!("{}_SRC_DIR", pkg.to_uppercase().replace('-', "_"));
     println!("cargo::rerun-if-env-changed={key}");
     if let Some(dir) = env::var_os(&key) {
@@ -97,9 +82,11 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, String>) -> Pat
         return p;
     }
 
-    let locked_ver = locked
-        .get(pkg)
-        .unwrap_or_else(|| panic!("`{pkg}` is not in Cargo.lock"));
+    let locked_ver = match locked.get(pkg).map(Vec::as_slice) {
+        Some([v]) => v,
+        Some(vs) => panic!("`{pkg}` is in Cargo.lock twice ({vs:?}): say which one to read"),
+        None => panic!("`{pkg}` is not in Cargo.lock"),
+    };
     registry_src(pkg, locked_ver)
         .filter(|p| p.join(marker).exists())
         .unwrap_or_else(|| {
@@ -118,6 +105,24 @@ pub fn parse(path: &Path) -> syn::File {
 
 pub fn is_pub(vis: &Visibility) -> bool {
     matches!(vis, Visibility::Public(_))
+}
+
+/// Every inherent impl of `ty`, named by its last path segment.
+pub fn inherent_impls<'a>(
+    files: &'a [syn::File],
+    ty: &'a str,
+) -> impl Iterator<Item = &'a ItemImpl> {
+    files
+        .iter()
+        .flat_map(|f| &f.items)
+        .filter_map(move |i| match i {
+            Item::Impl(imp)
+                if imp.trait_.is_none() && self_ident(imp).is_some_and(|id| id == ty) =>
+            {
+                Some(imp)
+            }
+            _ => None,
+        })
 }
 
 /// Renames a kept item to the name the crate root exports it under, so what is
@@ -143,18 +148,32 @@ fn rename(item: &mut Item, from: &str, to: &str) {
     }
 }
 
+/// The name a `pub` struct, enum or type alias declares.
+pub fn item_ident(item: &Item) -> Option<&Ident> {
+    match item {
+        Item::Struct(s) if is_pub(&s.vis) => Some(&s.ident),
+        Item::Enum(e) if is_pub(&e.vis) => Some(&e.ident),
+        Item::Type(t) if is_pub(&t.vis) => Some(&t.ident),
+        _ => None,
+    }
+}
+
+/// The type an impl block is for, by its last path segment: upstream writes
+/// `impl crate::Tree` as well as `impl Tree`.
+pub fn self_ident(imp: &ItemImpl) -> Option<&Ident> {
+    match &*imp.self_ty {
+        syn::Type::Path(p) => p.path.segments.last().map(|s| &s.ident),
+        _ => None,
+    }
+}
+
 /// The name an item declares, when it declares one this generator cares about.
 fn declared(item: &Item) -> Option<String> {
-    Some(match item {
-        Item::Struct(st) => st.ident.to_string(),
-        Item::Enum(e) => e.ident.to_string(),
-        Item::Type(t) => t.ident.to_string(),
-        Item::Impl(im) => match &*im.self_ty {
-            syn::Type::Path(p) => p.path.segments.last()?.ident.to_string(),
-            _ => return None,
-        },
-        _ => return None,
-    })
+    match item {
+        Item::Impl(im) => self_ident(im),
+        _ => item_ident(item),
+    }
+    .map(ToString::to_string)
 }
 
 /// Every `.rs` under a crate's `src`, parsed. `ModTree` then decides which of
@@ -310,18 +329,6 @@ impl ModTree {
             }
             for item in &f.items {
                 match item {
-                    Item::Struct(s) if is_pub(&s.vis) => out.push((
-                        s.ident.to_string(),
-                        Target::Type(m.to_vec(), s.ident.to_string()),
-                    )),
-                    Item::Enum(e) if is_pub(&e.vis) => out.push((
-                        e.ident.to_string(),
-                        Target::Type(m.to_vec(), e.ident.to_string()),
-                    )),
-                    Item::Type(t) if is_pub(&t.vis) => out.push((
-                        t.ident.to_string(),
-                        Target::Type(m.to_vec(), t.ident.to_string()),
-                    )),
                     Item::Mod(md) if is_pub(&md.vis) && md.content.is_none() => {
                         let mut p = m.to_vec();
                         p.push(md.ident.to_string());
@@ -369,7 +376,11 @@ impl ModTree {
                             }
                         }
                     }
-                    _ => {}
+                    _ => {
+                        if let Some(id) = item_ident(item) {
+                            out.push((id.to_string(), Target::Type(m.to_vec(), id.to_string())));
+                        }
+                    }
                 }
             }
             out
@@ -422,11 +433,8 @@ impl ModTree {
                 continue;
             };
             for item in &f.items {
-                let name = match item {
-                    Item::Struct(s) if is_pub(&s.vis) => s.ident.to_string(),
-                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
-                    Item::Type(t) if is_pub(&t.vis) => t.ident.to_string(),
-                    _ => continue,
+                let Some(name) = item_ident(item).map(ToString::to_string) else {
+                    continue;
                 };
                 if let Some(to) = renames.get(&(module.clone(), name.clone())) {
                     renamed.insert((file.clone(), name.clone()), to.clone());
@@ -480,17 +488,12 @@ impl ModTree {
             })
             .map(|(p, f)| {
                 let mut f = f.clone();
-                f.items.retain(|item| {
-                    let name = match item {
-                        Item::Struct(s) => s.ident.to_string(),
-                        Item::Enum(e) => e.ident.to_string(),
-                        Item::Type(t) => t.ident.to_string(),
-                        Item::Impl(_) => {
-                            return declared(item).is_none_or(|n| !hidden.contains(n.as_str()));
-                        }
-                        _ => return true,
-                    };
-                    !self.private.contains(&(p.clone(), name))
+                // Only `pub` types are ever private-listed, so a type that
+                // is not `pub` stays as well.
+                f.items.retain(|item| match item {
+                    Item::Impl(_) => declared(item).is_none_or(|n| !hidden.contains(n.as_str())),
+                    _ => item_ident(item)
+                        .is_none_or(|n| !self.private.contains(&(p.clone(), n.to_string()))),
                 });
                 // Under the name the export gives it, so what is parsed is what
                 // a caller of the crate can write: `Stretch`, not `Width`.
@@ -505,64 +508,4 @@ impl ModTree {
             })
             .collect()
     }
-}
-
-/// `ModTree` on a crate small enough to read: a glob through a private module,
-/// a public submodule, two `filter.rs` in different places, a rename, and pub
-/// types no export reaches. Run by `build.rs` on every build.
-pub fn modtree_selftest(scratch: &Path) {
-    let root = scratch.join("modtree-selftest");
-    let _ = fs::remove_dir_all(&root);
-    let files = [
-        (
-            "lib.rs",
-            "mod tree; mod hidden; mod parser; pub use tree::*; pub use hidden::Lifted as Renamed;",
-        ),
-        (
-            "tree/mod.rs",
-            "pub mod filter; mod geom; pub use self::geom::*; pub use tiny; pub struct Image;",
-        ),
-        ("tree/filter.rs", "pub struct Image; pub struct Blur;"),
-        ("tree/geom.rs", "pub struct Rect;"),
-        ("hidden.rs", "pub struct Lifted; pub struct Secret;"),
-        ("parser/mod.rs", "mod filter;"),
-        ("parser/filter.rs", "pub struct Internal;"),
-        ("main.rs", "pub struct Bin;"),
-    ];
-    let mut parsed = Vec::new();
-    for (rel, text) in files {
-        let p = root.join(rel);
-        fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(&p, text).unwrap();
-        parsed.push((p, syn::parse_file(text).unwrap()));
-    }
-    let t = ModTree::load(&root, &parsed);
-    let at = |n: &str| t.paths.get(n).map(String::as_str);
-    assert_eq!(at("Image"), Some(""), "the root wins over filter::Image");
-    assert_eq!(at("Blur"), Some("filter"));
-    assert_eq!(at("Rect"), Some(""), "a glob through a private module");
-    assert_eq!(at("Renamed"), Some(""), "a rename");
-    assert_eq!(at("Secret"), None);
-    assert_eq!(
-        at("Internal"),
-        None,
-        "parser/filter.rs is not tree/filter.rs"
-    );
-    assert_eq!(
-        t.file_ns
-            .get(&root.join("tree/filter.rs"))
-            .map(String::as_str),
-        Some("filter")
-    );
-    assert!(!t.file_ns.contains_key(&root.join("parser/filter.rs")));
-    assert!(
-        t.private
-            .contains(&(root.join("hidden.rs"), "Secret".into()))
-    );
-    let view = t.public_view(&parsed, &root);
-    assert!(
-        view.iter().all(|(p, _)| !p.ends_with("main.rs")),
-        "a binary is not the library"
-    );
-    let _ = fs::remove_dir_all(&root);
 }

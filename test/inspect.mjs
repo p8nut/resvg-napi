@@ -1,9 +1,8 @@
 // What `console.log` shows of a class instance: its values live in prototype
 // getters and methods, so without `util.inspect.custom` every one printed `{}`.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
+import { Resvg, FontDatabase } from '../index.js';
 import { inspect } from 'node:util';
-const { Resvg, FontDatabase } = createRequire(import.meta.url)('../index.js');
 
 const doc = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20">
   <g id="a" opacity=".5"><rect id="r" width="5" height="5"/></g>

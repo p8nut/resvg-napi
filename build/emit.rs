@@ -9,6 +9,7 @@
 //! of an object and a class has neither, so a partial mapping cannot be a field
 //! of anything, and demoting one type forces every type holding it down too.
 
+use convert_case::Casing;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
@@ -16,7 +17,7 @@ use std::env;
 use syn::{Fields, ImplItem, Item, ReturnType};
 
 use crate::config::*;
-use crate::sources::is_pub;
+use crate::sources::{inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
 pub struct Field {
@@ -819,11 +820,7 @@ pub fn data_members(
     // Accessors first so a name they share with a field resolves to the
     // accessor, which is the one upstream means to be read.
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for item in files.iter().flat_map(|f| &f.items) {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty) {
-            continue;
-        }
+    for imp in inherent_impls(files, ty) {
         for it in &imp.items {
             let ImplItem::Fn(f) = it else { continue };
             if !is_pub(&f.vis) || f.sig.inputs.len() != 1 {
@@ -1042,19 +1039,15 @@ pub fn wrapper_class(
     }
     // A def that owns a content group gets a node view over it, derived from the
     // presence of `root() -> &Group`.
-    let owns_group = files.iter().flat_map(|f| &f.items).any(|i| {
-        let Item::Impl(imp) = i else { return false };
-        imp.trait_.is_none()
-            && ty_str(&imp.self_ty).rsplit("::").next()
-                == Some(ty.rsplit("::").next().unwrap_or(ty))
-            && imp.items.iter().any(|it| match it {
-                ImplItem::Fn(f) => {
-                    is_pub(&f.vis)
-                        && f.sig.ident == "root"
-                        && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "&Group")
-                }
-                _ => false,
-            })
+    let owns_group = inherent_impls(files, bare(ty)).any(|imp| {
+        imp.items.iter().any(|it| match it {
+            ImplItem::Fn(f) => {
+                is_pub(&f.vis)
+                    && f.sig.ident == "root"
+                    && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "&Group")
+            }
+            _ => false,
+        })
     });
     let content = if owns_group {
         quote! {
@@ -1153,12 +1146,7 @@ pub fn map_methods(
     let mut skipped = Vec::new();
     let mut twins = BTreeSet::new();
 
-    for item in files.iter().flat_map(|f| &f.items) {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty) {
-            continue;
-        }
-
+    for imp in inherent_impls(files, ty) {
         for it in &imp.items {
             let ImplItem::Fn(f) = it else { continue };
             if !is_pub(&f.vis) {
@@ -1200,37 +1188,17 @@ pub fn map_methods(
             // same everywhere.
             let gate = match crate::cfg::gate(&gated) {
                 crate::cfg::Gate::Always => None,
-                crate::cfg::Gate::Never => {
-                    skipped.push(Skip::new(&name, None, Reason::NeverBuilt));
-                    continue;
-                }
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
             };
 
-            // generic param -> bound text, so `P: AsRef<Path>` can be classified
-            // ...and from a `where` clause too, which said nothing before:
-            // `fn f<P>(p: P) where P: AsRef<Path>` had its argument skipped.
-            let mut bounds: BTreeMap<String, String> = f
+            // generic param -> bound text, so `P: AsRef<std::path::Path>` can
+            // be classified.
+            let bounds: BTreeMap<String, String> = f
                 .sig
                 .generics
                 .type_params()
                 .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
                 .collect();
-            for pred in f
-                .sig
-                .generics
-                .where_clause
-                .iter()
-                .flat_map(|w| &w.predicates)
-            {
-                if let syn::WherePredicate::Type(t) = pred {
-                    let b = &t.bounds;
-                    bounds
-                        .entry(ty_str(&t.bounded_ty))
-                        .or_default()
-                        .push_str(&quote!(#b).to_string().replace(' ', ""));
-                }
-            }
 
             let mut inputs = f.sig.inputs.iter();
             let Some(syn::FnArg::Receiver(recv)) = inputs.next() else {
@@ -1252,21 +1220,11 @@ pub fn map_methods(
             for a in inputs {
                 let syn::FnArg::Typed(t) = a else { continue };
                 let ty = ty_str(&t.ty);
-                // `impl AsRef<Path>` in argument position is the same bound,
-                // written in place.
-                let bound = bounds
-                    .get(&ty)
-                    .map(String::as_str)
-                    .or_else(|| ty.strip_prefix("impl"))
-                    .unwrap_or("");
                 // A generic parameter is classified through its bound instead.
-                let kind = if bound.contains("AsRef<std::path::Path>")
-                    || bound.contains("AsRef<Path>")
-                    || ty == "&std::path::Path"
-                    || ty == "std::path::PathBuf"
-                {
+                let bound = bounds.get(&ty).map(String::as_str).unwrap_or("");
+                let kind = if bound.contains("AsRef<std::path::Path>") {
                     Some(Arg::PathStr)
-                } else if bound.contains("Into<String>") || bound.contains("AsRef<str>") {
+                } else if bound.contains("Into<String>") {
                     Some(Arg::Str)
                 } else {
                     match vocab.classify(&ty) {
@@ -1360,90 +1318,99 @@ pub fn map_methods(
                 }
             };
 
-            // TryUnit's value is already the Result.
-            let ok_value = if already_result {
-                value.clone()
-            } else {
-                quote!(Ok(#value))
-            };
-            let arrow = if unit { quote!() } else { quote!(-> #ret_ty) };
-            // Every path from here emits the method.
-            taken.insert(name.clone());
-            if let Some((p, n)) = gate {
-                let (ret_ty, last) = if optional {
-                    let v = if already_result {
-                        quote!(#value.map(Some))
-                    } else {
-                        quote!(Ok(Some(#value)))
-                    };
-                    (quote!(Option<#ret_ty>), v)
-                } else if unit {
-                    (quote!(#ret_ty), quote! { #value; Ok(()) })
-                } else {
-                    (quote!(#ret_ty), ok_value)
-                };
-                let missing = format!(
-                    "{} is not available on this target: its upstream feature is off here",
-                    lower_camel(&name)
-                );
-                code.extend(quote! {
-                    #(#doc)*
-                    #[napi]
-                    #[cfg_attr(#n, allow(unused_variables))]
-                    pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
-                        #[cfg(#p)]
-                        {
-                            #prologue
-                            #(#lets)*
-                            #last
-                        }
-                        #[cfg(#n)]
-                        {
-                            Err(Error::from_reason(#missing))
-                        }
-                    }
-                });
-                continue;
-            }
-            code.extend(if optional {
-                let value = if already_result {
+            // The signature's return and the body's last expression. A gated
+            // body has an `Err` twin, so it always returns `Result`.
+            let (arrow, last) = if optional {
+                let v = if already_result {
                     quote!(#value.map(Some))
                 } else {
                     quote!(Ok(Some(#value)))
                 };
-                quote! {
-                    #(#doc)*
-                    #[napi]
-                    pub fn #ident(#recv, #(#params),*) -> Result<Option<#ret_ty>> {
-                        #prologue
-                        #(#lets)*
-                        #value
-                    }
-                }
-            } else if already_result || prologue.is_some() {
-                quote! {
-                    #(#doc)*
-                    #[napi]
-                    pub fn #ident(#recv, #(#params),*) -> Result<#ret_ty> {
-                        #prologue
-                        #(#lets)*
-                        #ok_value
-                    }
-                }
+                (quote!(-> Result<Option<#ret_ty>>), v)
+            } else if unit && gate.is_some() {
+                (quote!(-> Result<#ret_ty>), quote! { #value; Ok(()) })
+            } else if already_result {
+                // TryUnit's value is already the Result.
+                (quote!(-> Result<#ret_ty>), value)
+            } else if prologue.is_some() || gate.is_some() {
+                (quote!(-> Result<#ret_ty>), quote!(Ok(#value)))
+            } else if unit {
+                (quote!(), value)
             } else {
-                quote! {
-                    #(#doc)*
-                    #[napi]
-                    pub fn #ident(#recv, #(#params),*) #arrow {
-                        #(#lets)*
-                        #value
-                    }
+                (quote!(-> #ret_ty), value)
+            };
+            let body = quote! {
+                #prologue
+                #(#lets)*
+                #last
+            };
+            // Every path from here emits the method.
+            taken.insert(name.clone());
+            let (cfg_attr, body) = match gate {
+                None => (None, body),
+                Some((p, n)) => {
+                    let missing = format!(
+                        "{} is not available on this target: its upstream feature is off here",
+                        lower_camel(&name)
+                    );
+                    (
+                        Some(quote!(#[cfg_attr(#n, allow(unused_variables))])),
+                        quote! {
+                            #[cfg(#p)]
+                            { #body }
+                            #[cfg(#n)]
+                            { Err(Error::from_reason(#missing)) }
+                        },
+                    )
+                }
+            };
+            code.extend(quote! {
+                #(#doc)*
+                #[napi]
+                #cfg_attr
+                pub fn #ident(#recv, #(#params),*) #arrow {
+                    #body
                 }
             });
         }
     }
 
     (code, skipped)
+}
+
+/// The keys of an item's `#[napi(..)]`, with their string values:
+/// `#[napi(getter, js_name = "type")]` is `{getter: None, js_name: "type"}`.
+/// None without a `#[napi]`; a bare one has no keys.
+fn napi_args(attrs: &[syn::Attribute]) -> Option<BTreeMap<String, Option<String>>> {
+    let attr = attrs.iter().find(|a| a.path().is_ident("napi"))?;
+    let mut out = BTreeMap::new();
+    if matches!(attr.meta, syn::Meta::List(_)) {
+        attr.parse_nested_meta(|meta| {
+            let value = if meta.input.peek(syn::Token![=]) {
+                match meta.value()?.parse::<syn::Expr>()? {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }) => Some(s.value()),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            let key = &meta.path;
+            out.insert(quote!(#key).to_string(), value);
+            Ok(())
+        })
+        .unwrap_or_else(|e| panic!("#[napi(..)] that does not parse: {e}"));
+    }
+    Some(out)
+}
+
+/// The name JS sees a method under: its `js_name`, or napi's camelCase.
+fn js_name(f: &syn::ImplItemFn) -> String {
+    napi_args(&f.attrs)
+        .and_then(|mut a| a.remove("js_name").flatten())
+        .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()))
 }
 
 /// One async twin to generate: a Send-safe core the template marked with
@@ -1478,19 +1445,7 @@ pub fn async_twins(file: &mut syn::File) -> Vec<Twin> {
             .filter_map(|it| {
                 let ImplItem::Fn(f) = it else { return None };
                 let body = quote!(#f).to_string();
-                let js = f
-                    .attrs
-                    .iter()
-                    .find(|a| a.path().is_ident("napi"))
-                    .and_then(|a| {
-                        let text = quote!(#a).to_string();
-                        text.split("js_name = \"")
-                            .nth(1)
-                            .and_then(|r| r.split('"').next())
-                            .map(str::to_string)
-                    })
-                    .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()));
-                Some((body, js))
+                Some((body, js_name(f)))
             })
             .collect();
         for it in &mut imp.items {
@@ -1557,7 +1512,7 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
         let task = format_ident!(
             "{}{}Task",
             ty_str(&t.target),
-            heck_camel(&t.core.to_string())
+            t.core.to_string().to_case(convert_case::Case::Pascal)
         );
         let (names, types): (Vec<_>, Vec<_>) = t.params.iter().cloned().unzip();
         let core = &t.core;
@@ -1626,7 +1581,7 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
 pub fn guard_live(file: &mut syn::File, class: &str, open: &[&str]) {
     for item in &mut file.items {
         let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || ty_str(&imp.self_ty) != class {
+        if imp.trait_.is_some() || !self_ident(imp).is_some_and(|id| id == class) {
             continue;
         }
         for it in &mut imp.items {
@@ -1677,9 +1632,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     .into();
     for item in &file.items {
         if let Item::Enum(e) = item
-            && e.attrs
-                .iter()
-                .any(|a| quote!(#a).to_string().contains("string_enum"))
+            && napi_args(&e.attrs).is_some_and(|a| a.contains_key("string_enum"))
         {
             scalars.insert(e.ident.to_string());
         }
@@ -1688,6 +1641,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         let ReturnType::Type(_, t) = ret else {
             return false;
         };
+        // Result and Option only, not peel_type: a list is not cheap.
         let mut name = ty_str(t);
         while let Some(inner) = ["Result<", "Option<"]
             .iter()
@@ -1716,34 +1670,20 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     let mut out = TokenStream::new();
     for class in classes {
         let (mut getters, mut methods) = (Vec::new(), Vec::new());
-        let members = file
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                Item::Impl(imp) if imp.trait_.is_none() && *class == ty_str(&imp.self_ty) => {
-                    Some(imp)
-                }
-                _ => None,
-            })
-            .flat_map(|imp| &imp.items);
+        let name = class.to_string();
+        let members = inherent_impls(std::slice::from_ref(file), &name).flat_map(|imp| &imp.items);
         for it in members {
             let ImplItem::Fn(f) = it else { continue };
-            let Some(attr) = f.attrs.iter().find(|a| a.path().is_ident("napi")) else {
+            let Some(args) = napi_args(&f.attrs) else {
                 continue;
             };
-            let text = quote!(#attr).to_string();
-            let js = text
-                .split("js_name = \"")
-                .nth(1)
-                .and_then(|r| r.split('"').next())
-                .map(str::to_string)
-                .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()));
-            if text.contains("getter") {
+            let js = js_name(f);
+            if args.contains_key("getter") {
                 getters.push(js);
             } else if is_pub(&f.vis)
                 && !["setter", "constructor", "factory"]
                     .iter()
-                    .any(|k| text.contains(k))
+                    .any(|k| args.contains_key(*k))
                 && matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
                 && f.sig.inputs.len() == 1
                 && scalar(&f.sig.output)
@@ -1751,7 +1691,6 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
                 methods.push(js);
             }
         }
-        let name = class.to_string();
         out.extend(quote! {
             #[napi]
             impl #class {
@@ -1784,7 +1723,6 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
 pub fn template_fns(code: &TokenStream) -> BTreeMap<String, Vec<String>> {
     let file: syn::File =
         syn::parse2(code.clone()).expect("the emitter template is not valid Rust on its own");
-    // A Vec, not a Set: the duplicate check below needs the repeats.
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for item in &file.items {
         let Item::Impl(imp) = item else { continue };
@@ -1828,22 +1766,8 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
                 let ReturnType::Type(_, t) = &f.sig.output else {
                     continue;
                 };
-                let mut name = ty_str(t);
                 // Result<Option<Text>> -> Text, in any nesting order.
-                loop {
-                    let before = name.clone();
-                    name = name.trim_start_matches('&').to_string();
-                    for w in ["Result<", "Option<", "Vec<"] {
-                        if let Some(inner) = name.strip_prefix(w).and_then(|r| r.strip_suffix('>'))
-                        {
-                            name = inner.to_string();
-                        }
-                    }
-                    if name == before {
-                        break;
-                    }
-                }
-                out.insert(name);
+                out.insert(peel_type(&ty_str(t)).to_string());
             }
         }
     }

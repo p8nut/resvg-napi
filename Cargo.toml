@@ -18,8 +18,8 @@ crate-type = ["cdylib"]
 # napi v3: the runtime crate and the derive crate are versioned SEPARATELY.
 # Current napi links the wasm target against the emnapi 2 ABI (napi-build
 # hard-exports `emnapi_create_env`), so package.json pins emnapi, @emnapi/core
-# and @emnapi/runtime to 2.0.0-beta.3; scripts/check-pins.mjs says when a
-# stable 2.x lets them go.
+# and @emnapi/runtime to 2.0.0-beta.3, until a stable 2.x that
+# @napi-rs/wasm-runtime accepts; dependabot's `napi` group moves them together.
 # The two minimums move as a pair: napi-derive (3.6.13 and up) expands to
 # `defer_native_borrow_scope`, which napi only has from 3.15.0.
 # napi8 turns on class type tags on native targets. napi compiles them out for
@@ -59,6 +59,9 @@ resvg = { version = "0.49.0", default-features = false, features = ["memmap-font
 
 [build-dependencies]
 napi-build = "2.6.0"
+# The version napi-derive-backend already pulls in: napi names JS members
+# with it, so the generator spelling them the same way is the point.
+convert_case = "0.12.0"
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
 quote = "1.0.35"
 proc-macro2 = "1.0.91"

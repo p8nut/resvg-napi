@@ -1,8 +1,7 @@
 // A parse failure carries usvg's own variant name as `error.code`, on every
 // path that parses: the constructor, parseAsync and the one-shot renderAsync.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-const { Resvg, renderAsync, FontDatabase } = createRequire(import.meta.url)('../index.js');
+import { Resvg, renderAsync, FontDatabase } from '../index.js';
 
 const cases = {
   NotAnUtf8Str: Buffer.from([0xff, 0xfe, 0x3c]),

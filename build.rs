@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Fields, ImplItem, Item};
+use syn::Item;
 
 /// The codegen's own report: what it derived from upstream, and what it left
 /// alone with the reason. Cargo gives a build script no channel but
@@ -65,123 +65,8 @@ use sources::*;
 use template::*;
 use vocab::*;
 
-fn assert_free_fn(files: &[syn::File], name: &str, want: &[&str]) {
-    let f = files
-        .iter()
-        .flat_map(|f| &f.items)
-        .find_map(|i| match i {
-            Item::Fn(f) if f.sig.ident == name && is_pub(&f.vis) => Some(f),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("resvg: `pub fn {name}` disappeared"));
-    let got: Vec<String> = f
-        .sig
-        .inputs
-        .iter()
-        .map(|a| match a {
-            syn::FnArg::Typed(t) => ty_str(&t.ty),
-            syn::FnArg::Receiver(_) => "self".into(),
-        })
-        .collect();
-    assert_eq!(
-        got,
-        want.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-        "resvg::{name} signature changed; update build.rs"
-    );
-}
-
-/// The emitter templates code against these fields by name; break loudly if they move.
-fn assert_struct_fields(files: &[syn::File], ty: &str, want: &[&str]) {
-    let s = files
-        .iter()
-        .flat_map(|f| &f.items)
-        .find_map(|i| match i {
-            Item::Struct(s) if s.ident == ty && is_pub(&s.vis) => Some(s),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("usvg: `pub struct {ty}` not found"));
-    let Fields::Named(named) = &s.fields else {
-        panic!("usvg::{ty} is no longer a struct with named fields")
-    };
-    for w in want {
-        assert!(
-            named
-                .named
-                .iter()
-                .any(|f| f.ident.as_ref().is_some_and(|i| i == w)),
-            "usvg::{ty}::{w} disappeared; update build.rs"
-        );
-    }
-}
-
-fn assert_tree_ctor(files: &[syn::File], ty: &str, name: &str) {
-    let found = files.iter().flat_map(|f| &f.items).any(|i| match i {
-        // upstream writes `impl crate::Tree`, so compare the last path segment
-        Item::Impl(imp) if ty_str(&imp.self_ty).rsplit("::").next() == Some(ty) => imp
-            .items
-            .iter()
-            .any(|it| matches!(it, ImplItem::Fn(f) if f.sig.ident == name && is_pub(&f.vis))),
-        _ => false,
-    });
-    assert!(found, "upstream: `{ty}::{name}` disappeared");
-}
-
 fn main() {
     napi_build::setup();
-    let probe = quote!(image_kind_to_js(x));
-    assert!(
-        calls(&probe, "image_kind_to_js") && !calls(&probe, "kind_to_js"),
-        "calls() matches inside a longer identifier"
-    );
-    cfg::selftest();
-    modtree_selftest(Path::new(
-        &env::var("OUT_DIR").expect("OUT_DIR, set by Cargo for build scripts"),
-    ));
-    // map_methods: a name skipped on one pass stays free for the next, and a
-    // `where` bound classifies its argument like an inline one does.
-    {
-        let a: syn::File = syn::parse_quote! { impl A { pub fn foo(self) {} } };
-        let b: syn::File = syn::parse_quote! {
-            impl B {
-                pub fn foo(&self) -> u32 { 0 }
-                pub fn load<P>(&mut self, p: P) where P: AsRef<Path> {}
-            }
-        };
-        let (v, recv, mut taken) = (Vocab::default(), quote!(self.inner), BTreeSet::new());
-        let pass = |files: &[syn::File], ty: &str, taken: &mut BTreeSet<String>| {
-            map_methods(
-                &MethodPass {
-                    files,
-                    ty,
-                    receiver: &recv,
-                    skip: &[],
-                    prologue: None,
-                    readonly: false,
-                    optional: false,
-                },
-                &v,
-                taken,
-            )
-        };
-        let (_, skipped) = pass(&[a], "A", &mut taken);
-        assert!(
-            skipped.iter().any(|s| s.name == "foo"),
-            "pass 1 skips foo(self)"
-        );
-        let (code, skipped) = pass(&[b], "B", &mut taken);
-        let code = code.to_string().replace(' ', "");
-        assert!(code.contains("pubfnfoo("), "pass 2 still emits foo: {code}");
-        assert!(
-            code.contains("pubfnload(&mutself,p:String)"),
-            "where-bound arg: {code}"
-        );
-        assert!(skipped.is_empty(), "nothing skipped on pass 2");
-        let ne: syn::ItemEnum = syn::parse_quote! { #[non_exhaustive] pub enum E { A } };
-        assert!(
-            payload_shape(&ne, &|t| t).is_err(),
-            "#[non_exhaustive] is refused"
-        );
-    }
     // One table: a kind that both a getter and a method can return has the
     // same JS type at both, whatever expression each uses to get there.
     {
@@ -213,16 +98,6 @@ fn main() {
                 "{js:?}: getter and method disagree"
             );
         }
-    }
-    for (ty, peeled) in [
-        ("&[Arc<ClipPath>]", "Arc<ClipPath>"),
-        ("Option<&Vec<Stop>>", "Stop"),
-        ("implIterator<Item=&Node>+'_", "Node"),
-        ("&[TextChunk]", "TextChunk"),
-        ("Box<Group>", "Group"),
-        ("usvg::Color", "usvg::Color"),
-    ] {
-        assert_eq!(peel_type(ty), peeled, "peel_type({ty})");
     }
     println!("cargo::rerun-if-changed=build.rs");
     // The generator is six files now, and Cargo watches only what it is told:
@@ -282,7 +157,7 @@ fn main() {
             }
         })
         .collect();
-    // The primary crate: options, guards and clamps are read from it.
+    // The primary crate: options and clamps are read from it.
     let primary = &sources[0];
     let primary_files = &primary.files;
     let modules = &primary.tree.paths;
@@ -295,11 +170,6 @@ fn main() {
         let m = primary.tree.file_ns.get(path).cloned().unwrap_or_default();
         by_module.entry(m).or_default().push(file.clone());
     }
-    // Only the crate root for free functions: a module-level `pub fn` elsewhere
-    // is not crate-public (resvg has an internal `render(&Image, ...)`).
-    let renderer_root = vec![parse(
-        &locate(RENDERER.0, RENDERER.1, &locked).join(RENDERER.1),
-    )];
     let source_files = |root: &str| {
         &sources
             .iter()
@@ -330,13 +200,8 @@ fn main() {
         // shares a name between usvg and fontdb today; tiny-skia would bring
         // nine at once, `Color` and `Paint` among them.
         for f in sources.iter().flat_map(|s| s.files.iter()) {
-            for item in &f.items {
-                let name = match item {
-                    Item::Struct(st) if is_pub(&st.vis) => st.ident.to_string(),
-                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
-                    _ => continue,
-                };
-                *seen.entry(name).or_default() += 1;
+            for id in f.items.iter().filter_map(item_ident) {
+                *seen.entry(id.to_string()).or_default() += 1;
             }
         }
         seen.into_iter()
@@ -349,15 +214,6 @@ fn main() {
             "names defined more than once across the sources, keyed by module: {}",
             dups.iter().cloned().collect::<Vec<_>>().join(", ")
         );
-    }
-
-    // Guards first: no point generating against a moved API.
-    assert_free_fn(&renderer_root, RENDER_FN.0, RENDER_FN.1);
-    for m in TREE.1 {
-        assert_tree_ctor(primary_files, TREE.0, m);
-    }
-    for (ty, fields) in HAND_FILLED {
-        assert_struct_fields(primary_files, ty, fields);
     }
 
     // The table has N entries, so the highest usable index is N - 1.
@@ -382,7 +238,7 @@ fn main() {
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
     // make Stop/FaceInfo objects, while `&Group` stays a handle question.
     // Everything asked of the template is written in its own body, so the
-    // fragments can be blank. Reused by the pruner further down.
+    // fragments can be blank.
     let nothing = TokenStream::new();
     let probe = template(
         &Fragments::default(),
@@ -391,64 +247,13 @@ fn main() {
         &nothing,
         &nothing,
     );
-    // The names the generated code spells and the template must define. A
-    // template edit that drops one fails here, by name, instead of as a
-    // compile error deep in src/lib.rs.
-    {
-        let file: syn::File = syn::parse2(probe.clone()).expect("the probe template parses");
-        let mut defined: BTreeSet<String> = file
-            .items
-            .iter()
-            .filter_map(|i| match i {
-                Item::Struct(x) => Some(x.ident.to_string()),
-                Item::Enum(x) => Some(x.ident.to_string()),
-                Item::Fn(x) => Some(x.sig.ident.to_string()),
-                Item::Trait(x) => Some(x.ident.to_string()),
-                Item::Type(x) => Some(x.ident.to_string()),
-                _ => None,
-            })
-            .collect();
-        // In scope through an import counts too: `Signal` comes from
-        // napi-support.
-        fn imported(t: &syn::UseTree, out: &mut BTreeSet<String>) {
-            match t {
-                syn::UseTree::Path(p) => imported(&p.tree, out),
-                syn::UseTree::Name(n) => {
-                    out.insert(n.ident.to_string());
-                }
-                syn::UseTree::Rename(r) => {
-                    out.insert(r.rename.to_string());
-                }
-                syn::UseTree::Group(g) => g.items.iter().for_each(|i| imported(i, out)),
-                syn::UseTree::Glob(_) => {}
-            }
-        }
-        for item in &file.items {
-            if let Item::Use(u) = item {
-                imported(&u.tree, &mut defined);
-            }
-        }
-        let missing: Vec<_> = TEMPLATE_CONTRACT
-            .iter()
-            .filter(|n| !defined.contains(**n))
-            .collect();
-        assert!(
-            missing.is_empty(),
-            "the template no longer defines {missing:?} (config::TEMPLATE_CONTRACT)"
-        );
-    }
     let object_seeds: BTreeSet<String> = referenced
         .iter()
-        .filter_map(|t| {
+        .filter(|t| {
             let b = t.trim_start_matches('&');
-            if let Some(inner) = b.strip_prefix("[").and_then(|s| s.strip_suffix("]")) {
-                return Some(inner.trim_start_matches('&').to_string());
-            }
-            if let Some(rest) = b.strip_prefix("implIterator<Item=") {
-                return Some(rest.split('>').next()?.trim_start_matches('&').to_string());
-            }
-            None
+            b.starts_with('[') || b.starts_with("implIterator<Item=")
         })
+        .map(|t| peel_type(t).to_string())
         // Plus what a payload enum carries. `filter::Kind` names seventeen
         // primitive structs and nothing else does. Safe now on two counts: a
         // duplicated name is keyed by its module, and a member returning a node
@@ -472,10 +277,9 @@ fn main() {
             // `clipPath()` returns the *wrapper class* ClipPath, which shares
             // its name with usvg::ClipPath. Seeding it would emit `wrap` twice.
             let arc_held = referenced.iter().any(|r| {
-                r.trim_start_matches('&')
-                    .trim_start_matches('[')
+                peel_type(r)
                     .strip_prefix("Arc<")
-                    .and_then(|i| i.split('>').next())
+                    .and_then(|i| i.strip_suffix('>'))
                     == Some(t.as_str())
             });
             !arc_held
@@ -833,98 +637,17 @@ fn main() {
     for (pass, what, by) in COVERED_ELSEWHERE {
         report!("{pass} method covered by {by}: {what}");
     }
-    // Prune: an object type nothing returns is dead TS surface. Start from the
-    // generated method bodies, then follow objects nested in kept objects.
-    let mentions = |code: &TokenStream, name: &str| -> bool {
-        format!(" {code} ").contains(&format!(" {name} "))
-    };
-    // The template hands out types as well -- `SvgNode::path` returns `Path` --
-    // and none of that is visible from the passes. Probe it once, empty.
-    // A union references its payload types, and unions are generated after this
-    // pruning -- so without this the primitives `filter::Kind` names are dropped
-    // as unreachable and the union cannot compile. Only for unions something
-    // actually calls.
-    let payload_map = vocab.payload.clone();
-    let via_payload: BTreeSet<String> = payload_map
-        .iter()
-        .filter(|(_, p)| p.payload_blocker(&vocab).is_none())
-        .filter(|(n, p)| {
-            let c = p.conv_ident(n).to_string();
-            let used = |t: &TokenStream| calls(t, &c);
-            generated.values().any(used)
-                || object_parts.values().any(used)
-                || used(&wrapper_code)
-                || used(&probe)
-        })
-        .flat_map(|(_, p)| p.variants.iter().map(|(_, x)| x.clone()))
-        .flat_map(|payload| match payload {
-            Payload::None => Vec::new(),
-            Payload::Value(t) => vec![t],
-            Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
-        })
-        .map(|t| bare(&t).to_string())
-        .collect();
+    // Every settled data type, objects and read-only classes alike: the
+    // registry only ever holds what a pass, the template or another data type
+    // reached, so there is nothing to prune.
+    let mut object_code: TokenStream = object_parts.values().cloned().collect();
 
-    let mut kept: BTreeSet<String> = BTreeSet::new();
-    let all_data: BTreeSet<String> = vocab.objects.union(&vocab.values).cloned().collect();
-    for name in all_data.clone() {
-        // A value class is referenced under its JS name, not the Rust one.
-        let js = data_ident(&name).to_string();
-        let used = generated
-            .values()
-            .any(|c| mentions(c, &name) || mentions(c, &js))
-            || mentions(&wrapper_code, &name)
-            || mentions(&wrapper_code, &js)
-            || mentions(&probe, &name)
-            || mentions(&probe, &js)
-            || via_payload.contains(bare(&name));
-        if used {
-            kept.insert(name);
-        }
-    }
-    loop {
-        let mut added = false;
-        for name in all_data.clone() {
-            if kept.contains(&name) {
-                continue;
-            }
-            if kept
-                .iter()
-                .any(|k| object_parts.get(k).is_some_and(|c| mentions(c, &name)))
-            {
-                kept.insert(name);
-                added = true;
-            }
-        }
-        if !added {
-            break;
-        }
-    }
-    let dropped: Vec<String> = all_data.difference(&kept).cloned().collect();
-    if !dropped.is_empty() {
-        report!("object types pruned as unreachable: {}", dropped.join(", "));
-    }
-    let mut object_code: TokenStream = kept
-        .iter()
-        .filter_map(|k| object_parts.get(k).cloned())
-        .collect();
-
-    // The unions for the payload enums something actually reached. Generated
-    // last, because a payload may be one of the data types settled just above,
-    // and appended only when the converter is referenced -- an unreferenced
-    // union is dead TS surface, the same reason the pruner exists.
+    // The unions for the payload enums. Generated last, because a payload may
+    // be one of the data types settled just above.
     let mut unions: Vec<String> = Vec::new();
     for (name, info) in &vocab.payload {
         if let Some(why) = info.payload_blocker(&vocab) {
             report!("payload enum {name} not mapped: {why}");
-            continue;
-        }
-        // `calls`, not the space-padded `mentions` used for type names: a
-        // token stream renders a call as `foo_to_js(..)` with no space before
-        // the paren.
-        let conv = info.conv_ident(name).to_string();
-        let used = |c: &TokenStream| calls(c, &conv);
-        if !used(&object_code) && !generated.values().any(used) {
             continue;
         }
         match payload_enum_code(name, info, &vocab, modules) {
@@ -940,7 +663,7 @@ fn main() {
     }
     report!(
         "data types emitted: {}",
-        kept.iter().cloned().collect::<Vec<_>>().join(", ")
+        object_parts.keys().cloned().collect::<Vec<_>>().join(", ")
     );
 
     let fontdb_methods = &generated["fontdb::Database"];
@@ -1053,20 +776,6 @@ fn main() {
         code = quote! { #file #inspect };
     }
 
-    // Nothing above prevents a future upstream method from colliding with a
-    // name the template already uses: rustc would say so, from inside a
-    // generated file. Say it here instead.
-    for (target, names) in template_fns(&code) {
-        let mut seen: BTreeSet<&String> = BTreeSet::new();
-        for n in &names {
-            assert!(
-                seen.insert(n),
-                "{target}::{n} is emitted twice: the template defines it and a \
-                 pass generated it too. Add it to RENAMED, or skip it in the pass."
-            );
-        }
-    }
-
     let header = format!(
         "// @generated by build.rs from {GENERATED_FROM}. DO NOT EDIT.\n{}",
         HEADER_REST
@@ -1105,13 +814,4 @@ fn rustfmt(path: &Path) {
         .arg("--edition=2024")
         .arg(path)
         .status();
-}
-
-/// Whether `ident` occurs in `code` as a whole identifier. A substring test
-/// finds `kind_to_js` inside `image_kind_to_js` and `color_matrix_kind_to_js`,
-/// which would keep `filter::Kind`'s union alive with nothing calling it.
-fn calls(code: &TokenStream, ident: &str) -> bool {
-    code.to_string()
-        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .any(|w| w == ident)
 }

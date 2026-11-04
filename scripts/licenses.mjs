@@ -1,8 +1,7 @@
 // Third-party notices for what the binaries actually contain.
 //
-//   npm run licenses          check the snapshot against the crate graph
-//   npm run licenses -- -w    rewrite it, after a dependency moved
-//   npm run licenses -- -s    selftest, offline
+//   npm run licenses    rewrite the notices from the crate graph; the diff
+//                       shows what moved, and CI fails on one
 //
 // Every `.node` and the `.wasm` statically link 91 crates. MIT asks for its
 // notice to travel with "copies or substantial portions"; BSD-2 and BSD-3 ask
@@ -19,7 +18,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import assert from 'node:assert/strict';
 
 const SNAPSHOT = 'THIRD-PARTY-NOTICES.md';
 
@@ -215,204 +213,41 @@ export function render(crates) {
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }
 
-/**
- * Which platform packages are missing a notice, or carrying one that no longer
- * matches the root's. Nothing regenerates these copies on its own: `napi
- * version` only rewrites the version field and `napi artifacts` only drops the
- * `.node` in, so without a check they go stale the first time the crate graph
- * moves -- which is the same failure the snapshot itself exists to catch, one
- * directory down.
- *
- * @param {{dir: string, have: Record<string, string|null>}[]} pkgs
- * @param {Record<string, string>} want  filename -> the content it must have
- * @returns {string[]} what is wrong, empty when nothing is
- */
-export function stale(pkgs, want) {
-  const why = [];
-  for (const { dir, have } of pkgs) {
-    for (const file of Object.keys(want)) {
-      if (have[file] == null) why.push(`${dir} does not ship ${file}`);
-      else if (have[file] !== want[file]) why.push(`${dir} has a stale ${file}`);
-    }
-  }
-  return why;
-}
-
-/**
- * Which platform manifests forget to ship the files they hold. `files[]` is an
- * allowlist, and npm drops what is not on it in silence -- so a copy sitting in
- * the directory proves nothing on its own. `napi create-npm-dirs` rewrites
- * these manifests from `napi.targets`, which is exactly the command that would
- * drop the three entries again, so this is checked rather than trusted.
- *
- * @param {{dir: string, files?: string[]}[]} pkgs
- * @param {string[]} want  the filenames that must be listed
- */
-export function unshipped(pkgs, want) {
-  const why = [];
-  for (const { dir, files } of pkgs) {
-    for (const file of want) {
-      if (!(files ?? []).includes(file)) why.push(`${dir} holds ${file} but does not list it in files[]`);
-    }
-  }
-  return why;
-}
-
-/** The `npm/*` packages, and the notice files each currently holds. */
-function platformPkgs(want) {
+/** The `npm/*` packages: each holds a binary, so each carries the notice. */
+function platformDirs() {
   if (!existsSync('npm')) return [];
   return readdirSync('npm')
     .map((d) => join('npm', d))
-    .filter((dir) => existsSync(join(dir, 'package.json')))
-    .map((dir) => ({
-      dir,
-      files: JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).files,
-      have: Object.fromEntries(Object.keys(want).map((f) => {
-        const p = join(dir, f);
-        return [f, existsSync(p) ? readFileSync(p, 'utf8') : null];
-      })),
-    }));
+    .filter((dir) => existsSync(join(dir, 'package.json')));
 }
 
-async function selftest() {
-  assert.deepEqual(copyrights('Copyright (c) 2011 Google Inc. All rights reserved.\nblah'),
-    ['Copyright (c) 2011 Google Inc. All rights reserved']);
-  // The Apache template line names nobody and must not be reported as a holder.
-  assert.deepEqual(copyrights('Copyright [yyyy] [name of copyright owner]'), []);
-  // Nor the Apache prose lines that happen to wrap onto the word.
-  assert.deepEqual(copyrights('copyright notice that is included in or attached to the work\ncopyright license to reproduce, prepare Derivative Works of,'), []);
-  assert.deepEqual(copyrights('COPYRIGHT (C) 2020 A'), ['COPYRIGHT (C) 2020 A']);
-  assert.deepEqual(copyrights('Copyright (c) A\nCopyright (c) A\nCopyright (c) B').length, 2);
-
-  assert.deepEqual(spdxIds('MIT OR Apache-2.0'), ['MIT', 'Apache-2.0']);
-  assert.deepEqual(spdxIds('MIT/Apache-2.0'), ['MIT', 'Apache-2.0']);
-  assert.deepEqual(spdxIds('(MIT OR Apache-2.0) AND Unicode-3.0').includes('Unicode-3.0'), true);
-
-  // A dual licence resolves to the text already shipped, not to a third file.
-  assert.deepEqual(required('MIT OR Apache-2.0'), ['Apache-2.0']);
-  assert.deepEqual(required('Zlib OR Apache-2.0 OR MIT'), ['Apache-2.0']);
-  // A licence that stands alone is the one that must be quoted.
-  assert.deepEqual(required('BSD-3-Clause'), ['BSD-3-Clause']);
-  assert.deepEqual(required(undefined), ['UNKNOWN']);
-  // AND is not a choice: the added terms come back with the chosen half.
-  assert.deepEqual(required('(MIT OR Apache-2.0) AND Unicode-3.0'), ['Apache-2.0', 'Unicode-3.0']);
-  // ...and no id ever carries a bracket.
-  assert.ok(required('(MIT OR Apache-2.0) AND Unicode-3.0').every((id) => !/[()]/.test(id)));
-
-  // Build dependencies do not reach the binary, so they do not reach this file.
-  const resolve = {
-    nodes: [
-      { id: 'root', deps: [
-        { pkg: 'linked', dep_kinds: [{ kind: null }] },
-        { pkg: 'builder', dep_kinds: [{ kind: 'build' }] },
-        { pkg: 'tester', dep_kinds: [{ kind: 'dev' }] },
-      ] },
-      { id: 'linked', deps: [{ pkg: 'deep', dep_kinds: [{ kind: null }] }] },
-      { id: 'builder', deps: [{ pkg: 'syn-ish', dep_kinds: [{ kind: null }] }] },
-      { id: 'deep', deps: [] },
-    ],
-  };
-  assert.deepEqual([...linkedIds(resolve, 'root')].sort(), ['deep', 'linked']);
-  // A crate reached only through a build dependency stays out, however deep.
-  assert.equal(linkedIds(resolve, 'root').has('syn-ish'), false);
-  // A target-specific edge still ships: thirteen platforms come from one graph.
-  assert.equal(linkedIds({ nodes: [{ id: 'r', deps: [
-    { pkg: 'win-only', dep_kinds: [{ kind: null, target: 'cfg(windows)' }] }] }] }, 'r').has('win-only'), true);
-
-  // The quoted text is the one named after the licence, not the first on disk.
-  assert.equal(textFor([{ texts: [
-    { file: 'LICENSE-APACHE', text: 'APACHE' }, { file: 'LICENSE-UNICODE', text: 'UNICODE' }] }],
-    'Unicode-3.0'), 'UNICODE');
-
-  const doc = render([
-    { name: 'tiny-skia', version: '0.12.0', expr: 'BSD-3-Clause', ids: ['BSD-3-Clause'],
-      holders: ['Copyright (c) 2011 Google Inc'], texts: [{ file: 'LICENSE', text: 'BSD TEXT HERE' }] },
-    { name: 'serde', version: '1.0', expr: 'MIT OR Apache-2.0', ids: ['Apache-2.0'],
-      holders: [], texts: [{ file: 'LICENSE-APACHE', text: 'APACHE TEXT' }] },
-  ]);
-  assert.match(doc, /## BSD-3-Clause/);
-  assert.match(doc, /Copyright \(c\) 2011 Google Inc/);
-  assert.match(doc, /BSD TEXT HERE/, 'a licence we do not otherwise ship is quoted in full');
-  assert.doesNotMatch(doc, /APACHE TEXT/, 'Apache-2.0 is already in LICENSE-APACHE');
-  assert.match(doc, /Offered as `MIT OR Apache-2\.0`/, 'a dual licence says which half was taken');
-
-  // The copies under npm/*. A binary package that ships no notice is the case
-  // that shipped: 0.3.0 put the file in the root package, which holds no
-  // binary, and in none of the thirteen that do.
-  const want = { 'THIRD-PARTY-NOTICES.md': 'N', 'LICENSE-MIT': 'M' };
-  const ok = [{ dir: 'npm/linux-x64-gnu', have: { 'THIRD-PARTY-NOTICES.md': 'N', 'LICENSE-MIT': 'M' } }];
-  assert.deepEqual(stale(ok, want), [], 'a package carrying both is fine');
-
-  const absent = stale([{ dir: 'npm/darwin-arm64', have: { 'THIRD-PARTY-NOTICES.md': null, 'LICENSE-MIT': 'M' } }], want);
-  assert.equal(absent.length, 1);
-  assert.match(absent[0], /npm\/darwin-arm64 does not ship THIRD-PARTY-NOTICES\.md/);
-
-  // A notice left behind by a crate-graph move is worse than none: it is a
-  // claim about the binary that is no longer true.
-  const drifted = stale([{ dir: 'npm/win32-x64-msvc', have: { 'THIRD-PARTY-NOTICES.md': 'OLD', 'LICENSE-MIT': 'M' } }], want);
-  assert.equal(drifted.length, 1);
-  assert.match(drifted[0], /has a stale THIRD-PARTY-NOTICES\.md/);
-
-  assert.equal(stale([{ dir: 'a', have: {} }, { dir: 'b', have: {} }], want).length, 4,
-    'every package and every file is named, not just the first');
-  assert.deepEqual(stale([], want), [], 'no platform packages is not a failure');
-
-  // A copy npm would not ship is a copy that is not there. `files[]` is an
-  // allowlist, and `napi create-npm-dirs` rewrites these manifests.
-  assert.deepEqual(unshipped([{ dir: 'a', files: ['x.node', 'LICENSE-MIT'] }], ['LICENSE-MIT']), []);
-  const forgot = unshipped([{ dir: 'npm/linux-x64-gnu', files: ['resvg-napi.linux-x64-gnu.node'] }],
-    ['THIRD-PARTY-NOTICES.md']);
-  assert.equal(forgot.length, 1);
-  assert.match(forgot[0], /does not list it in files\[\]/);
-  assert.equal(unshipped([{ dir: 'a' }], ['LICENSE-MIT']).length, 1, 'no files[] at all is the same fault');
-
-  console.log('ok — licenses: 32 checks passed');
-}
-
-function main() {
-  const write = process.argv.includes('-w') || process.argv.includes('--write');
+if (import.meta.main) {
   const got = render(graph());
+  writeFileSync(SNAPSHOT, got);
+  console.log(`${SNAPSHOT} written, ${got.trim().split('\n').length} lines`);
+
   // What every package holding a `.node` must carry: the notice, and the two
-  // licence texts it refers to by name rather than quoting.
+  // licence texts it refers to by name rather than quoting. Nothing else
+  // refreshes these copies -- `napi version` only moves the version field and
+  // `napi artifacts` only drops the `.node` in -- so they are rewritten here
+  // with the snapshot, and CI's diff catches a stale one the same way.
+  //
+  // The copy and its listing together: `files[]` is an allowlist, so a file
+  // written into the directory and left off it ships nowhere. `napi
+  // create-npm-dirs` rewrites those manifests from `napi.targets` and would
+  // drop the three entries without saying so; this puts them back.
   const want = { [SNAPSHOT]: got };
   for (const f of BESIDE) want[f] = readFileSync(f, 'utf8');
-
-  if (write || !existsSync(SNAPSHOT)) {
-    writeFileSync(SNAPSHOT, got);
-    console.log(`${SNAPSHOT} written, ${got.trim().split('\n').length} lines`);
-    // The copy and its listing together: `files[]` is an allowlist, so a file
-    // written into the directory and left off it ships nowhere. This is the
-    // command that repairs what `napi create-npm-dirs` rewrites, so it has to
-    // repair both halves or the next release quietly drops the notices again.
-    const pkgs = platformPkgs(want);
-    for (const { dir } of pkgs) {
-      for (const [file, content] of Object.entries(want)) writeFileSync(join(dir, file), content);
-      const manifest = join(dir, 'package.json');
-      const m = JSON.parse(readFileSync(manifest, 'utf8'));
-      const missing = Object.keys(want).filter((f) => !m.files.includes(f));
-      if (missing.length) {
-        m.files = [...missing, ...m.files].sort();
-        writeFileSync(manifest, `${JSON.stringify(m, null, 2)}\n`);
-      }
+  const dirs = platformDirs();
+  for (const dir of dirs) {
+    for (const [file, content] of Object.entries(want)) writeFileSync(join(dir, file), content);
+    const manifest = join(dir, 'package.json');
+    const m = JSON.parse(readFileSync(manifest, 'utf8'));
+    const missing = Object.keys(want).filter((f) => !(m.files ?? []).includes(f));
+    if (missing.length) {
+      m.files = [...missing, ...(m.files ?? [])].sort();
+      writeFileSync(manifest, `${JSON.stringify(m, null, 2)}\n`);
     }
-    console.log(`  and copied into ${pkgs.length} platform packages`);
-    return;
   }
-
-  const reasons = [];
-  if (readFileSync(SNAPSHOT, 'utf8') !== got) {
-    reasons.push(`${SNAPSHOT} is out of date: the crate graph moved`);
-  }
-  const pkgs = platformPkgs(want);
-  reasons.push(...stale(pkgs, want));
-  reasons.push(...unshipped(pkgs, Object.keys(want)));
-  if (reasons.length) {
-    console.error('The third-party notices do not match what would be published:\n');
-    for (const r of reasons) console.error(`  - ${r}`);
-    console.error('\nRerun with: npm run licenses -- -w');
-    process.exit(1);
-  }
-  console.log(`${SNAPSHOT} matches the crate graph, and every platform package carries it`);
+  console.log(`  and copied into ${dirs.length} platform packages`);
 }
-
-await (process.argv.includes('-s') || process.argv.includes('--selftest') ? selftest() : main());

@@ -535,6 +535,7 @@ dependencies = [
 name = "resvg-napi"
 version = "0.9.0"
 dependencies = [
+ "convert_case",
  "imagesize",
  "log",
  "napi",

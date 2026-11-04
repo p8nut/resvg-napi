@@ -5,6 +5,7 @@
 // user units. The page supplies it, because it owns the font database.
 
 import { toValueSync } from 'liquidjs';
+import qrcode from 'qrcode-generator';
 
 const escapeXml = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -13,13 +14,73 @@ const escapeXml = (s) => String(s)
 const round = (n) => Math.round(n * 100) / 100;
 
 /**
+ * Width of a string, straight from the renderer that will draw it: the
+ * `measure` both pages hand to registerSvgFilters.
+ *
+ * @param Resvg   the binding's class (native or wasm)
+ * @param fonts   the FontDatabase the document will render with
+ * @param text    the string
+ * @param fontSize, family  defaults: 12, the database's first family
+ * @param options extra Resvg options (e.g. `languages`)
+ */
+export function measureText(Resvg, fonts, text, { fontSize = 12, family } = {}, options = {}) {
+  const fam = family ?? fonts?.faces()[0]?.families[0] ?? 'sans-serif';
+  const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
+    + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`
+    + `${escapeXml(text)}</text></svg>`;
+  try {
+    return new Resvg(probe, { ...options, fontFamily: fam }, fonts).node('m')?.extent()?.width ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * QR code as an SVG fragment, sized to whatever viewport it is dropped into.
+ *
+ * Returns a nested `<svg>` with a viewBox and `width/height="100%"`, so
+ * `<svg id="qr" x=".." y=".." width="39.68" height="39.68">{{ upn | qr | raw }}</svg>`
+ * scales it without the template having to know the module count.
+ *
+ * @param text  value to encode
+ * @param dark  colour of the modules (default black)
+ * @param light colour behind them; `#00000000` for transparent (default none)
+ * @param level error correction: L, M, Q or H (default M)
+ */
+export function qrSvg(text, dark = '#000000', light = 'none', level = 'M') {
+  const value = String(text ?? '');
+  if (!value) return '';
+
+  // typeNumber 0 = smallest version that fits the data
+  const qr = qrcode(0, level);
+  qr.addData(value);
+  qr.make();
+
+  const n = qr.getModuleCount();
+  // One path for every dark module: a single `d` beats thousands of <rect>s,
+  // and crispEdges keeps the modules square at any scale.
+  let d = '';
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      if (qr.isDark(row, col)) d += `M${col} ${row}h1v1h-1z`;
+    }
+  }
+
+  const background = light && light !== 'none'
+    ? `<rect width="${n}" height="${n}" fill="${light}"/>`
+    : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}"`
+    + ` width="100%" height="100%" shape-rendering="crispEdges">`
+    + `${background}<path d="${d}" fill="${dark}"/></svg>`;
+}
+
+/**
  * Registers the filters on a Liquid instance.
  *
  * @param liquid   the engine
  * @param measure  (text, { fontSize, family }) => width in user units
- * @param qrSvg    the QR generator, kept here so the whole vocabulary is in one place
  */
-export function registerSvgFilters(liquid, { measure, qrSvg }) {
+export function registerSvgFilters(liquid, { measure }) {
   liquid.registerFilter('qr', (value, dark, light, level) => qrSvg(value, dark, light, level));
 
   /**
@@ -102,30 +163,42 @@ export function registerSvgFilters(liquid, { measure, qrSvg }) {
     round(measure(String(value ?? ''), { fontSize: Number(fontSize) || 12, family })));
 }
 
-/** Partial names a template asks for, from the `render`/`include` tags. */
-export function referencedPartials(liquid, source) {
-  const names = new Set();
-  let templates;
-  try {
-    templates = liquid.parse(source);
-  } catch {
-    return names;
+/**
+ * Calls `fn` on every node of a parsed template, nested ones included.
+ * `source` is template text or what `liquid.parse` returned; text that does
+ * not parse visits nothing.
+ */
+export function eachNode(liquid, source, fn) {
+  let templates = source;
+  if (typeof source === 'string') {
+    try {
+      templates = liquid.parse(source);
+    } catch {
+      return;
+    }
   }
   const visit = (nodes) => {
     for (const node of nodes) {
-      if (node.name === 'render' || node.name === 'include') {
-        // A literal file name arrives already unquoted; a dynamic one
-        // (`{% render page %}`) is a Value, and only known at render time.
-        const name = typeof node.file === 'string'
-          ? node.file
-          : String(node.file?.getText?.() ?? '').trim();
-        if (name) names.add(name);
-      }
+      fn(node);
       // What liquid's own `analyze` walks: every tag lists its nested
       // templates, branches included, without our knowing their fields.
       if (node.children) visit(toValueSync(node.children(false, true)));
     }
   };
   visit(templates);
+}
+
+/** Partial names a template asks for, from the `render`/`include` tags. */
+export function referencedPartials(liquid, source) {
+  const names = new Set();
+  eachNode(liquid, source, (node) => {
+    if (node.name !== 'render' && node.name !== 'include') return;
+    // A literal file name arrives already unquoted; a dynamic one
+    // (`{% render page %}`) is a Value, and only known at render time.
+    const name = typeof node.file === 'string'
+      ? node.file
+      : String(node.file?.getText?.() ?? '').trim();
+    if (name) names.add(name);
+  });
   return names;
 }

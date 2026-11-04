@@ -1,8 +1,7 @@
 // The log collector: usvg and resvg report recoverable problems through the
 // `log` crate, and nothing consumed it before.
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-const { Resvg, setLogLevel, takeLogs } = createRequire(import.meta.url)('../index.js');
+import { Resvg, setLogLevel, takeLogs } from '../index.js';
 
 const messy = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="50" height="50">
   <rect width="10" height="10" fill="notacolour"/>
@@ -49,7 +48,7 @@ const bounded = takeLogs();
 assert.ok(bounded.length > 100, `the document did produce warnings, got ${bounded.length}`);
 assert.equal(bounded.length, 500, 'capped at exactly 500, not merely under it');
 // ...and says so: without a marker, 500 lines read as everything there was.
-assert.match(bounded.at(-1), /^WARN resvg-napi: log buffer full .*dropped$/, 'truncation is marked');
+assert.match(bounded.at(-1), /^WARN napi_support::logs: log buffer full .*dropped$/, 'truncation is marked');
 assert.ok(!bounded.slice(0, -1).some((l) => /buffer full/.test(l)), 'one marker, last');
 {
   // a document's own buffer: parse and render each fill a thread sink that is
@@ -111,5 +110,3 @@ takeLogs();
   assert.ok(all.some((l) => l.includes("'colour-a'")) && all.some((l) => l.includes("'colour-b'")));
 }
 setLogLevel('off');
-
-console.log('ok — log collection: all checks passed');

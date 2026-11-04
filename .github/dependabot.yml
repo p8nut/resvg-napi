@@ -1,9 +1,9 @@
 # Only what nothing else watches. The actions are pinned to major tags and would
 # otherwise sit on v7 forever, and the dev dependencies rot quietly. Cargo is
 # left out on purpose: .github/workflows/resvg.yml asks upstream every day
-# whether the resvg version moved, and the `pins` job in CI.yml fails when the
-# emnapi and napi-build pins in Cargo.toml stop being necessary. Dependabot has
-# no way to know that and would only propose breaking them.
+# whether the resvg version moved, with the conformance run a bump needs, and
+# CI.yml's daily `lock` job reports a stale Cargo.lock and says when the flate2
+# hold can go. Dependabot knows neither and would only propose breaking them.
 version: 2
 updates:
   - package-ecosystem: github-actions

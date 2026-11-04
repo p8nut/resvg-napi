@@ -1,17 +1,15 @@
 // What `npm publish` would ship, checked without publishing.
 //
 // npm omits a file listed in `files[]` that is not on disk, silently -- so a
-// platform package whose binary never arrived publishes as a README and a
-// manifest, and the failure only shows up when someone installs it. The publish
-// job runs `napi artifacts` to place those binaries; nothing verified that it
-// worked, because that job only ever runs on a `v*` tag.
-//
-// `--selftest` exercises the decision offline; the real run needs `npm pack`.
+// package whose file never arrived publishes without it, and the failure only
+// shows up when someone installs it. This checks the root tarball, and the
+// manifests of every package. The platform packages' binaries are `napi
+// pre-publish --dry-run`'s to check: CI runs it after `napi artifacts`, on the
+// runs that build all thirteen.
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { npmName } from './lib/project.mjs';
 
 /** A `files[]` entry naming one concrete file, not a pattern. */
 const isLiteral = (entry) => !/[*?[\]{}]/.test(entry) && !entry.endsWith('/');
@@ -20,27 +18,20 @@ const isLiteral = (entry) => !/[*?[\]{}]/.test(entry) && !entry.endsWith('/');
 const RUST = /^(Cargo\.(toml|lock)|build\.rs|src\/)/;
 
 /**
- * @param {{name: string, promised: string[], shipped: string[], root: boolean}[]} pkgs
+ * The root package: every literal files[] entry in the tarball, and no Rust.
+ *
+ * @param {{name: string, promised: string[], shipped: string[]}} pkg
  * @returns {string[]} what is wrong, empty when nothing is
  */
-export function assess(pkgs) {
+export function assess({ name, promised, shipped }) {
   const reasons = [];
-  for (const { name, promised, shipped, root } of pkgs) {
-    for (const entry of promised.filter(isLiteral)) {
-      if (!shipped.includes(entry)) {
-        reasons.push(`${name} promises ${entry} in files[] but the tarball has no such path`);
-      }
-    }
-    if (shipped.length === 0) {
-      reasons.push(`${name} would publish an empty tarball`);
-    }
-    if (root) {
-      const rust = shipped.filter((f) => RUST.test(f));
-      if (rust.length) {
-        reasons.push(`${name} ships Rust sources: ${rust.join(', ')}`);
-      }
+  for (const entry of promised.filter(isLiteral)) {
+    if (!shipped.includes(entry)) {
+      reasons.push(`${name} promises ${entry} in files[] but the tarball has no such path`);
     }
   }
+  const rust = shipped.filter((f) => RUST.test(f));
+  if (rust.length) reasons.push(`${name} ships Rust sources: ${rust.join(', ')}`);
   return reasons;
 }
 
@@ -119,10 +110,10 @@ export function mismatched(version, pinned, platforms) {
  * and `@napi-rs/wasm-runtime`, which track upstream and have no business
  * matching our version.
  *
- * @param {{optionalDependencies?: Record<string,string>, peerDependencies?: Record<string,string>, dependencies?: Record<string,string>}} manifest
+ * @param {{name: string, optionalDependencies?: Record<string,string>, peerDependencies?: Record<string,string>, dependencies?: Record<string,string>}} manifest
  */
 export function familyPins(manifest) {
-  const family = (m) => Object.entries(m ?? {}).filter(([name]) => name.startsWith(npmName));
+  const family = (m) => Object.entries(m ?? {}).filter(([name]) => name.startsWith(manifest.name));
   return Object.fromEntries([
     ...family(manifest.optionalDependencies),
     ...family(manifest.peerDependencies),
@@ -167,143 +158,31 @@ function pack(dir) {
   return JSON.parse(out)[0].files.map((f) => f.path);
 }
 
-// `--root-only` checks the root package and nothing else. A slim CI run holds
-// two of the thirteen platform binaries, so the per-platform half would report
-// eleven absences that are not faults -- while the half that matters, the
-// files[] entries npm drops in silence, still runs.
-function collect(rootOnly = false) {
-  const read = (d) => JSON.parse(readFileSync(join(d, 'package.json'), 'utf8'));
-  const pkgs = [{ name: read('.').name, promised: read('.').files ?? [], shipped: pack('.'), root: true }];
-  if (rootOnly) return pkgs;
-  for (const d of readdirSync('npm')) {
-    const dir = join('npm', d);
-    if (!existsSync(join(dir, 'package.json'))) continue;
-    const m = read(dir);
-    pkgs.push({ name: m.name, promised: m.files ?? [], shipped: pack(dir), root: false });
-  }
-  return pkgs;
-}
-
-async function selftest() {
-  const assert = (await import('node:assert/strict')).default;
-
-  assert.deepEqual(
-    assess([{ name: 'a', promised: ['x.node'], shipped: ['x.node', 'package.json'], root: false }]),
-    [],
-    'a promise the tarball keeps is fine',
-  );
-
-  const missing = assess([
-    { name: 'a', promised: ['x.node'], shipped: ['README.md', 'package.json'], root: false },
-  ]);
-  assert.equal(missing.length, 1);
-  assert.match(missing[0], /promises x\.node/);
-
-  const empty = assess([{ name: 'a', promised: [], shipped: [], root: false }]);
-  assert.equal(empty.length, 1);
-  assert.match(empty[0], /empty tarball/);
-
-  const rusty = assess([
-    { name: 'r', promised: [], shipped: ['index.js', 'src/lib.rs', 'build.rs'], root: true },
-  ]);
-  assert.equal(rusty.length, 1);
-  assert.match(rusty[0], /src\/lib\.rs, build\.rs/);
-
-  // Rust in a platform package is not checked -- only the root claims to be
-  // source-free, and this is the rule that says so.
-  assert.deepEqual(
-    assess([{ name: 'p', promised: [], shipped: ['build.rs'], root: false }]),
-    [],
-  );
-
-  // a glob is not a promise about one path
-  assert.deepEqual(
-    assess([{ name: 'g', promised: ['*.node', 'dist/'], shipped: ['package.json'], root: false }]),
-    [],
-  );
-
-  // the invariant that would have caught the wasm package being put back
-  // without its gate
-  assert.deepEqual(unconstrained({ a: '1' }, { a: { os: ['linux'], cpu: ['x64'] } }), []);
-  // cpu wasm32 with no os is the gate napi CLI 3.10.11 restored: constrained
-  assert.deepEqual(unconstrained({ w: '1' }, { w: { name: 'w', cpu: ['wasm32'] } }), []);
-  assert.deepEqual(unconstrained({ a: '1' }, { a: { os: ['linux'] } }), []);
-  assert.deepEqual(unconstrained({ a: '1' }, { a: { cpu: ['x64'] } }), []);
-  const loose = unconstrained({ w: '1' }, { w: { name: 'w' } });
-  assert.equal(loose.length, 1);
-  assert.match(loose[0], /installs it everywhere/);
-  // a dependency with no platform package of its own is somebody else's problem
-  assert.deepEqual(unconstrained({ pngjs: '1' }, {}), []);
-  const full = { author: 'a', license: 'b', repository: 'c', homepage: 'd', bugs: 'e' };
-  assert.deepEqual(anonymous([{ name: 'p', manifest: full }]), []);
-  const { author, ...noAuthor } = full;
-  const one = anonymous([{ name: 'p', manifest: noAuthor }]);
-  assert.equal(one.length, 1);
-  assert.match(one[0], /p declares no author/);
-  // every field named at once, not one complaint per field
-  const none = anonymous([{ name: 'p', manifest: {} }]);
-  assert.equal(none.length, 1);
-  assert.match(none[0], /author, license, repository, homepage, bugs/);
-  assert.deepEqual(mismatched('1.0.0', { a: '1.0.0' }, { a: { version: '1.0.0' } }), []);
-  const stale = mismatched('0.1.1', { a: '0.1.0' }, { a: { version: '0.1.1' } });
-  assert.equal(stale.length, 1);
-  assert.match(stale[0], /a is pinned at 0\.1\.0, but this package is 0\.1\.1/);
-  const behind = mismatched('0.1.1', { a: '0.1.1' }, { a: { version: '0.1.0' } });
-  assert.equal(behind.length, 1);
-  assert.match(behind[0], /a is 0\.1\.0, but the root is 0\.1\.1/);
-  // exactly what `npm version patch` leaves behind: manifests bumped, pins not
-  // What the 0.3.1 tag died on: the wasm package left on the previous emnapi.
-  assert.equal(wasiDeps({ '@emnapi/core': '1.11.3' }, { '@emnapi/core': '1.11.2' }).length, 1);
-  assert.deepEqual(wasiDeps({ '@emnapi/core': '1.11.3' }, { '@emnapi/core': '1.11.3' }), []);
-  // A tilde and an exact pin name the same version; only the version counts.
-  assert.deepEqual(wasiDeps({ '@napi-rs/wasm-runtime': '1.2.4' }, { '@napi-rs/wasm-runtime': '~1.2.4' }), []);
-  // A dependency the root does not share is the wasm package's own business.
-  assert.deepEqual(wasiDeps({}, { '@tybys/wasm-util': '0.10.3' }), []);
-
-  // The peer pin 0.3.0 shipped with: named in another map, and left behind.
-  const peer = mismatched('0.3.0', familyPins({
-    optionalDependencies: { 'resvg-napi-linux-x64-gnu': '0.3.0' },
-    peerDependencies: { 'resvg-napi-wasm32-wasi': '0.2.0' },
-  }), {});
-  assert.equal(peer.length, 1, 'a stale peer pin is a mismatch');
-  assert.match(peer[0], /resvg-napi-wasm32-wasi/);
-  // Upstream dependencies track upstream: they are not ours to match.
-  assert.deepEqual(familyPins({ dependencies: { '@emnapi/core': '1.11.3' } }), {});
-
-  assert.equal(mismatched('0.1.1', { a: '0.1.0', b: '0.1.0' },
-    { a: { version: '0.1.1' }, b: { version: '0.1.1' } }).length, 2);
-  console.log('ok — check-package: 34 checks passed');
-}
-
-async function main() {
-  const rootOnly = process.argv.includes('--root-only');
-  const pkgs = collect(rootOnly);
+if (import.meta.main) {
+  const root = JSON.parse(readFileSync('package.json', 'utf8'));
+  const shipped = pack('.');
   const platforms = Object.fromEntries(readdirSync('npm')
     .filter((d) => existsSync(join('npm', d, 'package.json')))
     .map((d) => {
       const m = JSON.parse(readFileSync(join('npm', d, 'package.json'), 'utf8'));
       return [m.name, m];
     }));
-  const root = JSON.parse(readFileSync('package.json', 'utf8'));
-  const loose = unconstrained(root.optionalDependencies ?? {}, platforms);
-  const drift = mismatched(root.version, familyPins(root), platforms);
-  const wasi = platforms[`${npmName}-wasm32-wasi`];
-  const shared = wasi ? wasiDeps(root.dependencies, wasi.dependencies) : [];
-  const bare = anonymous([
-    { name: root.name, manifest: root },
-    ...(rootOnly ? [] : Object.entries(platforms).map(([name, manifest]) => ({ name, manifest }))),
-  ]);
-  if (rootOnly) console.log('  (root package only -- not every platform binary is present)');
-  const reasons = [...assess(pkgs), ...loose, ...bare, ...drift, ...shared];
-  for (const p of pkgs) {
-    console.log(`  ${p.name.padEnd(30)} ${p.shipped.length} file(s)`);
-  }
+  const wasi = platforms[`${root.name}-wasm32-wasi`];
+  const reasons = [
+    ...assess({ name: root.name, promised: root.files ?? [], shipped }),
+    ...unconstrained(root.optionalDependencies ?? {}, platforms),
+    ...anonymous([
+      { name: root.name, manifest: root },
+      ...Object.entries(platforms).map(([name, manifest]) => ({ name, manifest })),
+    ]),
+    ...mismatched(root.version, familyPins(root), platforms),
+    ...(wasi ? wasiDeps(root.dependencies, wasi.dependencies) : []),
+  ];
+  console.log(`  ${root.name}: ${shipped.length} file(s); ${Object.keys(platforms).length} platform manifests`);
   if (reasons.length) {
     console.error('\nWhat would be published is wrong:\n');
     for (const r of reasons) console.error(`  - ${r}`);
     process.exit(1);
   }
-  console.log(`\n${pkgs.length} packages, every files[] promise kept`);
+  console.log('every files[] promise kept, every manifest in step');
 }
-
-await (process.argv.includes('--selftest') ? selftest() : main());

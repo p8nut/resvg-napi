@@ -15,9 +15,10 @@ await copyFile(join(root, 'resvg-napi.wasm32-wasi.wasm'),
   join(here, 'resvg-napi.wasm32-wasi.wasm'));
 
 // The loader and its worker are the generated shims; liquid-entry pulls in
-// liquidjs, the SVG filters and the QR generator.
-for (const [entry, out] of [
-  ['resvg-napi.wasi-browser.js', 'resvg.js'],
+// liquidjs, the SVG filters and the QR generator. The loader carries the
+// Buffer polyfill, so no page has to install it before importing.
+for (const [entry, out, inject = []] of [
+  ['resvg-napi.wasi-browser.js', 'resvg.js', [join(here, 'buffer-shim.mjs')]],
   ['wasi-worker-browser.mjs', 'wasi-worker-browser.mjs'],
   ['demo/liquid-entry.mjs', 'liquid.js'],
 ]) {
@@ -26,6 +27,7 @@ for (const [entry, out] of [
     outfile: join(here, out),
     bundle: true,
     format: 'esm',
+    inject,
   });
 }
 

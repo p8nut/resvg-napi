@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
 use crate::config::*;
-use crate::sources::is_pub;
+use crate::sources::{is_pub, self_ident};
 
 /// Normalised textual form of a type, e.g. `Option<std::path::PathBuf>`.
 pub fn ty_str(ty: &Type) -> String {
@@ -916,7 +916,7 @@ pub fn deref_target(files: &[syn::File], ty: &str) -> Option<String> {
             .segments
             .last()
             .is_some_and(|s| s.ident == "Deref")
-            || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty)
+            || !self_ident(imp).is_some_and(|id| id == ty)
         {
             return None;
         }

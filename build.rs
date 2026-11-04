@@ -200,13 +200,8 @@ fn main() {
         // shares a name between usvg and fontdb today; tiny-skia would bring
         // nine at once, `Color` and `Paint` among them.
         for f in sources.iter().flat_map(|s| s.files.iter()) {
-            for item in &f.items {
-                let name = match item {
-                    Item::Struct(st) if is_pub(&st.vis) => st.ident.to_string(),
-                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
-                    _ => continue,
-                };
-                *seen.entry(name).or_default() += 1;
+            for id in f.items.iter().filter_map(item_ident) {
+                *seen.entry(id.to_string()).or_default() += 1;
             }
         }
         seen.into_iter()

@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use syn::{Item, Visibility};
+use syn::{Ident, Item, ItemImpl, Visibility};
 
 /// Exact versions picked by the resolver, straight out of our own Cargo.lock.
 /// Cheap hand-rolled scan: no serde/toml build-dependency needed. A crate in
@@ -107,6 +107,24 @@ pub fn is_pub(vis: &Visibility) -> bool {
     matches!(vis, Visibility::Public(_))
 }
 
+/// Every inherent impl of `ty`, named by its last path segment.
+pub fn inherent_impls<'a>(
+    files: &'a [syn::File],
+    ty: &'a str,
+) -> impl Iterator<Item = &'a ItemImpl> {
+    files
+        .iter()
+        .flat_map(|f| &f.items)
+        .filter_map(move |i| match i {
+            Item::Impl(imp)
+                if imp.trait_.is_none() && self_ident(imp).is_some_and(|id| id == ty) =>
+            {
+                Some(imp)
+            }
+            _ => None,
+        })
+}
+
 /// Renames a kept item to the name the crate root exports it under, so what is
 /// parsed downstream is what a caller of the crate can actually write.
 fn rename(item: &mut Item, from: &str, to: &str) {
@@ -130,18 +148,32 @@ fn rename(item: &mut Item, from: &str, to: &str) {
     }
 }
 
+/// The name a `pub` struct, enum or type alias declares.
+pub fn item_ident(item: &Item) -> Option<&Ident> {
+    match item {
+        Item::Struct(s) if is_pub(&s.vis) => Some(&s.ident),
+        Item::Enum(e) if is_pub(&e.vis) => Some(&e.ident),
+        Item::Type(t) if is_pub(&t.vis) => Some(&t.ident),
+        _ => None,
+    }
+}
+
+/// The type an impl block is for, by its last path segment: upstream writes
+/// `impl crate::Tree` as well as `impl Tree`.
+pub fn self_ident(imp: &ItemImpl) -> Option<&Ident> {
+    match &*imp.self_ty {
+        syn::Type::Path(p) => p.path.segments.last().map(|s| &s.ident),
+        _ => None,
+    }
+}
+
 /// The name an item declares, when it declares one this generator cares about.
 fn declared(item: &Item) -> Option<String> {
-    Some(match item {
-        Item::Struct(st) => st.ident.to_string(),
-        Item::Enum(e) => e.ident.to_string(),
-        Item::Type(t) => t.ident.to_string(),
-        Item::Impl(im) => match &*im.self_ty {
-            syn::Type::Path(p) => p.path.segments.last()?.ident.to_string(),
-            _ => return None,
-        },
-        _ => return None,
-    })
+    match item {
+        Item::Impl(im) => self_ident(im),
+        _ => item_ident(item),
+    }
+    .map(ToString::to_string)
 }
 
 /// Every `.rs` under a crate's `src`, parsed. `ModTree` then decides which of
@@ -297,18 +329,6 @@ impl ModTree {
             }
             for item in &f.items {
                 match item {
-                    Item::Struct(s) if is_pub(&s.vis) => out.push((
-                        s.ident.to_string(),
-                        Target::Type(m.to_vec(), s.ident.to_string()),
-                    )),
-                    Item::Enum(e) if is_pub(&e.vis) => out.push((
-                        e.ident.to_string(),
-                        Target::Type(m.to_vec(), e.ident.to_string()),
-                    )),
-                    Item::Type(t) if is_pub(&t.vis) => out.push((
-                        t.ident.to_string(),
-                        Target::Type(m.to_vec(), t.ident.to_string()),
-                    )),
                     Item::Mod(md) if is_pub(&md.vis) && md.content.is_none() => {
                         let mut p = m.to_vec();
                         p.push(md.ident.to_string());
@@ -356,7 +376,11 @@ impl ModTree {
                             }
                         }
                     }
-                    _ => {}
+                    _ => {
+                        if let Some(id) = item_ident(item) {
+                            out.push((id.to_string(), Target::Type(m.to_vec(), id.to_string())));
+                        }
+                    }
                 }
             }
             out
@@ -409,11 +433,8 @@ impl ModTree {
                 continue;
             };
             for item in &f.items {
-                let name = match item {
-                    Item::Struct(s) if is_pub(&s.vis) => s.ident.to_string(),
-                    Item::Enum(e) if is_pub(&e.vis) => e.ident.to_string(),
-                    Item::Type(t) if is_pub(&t.vis) => t.ident.to_string(),
-                    _ => continue,
+                let Some(name) = item_ident(item).map(ToString::to_string) else {
+                    continue;
                 };
                 if let Some(to) = renames.get(&(module.clone(), name.clone())) {
                     renamed.insert((file.clone(), name.clone()), to.clone());
@@ -467,17 +488,12 @@ impl ModTree {
             })
             .map(|(p, f)| {
                 let mut f = f.clone();
-                f.items.retain(|item| {
-                    let name = match item {
-                        Item::Struct(s) => s.ident.to_string(),
-                        Item::Enum(e) => e.ident.to_string(),
-                        Item::Type(t) => t.ident.to_string(),
-                        Item::Impl(_) => {
-                            return declared(item).is_none_or(|n| !hidden.contains(n.as_str()));
-                        }
-                        _ => return true,
-                    };
-                    !self.private.contains(&(p.clone(), name))
+                // Only `pub` types are ever private-listed, so a type that
+                // is not `pub` stays as well.
+                f.items.retain(|item| match item {
+                    Item::Impl(_) => declared(item).is_none_or(|n| !hidden.contains(n.as_str())),
+                    _ => item_ident(item)
+                        .is_none_or(|n| !self.private.contains(&(p.clone(), n.to_string()))),
                 });
                 // Under the name the export gives it, so what is parsed is what
                 // a caller of the crate can write: `Stretch`, not `Width`.

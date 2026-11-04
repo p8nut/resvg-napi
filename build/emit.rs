@@ -16,7 +16,7 @@ use std::env;
 use syn::{Fields, ImplItem, Item, ReturnType};
 
 use crate::config::*;
-use crate::sources::is_pub;
+use crate::sources::{inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
 pub struct Field {
@@ -819,11 +819,7 @@ pub fn data_members(
     // Accessors first so a name they share with a field resolves to the
     // accessor, which is the one upstream means to be read.
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for item in files.iter().flat_map(|f| &f.items) {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty) {
-            continue;
-        }
+    for imp in inherent_impls(files, ty) {
         for it in &imp.items {
             let ImplItem::Fn(f) = it else { continue };
             if !is_pub(&f.vis) || f.sig.inputs.len() != 1 {
@@ -1042,19 +1038,15 @@ pub fn wrapper_class(
     }
     // A def that owns a content group gets a node view over it, derived from the
     // presence of `root() -> &Group`.
-    let owns_group = files.iter().flat_map(|f| &f.items).any(|i| {
-        let Item::Impl(imp) = i else { return false };
-        imp.trait_.is_none()
-            && ty_str(&imp.self_ty).rsplit("::").next()
-                == Some(ty.rsplit("::").next().unwrap_or(ty))
-            && imp.items.iter().any(|it| match it {
-                ImplItem::Fn(f) => {
-                    is_pub(&f.vis)
-                        && f.sig.ident == "root"
-                        && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "&Group")
-                }
-                _ => false,
-            })
+    let owns_group = inherent_impls(files, bare(ty)).any(|imp| {
+        imp.items.iter().any(|it| match it {
+            ImplItem::Fn(f) => {
+                is_pub(&f.vis)
+                    && f.sig.ident == "root"
+                    && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "&Group")
+            }
+            _ => false,
+        })
     });
     let content = if owns_group {
         quote! {
@@ -1153,12 +1145,7 @@ pub fn map_methods(
     let mut skipped = Vec::new();
     let mut twins = BTreeSet::new();
 
-    for item in files.iter().flat_map(|f| &f.items) {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || ty_str(&imp.self_ty).rsplit("::").next() != Some(ty) {
-            continue;
-        }
-
+    for imp in inherent_impls(files, ty) {
         for it in &imp.items {
             let ImplItem::Fn(f) = it else { continue };
             if !is_pub(&f.vis) {
@@ -1570,7 +1557,7 @@ pub fn emit_twins(twins: &[Twin]) -> TokenStream {
 pub fn guard_live(file: &mut syn::File, class: &str, open: &[&str]) {
     for item in &mut file.items {
         let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || ty_str(&imp.self_ty) != class {
+        if imp.trait_.is_some() || !self_ident(imp).is_some_and(|id| id == class) {
             continue;
         }
         for it in &mut imp.items {
@@ -1660,16 +1647,8 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     let mut out = TokenStream::new();
     for class in classes {
         let (mut getters, mut methods) = (Vec::new(), Vec::new());
-        let members = file
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                Item::Impl(imp) if imp.trait_.is_none() && *class == ty_str(&imp.self_ty) => {
-                    Some(imp)
-                }
-                _ => None,
-            })
-            .flat_map(|imp| &imp.items);
+        let name = class.to_string();
+        let members = inherent_impls(std::slice::from_ref(file), &name).flat_map(|imp| &imp.items);
         for it in members {
             let ImplItem::Fn(f) = it else { continue };
             let Some(attr) = f.attrs.iter().find(|a| a.path().is_ident("napi")) else {
@@ -1695,7 +1674,6 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
                 methods.push(js);
             }
         }
-        let name = class.to_string();
         out.extend(quote! {
             #[napi]
             impl #class {

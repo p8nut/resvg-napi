@@ -513,7 +513,10 @@ jobs:
       - name: flate2 hold still needed
         if: ${{ !cancelled() }}
         run: |
-          if ! cargo update -p flate2 --dry-run 2>&1 | grep -q 'Updating flate2 '; then
+          # Kept whole, so a red run shows what cargo answered.
+          out=$(cargo update -p flate2 --dry-run 2>&1)
+          echo "$out"
+          if ! printf '%s\n' "$out" | grep -q 'Updating flate2 '; then
             echo "::error::flate2 is already at its newest: the hold is gone, delete this step"; exit 1
           fi
           cargo update -p flate2 --quiet

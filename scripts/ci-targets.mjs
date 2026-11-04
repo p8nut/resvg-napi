@@ -50,7 +50,8 @@ const TARGETS = {
 const SLIM = ['x86_64-unknown-linux-gnu', 'wasm32-wasip1-threads'];
 
 const TESTS = [
-  { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 20 },
+  // The engines floor exactly, not the latest 20.x: napi9 needs 20.3.
+  { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: '20.3.0' },
   { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 22 },
   { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 24 },
   { target: 'aarch64-apple-darwin', host: 'macos-latest', node: 22 },

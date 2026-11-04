@@ -16,6 +16,13 @@ use quote::quote;
 /// The fragments the passes produce. Grouped so `template` keeps a short
 /// signature: these are the same on both of its calls, while the four method
 /// lists are not.
+///
+/// `Default` (every fragment empty) is for probing the template's own body.
+/// What the pruner needs from it -- which generated types it names -- is
+/// written in the template itself, never in what gets interpolated, so the
+/// fragments can be blank. Same double-build trick `template_fns` uses to read
+/// the method names off it.
+#[derive(Default)]
 pub struct Fragments<'a> {
     pub enums: TokenStream,
     pub object_code: TokenStream,
@@ -24,25 +31,6 @@ pub struct Fragments<'a> {
     pub assigns: Vec<&'a TokenStream>,
     pub write_decls: Vec<&'a TokenStream>,
     pub write_assigns: Vec<&'a TokenStream>,
-}
-
-impl Fragments<'_> {
-    /// Every fragment empty, for probing the template's own body. What the
-    /// pruner needs from it -- which generated types it names -- is written in
-    /// the template itself, never in what gets interpolated, so the fragments
-    /// can be blank. Same double-build trick `template_fns` uses to read the
-    /// method names off it.
-    pub fn probe() -> Fragments<'static> {
-        Fragments {
-            enums: TokenStream::new(),
-            object_code: TokenStream::new(),
-            wrapper_code: TokenStream::new(),
-            decls: Vec::new(),
-            assigns: Vec::new(),
-            write_decls: Vec::new(),
-            write_assigns: Vec::new(),
-        }
-    }
 }
 
 /// The hand-written half of the binding: everything the passes cannot derive.
@@ -177,6 +165,23 @@ pub fn template(
         #[derive(Default, Clone)]
         struct Misses(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
 
+        impl Misses {
+            #[doc = " Records `name`, once: a `<use>` of an image resolves it again."]
+            #[doc = " Poison-tolerant: this mutex only accumulates diagnostics, so a"]
+            #[doc = " panic elsewhere must not take the render down with it."]
+            fn note(&self, name: &str) {
+                let mut seen = self.0.lock().unwrap_or_else(|e| e.into_inner());
+                if !seen.iter().any(|s| s == name) {
+                    seen.push(name.to_string());
+                }
+            }
+
+            #[doc = " Drains what was recorded."]
+            fn take(&self) -> std::sync::Arc<[String]> {
+                std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner())).into()
+            }
+        }
+
         #[doc = " `usvg::ImageHrefResolver` demands `Send + Sync`, so a JS callback cannot"]
         #[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
         #[doc = " unresolved is reported back to JS for a second pass."]
@@ -220,14 +225,7 @@ pub fn template(
                         }
                     }
                     // 3. give up, but tell JS about it
-                    // Poison-tolerant: this mutex only accumulates
-                    // diagnostics, so a panic elsewhere must not take the
-                    // render down with it.
-                    // Once per href: a `<use>` of an image resolves it again.
-                    let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
-                    if !seen.iter().any(|h| h == href) {
-                        seen.push(href.to_string());
-                    }
+                    misses.note(href);
                     None
                 }),
             }
@@ -647,10 +645,7 @@ pub fn template(
                                 f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
                             });
                             if !known {
-                                let mut seen = misses.0.lock().unwrap_or_else(|e| e.into_inner());
-                                if !seen.iter().any(|s| s == name) {
-                                    seen.push(name.clone());
-                                }
+                                misses.note(name);
                             }
                         }
                         select(font, db)
@@ -1564,8 +1559,8 @@ pub fn template(
                 };
                 Ok(Ok((
                     tree,
-                    std::mem::take(&mut *missing_images.0.lock().unwrap_or_else(|e| e.into_inner())).into(),
-                    std::mem::take(&mut *missing_fonts.0.lock().unwrap_or_else(|e| e.into_inner())).into(),
+                    missing_images.take(),
+                    missing_fonts.take(),
                 )))
             }
 

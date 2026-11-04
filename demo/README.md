@@ -163,7 +163,8 @@ templated document can be previewed:
   1.1 will not do for you (place the block with a `transform` — a tspan's `x` is
   absolute); `sparkline: w, h` turns an array of numbers into a `points`
   attribute; `measure: size` returns the width itself. They live in
-  `svg-filters.mjs`, next to the `memoryFs` and the partial scanner.
+  `svg-filters.mjs`, next to the partial scanner. Partials the page holds go
+  through liquid's own `templates` option, by the exact name the tag uses.
 - `{{ upn | qr: '#ffffff', '#00000000' | raw }}` generates a real QR code, as SVG:
   `qrSvg()` in `liquid-entry.mjs` encodes with `qrcode-generator` and emits
   one `<path>` for the dark modules inside a nested `<svg viewBox="0 0 n n"

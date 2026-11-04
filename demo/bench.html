@@ -397,13 +397,14 @@
   }
   globalThis.Buffer ??= BufferPolyfill;
 
-  const { Liquid, qrSvg, fitTextWidths, registerSvgFilters, memoryFs, referencedPartials }
+  const { Liquid, qrSvg, fitTextWidths, registerSvgFilters, referencedPartials }
     = await import('./liquid.js');
 
   // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
-  // filesystem. Dropped `.liquid` files land here, and so do `.svg` files the
-  // template actually renders.
-  const partials = new Map();
+  // filesystem: liquid's `templates` option reads this object on every lookup.
+  // Dropped `.liquid` files land here, and so do `.svg` files the template
+  // actually renders. Names are as written: `./badge.svg` is another name.
+  const partials = {};
 
   // Measuring is a render: the filters that need a width ask the engine.
   const measureText = (text, { fontSize = 12, family } = {}) => {
@@ -430,7 +431,7 @@
       // getElementById, not the `$` helper: this runs during module evaluation,
       // above where `$` is declared.
       strictVariables: document.getElementById('strict')?.checked ?? false,
-      fs: memoryFs(partials),
+      templates: partials,
       // Output lands inside XML: every `{{ }}` is escaped, and a filter that
       // returns markup (`qr`, `wrap`) is piped through `raw` in the template.
       outputEscape: 'escape',
@@ -1178,7 +1179,7 @@
     const needAnyFont = hasText && fonts.len() === 0;
     const missingImages = doc.pendingImages();
     const missingPartials = [...referencedPartials(liquid, $('svg').value)]
-      .filter((name) => !partials.has(name));
+      .filter((name) => !Object.hasOwn(partials, name));
 
     // fonts
     const wantFonts = missingFonts.length > 0 || needAnyFont;
@@ -1294,7 +1295,7 @@
     const imageFiles = files.filter((f) => !isFont(f) && !isPartial(f));
 
     for (const file of partialFiles) {
-      partials.set(file.name, await file.text());
+      partials[file.name] = await file.text();
     }
 
     for (const file of fontFiles) {
@@ -1486,7 +1487,7 @@
     // Fragments the template renders, fetched from the same directory.
     for (const partial of referencedPartials(liquid, src)) {
       const res = await fetch(`./examples/${partial}`);
-      if (res.ok) partials.set(partial, await res.text());
+      if (res.ok) partials[partial] = await res.text();
     }
 
     // `<template>.json` holds the sample data, one field per key.

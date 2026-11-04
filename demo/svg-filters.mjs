@@ -4,6 +4,8 @@
 // `measure(text, { fontSize, family })` returns the width the string occupies in
 // user units. The page supplies it, because it owns the font database.
 
+import { toValueSync } from 'liquidjs';
+
 const escapeXml = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
@@ -100,28 +102,6 @@ export function registerSvgFilters(liquid, { measure, qrSvg }) {
     round(measure(String(value ?? ''), { fontSize: Number(fontSize) || 12, family })));
 }
 
-/**
- * A filesystem over a Map, so `{% render "badge.svg" %}` works with fragments
- * the page holds in memory rather than files on disk.
- */
-export function memoryFs(partials) {
-  const read = (file) => {
-    const key = String(file).replace(/^\.?\//, '');
-    if (!partials.has(key)) throw new Error(`partial not loaded: ${key}`);
-    return partials.get(key);
-  };
-  const has = (file) => partials.has(String(file).replace(/^\.?\//, ''));
-  return {
-    sep: '/',
-    resolve: (_dir, file) => file,
-    dirname: (file) => file,
-    readFileSync: read,
-    existsSync: has,
-    readFile: async (file) => read(file),
-    exists: async (file) => has(file),
-  };
-}
-
 /** Partial names a template asks for, from the `render`/`include` tags. */
 export function referencedPartials(liquid, source) {
   const names = new Set();
@@ -131,10 +111,9 @@ export function referencedPartials(liquid, source) {
   } catch {
     return names;
   }
-  const visit = (nodes, depth = 0) => {
-    if (!Array.isArray(nodes) || depth > 6) return;
+  const visit = (nodes) => {
     for (const node of nodes) {
-      if (node?.name === 'render' || node?.name === 'include') {
+      if (node.name === 'render' || node.name === 'include') {
         // A literal file name arrives already unquoted; a dynamic one
         // (`{% render page %}`) is a Value, and only known at render time.
         const name = typeof node.file === 'string'
@@ -142,9 +121,9 @@ export function referencedPartials(liquid, source) {
           : String(node.file?.getText?.() ?? '').trim();
         if (name) names.add(name);
       }
-      visit(node?.templates, depth + 1);
-      visit(node?.elseTemplates, depth + 1);
-      for (const branch of node?.branches ?? []) visit(branch?.templates, depth + 1);
+      // What liquid's own `analyze` walks: every tag lists its nested
+      // templates, branches included, without our knowing their fields.
+      if (node.children) visit(toValueSync(node.children(false, true)));
     }
   };
   visit(templates);

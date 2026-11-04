@@ -233,7 +233,7 @@ Copyright (c) 2019 Fontations Developers
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 The Servo Project Developers
 
-### svgtypes 0.16.1
+### svgtypes 0.16.2
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2018 Yevhenii Reizner
 

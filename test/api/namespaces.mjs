@@ -1,16 +1,15 @@
-// The second surface: one namespace per crate (`usvg.*`, `fontdb.*`,
-// `tiny_skia.*`, `svgtypes.*`, `resvg.*`, and the hand-written `guard.*`), Rust
-// names, beside the flat exports it will replace. This checks its shape
-// against index.d.ts: every class, enum and function declared is there at
-// runtime, under its Rust name, with the members declared. What they do is for render.mjs, errors.mjs and
-// conversions.mjs beside it.
+// The surface: one namespace per crate (`usvg.*`, `fontdb.*`, `tiny_skia.*`,
+// `svgtypes.*`, `resvg.*`, and the hand-written `guard.*`), Rust names, and
+// nothing at the root but the global logs. This checks its shape against
+// index.d.ts: every class, enum and function declared is there at runtime,
+// under its Rust name, with the members declared. What they do is for
+// render.mjs, errors.mjs and conversions.mjs beside it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import binding from '../../index.js';
 import { inspect } from 'node:util';
 import { declarations } from '../../scripts/api-diff.mjs';
-import { testFonts } from '../support.mjs';
 
 const dts = declarations(readFileSync(new URL('../../index.d.ts', import.meta.url), 'utf8'));
 const NAMESPACES = ['usvg', 'fontdb', 'tiny_skia', 'svgtypes', 'resvg', 'guard'];
@@ -66,15 +65,20 @@ test('every class, enum and function declared is there, under its Rust name', ()
   }
 });
 
-test('the Rust names, not the flat surface\'s renames', () => {
+test('the Rust names, and nothing else at the root', () => {
   const { fontdb, usvg } = binding;
   assert.equal(typeof fontdb.FaceInfo, 'function', 'fontdb.FaceInfo, not FontFace');
   assert.equal(fontdb.FontFace, undefined);
   assert.equal(typeof fontdb.Style, 'object', 'fontdb.Style, not FontFaceStyle');
   assert.equal(fontdb.FontFaceStyle, undefined);
   assert.equal(typeof fontdb.Database, 'function', 'fontdb.Database, not FontDatabase');
-  assert.deepEqual({ ...fontdb.Style }, { ...binding.FontFaceStyle });
-  assert.deepEqual({ ...usvg.BlendMode }, { ...binding.BlendMode });
+  assert.deepEqual({ ...fontdb.Style }, { Normal: 'normal', Italic: 'italic', Oblique: 'oblique' });
+  // The 0.9 flat surface is gone: the root holds the namespaces and the
+  // global log functions only.
+  assert.deepEqual(
+    Object.keys(binding).filter((k) => !k.startsWith('__')).sort(),
+    [...NAMESPACES, 'setLogLevel', 'takeLogs'].sort(),
+  );
   // The crate prefix is the Rust identifier only. napi still declares it as a
   // type alias of the class (`fontdb.FontdbDatabase`), never as a value.
   for (const ns of NAMESPACES) {
@@ -96,19 +100,6 @@ const USVG_CLASSES = [
   'ImageKindWebp', 'LinearGradient', 'Mask', 'Pattern', 'PositionedGlyph', 'RadialGradient',
   'Span', 'Text', 'TextChunk', 'TextSpan',
 ];
-
-test('no namespaced class shares a name with a flat one', () => {
-  // napi registers one constructor per class name, namespace or not: a
-  // second class of the same name would hand out instances of the first.
-  for (const ns of NAMESPACES) {
-    for (const [name] of declared(ns).classes) {
-      assert.equal(binding[name], undefined, `${ns}.${name} beside a flat ${name}`);
-    }
-  }
-  const db = new binding.FontDatabase();
-  assert.ok(db instanceof binding.FontDatabase, 'the flat classes are unchanged');
-  assert.ok(!(db instanceof binding.fontdb.Database));
-});
 
 test('the usvg classes are namespaced, with no flat copy left', () => {
   const { classes } = declared('usvg');
@@ -139,7 +130,7 @@ test('fontdb.Database: Rust methods in camelCase, the &mut ones included', () =>
 
 test('fontdb.FaceInfo: a read-only class of getters', () => {
   const proto = binding.fontdb.FaceInfo.prototype;
-  for (const g of ['index', 'postScriptName', 'style', 'weight', 'stretch', 'monospaced']) {
+  for (const g of ['families', 'index', 'postScriptName', 'style', 'weight', 'stretch', 'monospaced']) {
     const d = Object.getOwnPropertyDescriptor(proto, g);
     assert.equal(typeof d?.get, 'function', `get ${g}`);
     assert.equal(d.set, undefined, `no setter for ${g}`);

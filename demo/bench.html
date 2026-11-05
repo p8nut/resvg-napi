@@ -376,7 +376,7 @@
 </div>
 
 <script type="module">
-  const { Liquid, createHelpers, eachNode, familyName, measureText, nodeExtent, registerSvgFilters, referencedPartials }
+  const { Liquid, createHelpers, eachNode, measureText, nodeExtent, registerSvgFilters, referencedPartials }
     = await import('./liquid.js');
 
   // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
@@ -1037,7 +1037,7 @@
   // `mod` is the wasm binding, `helpers` the `resvg-napi/helpers` set built on
   // it, and `db` the one `fontdb.Database` every parse renders and measures
   // with. `families` holds what each loaded font calls itself, first loaded
-  // first: `fontdb.FaceInfo` has no `families` (see font-names.mjs).
+  // first: the first family fontdb read for its first face.
   let mod, helpers, db;
   const families = [];
   try {
@@ -1217,9 +1217,10 @@
     }
 
     for (const file of fontFiles) {
-      const data = new Uint8Array(await file.arrayBuffer());
-      db.loadFontData(data);
-      const family = familyName(data);
+      const loaded = db.len();
+      db.loadFontData(new Uint8Array(await file.arrayBuffer()));
+      // `families` is `[name, language]` pairs, English (US) first.
+      const family = db.faces()[loaded]?.families[0]?.[0];
       if (family && !families.includes(family)) families.push(family);
     }
     if (fontFiles.length && families.length) {
@@ -1448,7 +1449,8 @@
       $('renderedSource').textContent = rendered;
       // One parse serves the proof, the measurements and the Nodes panel.
       const { tree } = parse(rendered);
-      const bbox = tree.root().absLayerBoundingBox();
+      // The root group's layer box, as a plain `{ x, y, width, height }`.
+      const bbox = nodeExtent({ kind: 'group', value: tree.root() });
       const size = tree.size();
       const doc = { width: size.width(), height: size.height(), bbox };
       const params = {

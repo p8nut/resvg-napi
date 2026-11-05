@@ -22,17 +22,23 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80">
 const tree = usvg.Tree.fromStr(svg);
 const shape = (id) => tree.nodeById(id).value;
 
-// 1. geometry, in the document's own units, with the arity `points` promises
+// 1. geometry, in the document's own units: what `tiny_skia_path::Path::
+//    segments()` iterates, `PathSegment` as a union. One point for
+//    moveTo/lineTo, a tuple of them for quadTo/cubicTo (`[control, end]`),
+//    none for close; each point a `tiny_skia.PointObject`.
 {
   const data = shape('tri').data();
-  assert.deepEqual(
-    data.map((s) => s.type),
-    ['moveTo', 'lineTo', 'quadTo', 'close'],
-  );
-  assert.deepEqual(data.map((s) => s.points.length), [2, 2, 4, 0],
-    'one point for moveTo/lineTo, two for quadTo, none for close');
-  assert.deepEqual(data[0].points, [10, 10]);
-  assert.deepEqual(data[2].points, [60, 30, 30, 50], 'control then end');
+  assert.deepEqual(data, [
+    { type: 'moveTo', value: { x: 10, y: 10 } },
+    { type: 'lineTo', value: { x: 50, y: 10 } },
+    { type: 'quadTo', value: [{ x: 60, y: 30 }, { x: 30, y: 50 }] },
+    { type: 'close' },
+  ]);
+  // A point builds back into the class.
+  assert.equal(binding.tiny_skia.Point.fromObject(data[2].value[1]).x, 30);
+  const curve = usvg.Tree.fromStr('<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><path id="c" d="M0 0 C1 2 3 4 5 6" stroke="red"/></svg>');
+  assert.deepEqual(curve.nodeById('c').value.data()[1],
+    { type: 'cubicTo', value: [{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 6 }] });
 }
 
 // 2. fill: a colour arrives resolved and tagged
@@ -100,7 +106,7 @@ assert.equal(tree.nodeById('grp').kind, 'group', 'a group is not a shape');
   assert.equal(g.shouldIsolate(), true);
   assert.deepEqual(g.filters().map((f) => f.id()), ['f']);
   assert.equal(g.hasChildren(), true);
-  assert.ok(g.layerBoundingBox().width > 0);
+  assert.ok(g.layerBoundingBox().width() > 0);
 
   const rect = t.nodeById('r').value;
   for (const m of ['transform', 'opacity', 'blendMode', 'isolate', 'filters', 'layerBoundingBox', 'hasChildren']) {

@@ -129,3 +129,27 @@ test('inspect shows the fields and the cheap &self methods', () => {
   assert.match(inspect(svgtypes.Color.black()), /^Color \{.*red: 0.*alpha: 255/s);
   assert.match(inspect(new tiny_skia.Pixmap(3, 2)), /^Pixmap \{ width: 3, height: 2 \}$/);
 });
+
+// A Rust tuple of numbers is a JS array (the tuple rule, Q38): `[w, h]`.
+test('tuples: IntSize.dimensions and Transform.getScale are arrays', () => {
+  assert.deepEqual(tiny_skia.IntSize.fromWh(3, 4).dimensions(), [3, 4]);
+  assert.deepEqual(tiny_skia.Transform.fromScale(2, 3).getScale(), [2, 3]);
+});
+
+// What usvg's boxes are (`layerBoundingBox`, `filtersBoundingBox`, `rect`),
+// and what a path segment holds: tiny-skia's own classes.
+test('NonZeroRect and Point: factories, methods, Point is plain data', () => {
+  const { NonZeroRect, Point } = tiny_skia;
+  const r = NonZeroRect.fromXywh(1, 2, 3, 4);
+  assert.deepEqual([r.x(), r.y(), r.width(), r.height(), r.right(), r.bottom()], [1, 2, 3, 4, 4, 6]);
+  assert.equal(NonZeroRect.fromXywh(0, 0, 0, 1), null, 'not a non-zero rect');
+  assert.deepEqual([r.toRect().width(), r.size().height()], [3, 4]);
+  assert.deepEqual(Rect.fromXywh(1, 2, 3, 4).toNonZeroRect().toRect().x(), 1);
+  const p = Point.fromXy(3, 4);
+  assert.equal(p.length(), 5);
+  assert.deepEqual(p.toObject(), { x: 3, y: 4 });
+  assert.equal(Point.fromObject({ x: 1, y: 0 }).x, 1);
+  // `Transform::map_point` takes `&mut Point`: it writes the instance.
+  Transform.fromTranslate(10, 20).mapPoint(p);
+  assert.deepEqual(p.toObject(), { x: 13, y: 24 });
+});

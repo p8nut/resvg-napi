@@ -24,7 +24,8 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
 </svg>`;
 
 const rect = (r) => [r.x(), r.y(), r.width(), r.height()];
-const bbox = (b) => b && [b.x, b.y, b.width, b.height];
+// A `tiny_skia.NonZeroRect`, or null: what usvg's layer and filter boxes are.
+const bbox = (b) => b && (assert.ok(b instanceof tiny_skia.NonZeroRect), rect(b));
 const ids = (nodes) => nodes.map(({ kind, value }) => [kind, value.id()]);
 
 test('the root is a group, its children a { kind, value } union', () => {
@@ -71,7 +72,7 @@ test('bounding boxes, transforms and the inner group\'s filter extent', () => {
   assert.deepEqual(bbox(wrap.filtersBoundingBox()), [46, 46, 48, 48], 'blur spill');
   assert.deepEqual(bbox(wrap.absLayerBoundingBox()), [46, 46, 48, 48], 'the filter widens the layer box');
   assert.deepEqual(wrap.filters().map((f) => f.id()), ['f']);
-  assert.equal(blurred.nodeById('wrap').value.filtersBoundingBox().width, 48);
+  assert.equal(blurred.nodeById('wrap').value.filtersBoundingBox().width(), 48);
 });
 
 test('clip path, mask and pattern: projections too, their content a group', () => {

@@ -7,7 +7,7 @@
 // Nothing here hardcodes a family name. `family` is whatever the database
 // actually holds, which is the only name `fontFamily` will resolve.
 import { existsSync, readFileSync } from 'node:fs';
-import { nodeExtent } from '../fit.mjs';
+import { nodeExtent } from '../helpers.browser.mjs';
 
 const CANDIDATES = [
   process.env.RESVG_TEST_FONT,
@@ -20,12 +20,12 @@ const CANDIDATES = [
 ].filter(Boolean);
 
 /**
- * A database with at least one face, and the family name to ask for.
- * Returns `null` when the environment has no font at all, so a test can say
- * what it skipped instead of failing on the environment.
+ * A `fontdb.Database` with at least one face, and the family name to ask
+ * for. Returns `null` when the environment has no font at all, so a test can
+ * say what it skipped instead of failing on the environment.
  */
-export function testFonts(FontDatabase) {
-  const db = new FontDatabase();
+export function testFonts({ fontdb }) {
+  const db = new fontdb.Database();
   db.loadSystemFonts();
   if (!db.len()) {
     const file = testFontFile();
@@ -34,10 +34,12 @@ export function testFonts(FontDatabase) {
   }
   // The first system face is whatever fontdb happened to enumerate first
   // (Comfortaa, on this machine): fine as a name, risky for glyph coverage.
-  // Prefer a workhorse when one is installed.
-  const families = new Set(db.faces().flatMap((f) => f.families));
+  // Prefer a workhorse when one is installed. `families` is `[name,
+  // language]` pairs.
+  const faces = db.faces();
+  const families = new Set(faces.flatMap((f) => f.families.map(([name]) => name)));
   const family = ['DejaVu Sans', 'Liberation Sans', 'Arial', 'Helvetica', 'Segoe UI']
-    .find((name) => families.has(name)) ?? db.faces()[0].families[0];
+    .find((name) => families.has(name)) ?? faces[0].families[0][0];
   // The generic families point at it too, so `font-family="sans-serif"` in a
   // fixture resolves wherever the test runs.
   for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
@@ -54,8 +56,8 @@ export function testFontFile() {
  * `testFonts`, or the end of the test file: when the environment has no font,
  * says what was skipped (see `skip`) and exits 0.
  */
-export function fontsOrSkip(FontDatabase, what) {
-  const fonts = testFonts(FontDatabase);
+export function fontsOrSkip(binding, what) {
+  const fonts = testFonts(binding);
   if (!fonts) {
     skip(what, 'no font in this environment');
     process.exit(0);
@@ -63,23 +65,7 @@ export function fontsOrSkip(FontDatabase, what) {
   return fonts;
 }
 
-/**
- * `fontsOrSkip` for the namespaced surface: a `fontdb.Database` loaded the
- * way `testFonts` loads its `FontDatabase`, and the family to ask for.
- * `fontdb.FaceInfo` has no family names, so the family is read off the flat
- * database.
- */
-export function treeFontsOrSkip({ FontDatabase, fontdb }, what) {
-  const { family } = fontsOrSkip(FontDatabase, what);
-  const db = new fontdb.Database();
-  db.loadSystemFonts();
-  if (!db.len()) db.loadFontData(readFileSync(testFontFile()));
-  for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
-                     'setCursiveFamily', 'setFantasyFamily']) db[set](family);
-  return { db, family };
-}
-
-/** The old `extent()`: where a `usvg.Node` will draw (`fit.mjs`). */
+/** Where a `usvg.Node` will draw (the helpers' `nodeExtent`). */
 export const extent = nodeExtent;
 
 /**
@@ -108,10 +94,10 @@ export function renderNodePng({ resvg, tiny_skia }, node, { scale = 1 } = {}) {
 /**
  * Prints what was not checked, and why.
  *
- * Seven of the fourteen test files skip themselves when no font is present, and
- * a skip leaves the exit code at 0 -- so half the suite could go quiet and the
- * runner would still report fourteen passes. That is right for WASI, which has
- * no font directories by design, and wrong everywhere else.
+ * Several test files skip themselves when no font is present, and a skip
+ * leaves the exit code at 0 -- so half the suite could go quiet and the runner
+ * would still report every file passed. That is right for WASI, which has no
+ * font directories by design, and wrong everywhere else.
  *
  * `RESVG_REQUIRE_FONTS=1` turns a skip into a failure. CI sets it on the native
  * jobs, where a missing font means the environment broke rather than that it is

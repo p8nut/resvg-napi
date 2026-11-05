@@ -1,20 +1,20 @@
 // `renderPng` / `renderRaw` and their async twins (step 11 of
-// docs/migration-0.10.md): JS on the generated API, and the same bytes as the
-// flat `Resvg.renderPng` / `renderRaw` for the same document and params. The
-// old canvas arithmetic was Rust's f32; the helpers redo it in JS, so these
-// compare every sizing path, not a sample PNG.
+// docs/migration-0.10.md): JS on the generated API. The canvas arithmetic was
+// Rust's f32 in 0.9 (`Resvg.renderPng` / `renderRaw`); the helpers redo it in
+// JS, and until 0.10 removed the flat `Resvg` these compared their bytes over
+// every sizing path. The sizes 0.9 computed are frozen below; the pixels are
+// the raw API's (resvg.render on a tiny_skia.Pixmap), and every path of the
+// helpers (source, tree, async, PNG or raw) gives the same ones.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import binding from '../../index.js';
 import helpers, { MAX_PIXELS, renderPng, renderPngAsync, renderRaw, renderRawAsync, parse } from '../../helpers.mjs';
-import { testFonts, treeFontsOrSkip } from '../support.mjs';
+import { fontsOrSkip } from '../support.mjs';
 
-const { Resvg, FontDatabase, usvg } = binding;
+const { usvg, resvg, tiny_skia } = binding;
 
-// Text included, so the fonts have to agree: the same faces, loaded alike, in
-// the flat `FontDatabase` and in the `fontdb.Database` the helpers take.
-const flatFonts = testFonts(FontDatabase);
-const { db, family } = treeFontsOrSkip(binding, 'helpers: renderPng byte equality');
+const { db, family } = fontsOrSkip(binding, 'helpers: renderPng');
 
 const DOCS = {
   shapes: `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
@@ -58,51 +58,68 @@ const PARAMS = [
 
 const name = (p) => JSON.stringify(p) ?? 'none';
 
+// The canvas 0.9's Rust `canvas()` sized for each of `PARAMS`, in order: the
+// numbers the helpers matched byte for byte until the flat `Resvg` left.
+const SIZES = {
+  shapes: '100x50 100x50 200x100 37x19 150x75 120x60 120x60 1x1 333x167 154x77 9x5 100x50 100x50 100x50 100x50 100x50 50x30 200x123 60x60 20x10',
+  odd: '38x92 38x92 75x184 14x34 56x138 120x296 120x296 1x3 333x819 32x77 9x23 38x92 38x92 38x92 38x92 38x92 50x30 200x123 60x60 20x50',
+  filtered: '64x48 64x48 128x96 24x18 96x72 120x90 120x90 1x1 333x250 103x77 9x7 64x48 64x48 64x48 64x48 64x48 50x30 200x123 60x60 20x15',
+};
+
 for (const [doc, svg] of Object.entries(DOCS)) {
-  test(`renderPng / renderRaw: the flat Resvg's bytes (${doc})`, async () => {
-    const flat = new Resvg(svg, { fontFamily: family }, flatFonts.db);
+  test(`renderPng / renderRaw: 0.9's sizes, one answer from every path (${doc})`, async () => {
     const options = { fonts: db, fontFamily: family };
     const { tree } = parse(svg, options);
-    for (const params of PARAMS) {
-      const want = flat.renderPng(params);
-      const wantRaw = flat.renderRaw(params);
+    const sizes = SIZES[doc].split(' ');
+    for (const [i, params] of PARAMS.entries()) {
+      const want = renderPng(tree, params);
+      const wantRaw = renderRaw(tree, params);
+      assert.equal(`${wantRaw.width}x${wantRaw.height}`, sizes[i], `size ${name(params)}`);
+      assert.deepEqual([want.readUInt32BE(16), want.readUInt32BE(20)], [wantRaw.width, wantRaw.height], `IHDR ${name(params)}`);
       // From source, from a parsed tree, and async: one answer.
       assert.ok(renderPng(svg, { ...options, ...params }).equals(want), `renderPng(svg) ${name(params)}`);
-      assert.ok(renderPng(tree, params).equals(want), `renderPng(tree) ${name(params)}`);
       assert.ok((await renderPngAsync(svg, { ...options, ...params })).equals(want), `renderPngAsync ${name(params)}`);
       assert.ok((await renderPngAsync(tree, params)).equals(want), `renderPngAsync(tree) ${name(params)}`);
-      for (const raw of [renderRaw(tree, params), await renderRawAsync(svg, { ...options, ...params })]) {
-        assert.deepEqual([raw.width, raw.height], [wantRaw.width, wantRaw.height], `renderRaw size ${name(params)}`);
-        assert.ok(raw.data.equals(wantRaw.data), `renderRaw pixels ${name(params)}`);
-      }
+      const raw = await renderRawAsync(svg, { ...options, ...params });
+      assert.deepEqual([raw.width, raw.height], [wantRaw.width, wantRaw.height], `renderRawAsync size ${name(params)}`);
+      assert.ok(raw.data.equals(wantRaw.data), `renderRawAsync pixels ${name(params)}`);
     }
     // A tree the caller passes is the caller's: still usable.
     assert.equal(tree.disposed, false);
   });
 }
 
-// The old suite's sweep (test/render.mjs): every requested dimension comes back
-// exactly, and as the flat render sized it.
-test('every requested width and height, as the flat render sized it', () => {
-  for (const [w, h] of [[100, 50], [100, 33], [37, 91], [1, 1]]) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="red"/></svg>`;
-    const flat = new Resvg(svg);
-    const { tree } = parse(svg, { fonts: [] });
-    const wrong = [];
-    for (let n = 1; n <= 300; n++) {
-      for (const key of ['width', 'height']) {
-        const a = renderRaw(tree, { [key]: n });
-        const b = flat.renderRaw({ [key]: n });
-        if (a[key] !== n || a.width !== b.width || a.height !== b.height) wrong.push(`${key}:${n}`);
-      }
-    }
-    assert.deepEqual(wrong, [], `${w}x${h}`);
-  }
+test('the pixels are the raw API\'s: resvg.render on a tiny_skia.Pixmap', () => {
+  const { tree } = parse(DOCS.odd, { fonts: [] });
+  const { width, height, data } = renderRaw(tree, { width: 120 });
+  const pixmap = new tiny_skia.Pixmap(width, height);
+  const scale = Math.fround(120 / tree.size().width());
+  resvg.render(tree, tiny_skia.Transform.fromScale(scale, scale), pixmap);
+  assert.ok(Buffer.from(pixmap.takeDemultiplied()).equals(data));
 });
 
-test('maxPixels: refused before allocating, with the flat messages', async () => {
+// The old suite's sweep (test/render.mjs): every requested dimension comes back
+// exactly, and the other side as 0.9 sized it (the sizes' digest, frozen).
+test('every requested width and height, as 0.9 sized them', () => {
+  const all = [];
+  const wrong = [];
+  for (const [w, h] of [[100, 50], [100, 33], [37, 91], [1, 1]]) {
+    const { tree } = parse(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"/>`, { fonts: [] });
+    for (let n = 1; n <= 300; n++) {
+      for (const key of ['width', 'height']) {
+        const r = renderRaw(tree, { [key]: n });
+        if (r[key] !== n) wrong.push(`${w}x${h} ${key}:${n}`);
+        all.push(`${r.width}x${r.height}`);
+      }
+    }
+  }
+  assert.deepEqual(wrong, []);
+  assert.equal(createHash('sha256').update(all.join(',')).digest('hex'),
+    '99524f31c15dd875525a6ed1175543b8fc523cc300d4373c39a2c94e2b07470a');
+});
+
+test('maxPixels: refused before allocating, with 0.9\'s messages', async () => {
   const svg = DOCS.shapes;
-  const flat = new Resvg(svg);
   const { tree } = parse(svg, { fonts: [] });
   const cases = [
     [{ scale: 2000 }, /200000x100000 exceeds maxPixels \(67108864\)$/],
@@ -121,7 +138,6 @@ test('maxPixels: refused before allocating, with the flat messages', async () =>
     [{ background: 'notacolour' }, /invalid background: notacolour$/],
   ];
   for (const [params, message] of cases) {
-    assert.throws(() => flat.renderPng(params), message, `flat ${name(params)}`);
     assert.throws(() => renderPng(tree, params), message, `renderPng ${name(params)}`);
     assert.throws(() => renderRaw(tree, params), message, `renderRaw ${name(params)}`);
     await assert.rejects(renderPngAsync(tree, params), message, `renderPngAsync ${name(params)}`);

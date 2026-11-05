@@ -42,12 +42,12 @@ function usvgOptions(options) {
   return out;
 }
 
-// --- Numbers, as the old Rust `canvas()` computed them ----------------------
+// --- Numbers, as Rust computes them ------------------------------------------
 //
-// The output has to match the flat `Resvg.renderPng` byte for byte, so the
-// arithmetic is Rust's: the same f32 roundings (`Math.fround`; a single f64
-// operation on f32 operands, rounded to f32, is the f32 operation), the same
-// saturating `as u32`, the same messages.
+// The sizes are what the 0.9 `Resvg.renderPng` computed in Rust, byte for
+// byte, so the arithmetic is Rust's: the same f32 roundings (`Math.fround`; a
+// single f64 operation on f32 operands, rounded to f32, is the f32
+// operation), the same saturating `as u32`, the same messages.
 
 const f32 = Math.fround;
 
@@ -109,7 +109,11 @@ function plan(baseWidth, baseHeight, params = {}) {
   return { scale, width: w, height: h };
 }
 
-/** A crop box as `[x, y, width, height]` in f32, from a `BBox` or a `tiny_skia.Rect`. */
+/**
+ * A crop box as `[x, y, width, height]` in f32, from a plain
+ * `{ x, y, width, height }` (what `nodeExtent` returns) or a `tiny_skia.Rect`
+ * or `tiny_skia.NonZeroRect`, whose sides are methods.
+ */
 function cropBox(c) {
   const get = (k) => f32(typeof c[k] === 'function' ? c[k]() : c[k]);
   const [x, y, w, h] = [get('x'), get('y'), get('width'), get('height')];
@@ -137,23 +141,27 @@ function cropBox(c) {
 
 const ATTR = 'data-maxwidth';
 
+/** A `tiny_skia.NonZeroRect` as a plain `{ x, y, width, height }`, or null. */
+const box = (r) => r && { x: r.x(), y: r.y(), width: r.width(), height: r.height() };
+
 /**
  * Where a `usvg.Node` will draw, contours and filters included: a group's
  * layer box, a path's or a text's stroke box (its geometric box would clip the
- * stroke), an image's box. `null` when it has no visible size. A `BBox`, as
- * Rust's `NonZeroRect` has it.
+ * stroke), an image's box. `null` when it has no visible size. A plain
+ * `{ x, y, width, height }`, the numbers of Rust's `NonZeroRect`, which `crop`
+ * takes back.
  */
 export function nodeExtent({ kind, value }) {
   switch (kind) {
-    case 'group': return value.absLayerBoundingBox();
-    case 'image': return value.absBoundingBox().toNonZeroRect();
-    default: return value.absStrokeBoundingBox().toNonZeroRect();
+    case 'group': return box(value.absLayerBoundingBox());
+    case 'image': return box(value.absBoundingBox().toNonZeroRect());
+    default: return box(value.absStrokeBoundingBox().toNonZeroRect());
   }
 }
 
 /** `usvg::Node::abs_layer_bounding_box`: the box `resvg::render_node` offsets a node by. */
 function layerBox({ kind, value }) {
-  return kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox().toNonZeroRect();
+  return box(kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox().toNonZeroRect());
 }
 
 /**
@@ -525,7 +533,7 @@ function build(binding) {
    * The canvas and root transform of a node render, sized to the node's
    * extent. `resvg.renderNode` offsets the node by its layer box and applies a
    * group's own transform itself, so both are undone here: a group is passed
-   * its parent's transform. (The flat `renderNodePng` passed the group's
+   * its parent's transform. (The 0.9 `renderNodePng` passed the group's
    * absolute one, which applied its own transform twice.)
    */
   function nodeCanvas(node, params) {

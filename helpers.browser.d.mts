@@ -9,7 +9,7 @@
  * them against `test/helpers-types.mts`.
  */
 
-import type { usvg, fontdb, guard, resvg, svgtypes, tiny_skia, BBox } from './index.js'
+import type { usvg, fontdb, guard, resvg, svgtypes, tiny_skia } from './index.js'
 
 /** What `createHelpers` needs of a binding: its namespaces. */
 export interface Binding {
@@ -23,6 +23,17 @@ export interface Binding {
 
 /** A `usvg.Node`: what `tree.nodeById` and `group.children()` hand back. */
 export type Node = usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText
+
+/**
+ * A box in the tree's units, as a plain object: what `nodeExtent` returns,
+ * the numbers of Rust's `NonZeroRect`, and what `crop` takes back.
+ */
+export interface Box {
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 /** The canvas cap the helpers default to: 2^26 px, an 8192x8192 canvas or 256 MiB. */
 export declare const MAX_PIXELS: number
@@ -79,9 +90,10 @@ export interface RenderParams {
   background?: string
   /**
    * Render only this rectangle, in the tree's units: sizing then applies to
-   * the crop. A `BBox` (`nodeExtent(node)`) or a `tiny_skia.Rect`.
+   * the crop. A plain `Box` (`nodeExtent(node)`), or a `tiny_skia.Rect` or
+   * `tiny_skia.NonZeroRect` (`tree.root().absLayerBoundingBox()`).
    */
-  crop?: BBox | tiny_skia.Rect
+  crop?: Box | tiny_skia.Rect | tiny_skia.NonZeroRect
   /**
    * Refuse a canvas of more than this many pixels, before allocating it.
    * Default: `MAX_PIXELS`. A group with a filter, opacity, mask or clip path
@@ -205,7 +217,7 @@ export interface FitResult {
  * a path's or a text's stroke box, an image's box. `null` when it has no
  * visible size.
  */
-export function nodeExtent(node: Node): BBox | null
+export function nodeExtent(node: Node): Box | null
 
 /** Elements carrying a width constraint, with the tag text needed to rewrite it. */
 export function findWidthConstraints(svg: string): WidthConstraint[]

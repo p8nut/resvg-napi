@@ -2,14 +2,12 @@
 // background and sizing #191 asked back): one element in a PNG sized to its
 // extent, which is the document rendered with `crop` at that extent when the
 // element is all the document draws. The flat `renderNodePng` went with step
-// 7b; this compares against the flat `Resvg.renderPng({ crop })`, which stays
-// until step 13.
+// 7b; this compares against the document rendered with `crop` (the flat
+// `Resvg.renderPng({ crop })` until 0.10, the helpers' `renderPng` since: the
+// two were byte for byte the same, test/helpers/render.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import binding from '../../index.js';
 import { nodeExtent, parse, renderNodePng, renderNodePngAsync, renderPng } from '../../helpers.mjs';
-
-const { Resvg } = binding;
 
 const wrap = (body) => `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200">${body}</svg>`;
 
@@ -33,16 +31,15 @@ const PARAMS = [undefined, { scale: 2 }, { scale: 0.33 }, { width: 101 }, { heig
 
 for (const [what, svg] of Object.entries(ALONE)) {
   test(`renderNodePng: the document cropped to the node (${what})`, async () => {
-    const flat = new Resvg(svg);
     const { tree } = parse(svg, { fonts: [] });
     const node = tree.nodeById('n');
     const crop = nodeExtent(node);
+    assert.deepEqual(Object.keys(crop), ['x', 'y', 'width', 'height'], 'a plain box');
     for (const params of PARAMS) {
-      const want = flat.renderPng({ ...params, crop });
+      const want = renderPng(tree, { ...params, crop });
       const label = `${what} ${JSON.stringify(params)}`;
       assert.ok(renderNodePng(node, params).equals(want), label);
       assert.ok((await renderNodePngAsync(node, params)).equals(want), `async ${label}`);
-      assert.ok(renderPng(tree, { ...params, crop }).equals(want), `helpers crop ${label}`);
     }
   });
 }

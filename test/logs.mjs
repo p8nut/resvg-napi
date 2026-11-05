@@ -1,22 +1,25 @@
 // The log collector: usvg and resvg report recoverable problems through the
-// `log` crate, and nothing consumed it before.
+// `log` crate, and nothing consumed it before. One buffer for the process
+// (ADR 0001: per-document logs went with the 0.9 `Resvg`).
 import assert from 'node:assert/strict';
-import { Resvg, setLogLevel, takeLogs, usvg, tiny_skia, resvg } from '../index.js';
+import { setLogLevel, takeLogs, usvg, tiny_skia, resvg } from '../index.js';
+import { renderPng, renderPngAsync } from '../helpers.mjs';
 
 const messy = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="50" height="50">
   <rect width="10" height="10" fill="notacolour"/>
   <rect width="0" height="10" stroke="red"/>
   <image xlink:href="data:image/png;base64,AAAA" width="5" height="5"/>
 </svg>`;
+const render = (svg) => renderPng(svg, { fonts: [] });
 
 // 1. nothing is collected until a level is set
 takeLogs();
-new Resvg(messy).renderPng();
+render(messy);
 assert.deepEqual(takeLogs(), [], 'silent by default');
 
 // 2. warnings arrive, tagged with level and module
 setLogLevel('warn');
-new Resvg(messy).renderPng();
+render(messy);
 const logs = takeLogs();
 assert.ok(logs.length >= 2, `got ${logs.length} messages`);
 assert.ok(logs.every((l) => /^(ERROR|WARN) \S+: /.test(l)), logs.join('\n'));
@@ -28,7 +31,7 @@ assert.deepEqual(takeLogs(), []);
 
 // 4. the level filters
 setLogLevel('off');
-new Resvg(messy).renderPng();
+render(messy);
 assert.deepEqual(takeLogs(), [], 'off collects nothing');
 
 // 5. a bad level is an error, not a silent no-op
@@ -43,60 +46,29 @@ setLogLevel('warn');
 const many = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${
   Array.from({ length: 1200 }, (_, i) => `<rect width="0" height="1" stroke="red" id="r${i}"/>`).join('')
 }</svg>`;
-new Resvg(many).renderPng();
+render(many);
 const bounded = takeLogs();
 assert.ok(bounded.length > 100, `the document did produce warnings, got ${bounded.length}`);
 assert.equal(bounded.length, 500, 'capped at exactly 500, not merely under it');
 // ...and says so: without a marker, 500 lines read as everything there was.
 assert.match(bounded.at(-1), /^WARN napi_support::logs: log buffer full .*dropped$/, 'truncation is marked');
 assert.ok(!bounded.slice(0, -1).some((l) => /buffer full/.test(l)), 'one marker, last');
-{
-  // a document's own buffer: parse and render each fill a thread sink that is
-  // capped too, and both land in it -- still one marker, still last
-  const d = new Resvg(many);
-  d.renderPng();
-  const own = d.takeLogs();
-  assert.equal(own.length, 500, 'per-document buffer capped');
-  assert.match(own.at(-1), /buffer full/, 'per-document truncation is marked');
-  assert.equal(own.filter((l) => /buffer full/.test(l)).length, 1, 'one marker per document');
-}
 takeLogs();
-setLogLevel('off');
 
-// 7. per document: each holds its own messages, async twins included, even
-//    while both render at once on worker threads -- the global buffer
-//    interleaves them, a document's takeLogs() does not
-setLogLevel('warn');
-takeLogs();
+// 7. what a worker thread reports lands in the same buffer: a PNG cut after
+//    its header parses (usvg reads only the size) and fails to decode at
+//    render time, on the worker thread an async twin runs on.
 {
-  const doc = (colour) => `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="${colour}"/></svg>`;
-  const a = new Resvg(doc('colour-a'));
-  const b = new Resvg(doc('colour-b'));
-  const parsedA = a.takeLogs();
-  assert.ok(parsedA.some((l) => l.includes("'colour-a'")), parsedA.join('\n'));
-  assert.ok(!parsedA.some((l) => l.includes('colour-b')), 'no message from the other document');
-  assert.ok(b.takeLogs().every((l) => !l.includes('colour-a')));
-  assert.deepEqual(a.takeLogs(), [], 'draining is a drain');
-
-  // A PNG cut after its header parses (usvg reads only the size) and fails
-  // to decode at render time, on the worker thread an async twin runs on.
-  const png = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>').renderPng();
-  const broken = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image href="data:image/png;base64,${png.subarray(0, 33).toString('base64')}" width="5" height="5"/></svg>`);
-  const clean = new Resvg(doc('red'));
-  broken.takeLogs(); clean.takeLogs();
-  await Promise.all([broken.renderPngAsync(), clean.renderPngAsync(), broken.renderRawAsync(), clean.renderPngAsync()]);
-  const fromBroken = broken.takeLogs();
-  assert.equal(fromBroken.filter((l) => l.includes('Failed to decode a PNG image')).length, 2, fromBroken.join('\n'));
-  assert.deepEqual(clean.takeLogs(), [], 'the clean document rendered alongside got none of them');
-
-  // and the global buffer still receives everything, for code that used it
-  const all = takeLogs();
-  assert.ok(all.some((l) => l.includes("'colour-a'")) && all.some((l) => l.includes("'colour-b'")));
-
-  // a node drawn through resvg.renderNode reports to the global buffer: the
-  // namespaced surface has no per-document logs (ADR 0001). A node reached
-  // through a definition's content too.
+  const png = render('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>');
   const bad = `<image href="data:image/png;base64,${png.subarray(0, 33).toString('base64')}" width="5" height="5"/><rect width="5" height="5"/>`;
+  const broken = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">${bad}</svg>`;
+  takeLogs();
+  await renderPngAsync(broken, { fonts: [] });
+  const fromWorker = takeLogs();
+  assert.equal(fromWorker.filter((l) => l.includes('Failed to decode a PNG image')).length, 1, fromWorker.join('\n'));
+
+  // A node drawn through resvg.renderNode reports too, and so does one
+  // reached through a definition's content.
   const draw = (node) => {
     const pixmap = new tiny_skia.Pixmap(20, 20);
     resvg.renderNode(node, tiny_skia.Transform.identity(), pixmap);
@@ -114,7 +86,7 @@ takeLogs();
   // Its async twin draws on a worker thread, which reports there too.
   takeLogs();
   await resvg.renderNodeAsync(sprite.nodeById('icon'), tiny_skia.Transform.identity(), new tiny_skia.Pixmap(20, 20));
-  const fromWorker = takeLogs();
-  assert.equal(fromWorker.filter((l) => l.includes('Failed to decode a PNG image')).length, 1, fromWorker.join('\n'));
+  const fromNodeWorker = takeLogs();
+  assert.equal(fromNodeWorker.filter((l) => l.includes('Failed to decode a PNG image')).length, 1, fromNodeWorker.join('\n'));
 }
 setLogLevel('off');

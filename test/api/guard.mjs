@@ -2,8 +2,9 @@
 // docs/migration-0.10.md): `usvg.Options.imageHrefResolver` and
 // `fontResolver` take a `guard.ImageHrefResolver` and a `guard.FontResolver`.
 // Without them the raw API resolves as Rust does, reading any path: the
-// first test shows it, so that the opt-in is real. The flat `Resvg`
-// resolves through the same code (test/images.mjs, test/limits.mjs).
+// first test shows it, so that the opt-in is real. The helpers pass a fresh
+// one of each to every parse (test/helpers/parse.mjs, test/images.mjs,
+// test/limits.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';

@@ -38,10 +38,6 @@ test('each error enum has a type of its codes', () => {
   assert.ok(Object.values(svgtypes.ErrorCode).includes('InvalidValue'));
 });
 
-test('the flat surface keeps its own wording', () => {
-  throwsCoded(() => new binding.Resvg('<svg'), 'ParsingFailed', /^invalid SVG: /);
-});
-
 test('new returning None throws: a JS constructor cannot return null', () => {
   throwsCoded(() => new tiny_skia.Pixmap(0, 0), 'InvalidArg', /Pixmap::new returned None/);
   throwsCoded(() => new tiny_skia.Pixmap(10, 0), 'InvalidArg', /Pixmap::new returned None/);
@@ -87,4 +83,19 @@ test('arguments are checked: the class, never a look-alike', () => {
   assert.throws(() => pixmap.fill({ r: 0, g: 0, b: 0, a: 1 }));
   assert.throws(() => pixmap.fill(svgtypes.Color.black()), 'svgtypes.Color is not tiny_skia.Color');
   assert.throws(() => usvg.Tree.fromData('<svg/>'), 'fromData takes bytes; fromStr a string');
+});
+
+// Ported from the 0.9 suite (test/errors.mjs): an instance of another class
+// where a class is expected is refused, not reinterpreted. Unchecked, a
+// `usvg.Path` read as a `tiny_skia.Transform` is memory corruption. Native
+// (type tags) and WASI (the class recorded at wrap time) alike.
+test('another class\'s instance is refused where a class is expected', () => {
+  const tree = usvg.Tree.fromStr('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect id="r" width="1" height="1"/></svg>');
+  const path = tree.nodeById('r').value;
+  const pixmap = new tiny_skia.Pixmap(1, 1);
+  const refused = (cls) => (e) => e instanceof Error && e.code === 'InvalidArg'
+    && new RegExp(`not an instance of class \`${cls}\``).test(e.message);
+  assert.throws(() => binding.resvg.render(tree, path, pixmap), refused('TinySkiaTransform'));
+  assert.throws(() => binding.resvg.render(path, tiny_skia.Transform.identity(), pixmap), refused('UsvgTree'));
+  assert.throws(() => usvg.Tree.fromStr('<svg/>', { fontdb: path }), /Database/);
 });

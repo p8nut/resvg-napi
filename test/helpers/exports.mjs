@@ -28,15 +28,15 @@ function resolved(specifier, conditions = []) {
 test('exports: Node gets the bound helpers, a bundler the browser variants', () => {
   assert.equal(resolved('resvg-napi'), './index.js');
   assert.equal(resolved('resvg-napi/helpers'), './helpers.mjs');
-  assert.equal(resolved('resvg-napi/fit.mjs'), './fit.mjs');
   assert.equal(resolved('resvg-napi/package.json'), './package.json');
   assert.equal(resolved('resvg-napi', ['browser']), './browser.js');
   assert.equal(resolved('resvg-napi/helpers', ['browser']), './helpers.browser.mjs');
-  assert.equal(resolved('resvg-napi/fit.mjs', ['browser']), './fit.mjs');
 });
 
 test('exports: deep imports are closed', () => {
-  for (const deep of ['resvg-napi/index.js', 'resvg-napi/helpers.mjs', 'resvg-napi/fit', 'resvg-napi/resvg-napi.wasi.cjs']) {
+  // `resvg-napi/fit.mjs` went in 0.10: the helpers have it.
+  for (const deep of ['resvg-napi/index.js', 'resvg-napi/helpers.mjs', 'resvg-napi/fit', 'resvg-napi/fit.mjs',
+    'resvg-napi/resvg-napi.wasi.cjs']) {
     assert.equal(resolved(deep), 'ERR_PACKAGE_PATH_NOT_EXPORTED', deep);
   }
 });

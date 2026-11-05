@@ -1,11 +1,11 @@
 // The laid-out content of a text node, `usvg.Text`: chunks, spans, the
 // resolved layout and the outlines (the basics: test/api/nodes.mjs).
 import assert from 'node:assert/strict';
-import { treeFontsOrSkip, renderNodePng } from './support.mjs';
+import { fontsOrSkip, renderNodePng } from './support.mjs';
 import binding from '../index.js';
 const { usvg } = binding;
 
-const { db, family } = treeFontsOrSkip(binding, 'text content');
+const { db, family } = fontsOrSkip(binding, 'text content');
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="90">
   <text id="one" x="10" y="30" font-size="20" fill="#38bdf8">Hi there</text>

@@ -52,6 +52,8 @@ function everyClass() {
     'tiny_skia.IntSize': tiny_skia.IntSize.fromWh(1, 2),
     'tiny_skia.Pixmap': new tiny_skia.Pixmap(2, 2),
     'tiny_skia.Rect': tiny_skia.Rect.fromLtrb(0, 0, 1, 1),
+    'tiny_skia.NonZeroRect': tiny_skia.NonZeroRect.fromXywh(0, 0, 1, 1),
+    'tiny_skia.Point': tiny_skia.Point.fromXy(1, 2),
     'tiny_skia.Size': tiny_skia.Size.fromWh(1, 2),
     'tiny_skia.Transform': tiny_skia.Transform.identity(),
     'usvg.Tree': tree,
@@ -63,6 +65,7 @@ function everyClass() {
     'usvg.Mask': tree.masks()[0],
     'usvg.Pattern': tree.patterns()[0],
     'usvg.Filter': tree.filters()[0],
+    'usvg.Primitive': tree.filters()[0].primitives()[0],
     'usvg.LinearGradient': tree.linearGradients()[0],
     'usvg.RadialGradient': tree.radialGradients()[0],
     'usvg.TextChunk': chunk,
@@ -122,7 +125,7 @@ test('every class has dispose(), and the test reaches every one', () => {
 });
 
 test('[Symbol.dispose] is dispose, where the runtime has the symbol', () => {
-  for (const [key, cls] of [...Object.entries(exported()), ['Resvg', binding.Resvg]]) {
+  for (const [key, cls] of Object.entries(exported())) {
     assert.equal(cls.prototype[Symbol.dispose], Symbol.dispose && cls.prototype.dispose, key);
   }
 });
@@ -236,7 +239,7 @@ test('without Symbol.dispose (Node < 20.4), the module loads and leaves the alia
     const aliased = (c) => Object.getOwnPropertySymbols(c.prototype).includes(real.dispose);
     p.dispose();
     process.stdout.write(JSON.stringify({
-      alias: aliased(b.tiny_skia.Pixmap) || aliased(b.usvg.Tree) || aliased(b.Resvg),
+      alias: aliased(b.tiny_skia.Pixmap) || aliased(b.usvg.Tree),
       disposed: p.disposed,
     }));
   `;

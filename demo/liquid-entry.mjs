@@ -3,5 +3,4 @@
 // condition of `resvg-napi/helpers` names), which the filters already use.
 export { Liquid } from 'liquidjs';
 export { createHelpers, nodeExtent } from '../helpers.browser.mjs';
-export { familyName } from './font-names.mjs';
 export { eachNode, measureText, referencedPartials, registerSvgFilters } from './svg-filters.mjs';

@@ -1,15 +1,15 @@
 // Horizontal fitting driven by the template's own `data-maxwidth`.
 import assert from 'node:assert/strict';
 import binding from '../index.js';
-import { treeFontsOrSkip, extent } from './support.mjs';
+import { fontsOrSkip, extent } from './support.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fitTextWidths, findWidthConstraints, guardedParse } from '../fit.mjs';
+import { fitTextWidths, findWidthConstraints, guardedParse } from '../helpers.browser.mjs';
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds. testFonts also points the
 // generic families at it, so `font-size` on a bare <text> resolves.
-const { db: fonts, family } = treeFontsOrSkip(binding, 'horizontal fitting');
+const { db: fonts, family } = fontsOrSkip(binding, 'horizontal fitting');
 // The safe default: a fresh guard.ImageHrefResolver per parse.
 const render = guardedParse(binding, { fontdb: fonts, fontFamily: family });
 const measured = (tree, id) => extent(tree.nodeById(id));

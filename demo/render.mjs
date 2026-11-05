@@ -17,7 +17,6 @@ import { Liquid } from 'liquidjs';
 // binding (fonts, logs), `resvg-napi/helpers` for parsing and rendering.
 import binding from 'resvg-napi';
 import { parse, renderPng } from 'resvg-napi/helpers';
-import { familyName } from './font-names.mjs';
 import { measureText, registerSvgFilters, referencedPartials } from './svg-filters.mjs';
 
 // fileURLToPath, not `.pathname`: on Windows the latter yields
@@ -53,9 +52,11 @@ const fontFiles = [join(here, 'DejaVuSans.ttf'),
   .filter(existsSync);
 let family;
 for (const file of fontFiles) {
-  const data = readFileSync(file);
-  db.loadFontData(data);
-  family ??= familyName(data);
+  const loaded = db.len();
+  db.loadFontData(readFileSync(file));
+  // What fontdb calls the file's first face: `families[0]`, a
+  // `[name, language]` pair, English (US) first.
+  family ??= db.faces()[loaded]?.families[0]?.[0];
 }
 // Local files first, so the generic families below point at a known face; then
 // the system, for the glyphs the local files do not have (emoji, scripts).

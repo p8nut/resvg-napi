@@ -11,7 +11,6 @@ import type { Helpers, Parsed, RawImage, FitResult, RenderOptions } from '../hel
 import binding from '../index.js';
 // Through the package's own name: the `exports` map's `types`.
 import viaExports from 'resvg-napi/helpers';
-import { fitTextWidths as viaShim } from 'resvg-napi/fit.mjs';
 
 // Type-checked, never run: `node --test` runs .mts files too, and these calls
 // are shapes, not working arguments (a font file that does not exist).
@@ -33,6 +32,7 @@ export function compileOnly(): void {
     crop: { x: 0, y: 0, width: 1, height: 1 }, fonts: new binding.fontdb.Database() };
   const png: Buffer = renderPng(svg, options);
   const png2: Buffer = renderPng(tree, { crop: binding.tiny_skia.Rect.fromXywh(0, 0, 1, 1)! });
+  const png3: Buffer = renderPng(tree, { crop: binding.tiny_skia.NonZeroRect.fromXywh(0, 0, 1, 1)! });
   const raw: RawImage = renderRaw(tree);
   const rawAsync: Promise<RawImage> = renderRawAsync(svg, { signal: new AbortController().signal });
   const pngAsync: Promise<Buffer> = renderPngAsync(tree, { scale: 1 });
@@ -44,7 +44,9 @@ export function compileOnly(): void {
     // @ts-expect-error a node is its own crop
     renderNodePng(node, { crop: { x: 0, y: 0, width: 1, height: 1 } });
     const box = nodeExtent(node);
-    console.log(one, two, box?.width);
+    const sides: number[] = box ? [box.x, box.y, box.width, box.height] : [];
+    if (box) renderPng(tree, { crop: box });
+    console.log(one, two, sides);
   }
 
   const width: number = measureText('hi', { fontSize: 12, family: 'x', fonts: systemFonts() });
@@ -59,6 +61,6 @@ export function compileOnly(): void {
   console.log(browser.default);
 
   const _viaExports: Helpers = viaExports;
-  console.log(_viaExports, viaShim);
-  console.log(set, same, max, pending, later, png, png2, raw, rawAsync, pngAsync, width, fitted, fitted2, fitted3, db);
+  console.log(_viaExports);
+  console.log(set, same, max, pending, later, png, png2, png3, raw, rawAsync, pngAsync, width, fitted, fitted2, fitted3, db);
 }

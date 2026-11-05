@@ -8,8 +8,8 @@ import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import binding from '../index.js';
-import { treeFontsOrSkip, testFontFile, skip } from './support.mjs';
-const { FontDatabase, usvg } = binding;
+import { fontsOrSkip, testFontFile, skip } from './support.mjs';
+const { fontdb, usvg } = binding;
 
 // 1. which artifact is loaded: the native addon, or the WASI module when
 //    NAPI_RS_NATIVE_LIBRARY_PATH points at its loader (npm run test:wasi).
@@ -20,38 +20,34 @@ if (wasi) {
   assert.equal(binding.__napiBindingTarget, 'native', '__napiBindingTarget');
 }
 
-// 2. FontDatabase members no other test calls
+// 2. fontdb.Database members no other test calls
 {
-  const db = new FontDatabase();
+  const db = new fontdb.Database();
   assert.equal(db.isEmpty(), true, 'a new database is empty');
   const file = testFontFile();
   if (file && wasi) {
     // No mmap under WASI: fontdb is built without `memmap` there, so files
-    // are read into memory, and the one call that needs a mapping throws.
+    // are read into memory.
     db.loadFontsDir(join(file, '..'));
     assert.equal(db.isEmpty(), false, 'loadFontsDir under WASI');
-    const one = new FontDatabase();
+    const one = new fontdb.Database();
     one.loadFontFile(file);
     assert.equal(one.len(), 1, 'loadFontFile under WASI');
-    assert.throws(() => one.makeFaceDataUnshared(one.faces()[0]), /makeFaceDataUnshared is not available on this target/);
   } else if (file) {
     const dir = mkdtempSync(join(tmpdir(), 'resvg-fonts-'));
     copyFileSync(file, join(dir, 'face.ttf'));
     db.loadFontsDir(dir);
     assert.equal(db.isEmpty(), false, 'loadFontsDir found the face');
-    const [face] = db.faces();
-    db.makeFaceDataUnshared(face);
-    assert.ok(db.faceData(face.postScriptName)?.length > 0, 'data still readable once unshared');
     db.loadFontsDir(join(dir, 'nowhere'));
     assert.equal(db.len(), 1, 'a missing directory adds nothing and does not throw');
   } else {
-    skip('loadFontsDir / makeFaceDataUnshared', 'no font file in this environment');
+    skip('loadFontsDir', 'no font file in this environment');
   }
 }
 
 // 3. the walk, over the namespaced surface: the tree and every node,
 //    definition and value reachable from it
-const fonts = treeFontsOrSkip(binding, 'generated getters');
+const fonts = fontsOrSkip(binding, 'generated getters');
 const png = readFileSync(new URL('../demo/assets/roster.png', import.meta.url)).toString('base64');
 const tree = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="320" height="240">
   <defs>

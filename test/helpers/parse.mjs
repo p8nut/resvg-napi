@@ -1,5 +1,5 @@
 // `parse` / `parseAsync` (step 11 of docs/migration-0.10.md): the guard on by
-// default, the flat `Resvg`'s `pendingImages` / `pendingFonts`, the SVGZ
+// default, `pendingImages` / `pendingFonts` as 0.9's `Resvg` reported them, the SVGZ
 // advice of #167, the system fonts scanned once, and `createHelpers(binding)`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ import zlib from 'node:zlib';
 import binding from '../../index.js';
 import helpers, { createHelpers, parse, parseAsync, renderPng, systemFonts, systemFontsAsync } from '../../helpers.mjs';
 
-const { Resvg, usvg, fontdb, tiny_skia, resvg } = binding;
+const { usvg, fontdb, tiny_skia, resvg } = binding;
 
 /** A 20x20 PNG of one colour. */
 function png(r, g, b) {
@@ -35,28 +35,29 @@ function pixel(tree) {
 
 const FONT = readFileSync(new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url));
 
-test('pendingImages and pendingFonts: what the flat Resvg reports', async () => {
+test('pendingImages and pendingFonts: what 0.9\'s Resvg reported', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'resvg-helpers-'));
   writeFileSync(join(dir, 'disk.png'), RED);
   const outside = mkdtempSync(join(tmpdir(), 'resvg-helpers-out-'));
   writeFileSync(join(outside, 'secret.png'), RED);
-  const svg = doc('logo', 'disk.png', 'missing.png', join(outside, 'secret.png'), `../${outside.split(/[\\/]/).pop()}/secret.png`);
+  const [abs, up] = [join(outside, 'secret.png'), `../${outside.split(/[\\/]/).pop()}/secret.png`];
+  const svg = doc('logo', 'disk.png', 'missing.png', abs, up);
+  const fonts = ['No Such Family', 'Another Missing One'];
+  // What the flat `Resvg` reported for each, before 0.10 removed it.
   const cases = [
-    [{}, {}],
-    [{ resourcesDir: dir }, {}],
-    [{ resourcesDir: dir }, { logo: RED }],
-    [{ resourcesDir: dir, resourcesRoot: tmpdir() }, { logo: RED }],
+    [{}, {}, ['logo', 'disk.png', 'missing.png', abs, up]],
+    [{ resourcesDir: dir }, {}, ['logo', 'missing.png', abs, up]],
+    [{ resourcesDir: dir }, { logo: RED }, ['missing.png', abs, up]],
+    [{ resourcesDir: dir, resourcesRoot: tmpdir() }, { logo: RED }, ['missing.png']],
   ];
-  for (const [options, images] of cases) {
-    const flat = new Resvg(svg, options, null, images);
-    const want = [flat.pendingImages(), flat.pendingFonts()];
+  for (const [options, images, pending] of cases) {
     const sync = parse(svg, { ...options, images });
     const async = await parseAsync(Buffer.from(svg), { ...options, images });
     for (const got of [sync, async]) {
-      assert.deepEqual([got.pendingImages, got.pendingFonts], want, JSON.stringify(options));
+      assert.deepEqual([got.pendingImages, got.pendingFonts], [pending, fonts], JSON.stringify(options));
       assert.ok(got.tree instanceof usvg.Tree);
     }
-    assert.ok(renderPng(sync.tree).equals(flat.renderPng()), 'and the same pixels');
+    assert.ok(renderPng(sync.tree).equals(renderPng(async.tree)), 'and the same pixels');
   }
 });
 

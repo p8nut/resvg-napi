@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType};
 
 use crate::config;
-use crate::sources::{inherent_impls, is_pub, self_ident};
+use crate::sources::{derives, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
 pub struct Field {
@@ -997,17 +997,36 @@ pub fn value_class(
     (code, skipped, reached)
 }
 
-/// Emits `#[napi] pub struct T { inner: Arc<...> }` plus its read-only
-/// accessors, and reports the handle types those accessors reach in turn.
+/// Which surface a handle class is emitted for. They differ in what a rule
+/// may add beside the upstream methods.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    /// The first surface: read-only, with `Config::content_view` and
+    /// `Config::arg_standin`.
+    Flat,
+    /// The mirrored one, later passed through [`namespaced`]: nothing the
+    /// template provides, and a handle whose upstream type derives `Clone`
+    /// gets its `&mut self` methods through `Arc::make_mut`, copy on write.
+    Namespaced,
+}
+
+/// Emits `#[napi] pub struct T { inner: Arc<...> }` plus its accessors, and
+/// reports the handle types those accessors reach in turn.
 pub fn wrapper_class(
     files: &[syn::File],
     ty: &str,
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
+    surface: Surface,
 ) -> (TokenStream, Vec<Skip>, BTreeSet<String>) {
     let name = wrapper_ident(ty);
     let path = wrapper_path(ty, modules, root);
+    // An `Arc` hands out `&mut` only through `make_mut`, which clones a value
+    // shared with anyone else first: the rule needs `Clone`, and takes it
+    // from the derive.
+    let make_mut = surface == Surface::Namespaced && derives(files, bare(ty), "Clone");
+    let inner_mut = quote!(std::sync::Arc::make_mut(&mut self.inner));
     // Walk the type itself, then whatever it derefs to, sharing one name set so
     // an override on the outer type wins.
     let mut taken = BTreeSet::new();
@@ -1020,15 +1039,20 @@ pub fn wrapper_class(
         // A chain this long is upstream changing shape, not a deeper class:
         // cutting it short dropped the remaining targets' methods silently.
         assert!(depth < 4, "{ty}: Deref chain longer than 4, reached {t}");
+        // `make_mut` gives `&mut` to the type itself, not to what it derefs
+        // to: a Deref target's mutating methods stay out.
+        let mutable = make_mut && depth == 0;
         let (code, sk) = map_methods(
             &MethodPass {
                 files,
                 ty: &t,
                 receiver: &inner,
+                receiver_mut: mutable.then_some(&inner_mut),
                 skip: &[],
                 prologue: None,
-                readonly: true,
+                readonly: !mutable,
                 optional: false,
+                standin: surface == Surface::Flat,
             },
             vocab,
             &mut taken,
@@ -1054,7 +1078,8 @@ pub fn wrapper_class(
     // from the presence of the accessor `Config::content_view` names.
     let content = match &config().content_view {
         Some(view)
-            if inherent_impls(files, bare(ty)).any(|imp| {
+            if surface == Surface::Flat
+                && inherent_impls(files, bare(ty)).any(|imp| {
                 imp.items.iter().any(|it| match it {
                     ImplItem::Fn(f) => {
                         is_pub(&f.vis)
@@ -1071,7 +1096,11 @@ pub fn wrapper_class(
     };
     // The crate path as the generated file spells it, not as quote! does.
     let crate_path = root.to_string().replace(' ', "");
-    let doc = format!(" Read-only handle on a `{crate_path}::{ty}`.");
+    let doc = if make_mut {
+        format!(" Handle on a `{crate_path}::{ty}`, copied on the first write while shared.")
+    } else {
+        format!(" Read-only handle on a `{crate_path}::{ty}`.")
+    };
     let code = quote! {
         #[doc = #doc]
         #[napi]
@@ -1108,6 +1137,9 @@ pub struct MethodPass<'a> {
     pub files: &'a [syn::File],
     pub ty: &'a str,
     pub receiver: &'a TokenStream,
+    /// What a `&mut self` method is called on, when it differs: a
+    /// copy-on-write `Arc` hands out `&mut` through `make_mut`.
+    pub receiver_mut: Option<&'a TokenStream>,
     pub skip: &'a [&'a str],
     /// Emitted before the call; when set, every wrapper returns `Result<_>` so a
     /// receiver that has to be looked up first can fail cleanly.
@@ -1118,6 +1150,9 @@ pub struct MethodPass<'a> {
     /// wrapper returns `Result<Option<_>>`, and the prologue returns
     /// `Ok(None)` itself.
     pub optional: bool,
+    /// Whether `Config::arg_standin` applies: its class is the template's,
+    /// which a namespaced class must not take.
+    pub standin: bool,
 }
 
 /// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
@@ -1137,17 +1172,19 @@ pub fn map_methods(
         files,
         ty,
         receiver,
+        receiver_mut,
         skip,
         prologue,
         readonly,
         optional,
+        standin: with_standin,
     } = *m;
     let mut code = TokenStream::new();
     let mut skipped = Vec::new();
     let mut twins = BTreeSet::new();
     // `Config::arg_standin`: the class JS hands over, and its resolver.
-    let standin = config()
-        .arg_standin
+    let standin_cfg = config().arg_standin.filter(|_| with_standin);
+    let standin = standin_cfg
         .map(|(_, class, resolve)| (format_ident!("{class}"), format_ident!("{resolve}")));
 
     for imp in inherent_impls(files, ty) {
@@ -1234,7 +1271,7 @@ pub fn map_methods(
                     match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
-                        _ if config().arg_standin.is_some_and(|s| ty == s.0) => Some(Arg::Standin),
+                        _ if standin_cfg.is_some_and(|s| ty == s.0) => Some(Arg::Standin),
                         _ => None,
                     }
                 };
@@ -1315,7 +1352,11 @@ pub fn map_methods(
                 quote!(&self)
             };
             let doc = docs(&f.attrs);
-            let call = quote!(#receiver.#ident(#(#fwd),*));
+            let on = match receiver_mut {
+                Some(r) if mutable => r,
+                _ => receiver,
+            };
+            let call = quote!(#on.#ident(#(#fwd),*));
 
             // The JS type and the expression producing it: the one table.
             let (ret_ty, value, already_result) = match &ret {
@@ -1659,26 +1700,20 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         }
         scalars.contains(&name)
     };
-    let classes: Vec<&syn::Ident> = file
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            // A bare `#[napi]` is a class; `#[napi(object)]` and the enums are
-            // plain values, which print fine already.
-            Item::Struct(s)
-                if s.attrs
-                    .iter()
-                    .any(|a| a.path().is_ident("napi") && matches!(a.meta, syn::Meta::Path(_))) =>
-            {
-                Some(&s.ident)
-            }
-            _ => None,
-        })
-        .collect();
+    // `#[napi(object)]` and the enums are plain values, which print fine
+    // already.
+    let classes: Vec<(&syn::Ident, String, Option<String>)> =
+        file.items.iter().filter_map(class_of).collect();
     let mut out = TokenStream::new();
-    for class in classes {
+    for (class, js_class, namespace) in classes {
         let (mut getters, mut methods) = (Vec::new(), Vec::new());
         let name = class.to_string();
+        // An impl lands on its class in the `.d.ts` only under the same
+        // namespace.
+        let attr = match &namespace {
+            Some(ns) => quote!(#[napi(namespace = #ns)]),
+            None => quote!(#[napi]),
+        };
         let members = inherent_impls(std::slice::from_ref(file), &name).flat_map(|imp| &imp.items);
         for it in members {
             let ImplItem::Fn(f) = it else { continue };
@@ -1700,7 +1735,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
             }
         }
         out.extend(quote! {
-            #[napi]
+            #attr
             impl #class {
                 #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
                 #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -1712,12 +1747,12 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
                     options: Object,
                     inspect: Function<FnArgs<(Object, Object)>, String>,
                 ) -> Result<String> {
-                    napi_support::inspect(&env, &this, #name, &[#(#getters),*], &[#(#methods),*], depth, options, inspect)
+                    napi_support::inspect(&env, &this, #js_class, &[#(#getters),*], &[#(#methods),*], depth, options, inspect)
                 }
                 #[doc = " The class name, for `Object.prototype.toString`."]
                 #[napi(getter, well_known_symbol = "toStringTag")]
                 pub fn to_string_tag(&self) -> String {
-                    #name.to_string()
+                    #js_class.to_string()
                 }
             }
         });
@@ -1780,4 +1815,288 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
         }
     }
     out
+}
+
+/// The second surface: every item of `parts` again, each under its part's JS
+/// namespace (`toy.Point`), beside the first surface it is copied from.
+/// Returns the code, and what was left out with the reason.
+///
+/// Rust forbids two items of one name, so each copied item is renamed with
+/// its namespace as a prefix -- `Point` becomes `ToyPoint`, a free function
+/// `point_to_js` becomes `toy_point_to_js` -- and given `js_name` and
+/// `namespace`, so the prefix stays out of JavaScript (napi's `.d.ts` still
+/// aliases a class's Rust name to it, as a type). The JS name is the upstream
+/// one: a `Config::data_renames` or `Config::enum_renames` entry is undone.
+///
+/// References between copied items are renamed with them, across parts, so a
+/// type of one namespace holding a type of another points at the other's
+/// copy. A path (`a::Point`), a field or a method (`.point`) and an enum's
+/// variants are never renamed: those name upstream, not the copy.
+///
+/// A class is left out when its JS name is in `taken` or already used by an
+/// earlier part: napi keeps one constructor per JS class name, namespace or
+/// not (see [`class_names`]). So is everything that names a left-out item.
+///
+/// napi resolves a reference to its TypeScript name when the referencing
+/// item expands, from what has expanded before it, and falls back to the
+/// Rust identifier. The copies' struct and enum definitions are therefore
+/// put before whatever names them, and every impl and function after all of
+/// them.
+pub fn namespaced(
+    parts: &[(&str, TokenStream)],
+    taken: &BTreeSet<String>,
+) -> (TokenStream, Vec<String>) {
+    let parsed: Vec<(&str, syn::File)> = parts
+        .iter()
+        .map(|(ns, code)| {
+            let file = syn::parse2(code.clone())
+                .unwrap_or_else(|e| panic!("namespace {ns}: not valid Rust: {e}"));
+            (*ns, file)
+        })
+        .collect();
+    // The upstream name behind a renamed first-surface one.
+    let upstream = |ident: &str| -> String {
+        config()
+            .data_renames
+            .iter()
+            .chain(config().enum_renames)
+            .find(|(_, to)| *to == ident)
+            .map_or(ident, |(from, _)| from)
+            .to_string()
+    };
+    // first-surface ident -> (copy's ident, JS name, namespace)
+    let mut names: BTreeMap<String, (proc_macro2::Ident, String, &str)> = BTreeMap::new();
+    // What is left out, with the reason; the rest follows from it below.
+    let mut out_why: BTreeMap<String, String> = BTreeMap::new();
+    let mut classes = taken.clone();
+    for (ns, file) in &parsed {
+        let pascal = ns.to_case(convert_case::Case::Pascal);
+        let snake = ns.to_case(convert_case::Case::Snake);
+        for item in &file.items {
+            // The prefix goes on the JS name, so the Rust name says what JS
+            // sees: `FaceInfo` copied from a first-surface `FontFace` is
+            // `<Ns>FaceInfo`.
+            let (id, new) = match item {
+                Item::Struct(s) => (
+                    &s.ident,
+                    format_ident!("{pascal}{}", upstream(&s.ident.to_string())),
+                ),
+                Item::Enum(e) => (
+                    &e.ident,
+                    format_ident!("{pascal}{}", upstream(&e.ident.to_string())),
+                ),
+                Item::Fn(f) => (&f.sig.ident, format_ident!("{snake}_{}", f.sig.ident)),
+                _ => continue,
+            };
+            let js = upstream(&id.to_string());
+            if class_of(item).is_some() && !classes.insert(js.clone()) {
+                out_why.insert(
+                    id.to_string(),
+                    format!("{ns}.{js}: a class named {js} exists already"),
+                );
+            }
+            let prior = names.insert(id.to_string(), (new, js, ns));
+            assert!(
+                prior.is_none(),
+                "{id} is defined twice across the namespaces"
+            );
+        }
+    }
+    let renames: BTreeMap<String, proc_macro2::Ident> = names
+        .iter()
+        .map(|(k, (new, _, _))| (k.clone(), new.clone()))
+        .collect();
+
+    // (first-surface ident or empty, whether a definition, the item renamed,
+    // the copied idents it names)
+    let mut items: Vec<(String, bool, TokenStream, BTreeSet<String>)> = Vec::new();
+    for (ns, file) in &parsed {
+        for item in &file.items {
+            let mut item = item.clone();
+            let own = match &mut item {
+                Item::Struct(s) => Some((s.ident.to_string(), &mut s.attrs)),
+                Item::Enum(e) => Some((e.ident.to_string(), &mut e.attrs)),
+                _ => None,
+            };
+            if let Some((id, attrs)) = own {
+                let (_, js, ns) = &names[&id];
+                with_napi_args(attrs, quote!(js_name = #js, namespace = #ns));
+            } else if let Item::Impl(imp) = &mut item {
+                // An impl joins its class in the `.d.ts` only under the
+                // class's namespace.
+                let ns = self_ident(imp)
+                    .and_then(|id| names.get(&id.to_string()))
+                    .map_or(*ns, |(_, _, n)| n);
+                with_napi_args(&mut imp.attrs, quote!(namespace = #ns));
+            }
+            let is_def = matches!(item, Item::Struct(_) | Item::Enum(_));
+            let id = item_name(&item);
+            let mut named = BTreeSet::new();
+            let code = rename_idents(quote!(#item), &renames, &mut named);
+            named.remove(&id);
+            items.push((id, is_def, code, named));
+        }
+    }
+    // Whatever names a left-out item goes too, to a fixpoint: an impl of it, a
+    // type holding it, a function returning it.
+    loop {
+        let more: Vec<(String, String)> = items
+            .iter()
+            .filter(|(id, _, _, _)| !id.is_empty() && !out_why.contains_key(id))
+            .filter_map(|(id, _, _, named)| {
+                let gone = named.iter().find(|n| out_why.contains_key(*n))?;
+                let (_, js, ns) = &names[id];
+                Some((id.clone(), format!("{ns}.{js}: it names {}", names[gone].1)))
+            })
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        out_why.extend(more);
+    }
+    items.retain(|(id, _, _, named)| {
+        !out_why.contains_key(id) && !named.iter().any(|n| out_why.contains_key(n))
+    });
+    let (defs, rest): (Vec<_>, Vec<_>) = items.into_iter().partition(|(_, def, _, _)| *def);
+
+    // Definitions in dependency order, the parts' own order otherwise. A cycle
+    // (a type holding a list of itself) is cut where it is first met.
+    type Def = (String, bool, TokenStream, BTreeSet<String>);
+    fn visit(
+        i: usize,
+        defs: &[Def],
+        index: &BTreeMap<&str, usize>,
+        state: &mut [u8],
+        out: &mut TokenStream,
+    ) {
+        if state[i] != 0 {
+            return;
+        }
+        state[i] = 1;
+        for dep in &defs[i].3 {
+            if let Some(&j) = index.get(dep.as_str()) {
+                visit(j, defs, index, state, out);
+            }
+        }
+        state[i] = 2;
+        out.extend(defs[i].2.clone());
+    }
+    let index: BTreeMap<&str, usize> = defs
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _, _, _))| (id.as_str(), i))
+        .collect();
+    let mut out = TokenStream::new();
+    let mut state = vec![0u8; defs.len()];
+    for i in 0..defs.len() {
+        visit(i, &defs, &index, &mut state, &mut out);
+    }
+    out.extend(rest.into_iter().map(|(_, _, code, _)| code));
+    (out, out_why.into_values().collect())
+}
+
+/// A `#[napi]` struct that is a class, not an object: its Rust ident, its JS
+/// name and its namespace.
+fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<String>)> {
+    let Item::Struct(s) = item else { return None };
+    let mut args = napi_args(&s.attrs)?;
+    if ["object", "transparent", "array"]
+        .iter()
+        .any(|k| args.contains_key(*k))
+    {
+        return None;
+    }
+    let js = args
+        .remove("js_name")
+        .flatten()
+        .unwrap_or_else(|| s.ident.to_string());
+    Some((&s.ident, js, args.remove("namespace").flatten()))
+}
+
+/// The JS names of the classes `code` declares.
+///
+/// napi keeps one constructor per JS class name, whatever its namespace, and
+/// builds every instance it returns from the constructor registered under
+/// that name: two classes sharing one leave one of them handing out
+/// instances of the other. [`namespaced`] is given these to stay clear of.
+pub fn class_names(code: &TokenStream) -> BTreeSet<String> {
+    let file: syn::File = syn::parse2(code.clone()).expect("generated code that parses");
+    file.items
+        .iter()
+        .filter_map(class_of)
+        .map(|(_, js, _)| js)
+        .collect()
+}
+
+/// The name a struct, enum or function declares, or empty.
+fn item_name(item: &Item) -> String {
+    match item {
+        Item::Struct(s) => s.ident.to_string(),
+        Item::Enum(e) => e.ident.to_string(),
+        Item::Fn(f) => f.sig.ident.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Adds `extra` to an item's `#[napi]` or `#[napi(..)]`; nothing without one.
+fn with_napi_args(attrs: &mut [syn::Attribute], extra: TokenStream) {
+    let Some(attr) = attrs.iter_mut().find(|a| a.path().is_ident("napi")) else {
+        return;
+    };
+    *attr = match &attr.meta {
+        syn::Meta::List(l) => {
+            let have = &l.tokens;
+            syn::parse_quote!(#[napi(#have, #extra)])
+        }
+        _ => syn::parse_quote!(#[napi(#extra)]),
+    };
+}
+
+/// `ts` with every identifier in `renames` replaced, except where it names
+/// something else: after `::` (an upstream path, a variant), after `.` (a
+/// field, a method), or as a variant of an enum being declared. What was
+/// renamed is added to `named`.
+fn rename_idents(
+    ts: TokenStream,
+    renames: &BTreeMap<String, proc_macro2::Ident>,
+    named: &mut BTreeSet<String>,
+) -> TokenStream {
+    use proc_macro2::{Delimiter, Group, TokenTree};
+    let toks: Vec<TokenTree> = ts.into_iter().collect();
+    let punct =
+        |i: usize, c: char| matches!(toks.get(i), Some(TokenTree::Punct(p)) if p.as_char() == c);
+    let mut out = Vec::with_capacity(toks.len());
+    // Between `enum` and the enum's body, which is left alone.
+    let mut enum_head = false;
+    for (i, t) in toks.iter().enumerate() {
+        match t {
+            TokenTree::Ident(id) => {
+                let path = i >= 2 && punct(i - 1, ':') && punct(i - 2, ':');
+                let member = i >= 1 && punct(i - 1, '.');
+                match renames.get(&id.to_string()) {
+                    Some(new) if !path && !member => {
+                        named.insert(id.to_string());
+                        let mut new = new.clone();
+                        new.set_span(id.span());
+                        out.push(TokenTree::Ident(new));
+                    }
+                    _ => out.push(t.clone()),
+                }
+                if id == "enum" {
+                    enum_head = true;
+                }
+            }
+            TokenTree::Group(g) if enum_head && g.delimiter() == Delimiter::Brace => {
+                enum_head = false;
+                out.push(t.clone());
+            }
+            TokenTree::Group(g) => {
+                let mut ng = Group::new(g.delimiter(), rename_idents(g.stream(), renames, named));
+                ng.set_span(g.span());
+                out.push(TokenTree::Group(ng));
+            }
+            _ => out.push(t.clone()),
+        }
+    }
+    out.into_iter().collect()
 }

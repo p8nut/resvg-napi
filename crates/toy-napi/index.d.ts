@@ -34,3 +34,33 @@ export interface Point {
   x: number
   y: number
 }
+
+export declare namespace toy {
+  /** Handle on a `toy::Tally`, copied on the first write while shared. */
+  export class Tally {
+    push(name: string): void
+    clear(): void
+    len(): number
+    isEmpty(): boolean
+    joined(): string
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyTally = Tally
+  /** Which way a counter counts. */
+  export const enum Direction {
+    Up = 'up',
+    Down = 'down',
+  }
+  /** Plain view of a `Point`. */
+  export interface Point {
+    x: number
+    y: number
+  }
+  /** A second handle on the same `Tally`: shared until one of them writes. */
+  export function share(t: toy.Tally): toy.Tally
+  /** Whether two handles still share one value. */
+  export function shared(a: toy.Tally, b: toy.Tally): boolean
+  /** A new, empty `toy.Tally`. */
+  export function tally(): toy.Tally
+}

@@ -5298,6 +5298,2268 @@ pub fn render_async(
         signal.map(|s| s.0),
     )
 }
+#[doc = " A color interpolation mode."]
+#[doc = ""]
+#[doc = " The default is `ColorInterpolation::LinearRGB`."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "ColorInterpolation",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgColorInterpolation {
+    SRGB,
+    LinearRGB,
+}
+#[doc = " An edges processing mode."]
+#[napi(string_enum = "camelCase", js_name = "EdgeMode", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgEdgeMode {
+    None,
+    Duplicate,
+    Wrap,
+}
+#[doc = " A color channel."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "ColorChannel",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgColorChannel {
+    R,
+    G,
+    B,
+    A,
+}
+#[doc = " A morphology operation."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "MorphologyOperator",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgMorphologyOperator {
+    Erode,
+    Dilate,
+}
+#[doc = " A turbulence kind for the `feTurbulence` filter."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "TurbulenceKind",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgTurbulenceKind {
+    FractalNoise,
+    Turbulence,
+}
+#[doc = " A shape rendering method."]
+#[doc = ""]
+#[doc = " `shape-rendering` attribute in the SVG."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "ShapeRendering",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgShapeRendering {
+    OptimizeSpeed,
+    CrispEdges,
+    GeometricPrecision,
+}
+#[doc = " A text rendering method."]
+#[doc = ""]
+#[doc = " `text-rendering` attribute in the SVG."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "TextRendering",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgTextRendering {
+    OptimizeSpeed,
+    OptimizeLegibility,
+    GeometricPrecision,
+}
+#[doc = " An image rendering method."]
+#[doc = ""]
+#[doc = " `image-rendering` attribute in the SVG."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "ImageRendering",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgImageRendering {
+    OptimizeQuality,
+    OptimizeSpeed,
+    Smooth,
+    HighQuality,
+    CrispEdges,
+    Pixelated,
+}
+#[doc = " A blending mode property."]
+#[doc = ""]
+#[doc = " `mix-blend-mode` attribute in the SVG."]
+#[napi(string_enum = "camelCase", js_name = "BlendMode", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgBlendMode {
+    Normal,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
+    PlusLighter,
+}
+#[doc = " A spread method."]
+#[doc = ""]
+#[doc = " `spreadMethod` attribute in the SVG."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "SpreadMethod",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgSpreadMethod {
+    Pad,
+    Reflect,
+    Repeat,
+}
+#[doc = " A line cap."]
+#[doc = ""]
+#[doc = " `stroke-linecap` attribute in the SVG."]
+#[napi(string_enum = "camelCase", js_name = "LineCap", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgLineCap {
+    Butt,
+    Round,
+    Square,
+}
+#[doc = " A line join."]
+#[doc = ""]
+#[doc = " `stroke-linejoin` attribute in the SVG."]
+#[napi(string_enum = "camelCase", js_name = "LineJoin", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgLineJoin {
+    Miter,
+    MiterClip,
+    Round,
+    Bevel,
+}
+#[doc = " A fill rule."]
+#[doc = ""]
+#[doc = " `fill-rule` attribute in the SVG."]
+#[napi(string_enum = "camelCase", js_name = "FillRule", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgFillRule {
+    NonZero,
+    EvenOdd,
+}
+#[doc = " A mask type."]
+#[napi(string_enum = "camelCase", js_name = "MaskType", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgMaskType {
+    Luminance,
+    Alpha,
+}
+#[doc = " Representation of the [`paint-order`] property."]
+#[doc = ""]
+#[doc = " `usvg` will handle `markers` automatically,"]
+#[doc = " therefore we provide only `fill` and `stroke` variants."]
+#[doc = ""]
+#[doc = " [`paint-order`]: https://www.w3.org/TR/SVG2/painting.html#PaintOrder"]
+#[napi(string_enum = "camelCase", js_name = "PaintOrder", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgPaintOrder {
+    FillAndStroke,
+    StrokeAndFill,
+}
+#[doc = " A font stretch property."]
+#[napi(string_enum = "camelCase", js_name = "FontStretch", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgFontStretch {
+    UltraCondensed,
+    ExtraCondensed,
+    Condensed,
+    SemiCondensed,
+    Normal,
+    SemiExpanded,
+    Expanded,
+    ExtraExpanded,
+    UltraExpanded,
+}
+#[doc = " A font style property."]
+#[napi(string_enum = "camelCase", js_name = "FontStyle", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgFontStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+#[doc = " A dominant baseline property."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "DominantBaseline",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgDominantBaseline {
+    Auto,
+    UseScript,
+    NoChange,
+    ResetSize,
+    Ideographic,
+    Alphabetic,
+    Hanging,
+    Mathematical,
+    Central,
+    Middle,
+    TextAfterEdge,
+    TextBeforeEdge,
+}
+#[doc = " An alignment baseline property."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "AlignmentBaseline",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgAlignmentBaseline {
+    Auto,
+    Baseline,
+    BeforeEdge,
+    TextBeforeEdge,
+    Middle,
+    Central,
+    AfterEdge,
+    TextAfterEdge,
+    Ideographic,
+    Alphabetic,
+    Hanging,
+    Mathematical,
+}
+#[doc = " A length adjust property."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "LengthAdjust",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgLengthAdjust {
+    Spacing,
+    SpacingAndGlyphs,
+}
+#[doc = " A font optical sizing property."]
+#[doc = ""]
+#[doc = " Controls automatic adjustment of the `opsz` axis in variable fonts"]
+#[doc = " based on font size. Matches CSS `font-optical-sizing`."]
+#[napi(
+    string_enum = "camelCase",
+    js_name = "FontOpticalSizing",
+    namespace = "usvg"
+)]
+#[derive(Copy, Clone)]
+pub enum UsvgFontOpticalSizing {
+    Auto,
+    None,
+}
+#[doc = " A text chunk anchor property."]
+#[napi(string_enum = "camelCase", js_name = "TextAnchor", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgTextAnchor {
+    Start,
+    Middle,
+    End,
+}
+#[doc = " A writing mode."]
+#[napi(string_enum = "camelCase", js_name = "WritingMode", namespace = "usvg")]
+#[derive(Copy, Clone)]
+pub enum UsvgWritingMode {
+    LeftToRight,
+    TopToBottom,
+}
+#[doc = " The payload-free variants of `Input`."]
+#[napi(object, js_name = "InputPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgInputPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'sourceGraphic' | 'sourceAlpha'")]
+    pub r#type: String,
+}
+#[doc = " `Input::Reference`."]
+#[napi(object, js_name = "InputReference", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgInputReference {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'reference'")]
+    pub r#type: String,
+    pub value: String,
+}
+#[doc = " Plain view of a `Blend`."]
+#[napi(object, js_name = "Blend", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBlend {
+    pub input1: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input2: Either<UsvgInputPlain, UsvgInputReference>,
+    pub mode: UsvgBlendMode,
+}
+#[doc = " Plain view of a `Color`."]
+#[napi(object, js_name = "Color", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgColor {
+    pub red: u32,
+    pub green: u32,
+    pub blue: u32,
+}
+#[doc = " `ColorMatrixKind::HueRotate`."]
+#[napi(object, js_name = "ColorMatrixKindHueRotate", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgColorMatrixKindHueRotate {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'hueRotate'")]
+    pub r#type: String,
+    pub value: f64,
+}
+#[doc = " `ColorMatrixKind::Matrix`."]
+#[napi(object, js_name = "ColorMatrixKindMatrix", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgColorMatrixKindMatrix {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'matrix'")]
+    pub r#type: String,
+    pub value: Vec<f64>,
+}
+#[doc = " The payload-free variants of `ColorMatrixKind`."]
+#[napi(object, js_name = "ColorMatrixKindPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgColorMatrixKindPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'luminanceToAlpha'")]
+    pub r#type: String,
+}
+#[doc = " `ColorMatrixKind::Saturate`."]
+#[napi(object, js_name = "ColorMatrixKindSaturate", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgColorMatrixKindSaturate {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'saturate'")]
+    pub r#type: String,
+    pub value: f64,
+}
+#[doc = " Plain view of a `ColorMatrix`."]
+#[napi(object, js_name = "ColorMatrix", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgColorMatrix {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub kind: Either4<
+        UsvgColorMatrixKindPlain,
+        UsvgColorMatrixKindMatrix,
+        UsvgColorMatrixKindSaturate,
+        UsvgColorMatrixKindHueRotate,
+    >,
+}
+#[doc = " `TransferFunction::Discrete`."]
+#[napi(object, js_name = "TransferFunctionDiscrete", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTransferFunctionDiscrete {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'discrete'")]
+    pub r#type: String,
+    pub value: Vec<f64>,
+}
+#[doc = " `TransferFunction::Gamma`."]
+#[napi(object, js_name = "TransferFunctionGamma", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTransferFunctionGamma {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'gamma'")]
+    pub r#type: String,
+    pub amplitude: f64,
+    pub exponent: f64,
+    pub offset: f64,
+}
+#[doc = " `TransferFunction::Linear`."]
+#[napi(object, js_name = "TransferFunctionLinear", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTransferFunctionLinear {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'linear'")]
+    pub r#type: String,
+    pub slope: f64,
+    pub intercept: f64,
+}
+#[doc = " The payload-free variants of `TransferFunction`."]
+#[napi(object, js_name = "TransferFunctionPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTransferFunctionPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'identity'")]
+    pub r#type: String,
+}
+#[doc = " `TransferFunction::Table`."]
+#[napi(object, js_name = "TransferFunctionTable", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTransferFunctionTable {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'table'")]
+    pub r#type: String,
+    pub value: Vec<f64>,
+}
+#[doc = " Plain view of a `ComponentTransfer`."]
+#[napi(object, js_name = "ComponentTransfer", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgComponentTransfer {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub func_r: Either5<
+        UsvgTransferFunctionPlain,
+        UsvgTransferFunctionTable,
+        UsvgTransferFunctionDiscrete,
+        UsvgTransferFunctionLinear,
+        UsvgTransferFunctionGamma,
+    >,
+    pub func_g: Either5<
+        UsvgTransferFunctionPlain,
+        UsvgTransferFunctionTable,
+        UsvgTransferFunctionDiscrete,
+        UsvgTransferFunctionLinear,
+        UsvgTransferFunctionGamma,
+    >,
+    pub func_b: Either5<
+        UsvgTransferFunctionPlain,
+        UsvgTransferFunctionTable,
+        UsvgTransferFunctionDiscrete,
+        UsvgTransferFunctionLinear,
+        UsvgTransferFunctionGamma,
+    >,
+    pub func_a: Either5<
+        UsvgTransferFunctionPlain,
+        UsvgTransferFunctionTable,
+        UsvgTransferFunctionDiscrete,
+        UsvgTransferFunctionLinear,
+        UsvgTransferFunctionGamma,
+    >,
+}
+#[doc = " `CompositeOperator::Arithmetic`."]
+#[napi(object, js_name = "CompositeOperatorArithmetic", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgCompositeOperatorArithmetic {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'arithmetic'")]
+    pub r#type: String,
+    pub k1: f64,
+    pub k2: f64,
+    pub k3: f64,
+    pub k4: f64,
+}
+#[doc = " The payload-free variants of `CompositeOperator`."]
+#[napi(object, js_name = "CompositeOperatorPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgCompositeOperatorPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'over' | 'in' | 'out' | 'atop' | 'xor' | 'lighter'")]
+    pub r#type: String,
+}
+#[doc = " Plain view of a `Composite`."]
+#[napi(object, js_name = "Composite", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgComposite {
+    pub input1: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input2: Either<UsvgInputPlain, UsvgInputReference>,
+    pub operator: Either<UsvgCompositeOperatorPlain, UsvgCompositeOperatorArithmetic>,
+}
+#[doc = " Plain view of a `ConvolveMatrixData`."]
+#[napi(object, js_name = "ConvolveMatrixData", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgConvolveMatrixData {
+    pub target_x: u32,
+    pub target_y: u32,
+    pub columns: u32,
+    pub rows: u32,
+    pub data: Vec<f64>,
+}
+#[doc = " Plain view of a `ConvolveMatrix`."]
+#[napi(object, js_name = "ConvolveMatrix", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgConvolveMatrix {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub matrix: UsvgConvolveMatrixData,
+    pub divisor: f64,
+    pub bias: f64,
+    pub edge_mode: UsvgEdgeMode,
+    pub preserve_alpha: bool,
+}
+#[doc = " Plain view of a `DistantLight`."]
+#[napi(object, js_name = "DistantLight", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgDistantLight {
+    pub azimuth: f64,
+    pub elevation: f64,
+}
+#[doc = " `LightSource::DistantLight`."]
+#[napi(object, js_name = "LightSourceDistantLight", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgLightSourceDistantLight {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'distantLight'")]
+    pub r#type: String,
+    pub value: UsvgDistantLight,
+}
+#[doc = " Plain view of a `PointLight`."]
+#[napi(object, js_name = "PointLight", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPointLight {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+#[doc = " `LightSource::PointLight`."]
+#[napi(object, js_name = "LightSourcePointLight", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgLightSourcePointLight {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'pointLight'")]
+    pub r#type: String,
+    pub value: UsvgPointLight,
+}
+#[doc = " Plain view of a `SpotLight`."]
+#[napi(object, js_name = "SpotLight", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgSpotLight {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub points_at_x: f64,
+    pub points_at_y: f64,
+    pub points_at_z: f64,
+    pub specular_exponent: f64,
+    pub limiting_cone_angle: Option<f64>,
+}
+#[doc = " `LightSource::SpotLight`."]
+#[napi(object, js_name = "LightSourceSpotLight", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgLightSourceSpotLight {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'spotLight'")]
+    pub r#type: String,
+    pub value: UsvgSpotLight,
+}
+#[doc = " Plain view of a `DiffuseLighting`."]
+#[napi(object, js_name = "DiffuseLighting", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgDiffuseLighting {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub surface_scale: f64,
+    pub diffuse_constant: f64,
+    pub lighting_color: UsvgColor,
+    pub light_source:
+        Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>,
+}
+#[doc = " Plain view of a `DisplacementMap`."]
+#[napi(object, js_name = "DisplacementMap", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgDisplacementMap {
+    pub input1: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input2: Either<UsvgInputPlain, UsvgInputReference>,
+    pub scale: f64,
+    pub x_channel_selector: UsvgColorChannel,
+    pub y_channel_selector: UsvgColorChannel,
+}
+#[doc = " Plain view of a `DropShadow`."]
+#[napi(object, js_name = "DropShadow", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgDropShadow {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub dx: f64,
+    pub dy: f64,
+    pub std_dev_x: f64,
+    pub std_dev_y: f64,
+    pub color: UsvgColor,
+    pub opacity: f64,
+}
+#[doc = " `Paint::Color`."]
+#[napi(object, js_name = "PaintColor", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPaintColor {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'color'")]
+    pub r#type: String,
+    pub value: UsvgColor,
+}
+#[doc = " `Paint::LinearGradient`."]
+#[napi(object, js_name = "PaintLinearGradient", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPaintLinearGradient {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'linearGradient'")]
+    pub r#type: String,
+    pub id: String,
+}
+#[doc = " `Paint::Pattern`."]
+#[napi(object, js_name = "PaintPattern", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPaintPattern {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'pattern'")]
+    pub r#type: String,
+    pub id: String,
+}
+#[doc = " `Paint::RadialGradient`."]
+#[napi(object, js_name = "PaintRadialGradient", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPaintRadialGradient {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'radialGradient'")]
+    pub r#type: String,
+    pub id: String,
+}
+#[doc = " Plain view of a `Fill`."]
+#[napi(object, js_name = "Fill", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgFill {
+    pub paint:
+        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
+    pub opacity: f64,
+    pub rule: UsvgFillRule,
+}
+#[doc = " Plain view of a `Flood`."]
+#[napi(object, js_name = "Flood", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgFlood {
+    pub color: UsvgColor,
+    pub opacity: f64,
+}
+#[doc = " Plain view of a `FontVariation`."]
+#[napi(object, js_name = "FontVariation", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgFontVariation {
+    pub tag: String,
+    pub value: f64,
+}
+#[doc = " Plain view of a `GaussianBlur`."]
+#[napi(object, js_name = "GaussianBlur", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgGaussianBlur {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub std_dev_x: f64,
+    pub std_dev_y: f64,
+}
+#[doc = " Plain view of a `Merge`."]
+#[napi(object, js_name = "Merge", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgMerge {
+    pub inputs: Vec<Either<UsvgInputPlain, UsvgInputReference>>,
+}
+#[doc = " Plain view of a `Morphology`."]
+#[napi(object, js_name = "Morphology", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgMorphology {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub operator: UsvgMorphologyOperator,
+    pub radius_x: f64,
+    pub radius_y: f64,
+}
+#[doc = " Plain view of a `Offset`."]
+#[napi(object, js_name = "Offset", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgOffset {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub dx: f64,
+    pub dy: f64,
+}
+#[doc = " Plain view of a `Stroke`."]
+#[napi(object, js_name = "Stroke", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgStroke {
+    pub paint:
+        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
+    pub dasharray: Option<Vec<f64>>,
+    pub dashoffset: f64,
+    pub miterlimit: f64,
+    pub opacity: f64,
+    pub width: f64,
+    pub linecap: UsvgLineCap,
+    pub linejoin: UsvgLineJoin,
+}
+#[doc = " Plain view of a `Path`."]
+#[napi(object, js_name = "Path", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPath {
+    pub id: String,
+    pub is_visible: bool,
+    pub fill: Option<UsvgFill>,
+    pub stroke: Option<UsvgStroke>,
+    pub paint_order: UsvgPaintOrder,
+    pub rendering_mode: UsvgShapeRendering,
+    pub data: Vec<PathSegment>,
+    pub abs_transform: Matrix,
+    pub bounding_box: BBox,
+    pub abs_bounding_box: BBox,
+    pub stroke_bounding_box: BBox,
+    pub abs_stroke_bounding_box: BBox,
+}
+#[doc = " `Kind::Blend`."]
+#[napi(object, js_name = "KindBlend", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindBlend {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'blend'")]
+    pub r#type: String,
+    pub value: UsvgBlend,
+}
+#[doc = " `Kind::ColorMatrix`."]
+#[napi(object, js_name = "KindColorMatrix", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindColorMatrix {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'colorMatrix'")]
+    pub r#type: String,
+    pub value: UsvgColorMatrix,
+}
+#[doc = " `Kind::ComponentTransfer`."]
+#[napi(object, js_name = "KindComponentTransfer", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindComponentTransfer {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'componentTransfer'")]
+    pub r#type: String,
+    pub value: UsvgComponentTransfer,
+}
+#[doc = " `Kind::Composite`."]
+#[napi(object, js_name = "KindComposite", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindComposite {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'composite'")]
+    pub r#type: String,
+    pub value: UsvgComposite,
+}
+#[doc = " `Kind::ConvolveMatrix`."]
+#[napi(object, js_name = "KindConvolveMatrix", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindConvolveMatrix {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'convolveMatrix'")]
+    pub r#type: String,
+    pub value: UsvgConvolveMatrix,
+}
+#[doc = " `Kind::DiffuseLighting`."]
+#[napi(object, js_name = "KindDiffuseLighting", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindDiffuseLighting {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'diffuseLighting'")]
+    pub r#type: String,
+    pub value: UsvgDiffuseLighting,
+}
+#[doc = " `Kind::DisplacementMap`."]
+#[napi(object, js_name = "KindDisplacementMap", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindDisplacementMap {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'displacementMap'")]
+    pub r#type: String,
+    pub value: UsvgDisplacementMap,
+}
+#[doc = " `Kind::DropShadow`."]
+#[napi(object, js_name = "KindDropShadow", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindDropShadow {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'dropShadow'")]
+    pub r#type: String,
+    pub value: UsvgDropShadow,
+}
+#[doc = " `Kind::Flood`."]
+#[napi(object, js_name = "KindFlood", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindFlood {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'flood'")]
+    pub r#type: String,
+    pub value: UsvgFlood,
+}
+#[doc = " `Kind::GaussianBlur`."]
+#[napi(object, js_name = "KindGaussianBlur", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindGaussianBlur {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'gaussianBlur'")]
+    pub r#type: String,
+    pub value: UsvgGaussianBlur,
+}
+#[doc = " `Kind::Image`."]
+#[napi(object, js_name = "KindImage", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindImage {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'image'")]
+    pub r#type: String,
+}
+#[doc = " `Kind::Merge`."]
+#[napi(object, js_name = "KindMerge", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindMerge {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'merge'")]
+    pub r#type: String,
+    pub value: UsvgMerge,
+}
+#[doc = " `Kind::Morphology`."]
+#[napi(object, js_name = "KindMorphology", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindMorphology {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'morphology'")]
+    pub r#type: String,
+    pub value: UsvgMorphology,
+}
+#[doc = " `Kind::Offset`."]
+#[napi(object, js_name = "KindOffset", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindOffset {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'offset'")]
+    pub r#type: String,
+    pub value: UsvgOffset,
+}
+#[doc = " Plain view of a `SpecularLighting`."]
+#[napi(object, js_name = "SpecularLighting", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgSpecularLighting {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub surface_scale: f64,
+    pub specular_constant: f64,
+    pub specular_exponent: f64,
+    pub lighting_color: UsvgColor,
+    pub light_source:
+        Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>,
+}
+#[doc = " `Kind::SpecularLighting`."]
+#[napi(object, js_name = "KindSpecularLighting", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindSpecularLighting {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'specularLighting'")]
+    pub r#type: String,
+    pub value: UsvgSpecularLighting,
+}
+#[doc = " Plain view of a `Tile`."]
+#[napi(object, js_name = "Tile", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTile {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+}
+#[doc = " `Kind::Tile`."]
+#[napi(object, js_name = "KindTile", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindTile {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'tile'")]
+    pub r#type: String,
+    pub value: UsvgTile,
+}
+#[doc = " Plain view of a `Turbulence`."]
+#[napi(object, js_name = "Turbulence", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTurbulence {
+    pub base_frequency_x: f64,
+    pub base_frequency_y: f64,
+    pub num_octaves: u32,
+    pub seed: i32,
+    pub stitch_tiles: bool,
+    pub kind: UsvgTurbulenceKind,
+}
+#[doc = " `Kind::Turbulence`."]
+#[napi(object, js_name = "KindTurbulence", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgKindTurbulence {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'turbulence'")]
+    pub r#type: String,
+    pub value: UsvgTurbulence,
+}
+#[doc = " Plain view of a `Primitive`."]
+#[napi(object, js_name = "Primitive", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgPrimitive {
+    pub rect: BBox,
+    pub color_interpolation: UsvgColorInterpolation,
+    pub result: String,
+    pub kind: Either17<
+        UsvgKindBlend,
+        UsvgKindColorMatrix,
+        UsvgKindComponentTransfer,
+        UsvgKindComposite,
+        UsvgKindConvolveMatrix,
+        UsvgKindDiffuseLighting,
+        UsvgKindDisplacementMap,
+        UsvgKindDropShadow,
+        UsvgKindFlood,
+        UsvgKindGaussianBlur,
+        UsvgKindImage,
+        UsvgKindMerge,
+        UsvgKindMorphology,
+        UsvgKindOffset,
+        UsvgKindSpecularLighting,
+        UsvgKindTile,
+        UsvgKindTurbulence,
+    >,
+}
+#[doc = " Plain view of a `Stop`."]
+#[napi(object, js_name = "Stop", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgStop {
+    pub offset: f64,
+    pub color: UsvgColor,
+    pub opacity: f64,
+}
+#[doc = " Plain view of a `TextDecorationStyle`."]
+#[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextDecorationStyle {
+    pub fill: Option<UsvgFill>,
+    pub stroke: Option<UsvgStroke>,
+}
+#[doc = " Plain view of a `TextDecoration`."]
+#[napi(object, js_name = "TextDecoration", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextDecoration {
+    pub underline: Option<UsvgTextDecorationStyle>,
+    pub overline: Option<UsvgTextDecorationStyle>,
+    pub line_through: Option<UsvgTextDecorationStyle>,
+}
+#[doc = " The payload-free variants of `BaselineShift`."]
+#[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBaselineShiftPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
+    pub r#type: String,
+}
+#[doc = " `BaselineShift::Number`."]
+#[napi(object, js_name = "BaselineShiftNumber", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBaselineShiftNumber {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'number'")]
+    pub r#type: String,
+    pub value: f64,
+}
+#[doc = " `ImageKind::SVG`."]
+#[napi(object, js_name = "ImageKindSvg", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgImageKindSvg {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'svg'")]
+    pub r#type: String,
+}
+#[doc = " The payload-free variants of `TextFlow`."]
+#[napi(object, js_name = "TextFlowPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextFlowPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'linear'")]
+    pub r#type: String,
+}
+#[doc = " `TextFlow::Path`."]
+#[napi(object, js_name = "TextFlowPath", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextFlowPath {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'path'")]
+    pub r#type: String,
+    pub id: String,
+}
+#[doc = " Allows italic or oblique faces to be selected."]
+#[napi(string_enum = "camelCase", js_name = "Style", namespace = "fontdb")]
+#[derive(Copy, Clone)]
+pub enum FontdbStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+#[doc = " A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass)."]
+#[napi(string_enum = "camelCase", js_name = "Stretch", namespace = "fontdb")]
+#[derive(Copy, Clone)]
+pub enum FontdbStretch {
+    UltraCondensed,
+    ExtraCondensed,
+    Condensed,
+    SemiCondensed,
+    Normal,
+    SemiExpanded,
+    Expanded,
+    ExtraExpanded,
+    UltraExpanded,
+}
+#[doc = " Handle on a `usvg::fontdb::Database`, copied on the first write while shared."]
+#[napi(js_name = "Database", namespace = "fontdb")]
+pub struct FontdbDatabase {
+    inner: std::sync::Arc<usvg::fontdb::Database>,
+    doc: Doc,
+}
+#[doc = " Read-only view of a `FaceInfo`."]
+#[napi(js_name = "FaceInfo", namespace = "fontdb")]
+pub struct FontdbFaceInfo {
+    inner: usvg::fontdb::FaceInfo,
+    doc: Doc,
+}
+impl From<UsvgColorInterpolation> for usvg::filter::ColorInterpolation {
+    fn from(v: UsvgColorInterpolation) -> Self {
+        match v {
+            UsvgColorInterpolation::SRGB => <usvg::filter::ColorInterpolation>::SRGB,
+            UsvgColorInterpolation::LinearRGB => <usvg::filter::ColorInterpolation>::LinearRGB,
+        }
+    }
+}
+impl From<usvg::filter::ColorInterpolation> for UsvgColorInterpolation {
+    fn from(v: usvg::filter::ColorInterpolation) -> Self {
+        match v {
+            <usvg::filter::ColorInterpolation>::SRGB => UsvgColorInterpolation::SRGB,
+            <usvg::filter::ColorInterpolation>::LinearRGB => UsvgColorInterpolation::LinearRGB,
+        }
+    }
+}
+impl From<UsvgEdgeMode> for usvg::filter::EdgeMode {
+    fn from(v: UsvgEdgeMode) -> Self {
+        match v {
+            UsvgEdgeMode::None => <usvg::filter::EdgeMode>::None,
+            UsvgEdgeMode::Duplicate => <usvg::filter::EdgeMode>::Duplicate,
+            UsvgEdgeMode::Wrap => <usvg::filter::EdgeMode>::Wrap,
+        }
+    }
+}
+impl From<usvg::filter::EdgeMode> for UsvgEdgeMode {
+    fn from(v: usvg::filter::EdgeMode) -> Self {
+        match v {
+            <usvg::filter::EdgeMode>::None => UsvgEdgeMode::None,
+            <usvg::filter::EdgeMode>::Duplicate => UsvgEdgeMode::Duplicate,
+            <usvg::filter::EdgeMode>::Wrap => UsvgEdgeMode::Wrap,
+        }
+    }
+}
+impl From<UsvgColorChannel> for usvg::filter::ColorChannel {
+    fn from(v: UsvgColorChannel) -> Self {
+        match v {
+            UsvgColorChannel::R => <usvg::filter::ColorChannel>::R,
+            UsvgColorChannel::G => <usvg::filter::ColorChannel>::G,
+            UsvgColorChannel::B => <usvg::filter::ColorChannel>::B,
+            UsvgColorChannel::A => <usvg::filter::ColorChannel>::A,
+        }
+    }
+}
+impl From<usvg::filter::ColorChannel> for UsvgColorChannel {
+    fn from(v: usvg::filter::ColorChannel) -> Self {
+        match v {
+            <usvg::filter::ColorChannel>::R => UsvgColorChannel::R,
+            <usvg::filter::ColorChannel>::G => UsvgColorChannel::G,
+            <usvg::filter::ColorChannel>::B => UsvgColorChannel::B,
+            <usvg::filter::ColorChannel>::A => UsvgColorChannel::A,
+        }
+    }
+}
+impl From<UsvgMorphologyOperator> for usvg::filter::MorphologyOperator {
+    fn from(v: UsvgMorphologyOperator) -> Self {
+        match v {
+            UsvgMorphologyOperator::Erode => <usvg::filter::MorphologyOperator>::Erode,
+            UsvgMorphologyOperator::Dilate => <usvg::filter::MorphologyOperator>::Dilate,
+        }
+    }
+}
+impl From<usvg::filter::MorphologyOperator> for UsvgMorphologyOperator {
+    fn from(v: usvg::filter::MorphologyOperator) -> Self {
+        match v {
+            <usvg::filter::MorphologyOperator>::Erode => UsvgMorphologyOperator::Erode,
+            <usvg::filter::MorphologyOperator>::Dilate => UsvgMorphologyOperator::Dilate,
+        }
+    }
+}
+impl From<UsvgTurbulenceKind> for usvg::filter::TurbulenceKind {
+    fn from(v: UsvgTurbulenceKind) -> Self {
+        match v {
+            UsvgTurbulenceKind::FractalNoise => <usvg::filter::TurbulenceKind>::FractalNoise,
+            UsvgTurbulenceKind::Turbulence => <usvg::filter::TurbulenceKind>::Turbulence,
+        }
+    }
+}
+impl From<usvg::filter::TurbulenceKind> for UsvgTurbulenceKind {
+    fn from(v: usvg::filter::TurbulenceKind) -> Self {
+        match v {
+            <usvg::filter::TurbulenceKind>::FractalNoise => UsvgTurbulenceKind::FractalNoise,
+            <usvg::filter::TurbulenceKind>::Turbulence => UsvgTurbulenceKind::Turbulence,
+        }
+    }
+}
+impl From<UsvgShapeRendering> for usvg::ShapeRendering {
+    fn from(v: UsvgShapeRendering) -> Self {
+        match v {
+            UsvgShapeRendering::OptimizeSpeed => <usvg::ShapeRendering>::OptimizeSpeed,
+            UsvgShapeRendering::CrispEdges => <usvg::ShapeRendering>::CrispEdges,
+            UsvgShapeRendering::GeometricPrecision => <usvg::ShapeRendering>::GeometricPrecision,
+        }
+    }
+}
+impl From<usvg::ShapeRendering> for UsvgShapeRendering {
+    fn from(v: usvg::ShapeRendering) -> Self {
+        match v {
+            <usvg::ShapeRendering>::OptimizeSpeed => UsvgShapeRendering::OptimizeSpeed,
+            <usvg::ShapeRendering>::CrispEdges => UsvgShapeRendering::CrispEdges,
+            <usvg::ShapeRendering>::GeometricPrecision => UsvgShapeRendering::GeometricPrecision,
+        }
+    }
+}
+impl From<UsvgTextRendering> for usvg::TextRendering {
+    fn from(v: UsvgTextRendering) -> Self {
+        match v {
+            UsvgTextRendering::OptimizeSpeed => <usvg::TextRendering>::OptimizeSpeed,
+            UsvgTextRendering::OptimizeLegibility => <usvg::TextRendering>::OptimizeLegibility,
+            UsvgTextRendering::GeometricPrecision => <usvg::TextRendering>::GeometricPrecision,
+        }
+    }
+}
+impl From<usvg::TextRendering> for UsvgTextRendering {
+    fn from(v: usvg::TextRendering) -> Self {
+        match v {
+            <usvg::TextRendering>::OptimizeSpeed => UsvgTextRendering::OptimizeSpeed,
+            <usvg::TextRendering>::OptimizeLegibility => UsvgTextRendering::OptimizeLegibility,
+            <usvg::TextRendering>::GeometricPrecision => UsvgTextRendering::GeometricPrecision,
+        }
+    }
+}
+impl From<UsvgImageRendering> for usvg::ImageRendering {
+    fn from(v: UsvgImageRendering) -> Self {
+        match v {
+            UsvgImageRendering::OptimizeQuality => <usvg::ImageRendering>::OptimizeQuality,
+            UsvgImageRendering::OptimizeSpeed => <usvg::ImageRendering>::OptimizeSpeed,
+            UsvgImageRendering::Smooth => <usvg::ImageRendering>::Smooth,
+            UsvgImageRendering::HighQuality => <usvg::ImageRendering>::HighQuality,
+            UsvgImageRendering::CrispEdges => <usvg::ImageRendering>::CrispEdges,
+            UsvgImageRendering::Pixelated => <usvg::ImageRendering>::Pixelated,
+        }
+    }
+}
+impl From<usvg::ImageRendering> for UsvgImageRendering {
+    fn from(v: usvg::ImageRendering) -> Self {
+        match v {
+            <usvg::ImageRendering>::OptimizeQuality => UsvgImageRendering::OptimizeQuality,
+            <usvg::ImageRendering>::OptimizeSpeed => UsvgImageRendering::OptimizeSpeed,
+            <usvg::ImageRendering>::Smooth => UsvgImageRendering::Smooth,
+            <usvg::ImageRendering>::HighQuality => UsvgImageRendering::HighQuality,
+            <usvg::ImageRendering>::CrispEdges => UsvgImageRendering::CrispEdges,
+            <usvg::ImageRendering>::Pixelated => UsvgImageRendering::Pixelated,
+        }
+    }
+}
+impl From<UsvgBlendMode> for usvg::BlendMode {
+    fn from(v: UsvgBlendMode) -> Self {
+        match v {
+            UsvgBlendMode::Normal => <usvg::BlendMode>::Normal,
+            UsvgBlendMode::Multiply => <usvg::BlendMode>::Multiply,
+            UsvgBlendMode::Screen => <usvg::BlendMode>::Screen,
+            UsvgBlendMode::Overlay => <usvg::BlendMode>::Overlay,
+            UsvgBlendMode::Darken => <usvg::BlendMode>::Darken,
+            UsvgBlendMode::Lighten => <usvg::BlendMode>::Lighten,
+            UsvgBlendMode::ColorDodge => <usvg::BlendMode>::ColorDodge,
+            UsvgBlendMode::ColorBurn => <usvg::BlendMode>::ColorBurn,
+            UsvgBlendMode::HardLight => <usvg::BlendMode>::HardLight,
+            UsvgBlendMode::SoftLight => <usvg::BlendMode>::SoftLight,
+            UsvgBlendMode::Difference => <usvg::BlendMode>::Difference,
+            UsvgBlendMode::Exclusion => <usvg::BlendMode>::Exclusion,
+            UsvgBlendMode::Hue => <usvg::BlendMode>::Hue,
+            UsvgBlendMode::Saturation => <usvg::BlendMode>::Saturation,
+            UsvgBlendMode::Color => <usvg::BlendMode>::Color,
+            UsvgBlendMode::Luminosity => <usvg::BlendMode>::Luminosity,
+            UsvgBlendMode::PlusLighter => <usvg::BlendMode>::PlusLighter,
+        }
+    }
+}
+impl From<usvg::BlendMode> for UsvgBlendMode {
+    fn from(v: usvg::BlendMode) -> Self {
+        match v {
+            <usvg::BlendMode>::Normal => UsvgBlendMode::Normal,
+            <usvg::BlendMode>::Multiply => UsvgBlendMode::Multiply,
+            <usvg::BlendMode>::Screen => UsvgBlendMode::Screen,
+            <usvg::BlendMode>::Overlay => UsvgBlendMode::Overlay,
+            <usvg::BlendMode>::Darken => UsvgBlendMode::Darken,
+            <usvg::BlendMode>::Lighten => UsvgBlendMode::Lighten,
+            <usvg::BlendMode>::ColorDodge => UsvgBlendMode::ColorDodge,
+            <usvg::BlendMode>::ColorBurn => UsvgBlendMode::ColorBurn,
+            <usvg::BlendMode>::HardLight => UsvgBlendMode::HardLight,
+            <usvg::BlendMode>::SoftLight => UsvgBlendMode::SoftLight,
+            <usvg::BlendMode>::Difference => UsvgBlendMode::Difference,
+            <usvg::BlendMode>::Exclusion => UsvgBlendMode::Exclusion,
+            <usvg::BlendMode>::Hue => UsvgBlendMode::Hue,
+            <usvg::BlendMode>::Saturation => UsvgBlendMode::Saturation,
+            <usvg::BlendMode>::Color => UsvgBlendMode::Color,
+            <usvg::BlendMode>::Luminosity => UsvgBlendMode::Luminosity,
+            <usvg::BlendMode>::PlusLighter => UsvgBlendMode::PlusLighter,
+        }
+    }
+}
+impl From<UsvgSpreadMethod> for usvg::SpreadMethod {
+    fn from(v: UsvgSpreadMethod) -> Self {
+        match v {
+            UsvgSpreadMethod::Pad => <usvg::SpreadMethod>::Pad,
+            UsvgSpreadMethod::Reflect => <usvg::SpreadMethod>::Reflect,
+            UsvgSpreadMethod::Repeat => <usvg::SpreadMethod>::Repeat,
+        }
+    }
+}
+impl From<usvg::SpreadMethod> for UsvgSpreadMethod {
+    fn from(v: usvg::SpreadMethod) -> Self {
+        match v {
+            <usvg::SpreadMethod>::Pad => UsvgSpreadMethod::Pad,
+            <usvg::SpreadMethod>::Reflect => UsvgSpreadMethod::Reflect,
+            <usvg::SpreadMethod>::Repeat => UsvgSpreadMethod::Repeat,
+        }
+    }
+}
+impl From<UsvgLineCap> for usvg::LineCap {
+    fn from(v: UsvgLineCap) -> Self {
+        match v {
+            UsvgLineCap::Butt => <usvg::LineCap>::Butt,
+            UsvgLineCap::Round => <usvg::LineCap>::Round,
+            UsvgLineCap::Square => <usvg::LineCap>::Square,
+        }
+    }
+}
+impl From<usvg::LineCap> for UsvgLineCap {
+    fn from(v: usvg::LineCap) -> Self {
+        match v {
+            <usvg::LineCap>::Butt => UsvgLineCap::Butt,
+            <usvg::LineCap>::Round => UsvgLineCap::Round,
+            <usvg::LineCap>::Square => UsvgLineCap::Square,
+        }
+    }
+}
+impl From<UsvgLineJoin> for usvg::LineJoin {
+    fn from(v: UsvgLineJoin) -> Self {
+        match v {
+            UsvgLineJoin::Miter => <usvg::LineJoin>::Miter,
+            UsvgLineJoin::MiterClip => <usvg::LineJoin>::MiterClip,
+            UsvgLineJoin::Round => <usvg::LineJoin>::Round,
+            UsvgLineJoin::Bevel => <usvg::LineJoin>::Bevel,
+        }
+    }
+}
+impl From<usvg::LineJoin> for UsvgLineJoin {
+    fn from(v: usvg::LineJoin) -> Self {
+        match v {
+            <usvg::LineJoin>::Miter => UsvgLineJoin::Miter,
+            <usvg::LineJoin>::MiterClip => UsvgLineJoin::MiterClip,
+            <usvg::LineJoin>::Round => UsvgLineJoin::Round,
+            <usvg::LineJoin>::Bevel => UsvgLineJoin::Bevel,
+        }
+    }
+}
+impl From<UsvgFillRule> for usvg::FillRule {
+    fn from(v: UsvgFillRule) -> Self {
+        match v {
+            UsvgFillRule::NonZero => <usvg::FillRule>::NonZero,
+            UsvgFillRule::EvenOdd => <usvg::FillRule>::EvenOdd,
+        }
+    }
+}
+impl From<usvg::FillRule> for UsvgFillRule {
+    fn from(v: usvg::FillRule) -> Self {
+        match v {
+            <usvg::FillRule>::NonZero => UsvgFillRule::NonZero,
+            <usvg::FillRule>::EvenOdd => UsvgFillRule::EvenOdd,
+        }
+    }
+}
+impl From<UsvgMaskType> for usvg::MaskType {
+    fn from(v: UsvgMaskType) -> Self {
+        match v {
+            UsvgMaskType::Luminance => <usvg::MaskType>::Luminance,
+            UsvgMaskType::Alpha => <usvg::MaskType>::Alpha,
+        }
+    }
+}
+impl From<usvg::MaskType> for UsvgMaskType {
+    fn from(v: usvg::MaskType) -> Self {
+        match v {
+            <usvg::MaskType>::Luminance => UsvgMaskType::Luminance,
+            <usvg::MaskType>::Alpha => UsvgMaskType::Alpha,
+        }
+    }
+}
+impl From<UsvgPaintOrder> for usvg::PaintOrder {
+    fn from(v: UsvgPaintOrder) -> Self {
+        match v {
+            UsvgPaintOrder::FillAndStroke => <usvg::PaintOrder>::FillAndStroke,
+            UsvgPaintOrder::StrokeAndFill => <usvg::PaintOrder>::StrokeAndFill,
+        }
+    }
+}
+impl From<usvg::PaintOrder> for UsvgPaintOrder {
+    fn from(v: usvg::PaintOrder) -> Self {
+        match v {
+            <usvg::PaintOrder>::FillAndStroke => UsvgPaintOrder::FillAndStroke,
+            <usvg::PaintOrder>::StrokeAndFill => UsvgPaintOrder::StrokeAndFill,
+        }
+    }
+}
+impl From<UsvgFontStretch> for usvg::FontStretch {
+    fn from(v: UsvgFontStretch) -> Self {
+        match v {
+            UsvgFontStretch::UltraCondensed => <usvg::FontStretch>::UltraCondensed,
+            UsvgFontStretch::ExtraCondensed => <usvg::FontStretch>::ExtraCondensed,
+            UsvgFontStretch::Condensed => <usvg::FontStretch>::Condensed,
+            UsvgFontStretch::SemiCondensed => <usvg::FontStretch>::SemiCondensed,
+            UsvgFontStretch::Normal => <usvg::FontStretch>::Normal,
+            UsvgFontStretch::SemiExpanded => <usvg::FontStretch>::SemiExpanded,
+            UsvgFontStretch::Expanded => <usvg::FontStretch>::Expanded,
+            UsvgFontStretch::ExtraExpanded => <usvg::FontStretch>::ExtraExpanded,
+            UsvgFontStretch::UltraExpanded => <usvg::FontStretch>::UltraExpanded,
+        }
+    }
+}
+impl From<usvg::FontStretch> for UsvgFontStretch {
+    fn from(v: usvg::FontStretch) -> Self {
+        match v {
+            <usvg::FontStretch>::UltraCondensed => UsvgFontStretch::UltraCondensed,
+            <usvg::FontStretch>::ExtraCondensed => UsvgFontStretch::ExtraCondensed,
+            <usvg::FontStretch>::Condensed => UsvgFontStretch::Condensed,
+            <usvg::FontStretch>::SemiCondensed => UsvgFontStretch::SemiCondensed,
+            <usvg::FontStretch>::Normal => UsvgFontStretch::Normal,
+            <usvg::FontStretch>::SemiExpanded => UsvgFontStretch::SemiExpanded,
+            <usvg::FontStretch>::Expanded => UsvgFontStretch::Expanded,
+            <usvg::FontStretch>::ExtraExpanded => UsvgFontStretch::ExtraExpanded,
+            <usvg::FontStretch>::UltraExpanded => UsvgFontStretch::UltraExpanded,
+        }
+    }
+}
+impl From<UsvgFontStyle> for usvg::FontStyle {
+    fn from(v: UsvgFontStyle) -> Self {
+        match v {
+            UsvgFontStyle::Normal => <usvg::FontStyle>::Normal,
+            UsvgFontStyle::Italic => <usvg::FontStyle>::Italic,
+            UsvgFontStyle::Oblique => <usvg::FontStyle>::Oblique,
+        }
+    }
+}
+impl From<usvg::FontStyle> for UsvgFontStyle {
+    fn from(v: usvg::FontStyle) -> Self {
+        match v {
+            <usvg::FontStyle>::Normal => UsvgFontStyle::Normal,
+            <usvg::FontStyle>::Italic => UsvgFontStyle::Italic,
+            <usvg::FontStyle>::Oblique => UsvgFontStyle::Oblique,
+        }
+    }
+}
+impl From<UsvgDominantBaseline> for usvg::DominantBaseline {
+    fn from(v: UsvgDominantBaseline) -> Self {
+        match v {
+            UsvgDominantBaseline::Auto => <usvg::DominantBaseline>::Auto,
+            UsvgDominantBaseline::UseScript => <usvg::DominantBaseline>::UseScript,
+            UsvgDominantBaseline::NoChange => <usvg::DominantBaseline>::NoChange,
+            UsvgDominantBaseline::ResetSize => <usvg::DominantBaseline>::ResetSize,
+            UsvgDominantBaseline::Ideographic => <usvg::DominantBaseline>::Ideographic,
+            UsvgDominantBaseline::Alphabetic => <usvg::DominantBaseline>::Alphabetic,
+            UsvgDominantBaseline::Hanging => <usvg::DominantBaseline>::Hanging,
+            UsvgDominantBaseline::Mathematical => <usvg::DominantBaseline>::Mathematical,
+            UsvgDominantBaseline::Central => <usvg::DominantBaseline>::Central,
+            UsvgDominantBaseline::Middle => <usvg::DominantBaseline>::Middle,
+            UsvgDominantBaseline::TextAfterEdge => <usvg::DominantBaseline>::TextAfterEdge,
+            UsvgDominantBaseline::TextBeforeEdge => <usvg::DominantBaseline>::TextBeforeEdge,
+        }
+    }
+}
+impl From<usvg::DominantBaseline> for UsvgDominantBaseline {
+    fn from(v: usvg::DominantBaseline) -> Self {
+        match v {
+            <usvg::DominantBaseline>::Auto => UsvgDominantBaseline::Auto,
+            <usvg::DominantBaseline>::UseScript => UsvgDominantBaseline::UseScript,
+            <usvg::DominantBaseline>::NoChange => UsvgDominantBaseline::NoChange,
+            <usvg::DominantBaseline>::ResetSize => UsvgDominantBaseline::ResetSize,
+            <usvg::DominantBaseline>::Ideographic => UsvgDominantBaseline::Ideographic,
+            <usvg::DominantBaseline>::Alphabetic => UsvgDominantBaseline::Alphabetic,
+            <usvg::DominantBaseline>::Hanging => UsvgDominantBaseline::Hanging,
+            <usvg::DominantBaseline>::Mathematical => UsvgDominantBaseline::Mathematical,
+            <usvg::DominantBaseline>::Central => UsvgDominantBaseline::Central,
+            <usvg::DominantBaseline>::Middle => UsvgDominantBaseline::Middle,
+            <usvg::DominantBaseline>::TextAfterEdge => UsvgDominantBaseline::TextAfterEdge,
+            <usvg::DominantBaseline>::TextBeforeEdge => UsvgDominantBaseline::TextBeforeEdge,
+        }
+    }
+}
+impl From<UsvgAlignmentBaseline> for usvg::AlignmentBaseline {
+    fn from(v: UsvgAlignmentBaseline) -> Self {
+        match v {
+            UsvgAlignmentBaseline::Auto => <usvg::AlignmentBaseline>::Auto,
+            UsvgAlignmentBaseline::Baseline => <usvg::AlignmentBaseline>::Baseline,
+            UsvgAlignmentBaseline::BeforeEdge => <usvg::AlignmentBaseline>::BeforeEdge,
+            UsvgAlignmentBaseline::TextBeforeEdge => <usvg::AlignmentBaseline>::TextBeforeEdge,
+            UsvgAlignmentBaseline::Middle => <usvg::AlignmentBaseline>::Middle,
+            UsvgAlignmentBaseline::Central => <usvg::AlignmentBaseline>::Central,
+            UsvgAlignmentBaseline::AfterEdge => <usvg::AlignmentBaseline>::AfterEdge,
+            UsvgAlignmentBaseline::TextAfterEdge => <usvg::AlignmentBaseline>::TextAfterEdge,
+            UsvgAlignmentBaseline::Ideographic => <usvg::AlignmentBaseline>::Ideographic,
+            UsvgAlignmentBaseline::Alphabetic => <usvg::AlignmentBaseline>::Alphabetic,
+            UsvgAlignmentBaseline::Hanging => <usvg::AlignmentBaseline>::Hanging,
+            UsvgAlignmentBaseline::Mathematical => <usvg::AlignmentBaseline>::Mathematical,
+        }
+    }
+}
+impl From<usvg::AlignmentBaseline> for UsvgAlignmentBaseline {
+    fn from(v: usvg::AlignmentBaseline) -> Self {
+        match v {
+            <usvg::AlignmentBaseline>::Auto => UsvgAlignmentBaseline::Auto,
+            <usvg::AlignmentBaseline>::Baseline => UsvgAlignmentBaseline::Baseline,
+            <usvg::AlignmentBaseline>::BeforeEdge => UsvgAlignmentBaseline::BeforeEdge,
+            <usvg::AlignmentBaseline>::TextBeforeEdge => UsvgAlignmentBaseline::TextBeforeEdge,
+            <usvg::AlignmentBaseline>::Middle => UsvgAlignmentBaseline::Middle,
+            <usvg::AlignmentBaseline>::Central => UsvgAlignmentBaseline::Central,
+            <usvg::AlignmentBaseline>::AfterEdge => UsvgAlignmentBaseline::AfterEdge,
+            <usvg::AlignmentBaseline>::TextAfterEdge => UsvgAlignmentBaseline::TextAfterEdge,
+            <usvg::AlignmentBaseline>::Ideographic => UsvgAlignmentBaseline::Ideographic,
+            <usvg::AlignmentBaseline>::Alphabetic => UsvgAlignmentBaseline::Alphabetic,
+            <usvg::AlignmentBaseline>::Hanging => UsvgAlignmentBaseline::Hanging,
+            <usvg::AlignmentBaseline>::Mathematical => UsvgAlignmentBaseline::Mathematical,
+        }
+    }
+}
+impl From<UsvgLengthAdjust> for usvg::LengthAdjust {
+    fn from(v: UsvgLengthAdjust) -> Self {
+        match v {
+            UsvgLengthAdjust::Spacing => <usvg::LengthAdjust>::Spacing,
+            UsvgLengthAdjust::SpacingAndGlyphs => <usvg::LengthAdjust>::SpacingAndGlyphs,
+        }
+    }
+}
+impl From<usvg::LengthAdjust> for UsvgLengthAdjust {
+    fn from(v: usvg::LengthAdjust) -> Self {
+        match v {
+            <usvg::LengthAdjust>::Spacing => UsvgLengthAdjust::Spacing,
+            <usvg::LengthAdjust>::SpacingAndGlyphs => UsvgLengthAdjust::SpacingAndGlyphs,
+        }
+    }
+}
+impl From<UsvgFontOpticalSizing> for usvg::FontOpticalSizing {
+    fn from(v: UsvgFontOpticalSizing) -> Self {
+        match v {
+            UsvgFontOpticalSizing::Auto => <usvg::FontOpticalSizing>::Auto,
+            UsvgFontOpticalSizing::None => <usvg::FontOpticalSizing>::None,
+        }
+    }
+}
+impl From<usvg::FontOpticalSizing> for UsvgFontOpticalSizing {
+    fn from(v: usvg::FontOpticalSizing) -> Self {
+        match v {
+            <usvg::FontOpticalSizing>::Auto => UsvgFontOpticalSizing::Auto,
+            <usvg::FontOpticalSizing>::None => UsvgFontOpticalSizing::None,
+        }
+    }
+}
+impl From<UsvgTextAnchor> for usvg::TextAnchor {
+    fn from(v: UsvgTextAnchor) -> Self {
+        match v {
+            UsvgTextAnchor::Start => <usvg::TextAnchor>::Start,
+            UsvgTextAnchor::Middle => <usvg::TextAnchor>::Middle,
+            UsvgTextAnchor::End => <usvg::TextAnchor>::End,
+        }
+    }
+}
+impl From<usvg::TextAnchor> for UsvgTextAnchor {
+    fn from(v: usvg::TextAnchor) -> Self {
+        match v {
+            <usvg::TextAnchor>::Start => UsvgTextAnchor::Start,
+            <usvg::TextAnchor>::Middle => UsvgTextAnchor::Middle,
+            <usvg::TextAnchor>::End => UsvgTextAnchor::End,
+        }
+    }
+}
+impl From<UsvgWritingMode> for usvg::WritingMode {
+    fn from(v: UsvgWritingMode) -> Self {
+        match v {
+            UsvgWritingMode::LeftToRight => <usvg::WritingMode>::LeftToRight,
+            UsvgWritingMode::TopToBottom => <usvg::WritingMode>::TopToBottom,
+        }
+    }
+}
+impl From<usvg::WritingMode> for UsvgWritingMode {
+    fn from(v: usvg::WritingMode) -> Self {
+        match v {
+            <usvg::WritingMode>::LeftToRight => UsvgWritingMode::LeftToRight,
+            <usvg::WritingMode>::TopToBottom => UsvgWritingMode::TopToBottom,
+        }
+    }
+}
+impl From<&usvg::filter::Blend> for UsvgBlend {
+    fn from(v: &usvg::filter::Blend) -> Self {
+        Self {
+            input1: usvg_input_to_js(v.input1()),
+            input2: usvg_input_to_js(v.input2()),
+            mode: UsvgBlendMode::from(v.mode()),
+        }
+    }
+}
+impl From<&usvg::Color> for UsvgColor {
+    fn from(v: &usvg::Color) -> Self {
+        Self {
+            red: u32::from(v.red),
+            green: u32::from(v.green),
+            blue: u32::from(v.blue),
+        }
+    }
+}
+impl From<&usvg::filter::ColorMatrix> for UsvgColorMatrix {
+    fn from(v: &usvg::filter::ColorMatrix) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            kind: usvg_color_matrix_kind_to_js(v.kind()),
+        }
+    }
+}
+impl From<&usvg::filter::ComponentTransfer> for UsvgComponentTransfer {
+    fn from(v: &usvg::filter::ComponentTransfer) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            func_r: usvg_transfer_function_to_js(v.func_r()),
+            func_g: usvg_transfer_function_to_js(v.func_g()),
+            func_b: usvg_transfer_function_to_js(v.func_b()),
+            func_a: usvg_transfer_function_to_js(v.func_a()),
+        }
+    }
+}
+impl From<&usvg::filter::Composite> for UsvgComposite {
+    fn from(v: &usvg::filter::Composite) -> Self {
+        Self {
+            input1: usvg_input_to_js(v.input1()),
+            input2: usvg_input_to_js(v.input2()),
+            operator: usvg_composite_operator_to_js(&v.operator()),
+        }
+    }
+}
+impl From<&usvg::filter::ConvolveMatrix> for UsvgConvolveMatrix {
+    fn from(v: &usvg::filter::ConvolveMatrix) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            matrix: UsvgConvolveMatrixData::from(v.matrix()),
+            divisor: f64::from(v.divisor().get()),
+            bias: f64::from(v.bias()),
+            edge_mode: UsvgEdgeMode::from(v.edge_mode()),
+            preserve_alpha: v.preserve_alpha(),
+        }
+    }
+}
+impl From<&usvg::filter::ConvolveMatrixData> for UsvgConvolveMatrixData {
+    fn from(v: &usvg::filter::ConvolveMatrixData) -> Self {
+        Self {
+            target_x: v.target_x(),
+            target_y: v.target_y(),
+            columns: v.columns(),
+            rows: v.rows(),
+            data: v.data().iter().map(|v| f64::from(*v)).collect(),
+        }
+    }
+}
+impl From<&usvg::filter::DiffuseLighting> for UsvgDiffuseLighting {
+    fn from(v: &usvg::filter::DiffuseLighting) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            surface_scale: f64::from(v.surface_scale()),
+            diffuse_constant: f64::from(v.diffuse_constant()),
+            lighting_color: UsvgColor::from(&v.lighting_color()),
+            light_source: usvg_light_source_to_js(&v.light_source()),
+        }
+    }
+}
+impl From<&usvg::filter::DisplacementMap> for UsvgDisplacementMap {
+    fn from(v: &usvg::filter::DisplacementMap) -> Self {
+        Self {
+            input1: usvg_input_to_js(v.input1()),
+            input2: usvg_input_to_js(v.input2()),
+            scale: f64::from(v.scale()),
+            x_channel_selector: UsvgColorChannel::from(v.x_channel_selector()),
+            y_channel_selector: UsvgColorChannel::from(v.y_channel_selector()),
+        }
+    }
+}
+impl From<&usvg::filter::DistantLight> for UsvgDistantLight {
+    fn from(v: &usvg::filter::DistantLight) -> Self {
+        Self {
+            azimuth: f64::from(v.azimuth),
+            elevation: f64::from(v.elevation),
+        }
+    }
+}
+impl From<&usvg::filter::DropShadow> for UsvgDropShadow {
+    fn from(v: &usvg::filter::DropShadow) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            dx: f64::from(v.dx()),
+            dy: f64::from(v.dy()),
+            std_dev_x: f64::from(v.std_dev_x().get()),
+            std_dev_y: f64::from(v.std_dev_y().get()),
+            color: UsvgColor::from(&v.color()),
+            opacity: f64::from(v.opacity().get()),
+        }
+    }
+}
+impl From<&usvg::Fill> for UsvgFill {
+    fn from(v: &usvg::Fill) -> Self {
+        Self {
+            paint: usvg_paint_to_js(v.paint()),
+            opacity: f64::from(v.opacity().get()),
+            rule: UsvgFillRule::from(v.rule()),
+        }
+    }
+}
+impl From<&usvg::filter::Flood> for UsvgFlood {
+    fn from(v: &usvg::filter::Flood) -> Self {
+        Self {
+            color: UsvgColor::from(&v.color()),
+            opacity: f64::from(v.opacity().get()),
+        }
+    }
+}
+impl From<&usvg::FontVariation> for UsvgFontVariation {
+    fn from(v: &usvg::FontVariation) -> Self {
+        Self {
+            tag: String::from_utf8_lossy(&v.tag.clone()).into_owned(),
+            value: f64::from(v.value),
+        }
+    }
+}
+impl From<&usvg::filter::GaussianBlur> for UsvgGaussianBlur {
+    fn from(v: &usvg::filter::GaussianBlur) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            std_dev_x: f64::from(v.std_dev_x().get()),
+            std_dev_y: f64::from(v.std_dev_y().get()),
+        }
+    }
+}
+impl From<&usvg::filter::Merge> for UsvgMerge {
+    fn from(v: &usvg::filter::Merge) -> Self {
+        Self {
+            inputs: v.inputs().iter().map(usvg_input_to_js).collect(),
+        }
+    }
+}
+impl From<&usvg::filter::Morphology> for UsvgMorphology {
+    fn from(v: &usvg::filter::Morphology) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            operator: UsvgMorphologyOperator::from(v.operator()),
+            radius_x: f64::from(v.radius_x().get()),
+            radius_y: f64::from(v.radius_y().get()),
+        }
+    }
+}
+impl From<&usvg::filter::Offset> for UsvgOffset {
+    fn from(v: &usvg::filter::Offset) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            dx: f64::from(v.dx()),
+            dy: f64::from(v.dy()),
+        }
+    }
+}
+impl From<&usvg::Path> for UsvgPath {
+    fn from(v: &usvg::Path) -> Self {
+        Self {
+            id: v.id().to_string(),
+            is_visible: v.is_visible(),
+            fill: v.fill().map(UsvgFill::from),
+            stroke: v.stroke().map(UsvgStroke::from),
+            paint_order: UsvgPaintOrder::from(v.paint_order()),
+            rendering_mode: UsvgShapeRendering::from(v.rendering_mode()),
+            data: path_segments(v.data()),
+            abs_transform: Matrix::from(v.abs_transform()),
+            bounding_box: BBox::from(v.bounding_box()),
+            abs_bounding_box: BBox::from(v.abs_bounding_box()),
+            stroke_bounding_box: BBox::from(v.stroke_bounding_box()),
+            abs_stroke_bounding_box: BBox::from(v.abs_stroke_bounding_box()),
+        }
+    }
+}
+impl From<&usvg::filter::PointLight> for UsvgPointLight {
+    fn from(v: &usvg::filter::PointLight) -> Self {
+        Self {
+            x: f64::from(v.x),
+            y: f64::from(v.y),
+            z: f64::from(v.z),
+        }
+    }
+}
+impl From<&usvg::filter::Primitive> for UsvgPrimitive {
+    fn from(v: &usvg::filter::Primitive) -> Self {
+        Self {
+            rect: BBox::from(v.rect()),
+            color_interpolation: UsvgColorInterpolation::from(v.color_interpolation()),
+            result: v.result().to_string(),
+            kind: usvg_kind_to_js(v.kind()),
+        }
+    }
+}
+impl From<&usvg::filter::SpecularLighting> for UsvgSpecularLighting {
+    fn from(v: &usvg::filter::SpecularLighting) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+            surface_scale: f64::from(v.surface_scale()),
+            specular_constant: f64::from(v.specular_constant()),
+            specular_exponent: f64::from(v.specular_exponent()),
+            lighting_color: UsvgColor::from(&v.lighting_color()),
+            light_source: usvg_light_source_to_js(&v.light_source()),
+        }
+    }
+}
+impl From<&usvg::filter::SpotLight> for UsvgSpotLight {
+    fn from(v: &usvg::filter::SpotLight) -> Self {
+        Self {
+            x: f64::from(v.x),
+            y: f64::from(v.y),
+            z: f64::from(v.z),
+            points_at_x: f64::from(v.points_at_x),
+            points_at_y: f64::from(v.points_at_y),
+            points_at_z: f64::from(v.points_at_z),
+            specular_exponent: f64::from(v.specular_exponent.get()),
+            limiting_cone_angle: v.limiting_cone_angle.map(f64::from),
+        }
+    }
+}
+impl From<&usvg::Stop> for UsvgStop {
+    fn from(v: &usvg::Stop) -> Self {
+        Self {
+            offset: f64::from(v.offset().get()),
+            color: UsvgColor::from(&v.color()),
+            opacity: f64::from(v.opacity().get()),
+        }
+    }
+}
+impl From<&usvg::Stroke> for UsvgStroke {
+    fn from(v: &usvg::Stroke) -> Self {
+        Self {
+            paint: usvg_paint_to_js(v.paint()),
+            dasharray: v
+                .dasharray()
+                .map(|v| v.iter().map(|x| f64::from(*x)).collect()),
+            dashoffset: f64::from(v.dashoffset()),
+            miterlimit: f64::from(v.miterlimit().get()),
+            opacity: f64::from(v.opacity().get()),
+            width: f64::from(v.width().get()),
+            linecap: UsvgLineCap::from(v.linecap()),
+            linejoin: UsvgLineJoin::from(v.linejoin()),
+        }
+    }
+}
+impl From<&usvg::TextDecoration> for UsvgTextDecoration {
+    fn from(v: &usvg::TextDecoration) -> Self {
+        Self {
+            underline: v.underline().map(UsvgTextDecorationStyle::from),
+            overline: v.overline().map(UsvgTextDecorationStyle::from),
+            line_through: v.line_through().map(UsvgTextDecorationStyle::from),
+        }
+    }
+}
+impl From<&usvg::TextDecorationStyle> for UsvgTextDecorationStyle {
+    fn from(v: &usvg::TextDecorationStyle) -> Self {
+        Self {
+            fill: v.fill().map(UsvgFill::from),
+            stroke: v.stroke().map(UsvgStroke::from),
+        }
+    }
+}
+impl From<&usvg::filter::Tile> for UsvgTile {
+    fn from(v: &usvg::filter::Tile) -> Self {
+        Self {
+            input: usvg_input_to_js(v.input()),
+        }
+    }
+}
+impl From<&usvg::filter::Turbulence> for UsvgTurbulence {
+    fn from(v: &usvg::filter::Turbulence) -> Self {
+        Self {
+            base_frequency_x: f64::from(v.base_frequency_x().get()),
+            base_frequency_y: f64::from(v.base_frequency_y().get()),
+            num_octaves: v.num_octaves(),
+            seed: v.seed(),
+            stitch_tiles: v.stitch_tiles(),
+            kind: UsvgTurbulenceKind::from(v.kind()),
+        }
+    }
+}
+fn usvg_baseline_shift_to_js(
+    v: &usvg::BaselineShift,
+) -> Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber> {
+    match v {
+        usvg::BaselineShift::Baseline => Either::A(UsvgBaselineShiftPlain {
+            r#type: "baseline".to_string(),
+        }),
+        usvg::BaselineShift::Subscript => Either::A(UsvgBaselineShiftPlain {
+            r#type: "subscript".to_string(),
+        }),
+        usvg::BaselineShift::Superscript => Either::A(UsvgBaselineShiftPlain {
+            r#type: "superscript".to_string(),
+        }),
+        usvg::BaselineShift::Number(v) => Either::B(UsvgBaselineShiftNumber {
+            r#type: "number".to_string(),
+            value: f64::from(*v),
+        }),
+    }
+}
+fn usvg_color_matrix_kind_to_js(
+    v: &usvg::filter::ColorMatrixKind,
+) -> Either4<
+    UsvgColorMatrixKindPlain,
+    UsvgColorMatrixKindMatrix,
+    UsvgColorMatrixKindSaturate,
+    UsvgColorMatrixKindHueRotate,
+> {
+    match v {
+        usvg::filter::ColorMatrixKind::LuminanceToAlpha => Either4::A(UsvgColorMatrixKindPlain {
+            r#type: "luminanceToAlpha".to_string(),
+        }),
+        usvg::filter::ColorMatrixKind::Matrix(v) => Either4::B(UsvgColorMatrixKindMatrix {
+            r#type: "matrix".to_string(),
+            value: v.iter().map(|x| f64::from(*x)).collect(),
+        }),
+        usvg::filter::ColorMatrixKind::Saturate(v) => Either4::C(UsvgColorMatrixKindSaturate {
+            r#type: "saturate".to_string(),
+            value: f64::from(v.get()),
+        }),
+        usvg::filter::ColorMatrixKind::HueRotate(v) => Either4::D(UsvgColorMatrixKindHueRotate {
+            r#type: "hueRotate".to_string(),
+            value: f64::from(*v),
+        }),
+    }
+}
+fn usvg_composite_operator_to_js(
+    v: &usvg::filter::CompositeOperator,
+) -> Either<UsvgCompositeOperatorPlain, UsvgCompositeOperatorArithmetic> {
+    match v {
+        usvg::filter::CompositeOperator::Over => Either::A(UsvgCompositeOperatorPlain {
+            r#type: "over".to_string(),
+        }),
+        usvg::filter::CompositeOperator::In => Either::A(UsvgCompositeOperatorPlain {
+            r#type: "in".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Out => Either::A(UsvgCompositeOperatorPlain {
+            r#type: "out".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Atop => Either::A(UsvgCompositeOperatorPlain {
+            r#type: "atop".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Xor => Either::A(UsvgCompositeOperatorPlain {
+            r#type: "xor".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Lighter => Either::A(UsvgCompositeOperatorPlain {
+            r#type: "lighter".to_string(),
+        }),
+        usvg::filter::CompositeOperator::Arithmetic { k1, k2, k3, k4 } => {
+            Either::B(UsvgCompositeOperatorArithmetic {
+                r#type: "arithmetic".to_string(),
+                k1: f64::from(*k1),
+                k2: f64::from(*k2),
+                k3: f64::from(*k3),
+                k4: f64::from(*k4),
+            })
+        }
+    }
+}
+fn usvg_input_to_js(v: &usvg::filter::Input) -> Either<UsvgInputPlain, UsvgInputReference> {
+    match v {
+        usvg::filter::Input::SourceGraphic => Either::A(UsvgInputPlain {
+            r#type: "sourceGraphic".to_string(),
+        }),
+        usvg::filter::Input::SourceAlpha => Either::A(UsvgInputPlain {
+            r#type: "sourceAlpha".to_string(),
+        }),
+        usvg::filter::Input::Reference(v) => Either::B(UsvgInputReference {
+            r#type: "reference".to_string(),
+            value: v.to_string(),
+        }),
+    }
+}
+fn usvg_kind_to_js(
+    v: &usvg::filter::Kind,
+) -> Either17<
+    UsvgKindBlend,
+    UsvgKindColorMatrix,
+    UsvgKindComponentTransfer,
+    UsvgKindComposite,
+    UsvgKindConvolveMatrix,
+    UsvgKindDiffuseLighting,
+    UsvgKindDisplacementMap,
+    UsvgKindDropShadow,
+    UsvgKindFlood,
+    UsvgKindGaussianBlur,
+    UsvgKindImage,
+    UsvgKindMerge,
+    UsvgKindMorphology,
+    UsvgKindOffset,
+    UsvgKindSpecularLighting,
+    UsvgKindTile,
+    UsvgKindTurbulence,
+> {
+    match v {
+        usvg::filter::Kind::Blend(v) => Either17::A(UsvgKindBlend {
+            r#type: "blend".to_string(),
+            value: UsvgBlend::from(v),
+        }),
+        usvg::filter::Kind::ColorMatrix(v) => Either17::B(UsvgKindColorMatrix {
+            r#type: "colorMatrix".to_string(),
+            value: UsvgColorMatrix::from(v),
+        }),
+        usvg::filter::Kind::ComponentTransfer(v) => Either17::C(UsvgKindComponentTransfer {
+            r#type: "componentTransfer".to_string(),
+            value: UsvgComponentTransfer::from(v),
+        }),
+        usvg::filter::Kind::Composite(v) => Either17::D(UsvgKindComposite {
+            r#type: "composite".to_string(),
+            value: UsvgComposite::from(v),
+        }),
+        usvg::filter::Kind::ConvolveMatrix(v) => Either17::E(UsvgKindConvolveMatrix {
+            r#type: "convolveMatrix".to_string(),
+            value: UsvgConvolveMatrix::from(v),
+        }),
+        usvg::filter::Kind::DiffuseLighting(v) => Either17::F(UsvgKindDiffuseLighting {
+            r#type: "diffuseLighting".to_string(),
+            value: UsvgDiffuseLighting::from(v),
+        }),
+        usvg::filter::Kind::DisplacementMap(v) => Either17::G(UsvgKindDisplacementMap {
+            r#type: "displacementMap".to_string(),
+            value: UsvgDisplacementMap::from(v),
+        }),
+        usvg::filter::Kind::DropShadow(v) => Either17::H(UsvgKindDropShadow {
+            r#type: "dropShadow".to_string(),
+            value: UsvgDropShadow::from(v),
+        }),
+        usvg::filter::Kind::Flood(v) => Either17::I(UsvgKindFlood {
+            r#type: "flood".to_string(),
+            value: UsvgFlood::from(v),
+        }),
+        usvg::filter::Kind::GaussianBlur(v) => Either17::J(UsvgKindGaussianBlur {
+            r#type: "gaussianBlur".to_string(),
+            value: UsvgGaussianBlur::from(v),
+        }),
+        usvg::filter::Kind::Image(_) => Either17::K(UsvgKindImage {
+            r#type: "image".to_string(),
+        }),
+        usvg::filter::Kind::Merge(v) => Either17::L(UsvgKindMerge {
+            r#type: "merge".to_string(),
+            value: UsvgMerge::from(v),
+        }),
+        usvg::filter::Kind::Morphology(v) => Either17::M(UsvgKindMorphology {
+            r#type: "morphology".to_string(),
+            value: UsvgMorphology::from(v),
+        }),
+        usvg::filter::Kind::Offset(v) => Either17::N(UsvgKindOffset {
+            r#type: "offset".to_string(),
+            value: UsvgOffset::from(v),
+        }),
+        usvg::filter::Kind::SpecularLighting(v) => Either17::O(UsvgKindSpecularLighting {
+            r#type: "specularLighting".to_string(),
+            value: UsvgSpecularLighting::from(v),
+        }),
+        usvg::filter::Kind::Tile(v) => Either17::P(UsvgKindTile {
+            r#type: "tile".to_string(),
+            value: UsvgTile::from(v),
+        }),
+        usvg::filter::Kind::Turbulence(v) => Either17::Q(UsvgKindTurbulence {
+            r#type: "turbulence".to_string(),
+            value: UsvgTurbulence::from(v),
+        }),
+    }
+}
+fn usvg_light_source_to_js(
+    v: &usvg::filter::LightSource,
+) -> Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight> {
+    match v {
+        usvg::filter::LightSource::DistantLight(v) => Either3::A(UsvgLightSourceDistantLight {
+            r#type: "distantLight".to_string(),
+            value: UsvgDistantLight::from(v),
+        }),
+        usvg::filter::LightSource::PointLight(v) => Either3::B(UsvgLightSourcePointLight {
+            r#type: "pointLight".to_string(),
+            value: UsvgPointLight::from(v),
+        }),
+        usvg::filter::LightSource::SpotLight(v) => Either3::C(UsvgLightSourceSpotLight {
+            r#type: "spotLight".to_string(),
+            value: UsvgSpotLight::from(v),
+        }),
+    }
+}
+fn usvg_paint_to_js(
+    v: &usvg::Paint,
+) -> Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern> {
+    match v {
+        usvg::Paint::Color(v) => Either4::A(UsvgPaintColor {
+            r#type: "color".to_string(),
+            value: UsvgColor::from(v),
+        }),
+        usvg::Paint::LinearGradient(v) => Either4::B(UsvgPaintLinearGradient {
+            r#type: "linearGradient".to_string(),
+            id: v.id().to_string(),
+        }),
+        usvg::Paint::RadialGradient(v) => Either4::C(UsvgPaintRadialGradient {
+            r#type: "radialGradient".to_string(),
+            id: v.id().to_string(),
+        }),
+        usvg::Paint::Pattern(v) => Either4::D(UsvgPaintPattern {
+            r#type: "pattern".to_string(),
+            id: v.id().to_string(),
+        }),
+    }
+}
+fn usvg_text_flow_to_js(v: &usvg::TextFlow) -> Either<UsvgTextFlowPlain, UsvgTextFlowPath> {
+    match v {
+        usvg::TextFlow::Linear => Either::A(UsvgTextFlowPlain {
+            r#type: "linear".to_string(),
+        }),
+        usvg::TextFlow::Path(v) => Either::B(UsvgTextFlowPath {
+            r#type: "path".to_string(),
+            id: v.id().to_string(),
+        }),
+    }
+}
+fn usvg_transfer_function_to_js(
+    v: &usvg::filter::TransferFunction,
+) -> Either5<
+    UsvgTransferFunctionPlain,
+    UsvgTransferFunctionTable,
+    UsvgTransferFunctionDiscrete,
+    UsvgTransferFunctionLinear,
+    UsvgTransferFunctionGamma,
+> {
+    match v {
+        usvg::filter::TransferFunction::Identity => Either5::A(UsvgTransferFunctionPlain {
+            r#type: "identity".to_string(),
+        }),
+        usvg::filter::TransferFunction::Table(v) => Either5::B(UsvgTransferFunctionTable {
+            r#type: "table".to_string(),
+            value: v.iter().map(|x| f64::from(*x)).collect(),
+        }),
+        usvg::filter::TransferFunction::Discrete(v) => Either5::C(UsvgTransferFunctionDiscrete {
+            r#type: "discrete".to_string(),
+            value: v.iter().map(|x| f64::from(*x)).collect(),
+        }),
+        usvg::filter::TransferFunction::Linear { slope, intercept } => {
+            Either5::D(UsvgTransferFunctionLinear {
+                r#type: "linear".to_string(),
+                slope: f64::from(*slope),
+                intercept: f64::from(*intercept),
+            })
+        }
+        usvg::filter::TransferFunction::Gamma {
+            amplitude,
+            exponent,
+            offset,
+        } => Either5::E(UsvgTransferFunctionGamma {
+            r#type: "gamma".to_string(),
+            amplitude: f64::from(*amplitude),
+            exponent: f64::from(*exponent),
+            offset: f64::from(*offset),
+        }),
+    }
+}
+impl From<FontdbStyle> for usvg::fontdb::Style {
+    fn from(v: FontdbStyle) -> Self {
+        match v {
+            FontdbStyle::Normal => <usvg::fontdb::Style>::Normal,
+            FontdbStyle::Italic => <usvg::fontdb::Style>::Italic,
+            FontdbStyle::Oblique => <usvg::fontdb::Style>::Oblique,
+        }
+    }
+}
+impl From<usvg::fontdb::Style> for FontdbStyle {
+    fn from(v: usvg::fontdb::Style) -> Self {
+        match v {
+            <usvg::fontdb::Style>::Normal => FontdbStyle::Normal,
+            <usvg::fontdb::Style>::Italic => FontdbStyle::Italic,
+            <usvg::fontdb::Style>::Oblique => FontdbStyle::Oblique,
+        }
+    }
+}
+impl From<FontdbStretch> for usvg::fontdb::Stretch {
+    fn from(v: FontdbStretch) -> Self {
+        match v {
+            FontdbStretch::UltraCondensed => <usvg::fontdb::Stretch>::UltraCondensed,
+            FontdbStretch::ExtraCondensed => <usvg::fontdb::Stretch>::ExtraCondensed,
+            FontdbStretch::Condensed => <usvg::fontdb::Stretch>::Condensed,
+            FontdbStretch::SemiCondensed => <usvg::fontdb::Stretch>::SemiCondensed,
+            FontdbStretch::Normal => <usvg::fontdb::Stretch>::Normal,
+            FontdbStretch::SemiExpanded => <usvg::fontdb::Stretch>::SemiExpanded,
+            FontdbStretch::Expanded => <usvg::fontdb::Stretch>::Expanded,
+            FontdbStretch::ExtraExpanded => <usvg::fontdb::Stretch>::ExtraExpanded,
+            FontdbStretch::UltraExpanded => <usvg::fontdb::Stretch>::UltraExpanded,
+        }
+    }
+}
+impl From<usvg::fontdb::Stretch> for FontdbStretch {
+    fn from(v: usvg::fontdb::Stretch) -> Self {
+        match v {
+            <usvg::fontdb::Stretch>::UltraCondensed => FontdbStretch::UltraCondensed,
+            <usvg::fontdb::Stretch>::ExtraCondensed => FontdbStretch::ExtraCondensed,
+            <usvg::fontdb::Stretch>::Condensed => FontdbStretch::Condensed,
+            <usvg::fontdb::Stretch>::SemiCondensed => FontdbStretch::SemiCondensed,
+            <usvg::fontdb::Stretch>::Normal => FontdbStretch::Normal,
+            <usvg::fontdb::Stretch>::SemiExpanded => FontdbStretch::SemiExpanded,
+            <usvg::fontdb::Stretch>::Expanded => FontdbStretch::Expanded,
+            <usvg::fontdb::Stretch>::ExtraExpanded => FontdbStretch::ExtraExpanded,
+            <usvg::fontdb::Stretch>::UltraExpanded => FontdbStretch::UltraExpanded,
+        }
+    }
+}
+impl FontdbDatabase {
+    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbDatabase {
+    #[doc = " Loads a font data into the `Database`."]
+    #[doc = ""]
+    #[doc = " Will load all font faces in case of a font collection."]
+    #[napi]
+    pub fn load_font_data(&mut self, data: Uint8Array) {
+        std::sync::Arc::make_mut(&mut self.inner).load_font_data(data.to_vec())
+    }
+    #[doc = " Loads a font file into the `Database`."]
+    #[doc = ""]
+    #[doc = " Will load all font faces in case of a font collection."]
+    #[napi]
+    pub fn load_font_file(&mut self, path: String) -> Result<()> {
+        std::sync::Arc::make_mut(&mut self.inner)
+            .load_font_file(path)
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+    #[doc = " Loads font files from the selected directory into the `Database`."]
+    #[doc = ""]
+    #[doc = " This method will scan directories recursively."]
+    #[doc = ""]
+    #[doc = " Will load `ttf`, `otf`, `ttc` and `otc` fonts."]
+    #[doc = ""]
+    #[doc = " Unlike other `load_*` methods, this one doesn't return an error."]
+    #[doc = " It will simply skip malformed fonts and will print a warning into the log for each of them."]
+    #[napi]
+    pub fn load_fonts_dir(&mut self, dir: String) {
+        std::sync::Arc::make_mut(&mut self.inner).load_fonts_dir(dir)
+    }
+    #[doc = " Attempts to load system fonts."]
+    #[doc = ""]
+    #[doc = " Supports Windows, Linux and macOS."]
+    #[doc = ""]
+    #[doc = " System fonts loading is a surprisingly complicated task,"]
+    #[doc = " mostly unsolvable without interacting with system libraries."]
+    #[doc = " And since `fontdb` tries to be small and portable, this method"]
+    #[doc = " will simply scan some predefined directories."]
+    #[doc = " Which means that fonts that are not in those directories must"]
+    #[doc = " be added manually."]
+    #[napi]
+    pub fn load_system_fonts(&mut self) {
+        std::sync::Arc::make_mut(&mut self.inner).load_system_fonts()
+    }
+    #[doc = " Returns `true` if the `Database` contains no font faces."]
+    #[napi]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+    #[doc = " Returns the number of font faces in the `Database`."]
+    #[doc = ""]
+    #[doc = " Note that `Database` stores font faces, not fonts."]
+    #[doc = " For example, if a caller will try to load a font collection (`*.ttc`) that contains 5 faces,"]
+    #[doc = " then the `Database` will load 5 font faces and this method will return 5, not 1."]
+    #[napi]
+    pub fn len(&self) -> u32 {
+        u32::try_from(self.inner.len()).unwrap_or(u32::MAX)
+    }
+    #[doc = " Sets the family that will be used by `Family::Serif`."]
+    #[napi]
+    pub fn set_serif_family(&mut self, family: String) {
+        std::sync::Arc::make_mut(&mut self.inner).set_serif_family(family)
+    }
+    #[doc = " Sets the family that will be used by `Family::SansSerif`."]
+    #[napi]
+    pub fn set_sans_serif_family(&mut self, family: String) {
+        std::sync::Arc::make_mut(&mut self.inner).set_sans_serif_family(family)
+    }
+    #[doc = " Sets the family that will be used by `Family::Cursive`."]
+    #[napi]
+    pub fn set_cursive_family(&mut self, family: String) {
+        std::sync::Arc::make_mut(&mut self.inner).set_cursive_family(family)
+    }
+    #[doc = " Sets the family that will be used by `Family::Fantasy`."]
+    #[napi]
+    pub fn set_fantasy_family(&mut self, family: String) {
+        std::sync::Arc::make_mut(&mut self.inner).set_fantasy_family(family)
+    }
+    #[doc = " Sets the family that will be used by `Family::Monospace`."]
+    #[napi]
+    pub fn set_monospace_family(&mut self, family: String) {
+        std::sync::Arc::make_mut(&mut self.inner).set_monospace_family(family)
+    }
+    #[doc = " Returns an iterator over the internal storage."]
+    #[doc = ""]
+    #[doc = " This can be used for manual font matching."]
+    #[napi]
+    pub fn faces(&self) -> Vec<FontdbFaceInfo> {
+        self.inner
+            .faces()
+            .into_iter()
+            .map(|x| FontdbFaceInfo::wrap(x.clone(), self.doc()))
+            .collect()
+    }
+}
+impl FontdbFaceInfo {
+    fn wrap(inner: usvg::fontdb::FaceInfo, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbFaceInfo {
+    #[napi(getter)]
+    pub fn index(&self) -> u32 {
+        let v = &self.inner;
+        v.index
+    }
+    #[napi(getter)]
+    pub fn post_script_name(&self) -> String {
+        let v = &self.inner;
+        v.post_script_name.clone().to_string()
+    }
+    #[napi(getter)]
+    pub fn style(&self) -> FontdbStyle {
+        let v = &self.inner;
+        FontdbStyle::from(v.style)
+    }
+    #[napi(getter)]
+    pub fn weight(&self) -> u32 {
+        let v = &self.inner;
+        u32::from(v.weight.0)
+    }
+    #[napi(getter)]
+    pub fn stretch(&self) -> FontdbStretch {
+        let v = &self.inner;
+        FontdbStretch::from(v.stretch)
+    }
+    #[napi(getter)]
+    pub fn monospaced(&self) -> bool {
+        let v = &self.inner;
+        v.monospaced
+    }
+}
 #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
 pub struct SvgNodePngBytesTask {
     recv: SvgNode,
@@ -6166,5 +8428,70 @@ impl Resvg {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Resvg".to_string()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbDatabase {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Database",
+            &[],
+            &["isEmpty", "len"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Database".to_string()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbFaceInfo {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "FaceInfo",
+            &[
+                "index",
+                "postScriptName",
+                "style",
+                "weight",
+                "stretch",
+                "monospaced",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "FaceInfo".to_string()
     }
 }

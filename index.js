@@ -886,3 +886,5 @@ module.exports.TextAnchor = nativeBinding.TextAnchor
 module.exports.TextRendering = nativeBinding.TextRendering
 module.exports.TurbulenceKind = nativeBinding.TurbulenceKind
 module.exports.WritingMode = nativeBinding.WritingMode
+module.exports.fontdb = nativeBinding.fontdb
+module.exports.usvg = nativeBinding.usvg

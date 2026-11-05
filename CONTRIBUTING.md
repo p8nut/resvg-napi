@@ -73,6 +73,55 @@ pick it up. Neither toy crate is published, and neither is in the npm tarball
 or the third-party notices. If a change to the generator breaks the toy, the
 change is resvg-shaped. Fix the generator, not the toy.
 
+### The namespaced surface
+
+Beside the flat exports, the generator emits a second surface with one
+namespace per crate, `usvg.*` and `fontdb.*`, under the Rust names
+([ADR 0002, Q21](docs/adr/0002-api-details.md)). The two coexist until step 13
+of the migration removes the flat one. Three rules make it, all generic:
+
+- **One namespace per source.** `Config::namespaces` maps a source's root to
+  its namespace (`("usvg::fontdb", "fontdb")`). A type goes in the namespace
+  of the source that defines it. A type only re-exported from a crate parsed
+  for vocabulary (tiny-skia's) is left out until that crate has a namespace
+  of its own.
+- **A prefix on the Rust name.** `napi_gen::emit::namespaced` copies the data
+  types, enums, unions and handle classes the passes produced. It renames
+  each one with its namespace as a prefix: `FaceInfo` becomes `FontdbFaceInfo`,
+  and a helper `paint_to_js` becomes `usvg_paint_to_js`. It also sets
+  `js_name` and `namespace`. Two Rust items cannot share a name, so the prefix
+  is needed, and JS never sees it. The one trace is the type alias napi
+  declares for every class (`export type FontdbFaceInfo = FaceInfo`). The JS
+  name is the upstream one, so a `data_renames` or `enum_renames` entry is
+  undone. References between copies are renamed with them. Paths, fields,
+  methods and enum variants are not renamed. napi resolves a reference's
+  TypeScript name when the item expands, and falls back to the Rust name for
+  anything not seen yet. So the definitions are emitted in dependency order,
+  and impls and functions after all of them.
+- **`make_mut` for `Clone` handles.** A handle class on the namespaced surface
+  (`Surface::Namespaced`) whose upstream type derives `Clone` gets its
+  `&mut self` methods too: they go through `Arc::make_mut`, which copies a
+  value shared with another handle on the first write. That is how
+  `fontdb.Database` gets `loadFontData` and the other loaders. A type that
+  does not derive `Clone` stays read-only. The template's additions, the
+  content view and the argument stand-in, belong to the flat surface only.
+
+napi keeps **one constructor per JS class name**, whatever the namespace
+(`REGISTERED_CLASSES` in napi 3.16). It builds every instance of a class from
+the constructor registered under that name. If a namespaced class has the same
+name as a flat one, one of the two hands out instances of the other, and
+every method call on them throws. So `namespaced` leaves out any class whose
+name is already taken, and anything that refers to it, and the codegen report
+lists each one as `not namespaced`. Today that is every usvg class (`ClipPath`,
+`Text`, `Span`...): they come back when the flat surface goes, or when napi
+keys its registry by namespace. Objects and string enums have no constructor
+and are not affected.
+
+The toy shows both rules. `toy.Tally` derives `Clone` and is tested for
+copy-on-write. `toy.Counter` is left out because a flat `Counter` exists.
+`test/api/namespaces.mjs` checks the root's namespaces against `index.d.ts`:
+every class and enum it declares exists at runtime under its Rust name.
+
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen
 report says which member and why.

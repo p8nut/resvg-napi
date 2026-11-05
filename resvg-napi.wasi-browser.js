@@ -1491,3 +1491,5 @@ export const TextAnchor = __napiModule.exports.TextAnchor
 export const TextRendering = __napiModule.exports.TextRendering
 export const TurbulenceKind = __napiModule.exports.TurbulenceKind
 export const WritingMode = __napiModule.exports.WritingMode
+export const fontdb = __napiModule.exports.fontdb
+export const usvg = __napiModule.exports.usvg

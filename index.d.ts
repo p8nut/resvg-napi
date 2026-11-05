@@ -1831,3 +1831,644 @@ export interface WriteOptions {
 
 /** A writing mode. */
 export type WritingMode = 'leftToRight' | 'topToBottom'
+
+export declare namespace fontdb {
+  /** Handle on a `usvg::fontdb::Database`, copied on the first write while shared. */
+  export class Database {
+    /**
+     * Loads a font data into the `Database`.
+     *
+     * Will load all font faces in case of a font collection.
+     */
+    loadFontData(data: Uint8Array): void
+    /**
+     * Loads a font file into the `Database`.
+     *
+     * Will load all font faces in case of a font collection.
+     */
+    loadFontFile(path: string): void
+    /**
+     * Loads font files from the selected directory into the `Database`.
+     *
+     * This method will scan directories recursively.
+     *
+     * Will load `ttf`, `otf`, `ttc` and `otc` fonts.
+     *
+     * Unlike other `load_*` methods, this one doesn't return an error.
+     * It will simply skip malformed fonts and will print a warning into the log for each of them.
+     */
+    loadFontsDir(dir: string): void
+    /**
+     * Attempts to load system fonts.
+     *
+     * Supports Windows, Linux and macOS.
+     *
+     * System fonts loading is a surprisingly complicated task,
+     * mostly unsolvable without interacting with system libraries.
+     * And since `fontdb` tries to be small and portable, this method
+     * will simply scan some predefined directories.
+     * Which means that fonts that are not in those directories must
+     * be added manually.
+     */
+    loadSystemFonts(): void
+    /** Returns `true` if the `Database` contains no font faces. */
+    isEmpty(): boolean
+    /**
+     * Returns the number of font faces in the `Database`.
+     *
+     * Note that `Database` stores font faces, not fonts.
+     * For example, if a caller will try to load a font collection (`*.ttc`) that contains 5 faces,
+     * then the `Database` will load 5 font faces and this method will return 5, not 1.
+     */
+    len(): number
+    /** Sets the family that will be used by `Family::Serif`. */
+    setSerifFamily(family: string): void
+    /** Sets the family that will be used by `Family::SansSerif`. */
+    setSansSerifFamily(family: string): void
+    /** Sets the family that will be used by `Family::Cursive`. */
+    setCursiveFamily(family: string): void
+    /** Sets the family that will be used by `Family::Fantasy`. */
+    setFantasyFamily(family: string): void
+    /** Sets the family that will be used by `Family::Monospace`. */
+    setMonospaceFamily(family: string): void
+    /**
+     * Returns an iterator over the internal storage.
+     *
+     * This can be used for manual font matching.
+     */
+    faces(): Array<fontdb.FaceInfo>
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type FontdbDatabase = Database
+  /** Read-only view of a `FaceInfo`. */
+  export class FaceInfo {
+    get index(): number
+    get postScriptName(): string
+    get style(): fontdb.Style
+    get weight(): number
+    get stretch(): fontdb.Stretch
+    get monospaced(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type FontdbFaceInfo = FaceInfo
+  /** A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass). */
+  export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
+  /** Allows italic or oblique faces to be selected. */
+  export type Style = 'normal' | 'italic' | 'oblique'
+}
+
+export declare namespace usvg {
+  /** An alignment baseline property. */
+  export type AlignmentBaseline = 'auto' | 'baseline' | 'beforeEdge' | 'textBeforeEdge' | 'middle' | 'central' | 'afterEdge' | 'textAfterEdge' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical'
+  /** `BaselineShift::Number`. */
+  export interface BaselineShiftNumber {
+    /** Discriminant. Narrow on this. */
+    type: 'number'
+    value: number
+  }
+  /** The payload-free variants of `BaselineShift`. */
+  export interface BaselineShiftPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'baseline' | 'subscript' | 'superscript'
+  }
+  /** Plain view of a `Blend`. */
+  export interface Blend {
+    input1: usvg.InputPlain | usvg.InputReference
+    input2: usvg.InputPlain | usvg.InputReference
+    mode: usvg.BlendMode
+  }
+  /**
+   * A blending mode property.
+   *
+   * `mix-blend-mode` attribute in the SVG.
+   */
+  export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'colorDodge' | 'colorBurn' | 'hardLight' | 'softLight' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity' | 'plusLighter'
+  /** Plain view of a `Color`. */
+  export interface Color {
+    red: number
+    green: number
+    blue: number
+  }
+  /** A color channel. */
+  export type ColorChannel = 'r' | 'g' | 'b' | 'a'
+  /**
+   * A color interpolation mode.
+   *
+   * The default is `ColorInterpolation::LinearRGB`.
+   */
+  export type ColorInterpolation = 'srgb' | 'linearRgb'
+  /** Plain view of a `ColorMatrix`. */
+  export interface ColorMatrix {
+    input: usvg.InputPlain | usvg.InputReference
+    kind: usvg.ColorMatrixKindPlain | usvg.ColorMatrixKindMatrix | usvg.ColorMatrixKindSaturate | usvg.ColorMatrixKindHueRotate
+  }
+  /** `ColorMatrixKind::HueRotate`. */
+  export interface ColorMatrixKindHueRotate {
+    /** Discriminant. Narrow on this. */
+    type: 'hueRotate'
+    value: number
+  }
+  /** `ColorMatrixKind::Matrix`. */
+  export interface ColorMatrixKindMatrix {
+    /** Discriminant. Narrow on this. */
+    type: 'matrix'
+    value: Array<number>
+  }
+  /** The payload-free variants of `ColorMatrixKind`. */
+  export interface ColorMatrixKindPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'luminanceToAlpha'
+  }
+  /** `ColorMatrixKind::Saturate`. */
+  export interface ColorMatrixKindSaturate {
+    /** Discriminant. Narrow on this. */
+    type: 'saturate'
+    value: number
+  }
+  /** Plain view of a `ComponentTransfer`. */
+  export interface ComponentTransfer {
+    input: usvg.InputPlain | usvg.InputReference
+    funcR: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
+    funcG: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
+    funcB: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
+    funcA: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
+  }
+  /** Plain view of a `Composite`. */
+  export interface Composite {
+    input1: usvg.InputPlain | usvg.InputReference
+    input2: usvg.InputPlain | usvg.InputReference
+    operator: usvg.CompositeOperatorPlain | usvg.CompositeOperatorArithmetic
+  }
+  /** `CompositeOperator::Arithmetic`. */
+  export interface CompositeOperatorArithmetic {
+    /** Discriminant. Narrow on this. */
+    type: 'arithmetic'
+    k1: number
+    k2: number
+    k3: number
+    k4: number
+  }
+  /** The payload-free variants of `CompositeOperator`. */
+  export interface CompositeOperatorPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'over' | 'in' | 'out' | 'atop' | 'xor' | 'lighter'
+  }
+  /** Plain view of a `ConvolveMatrix`. */
+  export interface ConvolveMatrix {
+    input: usvg.InputPlain | usvg.InputReference
+    matrix: usvg.ConvolveMatrixData
+    divisor: number
+    bias: number
+    edgeMode: usvg.EdgeMode
+    preserveAlpha: boolean
+  }
+  /** Plain view of a `ConvolveMatrixData`. */
+  export interface ConvolveMatrixData {
+    targetX: number
+    targetY: number
+    columns: number
+    rows: number
+    data: Array<number>
+  }
+  /** Plain view of a `DiffuseLighting`. */
+  export interface DiffuseLighting {
+    input: usvg.InputPlain | usvg.InputReference
+    surfaceScale: number
+    diffuseConstant: number
+    lightingColor: usvg.Color
+    lightSource: usvg.LightSourceDistantLight | usvg.LightSourcePointLight | usvg.LightSourceSpotLight
+  }
+  /** Plain view of a `DisplacementMap`. */
+  export interface DisplacementMap {
+    input1: usvg.InputPlain | usvg.InputReference
+    input2: usvg.InputPlain | usvg.InputReference
+    scale: number
+    xChannelSelector: usvg.ColorChannel
+    yChannelSelector: usvg.ColorChannel
+  }
+  /** Plain view of a `DistantLight`. */
+  export interface DistantLight {
+    azimuth: number
+    elevation: number
+  }
+  /** A dominant baseline property. */
+  export type DominantBaseline = 'auto' | 'useScript' | 'noChange' | 'resetSize' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical' | 'central' | 'middle' | 'textAfterEdge' | 'textBeforeEdge'
+  /** Plain view of a `DropShadow`. */
+  export interface DropShadow {
+    input: usvg.InputPlain | usvg.InputReference
+    dx: number
+    dy: number
+    stdDevX: number
+    stdDevY: number
+    color: usvg.Color
+    opacity: number
+  }
+  /** An edges processing mode. */
+  export type EdgeMode = 'none' | 'duplicate' | 'wrap'
+  /** Plain view of a `Fill`. */
+  export interface Fill {
+    paint: usvg.PaintColor | usvg.PaintLinearGradient | usvg.PaintRadialGradient | usvg.PaintPattern
+    opacity: number
+    rule: usvg.FillRule
+  }
+  /**
+   * A fill rule.
+   *
+   * `fill-rule` attribute in the SVG.
+   */
+  export type FillRule = 'nonZero' | 'evenOdd'
+  /** Plain view of a `Flood`. */
+  export interface Flood {
+    color: usvg.Color
+    opacity: number
+  }
+  /**
+   * A font optical sizing property.
+   *
+   * Controls automatic adjustment of the `opsz` axis in variable fonts
+   * based on font size. Matches CSS `font-optical-sizing`.
+   */
+  export type FontOpticalSizing = 'auto' | 'none'
+  /** A font stretch property. */
+  export type FontStretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
+  /** A font style property. */
+  export type FontStyle = 'normal' | 'italic' | 'oblique'
+  /** Plain view of a `FontVariation`. */
+  export interface FontVariation {
+    tag: string
+    value: number
+  }
+  /** Plain view of a `GaussianBlur`. */
+  export interface GaussianBlur {
+    input: usvg.InputPlain | usvg.InputReference
+    stdDevX: number
+    stdDevY: number
+  }
+  /** `ImageKind::SVG`. */
+  export interface ImageKindSvg {
+    /** Discriminant. Narrow on this. */
+    type: 'svg'
+  }
+  /**
+   * An image rendering method.
+   *
+   * `image-rendering` attribute in the SVG.
+   */
+  export type ImageRendering = 'optimizeQuality' | 'optimizeSpeed' | 'smooth' | 'highQuality' | 'crispEdges' | 'pixelated'
+  /** The payload-free variants of `Input`. */
+  export interface InputPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'sourceGraphic' | 'sourceAlpha'
+  }
+  /** `Input::Reference`. */
+  export interface InputReference {
+    /** Discriminant. Narrow on this. */
+    type: 'reference'
+    value: string
+  }
+  /** `Kind::Blend`. */
+  export interface KindBlend {
+    /** Discriminant. Narrow on this. */
+    type: 'blend'
+    value: usvg.Blend
+  }
+  /** `Kind::ColorMatrix`. */
+  export interface KindColorMatrix {
+    /** Discriminant. Narrow on this. */
+    type: 'colorMatrix'
+    value: usvg.ColorMatrix
+  }
+  /** `Kind::ComponentTransfer`. */
+  export interface KindComponentTransfer {
+    /** Discriminant. Narrow on this. */
+    type: 'componentTransfer'
+    value: usvg.ComponentTransfer
+  }
+  /** `Kind::Composite`. */
+  export interface KindComposite {
+    /** Discriminant. Narrow on this. */
+    type: 'composite'
+    value: usvg.Composite
+  }
+  /** `Kind::ConvolveMatrix`. */
+  export interface KindConvolveMatrix {
+    /** Discriminant. Narrow on this. */
+    type: 'convolveMatrix'
+    value: usvg.ConvolveMatrix
+  }
+  /** `Kind::DiffuseLighting`. */
+  export interface KindDiffuseLighting {
+    /** Discriminant. Narrow on this. */
+    type: 'diffuseLighting'
+    value: usvg.DiffuseLighting
+  }
+  /** `Kind::DisplacementMap`. */
+  export interface KindDisplacementMap {
+    /** Discriminant. Narrow on this. */
+    type: 'displacementMap'
+    value: usvg.DisplacementMap
+  }
+  /** `Kind::DropShadow`. */
+  export interface KindDropShadow {
+    /** Discriminant. Narrow on this. */
+    type: 'dropShadow'
+    value: usvg.DropShadow
+  }
+  /** `Kind::Flood`. */
+  export interface KindFlood {
+    /** Discriminant. Narrow on this. */
+    type: 'flood'
+    value: usvg.Flood
+  }
+  /** `Kind::GaussianBlur`. */
+  export interface KindGaussianBlur {
+    /** Discriminant. Narrow on this. */
+    type: 'gaussianBlur'
+    value: usvg.GaussianBlur
+  }
+  /** `Kind::Image`. */
+  export interface KindImage {
+    /** Discriminant. Narrow on this. */
+    type: 'image'
+  }
+  /** `Kind::Merge`. */
+  export interface KindMerge {
+    /** Discriminant. Narrow on this. */
+    type: 'merge'
+    value: usvg.Merge
+  }
+  /** `Kind::Morphology`. */
+  export interface KindMorphology {
+    /** Discriminant. Narrow on this. */
+    type: 'morphology'
+    value: usvg.Morphology
+  }
+  /** `Kind::Offset`. */
+  export interface KindOffset {
+    /** Discriminant. Narrow on this. */
+    type: 'offset'
+    value: usvg.Offset
+  }
+  /** `Kind::SpecularLighting`. */
+  export interface KindSpecularLighting {
+    /** Discriminant. Narrow on this. */
+    type: 'specularLighting'
+    value: usvg.SpecularLighting
+  }
+  /** `Kind::Tile`. */
+  export interface KindTile {
+    /** Discriminant. Narrow on this. */
+    type: 'tile'
+    value: usvg.Tile
+  }
+  /** `Kind::Turbulence`. */
+  export interface KindTurbulence {
+    /** Discriminant. Narrow on this. */
+    type: 'turbulence'
+    value: usvg.Turbulence
+  }
+  /** A length adjust property. */
+  export type LengthAdjust = 'spacing' | 'spacingAndGlyphs'
+  /** `LightSource::DistantLight`. */
+  export interface LightSourceDistantLight {
+    /** Discriminant. Narrow on this. */
+    type: 'distantLight'
+    value: usvg.DistantLight
+  }
+  /** `LightSource::PointLight`. */
+  export interface LightSourcePointLight {
+    /** Discriminant. Narrow on this. */
+    type: 'pointLight'
+    value: usvg.PointLight
+  }
+  /** `LightSource::SpotLight`. */
+  export interface LightSourceSpotLight {
+    /** Discriminant. Narrow on this. */
+    type: 'spotLight'
+    value: usvg.SpotLight
+  }
+  /**
+   * A line cap.
+   *
+   * `stroke-linecap` attribute in the SVG.
+   */
+  export type LineCap = 'butt' | 'round' | 'square'
+  /**
+   * A line join.
+   *
+   * `stroke-linejoin` attribute in the SVG.
+   */
+  export type LineJoin = 'miter' | 'miterClip' | 'round' | 'bevel'
+  /** A mask type. */
+  export type MaskType = 'luminance' | 'alpha'
+  /** Plain view of a `Merge`. */
+  export interface Merge {
+    inputs: Array<usvg.InputPlain | usvg.InputReference>
+  }
+  /** Plain view of a `Morphology`. */
+  export interface Morphology {
+    input: usvg.InputPlain | usvg.InputReference
+    operator: usvg.MorphologyOperator
+    radiusX: number
+    radiusY: number
+  }
+  /** A morphology operation. */
+  export type MorphologyOperator = 'erode' | 'dilate'
+  /** Plain view of a `Offset`. */
+  export interface Offset {
+    input: usvg.InputPlain | usvg.InputReference
+    dx: number
+    dy: number
+  }
+  /** `Paint::Color`. */
+  export interface PaintColor {
+    /** Discriminant. Narrow on this. */
+    type: 'color'
+    value: usvg.Color
+  }
+  /** `Paint::LinearGradient`. */
+  export interface PaintLinearGradient {
+    /** Discriminant. Narrow on this. */
+    type: 'linearGradient'
+    id: string
+  }
+  /**
+   * Representation of the [`paint-order`] property.
+   *
+   * `usvg` will handle `markers` automatically,
+   * therefore we provide only `fill` and `stroke` variants.
+   *
+   * [`paint-order`]: https://www.w3.org/TR/SVG2/painting.html#PaintOrder
+   */
+  export type PaintOrder = 'fillAndStroke' | 'strokeAndFill'
+  /** `Paint::Pattern`. */
+  export interface PaintPattern {
+    /** Discriminant. Narrow on this. */
+    type: 'pattern'
+    id: string
+  }
+  /** `Paint::RadialGradient`. */
+  export interface PaintRadialGradient {
+    /** Discriminant. Narrow on this. */
+    type: 'radialGradient'
+    id: string
+  }
+  /** Plain view of a `Path`. */
+  export interface Path {
+    id: string
+    isVisible: boolean
+    fill?: usvg.Fill
+    stroke?: usvg.Stroke
+    paintOrder: usvg.PaintOrder
+    renderingMode: usvg.ShapeRendering
+    data: Array<PathSegment>
+    absTransform: Matrix
+    boundingBox: BBox
+    absBoundingBox: BBox
+    strokeBoundingBox: BBox
+    absStrokeBoundingBox: BBox
+  }
+  /** Plain view of a `PointLight`. */
+  export interface PointLight {
+    x: number
+    y: number
+    z: number
+  }
+  /** Plain view of a `Primitive`. */
+  export interface Primitive {
+    rect: BBox
+    colorInterpolation: usvg.ColorInterpolation
+    result: string
+    kind: usvg.KindBlend | usvg.KindColorMatrix | usvg.KindComponentTransfer | usvg.KindComposite | usvg.KindConvolveMatrix | usvg.KindDiffuseLighting | usvg.KindDisplacementMap | usvg.KindDropShadow | usvg.KindFlood | usvg.KindGaussianBlur | usvg.KindImage | usvg.KindMerge | usvg.KindMorphology | usvg.KindOffset | usvg.KindSpecularLighting | usvg.KindTile | usvg.KindTurbulence
+  }
+  /**
+   * A shape rendering method.
+   *
+   * `shape-rendering` attribute in the SVG.
+   */
+  export type ShapeRendering = 'optimizeSpeed' | 'crispEdges' | 'geometricPrecision'
+  /** Plain view of a `SpecularLighting`. */
+  export interface SpecularLighting {
+    input: usvg.InputPlain | usvg.InputReference
+    surfaceScale: number
+    specularConstant: number
+    specularExponent: number
+    lightingColor: usvg.Color
+    lightSource: usvg.LightSourceDistantLight | usvg.LightSourcePointLight | usvg.LightSourceSpotLight
+  }
+  /** Plain view of a `SpotLight`. */
+  export interface SpotLight {
+    x: number
+    y: number
+    z: number
+    pointsAtX: number
+    pointsAtY: number
+    pointsAtZ: number
+    specularExponent: number
+    limitingConeAngle?: number
+  }
+  /**
+   * A spread method.
+   *
+   * `spreadMethod` attribute in the SVG.
+   */
+  export type SpreadMethod = 'pad' | 'reflect' | 'repeat'
+  /** Plain view of a `Stop`. */
+  export interface Stop {
+    offset: number
+    color: usvg.Color
+    opacity: number
+  }
+  /** Plain view of a `Stroke`. */
+  export interface Stroke {
+    paint: usvg.PaintColor | usvg.PaintLinearGradient | usvg.PaintRadialGradient | usvg.PaintPattern
+    dasharray?: Array<number>
+    dashoffset: number
+    miterlimit: number
+    opacity: number
+    width: number
+    linecap: usvg.LineCap
+    linejoin: usvg.LineJoin
+  }
+  /** A text chunk anchor property. */
+  export type TextAnchor = 'start' | 'middle' | 'end'
+  /** Plain view of a `TextDecoration`. */
+  export interface TextDecoration {
+    underline?: usvg.TextDecorationStyle
+    overline?: usvg.TextDecorationStyle
+    lineThrough?: usvg.TextDecorationStyle
+  }
+  /** Plain view of a `TextDecorationStyle`. */
+  export interface TextDecorationStyle {
+    fill?: usvg.Fill
+    stroke?: usvg.Stroke
+  }
+  /** `TextFlow::Path`. */
+  export interface TextFlowPath {
+    /** Discriminant. Narrow on this. */
+    type: 'path'
+    id: string
+  }
+  /** The payload-free variants of `TextFlow`. */
+  export interface TextFlowPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'linear'
+  }
+  /**
+   * A text rendering method.
+   *
+   * `text-rendering` attribute in the SVG.
+   */
+  export type TextRendering = 'optimizeSpeed' | 'optimizeLegibility' | 'geometricPrecision'
+  /** Plain view of a `Tile`. */
+  export interface Tile {
+    input: usvg.InputPlain | usvg.InputReference
+  }
+  /** `TransferFunction::Discrete`. */
+  export interface TransferFunctionDiscrete {
+    /** Discriminant. Narrow on this. */
+    type: 'discrete'
+    value: Array<number>
+  }
+  /** `TransferFunction::Gamma`. */
+  export interface TransferFunctionGamma {
+    /** Discriminant. Narrow on this. */
+    type: 'gamma'
+    amplitude: number
+    exponent: number
+    offset: number
+  }
+  /** `TransferFunction::Linear`. */
+  export interface TransferFunctionLinear {
+    /** Discriminant. Narrow on this. */
+    type: 'linear'
+    slope: number
+    intercept: number
+  }
+  /** The payload-free variants of `TransferFunction`. */
+  export interface TransferFunctionPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'identity'
+  }
+  /** `TransferFunction::Table`. */
+  export interface TransferFunctionTable {
+    /** Discriminant. Narrow on this. */
+    type: 'table'
+    value: Array<number>
+  }
+  /** Plain view of a `Turbulence`. */
+  export interface Turbulence {
+    baseFrequencyX: number
+    baseFrequencyY: number
+    numOctaves: number
+    seed: number
+    stitchTiles: boolean
+    kind: usvg.TurbulenceKind
+  }
+  /** A turbulence kind for the `feTurbulence` filter. */
+  export type TurbulenceKind = 'fractalNoise' | 'turbulence'
+  /** A writing mode. */
+  export type WritingMode = 'leftToRight' | 'topToBottom'
+}

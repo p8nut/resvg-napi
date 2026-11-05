@@ -32,12 +32,22 @@ Tick a step off here when it is merged.
 | 13 | Remove the old API. Must come out labelled `breaking-api`. | large: split into 13a (Rust) and 13b (JS, tests, docs) if needed |
 | 14 | Release 0.10.0. The notes name what left (#181). | — |
 
+Step 4 found a limit of napi (3.16): it keeps one constructor per JS class
+name, whatever the namespace. A namespaced class with the same name as a flat
+class would break both, so the generator leaves it out (CONTRIBUTING, "The
+namespaced surface"). Until step 13, or a napi that keys classes by namespace,
+`usvg.*` has its data types, enums and unions, and none of its classes.
+`fontdb.Database` and `fontdb.FaceInfo` have names of their own and are in.
+`usvg.Tree` is free (the flat class is `Resvg`), but step 7 needs classes that
+collide (`ClipPath`, `Mask`, `Pattern`, the gradients, `Text`, `Image`), so it
+must either rename the flat classes or wait for that fix.
+
 ## Status
 
 - [x] 1
 - [x] 2
 - [x] 3
-- [ ] 4
+- [x] 4
 - [ ] 5
 - [ ] 6
 - [ ] 7

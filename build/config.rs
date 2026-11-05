@@ -240,4 +240,9 @@ pub const GEN: Config = Config {
         ("fontconfig", "true"),
         ("memmap", "not(target_family = \"wasm\")"),
     ],
+    // The second surface (ADR 0002, Q21): one namespace per crate, each type
+    // under the crate that defines it. fontdb is reached through usvg's
+    // re-export, and is still `fontdb` from JS. The flat exports stay beside
+    // it until the migration removes them.
+    namespaces: &[("usvg", "usvg"), ("usvg::fontdb", "fontdb")],
 };

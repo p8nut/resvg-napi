@@ -73,3 +73,36 @@ impl Counter {
         &self.origin
     }
 }
+
+/// Names counted so far. Unlike [`Counter`] it is `Clone` and changes in
+/// place, which is the shape a binding copies on write.
+#[derive(Clone, Debug, Default)]
+pub struct Tally {
+    names: Vec<String>,
+}
+
+impl Tally {
+    pub fn new() -> Arc<Tally> {
+        Arc::new(Tally::default())
+    }
+
+    pub fn push<S: Into<String>>(&mut self, name: S) {
+        self.names.push(name.into());
+    }
+
+    pub fn clear(&mut self) {
+        self.names.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.names.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
+    pub fn joined(&self) -> String {
+        self.names.join(",")
+    }
+}

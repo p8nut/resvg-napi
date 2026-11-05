@@ -30,6 +30,24 @@ fontdb::Database method not exposed: load_font_source (arg: Source)
 fontdb::Database method not exposed: make_shared_face_data (returns Option<(std::sync::Arc<dynAsRef<[u8]>+Send+Sync>,u32)>)
 fontdb::Database method not exposed: push_face_info (arg: FaceInfo)
 names defined more than once across the sources, keyed by module: Image
+not namespaced: usvg.ClipPath: a class named ClipPath exists already
+not namespaced: usvg.Filter: a class named Filter exists already
+not namespaced: usvg.Font: a class named Font exists already
+not namespaced: usvg.Image: a class named Image exists already
+not namespaced: usvg.ImageKindGif: a class named ImageKindGif exists already
+not namespaced: usvg.ImageKindJpeg: a class named ImageKindJpeg exists already
+not namespaced: usvg.ImageKindPng: a class named ImageKindPng exists already
+not namespaced: usvg.ImageKindWebp: a class named ImageKindWebp exists already
+not namespaced: usvg.LinearGradient: a class named LinearGradient exists already
+not namespaced: usvg.Mask: a class named Mask exists already
+not namespaced: usvg.Pattern: a class named Pattern exists already
+not namespaced: usvg.PositionedGlyph: a class named PositionedGlyph exists already
+not namespaced: usvg.RadialGradient: a class named RadialGradient exists already
+not namespaced: usvg.Span: a class named Span exists already
+not namespaced: usvg.Text: a class named Text exists already
+not namespaced: usvg.TextChunk: a class named TextChunk exists already
+not namespaced: usvg.TextSpan: a class named TextSpan exists already
+not namespaced: usvg.image_kind_to_js: it names ImageKindGif
 object (String,Language) skipped: not a public struct
 object Arc<ClipPath> skipped: not a public struct
 object Arc<LinearGradient> skipped: not a public struct
@@ -53,6 +71,8 @@ usvg precision clamp derived from POW_VEC: 12
 usvg sources: usvg-0.49.0
 usvg::ClipPath method covered by the content view: root (returns &Group)
 usvg::ClipPath method covered by the template: clip_path (returns Option<&ClipPath>)
+usvg::ClipPath method not in the namespaced class: clip_path (returns Option<&ClipPath>)
+usvg::ClipPath method not in the namespaced class: root (returns &Group)
 usvg::Group (on SvgNode) method covered by the template, not generated: children (returns &[Node])
 usvg::Group (on SvgNode) method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
 usvg::Group (on SvgNode) method covered by the template, not generated: mask (returns Option<&Mask>)
@@ -61,11 +81,14 @@ usvg::Group method covered by the template, not generated: clip_path (returns Op
 usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)
 usvg::Mask method covered by the content view: root (returns &Group)
 usvg::Mask method covered by the template: mask (returns Option<&Mask>)
+usvg::Mask method not in the namespaced class: mask (returns Option<&Mask>)
+usvg::Mask method not in the namespaced class: root (returns &Group)
 usvg::Node method covered by clipPath / mask / filters / imageChildren / paint ids: subroots (arg: F)
 usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
 usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
 usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)
 usvg::Pattern method covered by the content view: root (returns &Group)
+usvg::Pattern method not in the namespaced class: root (returns &Group)
 usvg::Tree method covered by the template as `children`: root (returns &Group)
 usvg::Tree method covered by the template as `new`: from_data (no receiver)
 usvg::Tree method covered by the template as `new`: from_data_nested (no receiver)
@@ -75,5 +98,16 @@ usvg::Tree method covered by the template as `node`: node_by_id (returns Option<
 usvg::Tree method covered by the template as `to_svg_string`: to_string (arg: &WriteOptions)
 usvg::WriteOptions field not exposed: attributes_indent: Indent (handled manually by the template)
 usvg::WriteOptions field not exposed: indent: Indent (handled manually by the template)
+usvg::fontdb::Database method not in the namespaced class: face (arg: ID)
+usvg::fontdb::Database method not in the namespaced class: face_source (arg: ID)
+usvg::fontdb::Database method not in the namespaced class: family_name (arg: &'aFamily)
+usvg::fontdb::Database method not in the namespaced class: load_font_source (arg: Source)
+usvg::fontdb::Database method not in the namespaced class: make_face_data_unshared (arg: ID)
+usvg::fontdb::Database method not in the namespaced class: make_shared_face_data (arg: ID)
+usvg::fontdb::Database method not in the namespaced class: new (no receiver)
+usvg::fontdb::Database method not in the namespaced class: push_face_info (arg: FaceInfo)
+usvg::fontdb::Database method not in the namespaced class: query (arg: &Query)
+usvg::fontdb::Database method not in the namespaced class: remove_face (arg: ID)
+usvg::fontdb::Database method not in the namespaced class: with_face_data (arg: ID)
 vocabulary derived: 7 f32 newtypes, 7 type aliases
 wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database

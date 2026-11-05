@@ -1,0 +1,118 @@
+# Classifies each pull request's `index.d.ts` diff (scripts/api-diff.mjs) and
+# keeps the `breaking-api` label and one sticky comment in step with it. The
+# label is what the release notes' "Breaking" section is written from.
+#
+# pull_request_target, not pull_request: a pull request from a fork gets a
+# read-only token under pull_request, and labelling needs write. The price is
+# that this runs with that write token, so it never runs anything from the pull
+# request. What runs is the base branch's checkout -- the default for this
+# event -- and the head's `index.d.ts` is read with `git show` as data: no
+# checkout of the head, no install, no script, no build from it. Anything the
+# pull request controls reaches a shell through `env:`, never through `${{ }}`
+# inside `run:`.
+#
+# The consequence is that a change to this file or to api-diff.mjs only takes
+# effect once it is on main. A pull request that edits them is classified by
+# the versions already there.
+#
+# Bump pull requests from resvg.yml never reach this: they are opened with
+# GITHUB_TOKEN, whose events start no workflow. resvg.yml applies the label
+# itself.
+name: api
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write  # labels and comments live on the issue side of a pull request
+
+concurrency:
+  group: api-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: classify index.d.ts
+    runs-on: ubuntu-latest
+    steps:
+      # The base branch. Full history, for the merge base below; no credentials
+      # left in .git, since nothing after this needs to push.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Against the merge base, not the base branch's tip: a pull request that
+      # is behind main would otherwise "remove" everything main gained since.
+      # The head is fetched as objects only; `git show` reads one blob of it.
+      - name: Classify
+        id: diff
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/$PR/head:refs/remotes/pr/head"
+          head=$(git rev-parse refs/remotes/pr/head)
+          base=$(git merge-base "$head" "$BASE_SHA")
+          echo "base $base, head $head"
+          # A side without the file reads as empty: deleting it is a removal of
+          # everything, adding it an addition of everything.
+          git show "$base:index.d.ts" > "$RUNNER_TEMP/base.d.ts" 2>/dev/null || : > "$RUNNER_TEMP/base.d.ts"
+          git show "$head:index.d.ts" > "$RUNNER_TEMP/head.d.ts" 2>/dev/null || : > "$RUNNER_TEMP/head.d.ts"
+          node scripts/api-diff.mjs "$RUNNER_TEMP/base.d.ts" "$RUNNER_TEMP/head.d.ts" > "$RUNNER_TEMP/out.md"
+          classification=$(tail -n 1 "$RUNNER_TEMP/out.md" | sed -n 's/^classification=//p')
+          case "$classification" in none|additive|breaking) ;; *) echo "::error::no classification"; exit 1 ;; esac
+          {
+            echo '<!-- api-diff -->'
+            head -n -1 "$RUNNER_TEMP/out.md"
+            echo
+            echo "_Merge base \`${base:0:7}\` against head \`${head:0:7}\`, by \`scripts/api-diff.mjs\`. The \`breaking-api\` label follows this classification._"
+          } > "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "classification=$classification" >> "$GITHUB_OUTPUT"
+
+      # REST rather than `gh pr edit`: that one goes through GraphQL and has
+      # failed on the projects (classic) fields with this token.
+      - name: Label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          CLASSIFICATION: ${{ steps.diff.outputs.classification }}
+        run: |
+          set -euo pipefail
+          if [ "$CLASSIFICATION" = breaking ]; then
+            gh label create breaking-api --color B60205 \
+              --description 'Removes or changes a declaration in index.d.ts' 2>/dev/null || true
+            gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=breaking-api' >/dev/null
+          else
+            # 404 when it was never there.
+            gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/breaking-api" >/dev/null 2>&1 || true
+          fi
+
+      # One comment, edited in place. Found by its marker *and* its author: a
+      # comment anyone else wrote with the marker in it is not ours to edit.
+      # With nothing to say and nothing said yet, it stays silent.
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          CLASSIFICATION: ${{ steps.diff.outputs.classification }}
+        run: |
+          set -euo pipefail
+          id=$(gh api --paginate "repos/$GH_REPO/issues/$PR/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- api-diff -->"))) | .id' \
+            | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -F "body=@$RUNNER_TEMP/comment.md" >/dev/null
+          elif [ "$CLASSIFICATION" != none ]; then
+            gh api "repos/$GH_REPO/issues/$PR/comments" -F "body=@$RUNNER_TEMP/comment.md" >/dev/null
+          fi

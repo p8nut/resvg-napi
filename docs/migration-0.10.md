@@ -36,7 +36,7 @@ Tick a step off here when it is merged.
 
 - [x] 1
 - [x] 2
-- [ ] 3
+- [x] 3
 - [ ] 4
 - [ ] 5
 - [ ] 6

@@ -217,6 +217,49 @@ derived surface on purpose, regenerate it and commit the diff:
 npm run report
 ```
 
+## The `breaking-api` label
+
+The API mirrors upstream, so a resvg, usvg, fontdb or tiny-skia bump can move
+it without anyone writing a line here. Every pull request's `index.d.ts` diff is
+classified, and the label says the result:
+
+- **none**: no declaration added, removed or changed. Doc comments and
+  whitespace do not count.
+- **additive**: additions only -- a new declaration, an optional parameter
+  appended, a union alias that gained a member, an interface merged into a
+  class of the same name.
+- **breaking**: anything else -- a declaration removed (a move between
+  namespaces is one), a signature changed in any way (narrowed, retyped,
+  optional made required), a union or enum member dropped, a required field
+  added to an existing interface.
+
+`scripts/api-diff.mjs` keys every declaration as `namespace.container.member`
+with its normalised signature and compares the two sets; anything changed that
+is not one of the widenings above is breaking, on purpose. To see what a branch
+does:
+
+```bash
+git show origin/main:index.d.ts > /tmp/base.d.ts
+node scripts/api-diff.mjs /tmp/base.d.ts index.d.ts
+```
+
+`.github/workflows/api.yml` runs it on each pull request against the merge
+base, sets or clears `breaking-api`, and keeps one comment with the summary up
+to date (it only starts one when there is something to say). It runs as
+`pull_request_target`, so it can label pull requests from forks, and for that
+reason it runs nothing from the pull request: its scripts come from `main`, and
+the head's `index.d.ts` is read as data with `git show`. A change to it or to
+the script therefore takes effect after the merge, not on its own pull request.
+`resvg.yml` applies the label to the bumps it opens itself, because a pull
+request opened with `GITHUB_TOKEN` starts no workflow.
+
+The label is what the release notes are sorted by: `.github/release.yml` puts
+labelled pull requests under **Breaking** in the generated body. Every update
+round that touches the binary or the API ends in a release, so that section is
+where a user learns what upstream moved. The label can be set or removed by
+hand when the classifier is wrong; the next push to the pull request
+reclassifies it.
+
 ## Third-party notices
 
 `THIRD-PARTY-NOTICES.md` is generated from `Cargo.lock` and committed, the same
@@ -291,5 +334,6 @@ them).
 
 There is no `CHANGELOG.md` any more. It was a file to remember at every pull
 request, and it recorded what a release body is for. The generated list of pull
-requests is the *what*; the *why*, and anything breaking, is written by hand at
-the top of the release once CI has opened it.
+requests is the *what*, with the `breaking-api` ones under **Breaking**; the
+*why*, and what a user has to change, is written by hand at the top of the
+release once CI has opened it.

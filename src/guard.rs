@@ -14,8 +14,8 @@
 //!   database does not carry (`misses()`).
 //!
 //! `usvg.Options.imageHrefResolver` and `fontResolver` take them
-//! (`Config::providers`). The flat `Resvg` resolves through the same
-//! functions until it goes (step 13 of the migration).
+//! (`Config::providers`), and the helpers pass a fresh one of each to every
+//! parse.
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -59,16 +59,10 @@ impl Misses {
     pub(crate) fn list(&self) -> Vec<String> {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
-
-    /// Drains what was recorded.
-    pub(crate) fn take(&self) -> Arc<[String]> {
-        std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner())).into()
-    }
 }
 
 /// Where an image href may be read from: supplied bytes, and files under a
 /// directory.
-#[derive(Default)]
 pub(crate) struct Fence {
     pub(crate) images: Arc<ImageMap>,
     /// The directory relative hrefs resolve against and files may not leave.

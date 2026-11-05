@@ -7,12 +7,11 @@ use std::{env, fs, path::PathBuf, process::Command};
 use napi_gen::class::{Classes, Holding, Source};
 use napi_gen::emit::*;
 use napi_gen::sources::{ModTree, parse_crate};
-use napi_gen::vocab::Vocab;
-use napi_gen::{Config, Converter, Provider, Shapes, View};
+use napi_gen::vocab::{Vocab, payload_enums};
+use napi_gen::{Config, Converter, Iterated, Provider, View};
 use quote::quote;
 
-/// The toy has no transform, size, box, path data or font tag, no feature
-/// gates and no data or enum to rename: most answers are empty.
+/// The toy has no font tag and no feature gates: those answers are empty.
 const GEN: Config = Config {
     log_env: "TOY_NAPI_CODEGEN_LOG",
     // `ReportOptions::style_index` indexes `STYLES` unchecked.
@@ -36,27 +35,16 @@ const GEN: Config = Config {
         ts: "number | 'auto'",
         convert: "width_from_js",
     }],
-    matrix_fields: &[],
-    size_types: &[],
-    rect_types: &[],
-    opt_rect_types: &[],
-    path_data_types: &[],
     tag4_types: &[],
-    // Never emitted: no toy type has one of these shapes.
-    shapes: Shapes {
-        rect: "Rect",
-        size: "Size",
-        matrix: "Matrix",
-        path: ("Segment", "segments"),
-    },
-    size_new: "Size::new",
-    arg_standin: None,
-    hand_wired_fields: &[],
+    // A `Trail` is what its `steps()` iterates: `scene.trail()` is an array
+    // of `Step` unions.
+    iterated: &[Iterated {
+        ty: "Trail",
+        via: "steps",
+        item: "Step",
+    }],
     node_types: &[],
     not_data: &[],
-    hand_wrapped: &[],
-    data_renames: &[],
-    enum_renames: &[],
     features: &[],
     // The crate root's items under `toy`, the `alt` module's under `alt`.
     namespaces: &[("toy", "toy"), ("toy::alt", "alt")],
@@ -131,9 +119,33 @@ fn main() {
     let alt: Vec<syn::File> = alt.into_iter().map(|(_, f)| f).collect();
     let (modules, root) = (&tree.paths, quote!(toy));
 
-    // The unit enum, the plain-data struct and the option struct, each
-    // through the emitter the root crate uses for the same shape.
+    // The classes and functions (`GEN.classes`, `GEN.functions`), each
+    // source's into its namespace. Built first: a member naming a class held
+    // by value is that class (`Vocab::classes`).
+    let none = Default::default();
+    let classes = Classes::new(vec![
+        Source {
+            root: "toy",
+            files: &files,
+            modules,
+        },
+        Source {
+            root: "toy::alt",
+            files: &alt,
+            modules: &none,
+        },
+    ]);
+
+    // The unit enum, the plain-data struct and the payload enum `Step`,
+    // each through the emitter the root crate uses for the same shape.
     let mut vocab = Vocab::default();
+    // `Color` has two, so a member's bare `Color` names neither.
+    for (name, plain) in classes.by_value().filter(|(n, _)| *n != "Color") {
+        vocab.classes.insert(name.to_string());
+        if plain {
+            vocab.plain.insert(name.to_string());
+        }
+    }
     let wanted = ["Direction".to_string()].into();
     let (enums, enum_code, _) = map_enums(&files, &wanted, modules, &root);
     vocab.enums = enums;
@@ -143,10 +155,20 @@ fn main() {
         !point.is_empty() && skipped.is_empty(),
         "Point maps completely"
     );
+    // A unit variant, one carrying a plain-data class (its `Vec2Object`),
+    // and one carrying two (a tuple, `value: [from, to]`).
+    let step = payload_enums(&files, "", &Default::default(), "toy")
+        .remove("Step")
+        .expect("Step is a payload enum");
+    vocab.payload.insert("Step".into(), step);
+    assert!(
+        vocab.payload["Step"].payload_blocker(&vocab).is_none(),
+        "every Step variant maps"
+    );
+    let step =
+        payload_enum_code("Step", &vocab.payload["Step"], &vocab, modules).expect("the Step union");
     let bounds = index_bounds(&files);
     assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
-    let (fields, skipped, _) = map_struct(&files, "Options", &vocab, &bounds);
-    assert!(skipped.is_empty(), "every Options field maps");
 
     // The option objects: `ReportOptions` with every field optional over
     // `Default`, `base` taken from a `toy.Tally` (a provider), `width`
@@ -174,22 +196,7 @@ fn main() {
         }
     }
 
-    // The second surface's classes and functions (`GEN.classes`,
-    // `GEN.functions`), each source's into its namespace. What a class
-    // leaves out is listed, as the codegen report would.
-    let none = Default::default();
-    let classes = Classes::new(vec![
-        Source {
-            root: "toy",
-            files: &files,
-            modules,
-        },
-        Source {
-            root: "toy::alt",
-            files: &alt,
-            modules: &none,
-        },
-    ]);
+    // What a class leaves out is listed, as the codegen report would.
     let holdings: Vec<_> = classes.classes.iter().map(|c| c.holding).collect();
     assert_eq!(
         holdings,
@@ -218,7 +225,7 @@ fn main() {
         ["Color".to_string()].into(),
         "two namespaces have a Color"
     );
-    let mut toy_part = quote! { #enum_code #point #options };
+    let mut toy_part = quote! { #enum_code #point #step #options };
     let mut alt_part = quote!();
     for (i, c) in classes.classes.iter().enumerate() {
         let (code, skipped) = classes.class(i, &vocab);
@@ -253,16 +260,7 @@ fn main() {
         toy_part.extend(code);
     }
 
-    let decls = fields.iter().map(|f| &f.decl);
-    let assigns = fields.iter().map(|f| &f.assign);
-    let flat = quote! {
-        use napi::bindgen_prelude::*;
-        use napi_derive::napi;
-
-        fn to_f32(v: f64) -> f32 {
-            v as f32
-        }
-
+    let template = quote! {
         #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
         fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
             match v {
@@ -273,44 +271,19 @@ fn main() {
                 Either::B(s) => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
             }
         }
-
-        #enum_code
-        #point
-
-        #[doc = " How to build a `Counter`: every field optional."]
-        #[napi(object)]
-        #[derive(Default)]
-        pub struct Options {
-            #(#decls)*
-        }
-
-        impl Options {
-            fn apply(&self, o: &mut toy::Options) {
-                #(#assigns)*
-            }
-        }
     };
     // The two `Color`s keep their name: `shared_names`.
     let surfaces = namespaced(
         &[("toy", toy_part), ("alt", alt_part)],
-        &flat,
         &classes.shared_names(),
     );
     assert!(surfaces.report.is_empty(), "nothing is left out");
     let mirrored = surfaces.namespaced;
+    let prelude = prelude();
     let code = quote! {
-        #flat
+        #prelude
+        #template
         #mirrored
-
-        #[doc = " A new `toy.Counter`, built from the flat `Options`."]
-        #[napi]
-        pub fn counter(options: Option<Options>) -> ToyCounter {
-            let mut o = toy::Options::default();
-            if let Some(options) = options {
-                options.apply(&mut o);
-            }
-            ToyCounter::wrap(toy::Counter::new(&o))
-        }
 
         // Copy on write has no Rust counterpart to mirror: these two let the
         // test see it. The namespaced items are named by the prefix rule:

@@ -4,11 +4,12 @@
 //! The generic phases live in their own crate, `crates/napi-gen` (sources,
 //! vocab, emit, cfg); this one fills its config and orchestrates them:
 //!
-//!   build/config.rs    the resvg-specific lists: renames, reserved names,
-//!                      hand-wired fields, and the `napi_gen::Config` they
-//!                      make. What another crate would rewrite
-//!   build/template.rs  the API decisions, written by hand. With config.rs,
-//!                      the only files here not describing upstream
+//!   build/config.rs    the resvg-specific lists: the crates, the allowlists,
+//!                      the hooks, and the `napi_gen::Config` they make. What
+//!                      another crate would rewrite
+//!   build/template.rs  the resvg-specific items of the generated file,
+//!                      written by hand: the crate paths, `mod guard;` and
+//!                      the one converter
 //!   build.rs           this: the passes, their order, the fixpoints, the
 //!                      assertions, and writing src/lib.rs
 //!
@@ -60,9 +61,8 @@ fn main() {
             Js::Count,
             Js::Str,
             Js::Scalar,
-            Js::Bbox,
-            Js::Size,
-            Js::Matrix,
+            Js::Class("C".into()),
+            Js::OptClass("C".into()),
             Js::IntNewtype("N".into()),
             Js::Value("V".into()),
             Js::ValueList("V".into()),
@@ -151,13 +151,6 @@ fn main() {
         let m = primary.tree.file_ns.get(path).cloned().unwrap_or_default();
         by_module.entry(m).or_default().push(file.clone());
     }
-    let source_files = |root: &str| {
-        &sources
-            .iter()
-            .find(|s| s.root_str == root)
-            .unwrap_or_else(|| panic!("no config::UPSTREAM with root {root:?}"))
-            .files
-    };
 
     // Which crate defines a type, by the same probe the chains used: the first
     // source with a public struct of that name.
@@ -207,8 +200,11 @@ fn main() {
     }
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
-    let mut referenced = struct_field_types(primary_files, PARSE_OPTIONS);
-    referenced.extend(struct_field_types(primary_files, WRITE_OPTIONS));
+    let mut referenced: BTreeSet<String> = GEN
+        .option_objects
+        .iter()
+        .flat_map(|o| struct_field_types(primary_files, o))
+        .collect();
     referenced.extend(returned_types(primary_files));
     for src in &sources[1..] {
         referenced.extend(returned_types(&src.files));
@@ -234,11 +230,7 @@ fn main() {
                 .iter()
                 .flat_map(|(m, files)| payload_enums(files, m, &dups, primary.root_str))
                 .flat_map(|(_, p)| p.variants)
-                .flat_map(|(_, payload)| match payload {
-                    Payload::None => Vec::new(),
-                    Payload::Value(t) => vec![t],
-                    Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
-                })
+                .flat_map(|(_, payload)| payload.carried().into_iter().cloned().collect::<Vec<_>>())
                 .filter(|t| !GEN.node_types.contains(&bare(t)))
                 .filter(|t| struct_fields_opt(primary_files, bare(t)).is_some()),
         )
@@ -286,7 +278,6 @@ fn main() {
         // tiny-skia-path is parsed for exactly this kind of answer: usvg
         // re-exports its `Transform`, so the struct that decides the mapping is
         // never in usvg's own files.
-        vocab.matrices.extend(matrix_like(set));
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
         vocab.payload.extend(payload_enums(set, "", &dups, root));
@@ -325,23 +316,101 @@ fn main() {
         vocab.aliases.len()
     );
 
+    // The classes and free functions (`GEN.classes`, `GEN.functions`): over
+    // the wrapped crates, and over the crates parsed for them alone
+    // (`CLASS_CRATES`), each read as one source. The crate root's files are
+    // where its free functions are. Built before the data types: a member
+    // naming a class held by value (`tiny_skia.Transform`) is that class.
+    struct ClassCrate {
+        files: Vec<syn::File>,
+        lib: Vec<syn::File>,
+        modules: BTreeMap<String, String>,
+        root: &'static str,
+    }
+    let extra_crates: Vec<ClassCrate> = CLASS_CRATES
+        .iter()
+        .map(|(pkgs, root)| {
+            let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
+            for pkg in *pkgs {
+                let dir = locate(pkg, "lib.rs", &locked);
+                let all = parse_crate(&dir);
+                let tree = ModTree::load(&dir, &all);
+                for (path, file) in tree.public_view(&all, &dir) {
+                    if path == dir.join("lib.rs") && lib.is_empty() {
+                        lib.push(file.clone());
+                    }
+                    files.push(file);
+                }
+                for (name, at) in tree.paths {
+                    modules.entry(name).or_insert(at);
+                }
+            }
+            ClassCrate {
+                files,
+                lib,
+                modules,
+                root,
+            }
+        })
+        .collect();
+    // A wrapped crate's classes are its root module's: a module whose types
+    // are exported under its own path (`filter`) is not that source, and its
+    // `Image` is not `usvg::Image`.
+    let root_files: Vec<Vec<syn::File>> = sources
+        .iter()
+        .map(|s| {
+            s.parsed
+                .iter()
+                .filter(|(p, _)| s.tree.file_ns.get(p).is_none_or(String::is_empty))
+                .map(|(_, f)| f.clone())
+                .collect()
+        })
+        .collect();
+    let classes = napi_gen::class::Classes::new(
+        sources
+            .iter()
+            .zip(&root_files)
+            .map(|(s, files)| napi_gen::class::Source {
+                root: s.root_str,
+                files,
+                modules: &s.tree.paths,
+            })
+            .chain(extra_crates.iter().map(|c| napi_gen::class::Source {
+                root: c.root,
+                files: &c.files,
+                modules: &c.modules,
+            }))
+            .collect(),
+    );
+    // By its upstream name, unless a wrapped crate defines that name itself
+    // (`usvg::Color` is not `tiny_skia.Color`).
+    for (name, plain) in classes.by_value() {
+        let enum_here = sources.iter().any(|s| {
+            s.files
+                .iter()
+                .flat_map(|f| &f.items)
+                .any(|i| matches!(i, Item::Enum(e) if e.ident == name && is_pub(&e.vis)))
+        });
+        if defines(name).is_none() && !enum_here {
+            vocab.classes.insert(name.to_string());
+            if plain {
+                vocab.plain.insert(name.to_string());
+            }
+        }
+    }
+
     // Every source, not just usvg: fontdb defines enums too -- `Style` is
     // Normal/Italic/Oblique -- and a usvg-only pass left them to the object
     // path, which reported them as "not a public struct" and dropped the field
     // that used them. Driven by the list so a third crate is a push.
-    let mut enums = TokenStream::new();
     let mut enum_names: BTreeSet<String> = BTreeSet::new();
-    // The second surface, by the root of the source that defines each item:
-    // `napi_gen::emit::namespaced` copies it under that source's namespace.
+    // The surface, by the root of the source that defines each item:
+    // `napi_gen::emit::namespaced` puts it under that source's namespace.
     let mut mirrored: BTreeMap<&str, TokenStream> = BTreeMap::new();
     for src in &sources {
         let (names, code, rejected) = map_enums(&src.files, &referenced, modules, &src.root);
         enum_names.extend(names);
-        mirrored
-            .entry(src.root_str)
-            .or_default()
-            .extend(code.clone());
-        enums.extend(code);
+        mirrored.entry(src.root_str).or_default().extend(code);
         for (name, why) in rejected {
             report!("payload enum {name} not mapped: {why}");
         }
@@ -491,10 +560,6 @@ fn main() {
             }
         }
     };
-    // (class, member, label, detail) for everything the generator left out,
-    // reported once the template's own methods are known: a member it adds by
-    // hand is covered, not missing.
-    let mut unexposed: Vec<(String, String, String, String)> = Vec::new();
     for t in &vocab.values {
         // The dropped list is the *class's* own: a getter maps members an
         // object field cannot, so reporting the object probe's list here would
@@ -506,33 +571,13 @@ fn main() {
             data_ident(t)
         );
         for d in dropped {
-            unexposed.push((
-                data_ident(t).to_string(),
-                d.name.clone(),
-                format!("{t} member"),
-                d.to_string(),
-            ));
+            report!("{t} member not exposed: {d}");
         }
     }
 
-    let (fields, skipped_fields, _) = map_struct(primary_files, PARSE_OPTIONS, &vocab, &bounds);
-    let (write_fields, skipped_write, clamped) =
-        map_struct(primary_files, WRITE_OPTIONS, &vocab, &bounds);
-    // The write options are where the clamped indices live
-    // (config::GEN.index_bounded), found by a name suffix. A rename upstream
-    // would match nothing, fall through to u8::MAX, and hand usvg an index 242
-    // places past the end of a 13-entry table -- an out-of-bounds panic inside
-    // an `extern "C"` callback, which aborts the process rather than throwing.
-    // Loud here instead.
-    assert!(
-        clamped > 0,
-        "no {WRITE_OPTIONS} field matched an index bound: either upstream renamed \
-         them, in which case the clamp now protects nothing, or they are gone"
-    );
-
-    // The option structs as plain objects of the namespaced surface
-    // (`usvg.Options`, `usvg.WriteOptions`): every field optional over
-    // `Default`, the font database supplied by a `fontdb.Database`.
+    // The option structs as plain objects (`usvg.Options`,
+    // `usvg.WriteOptions`): every field optional over `Default`, the font
+    // database supplied by a `fontdb.Database`.
     for name in GEN.option_objects {
         let Some(obj) = option_object(primary_files, name, &vocab, modules, &primary.root, &bounds)
         else {
@@ -542,11 +587,16 @@ fn main() {
             );
             continue;
         };
-        // The same guard as above, for the namespaced copy.
+        // The write options are where the clamped indices live
+        // (config::GEN.index_bounded), found by a name suffix. A rename
+        // upstream would match nothing, fall through to u8::MAX, and hand usvg
+        // an index 242 places past the end of a 13-entry table -- an
+        // out-of-bounds panic inside an `extern "C"` callback, which aborts
+        // the process rather than throwing. Loud here instead.
         assert!(
-            *name != WRITE_OPTIONS || obj.bounded == clamped,
-            "{name}: the option object clamps {} fields, the flat one {clamped}",
-            obj.bounded
+            *name != WRITE_OPTIONS || obj.bounded > 0,
+            "no {WRITE_OPTIONS} field matched an index bound: either upstream renamed \
+             them, in which case the clamp now protects nothing, or they are gone"
         );
         for s in obj.skipped {
             report!(
@@ -616,71 +666,6 @@ fn main() {
         done.iter().cloned().collect::<Vec<_>>().join(", ")
     );
 
-    // The classes and free functions of the second surface (`GEN.classes`,
-    // `GEN.functions`): over the wrapped crates, and over the crates parsed
-    // for them alone (`CLASS_CRATES`), each read as one source. The crate
-    // root's files are where its free functions are.
-    struct ClassCrate {
-        files: Vec<syn::File>,
-        lib: Vec<syn::File>,
-        modules: BTreeMap<String, String>,
-        root: &'static str,
-    }
-    let extra: Vec<ClassCrate> = CLASS_CRATES
-        .iter()
-        .map(|(pkgs, root)| {
-            let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
-            for pkg in *pkgs {
-                let dir = locate(pkg, "lib.rs", &locked);
-                let all = parse_crate(&dir);
-                let tree = ModTree::load(&dir, &all);
-                for (path, file) in tree.public_view(&all, &dir) {
-                    if path == dir.join("lib.rs") && lib.is_empty() {
-                        lib.push(file.clone());
-                    }
-                    files.push(file);
-                }
-                for (name, at) in tree.paths {
-                    modules.entry(name).or_insert(at);
-                }
-            }
-            ClassCrate {
-                files,
-                lib,
-                modules,
-                root,
-            }
-        })
-        .collect();
-    // A wrapped crate's classes are its root module's: a module whose types
-    // are exported under its own path (`filter`) is not that source, and its
-    // `Image` is not `usvg::Image`.
-    let root_files: Vec<Vec<syn::File>> = sources
-        .iter()
-        .map(|s| {
-            s.parsed
-                .iter()
-                .filter(|(p, _)| s.tree.file_ns.get(p).is_none_or(String::is_empty))
-                .map(|(_, f)| f.clone())
-                .collect()
-        })
-        .collect();
-    let classes = napi_gen::class::Classes::new(
-        sources
-            .iter()
-            .zip(&root_files)
-            .map(|(s, files)| napi_gen::class::Source {
-                root: s.root_str,
-                files,
-                modules: &s.tree.paths,
-            })
-            .chain(extra.iter().map(|c| napi_gen::class::Source {
-                root: c.root,
-                files: &c.files,
-                modules: &c.modules,
-            }))
-            .collect(),
-    );
     for (i, c) in classes.classes.iter().enumerate() {
         let root = classes.sources[c.source].root;
         let (code, skipped) = classes.class(i, &vocab);
@@ -697,7 +682,7 @@ fn main() {
         }
         mirrored.entry(root).or_default().extend(code);
     }
-    for ClassCrate { lib, root, .. } in &extra {
+    for ClassCrate { lib, root, .. } in &extra_crates {
         let (code, skipped) = classes.functions(root, lib, &vocab);
         for s in skipped {
             report!("{root} function not exposed: {s}");
@@ -719,39 +704,8 @@ fn main() {
             .extend(code);
     }
 
-    // One declarative table (config::PASSES) instead of four call sites:
-    // adding a wrapped `impl` block is a single row.
-    let mut generated: BTreeMap<&str, TokenStream> = BTreeMap::new();
-    let mut taken: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
-    // Reported once the template exists: whether a skipped method is "covered"
-    // is a question about the template, which is built further down.
-    let mut skips: Vec<(&str, &str, Vec<Skip>)> = Vec::new();
-    for p in PASSES {
-        let names = taken.entry(p.target).or_default();
-        let receiver: TokenStream = p
-            .receiver
-            .parse()
-            .expect("a config::PASSES receiver that parses");
-        let (code, skipped) = map_methods(
-            &MethodPass {
-                files: source_files(p.source),
-                ty: p.ty,
-                receiver: &receiver,
-                receiver_mut: None,
-                skip: p.skip,
-                readonly: false,
-                standin: true,
-            },
-            &vocab,
-            names,
-        );
-        skips.push((p.label, p.target, skipped));
-        generated.insert(p.label, code);
-    }
     // Every settled data type, objects and read-only classes alike: the
-    // registry only ever holds what a pass, the template or another data type
-    // reached, so there is nothing to prune.
-    let mut object_code: TokenStream = object_parts.values().cloned().collect();
+    // registry only ever holds what a member or another data type reached.
     for (t, code) in &object_parts {
         let root = object_root[t].to_string().replace(' ', "");
         let src = sources
@@ -764,7 +718,7 @@ fn main() {
             .iter()
             .any(|(r, n)| *r == src.root_str && *n == t.as_str())
         {
-            report!("{root}::{t} is a projection, not a copy of the flat data type");
+            report!("{root}::{t} is a projection, not a data type");
             continue;
         }
         mirrored
@@ -783,21 +737,26 @@ fn main() {
         }
         match payload_enum_code(name, info, &vocab, modules) {
             Ok(code) => {
-                // In the namespace of the source defining the enum. One only
-                // mined for vocabulary is another crate's, re-exported: it
-                // waits for that crate's own namespace.
-                match sources.iter().find(|s| {
+                // In the namespace of the source defining the enum; one mined
+                // from a vocabulary crate, in the namespace of the path that
+                // reaches it (`VOCAB_ROOT`, `PathSegment`).
+                let src = sources.iter().find(|s| {
                     s.files.iter().flat_map(|f| &f.items).any(
                         |i| matches!(i, Item::Enum(e) if e.ident == bare(name) && is_pub(&e.vis)),
                     )
-                }) {
-                    Some(src) => mirrored
-                        .entry(src.root_str)
-                        .or_default()
-                        .extend(code.clone()),
-                    None => report!("payload enum {name} not namespaced: no source defines it"),
+                });
+                let root = src.map_or(info.root.as_str(), |s| s.root_str);
+                if napi_gen::namespace_of(root).is_none() {
+                    report!("payload enum {name} not namespaced: no namespace for {root}");
+                    continue;
                 }
-                object_code.extend(code);
+                let root = GEN
+                    .namespaces
+                    .iter()
+                    .find(|(r, _)| *r == root)
+                    .map(|(r, _)| *r)
+                    .expect("checked above");
+                mirrored.entry(root).or_default().extend(code);
                 unions.push(name.clone());
             }
             Err(why) => report!("payload enum {name} skipped: {why}"),
@@ -811,123 +770,24 @@ fn main() {
         object_parts.keys().cloned().collect::<Vec<_>>().join(", ")
     );
 
-    let fontdb_methods = &generated["fontdb::Database"];
-    let tree_methods = &generated["usvg::Tree"];
-    let group_methods = &generated["usvg::Group"];
-
-    for s in skipped_fields {
-        report!(
-            "{}::{PARSE_OPTIONS} field not exposed: {s}",
-            primary.root_str
-        );
+    // The surface: one namespace per source (`GEN.namespaces`), after the
+    // generic prelude and the template's own items.
+    let parts: Vec<(&str, TokenStream)> = mirrored
+        .into_iter()
+        .map(|(root, code)| {
+            let ns = napi_gen::namespace_of(root)
+                .unwrap_or_else(|| panic!("no GEN.namespaces entry for {root}"));
+            (ns, code)
+        })
+        .collect();
+    let surfaces = namespaced(&parts, &classes.shared_names());
+    for line in surfaces.report {
+        report!("{line}");
     }
-    for s in skipped_write {
-        report!(
-            "{}::{WRITE_OPTIONS} field not exposed: {s}",
-            primary.root_str
-        );
-    }
-
-    let decls: Vec<_> = fields.iter().map(|f| &f.decl).collect();
-    let assigns: Vec<_> = fields.iter().map(|f| &f.assign).collect();
-    let write_decls: Vec<_> = write_fields.iter().map(|f| &f.decl).collect();
-    let write_assigns: Vec<_> = write_fields.iter().map(|f| &f.assign).collect();
-
-    // Everything the passes above produced, in one value: `template` is called
-    // twice and only the method lists differ between the two.
-    let fragments = Fragments {
-        enums,
-        object_code,
-        decls,
-        assigns,
-        write_decls,
-        write_assigns,
-    };
-    // What the template covers is derived from the template: build it once with
-    // no generated methods, and read its own method names off it.
-    let empty = TokenStream::new();
-    let hand = template_fns(&template(&fragments, &empty, &empty, &empty));
-    let defined: BTreeSet<&String> = hand.values().flatten().collect();
-    // Members the generator left out of a class, unless the template adds
-    // them to that same class by hand.
-    for (class, member, label, s) in &unexposed {
-        let verb = if hand.get(class).is_some_and(|fns| fns.contains(member)) {
-            "covered by the template"
-        } else {
-            "not exposed"
-        };
-        report!("{label} {verb}: {s}");
-    }
-    for (from, to) in RENAMED {
-        assert!(
-            defined.iter().any(|n| n.as_str() == *to),
-            "RENAMED says `{from}` is covered by `{to}`, but the template defines no `{to}`"
-        );
-    }
-    for (label, target, skipped) in &skips {
-        for s in skipped {
-            let name = s.name.as_str();
-            let renamed = RENAMED.iter().find(|(from, _)| *from == name);
-            let verb = match renamed {
-                Some((_, to)) => format!("covered by the template as `{to}`"),
-                None if defined.iter().any(|n| n.as_str() == name) => {
-                    "covered by the template, not generated".to_string()
-                }
-                // Another pass emitted a method of that name on the same class.
-                None if taken.get(target).is_some_and(|t| t.contains(name)) => {
-                    "covered by another pass on the same class".to_string()
-                }
-                None => "not exposed".to_string(),
-            };
-            report!("{label} method {verb}: {s}");
-        }
-    }
-
-    let mut code = template(&fragments, fontdb_methods, tree_methods, group_methods);
-    // The second surface, one namespace per source (`GEN.namespaces`).
-    {
-        let parts: Vec<(&str, TokenStream)> = mirrored
-            .into_iter()
-            .map(|(root, code)| {
-                let ns = napi_gen::namespace_of(root)
-                    .unwrap_or_else(|| panic!("no GEN.namespaces entry for {root}"));
-                (ns, code)
-            })
-            .collect();
-        // The flat surface keeps only the generated data types it names, or
-        // the namespaced copies do: the rest are reached through the
-        // namespaces. napi keeps one constructor per JS class name, so a
-        // copy with the name of a flat class is left out.
-        let generated = [&fragments.enums, &fragments.object_code];
-        let flat = prune(code.clone(), &generated, &[]);
-        let surfaces = namespaced(&parts, &flat, &classes.shared_names());
-        for line in surfaces.report {
-            report!("{line}");
-        }
-        code = prune(code, &generated, &[&surfaces.namespaced]);
-        code.extend(surfaces.namespaced);
-    }
-
-    // Async twins: the template marks a Send-safe core, the rule writes the
-    // ceremony. The marker is stripped on the way out -- rustc has never heard
-    // of it.
-    {
-        let mut file: syn::File =
-            syn::parse2(code.clone()).expect("the emitter template is not valid Rust");
-        let twins = async_twins(&mut file);
-        for t in &twins {
-            report!(
-                "async twin generated: {}::{} -> {} (Promise<{}>)",
-                ty_str(&t.target),
-                t.core,
-                t.public,
-                t.js
-            );
-        }
-        let ceremony = emit_twins(&twins);
-        let mut file: syn::File =
-            syn::parse2(quote! { #file #ceremony }).expect("the async twins are valid Rust");
-        guard_live(&mut file, "Resvg", &["dispose", "disposed"]);
+    let (prelude, template, namespaced) = (prelude(), template(), surfaces.namespaced);
+    let code = {
+        let mut file: syn::File = syn::parse2(quote! { #prelude #template #namespaced })
+            .expect("the generated file is valid Rust");
         // `dispose()` on every class, and `[Symbol.dispose]` with its
         // declaration (napi's `dtsHeaderFile`).
         napi_gen::dispose::slotted(&mut file);
@@ -942,8 +802,8 @@ fn main() {
             &dts_header,
         );
         let inspect = inspect_members(&whole);
-        code = quote! { #file #alias #inspect };
-    }
+        quote! { #file #alias #inspect }
+    };
 
     let header = format!(
         "// @generated by build.rs from {GENERATED_FROM}. DO NOT EDIT.\n{}",
@@ -955,8 +815,8 @@ fn main() {
         // Generated by type text, not type checking: an upstream alias may
         // already be the target type, option structs are filled field by
         // field from Default, and a 17-variant Either is what napi offers for
-        // a JS union; `FontDatabase::new` is a JS constructor, so a Default
-        // impl would be dead API. Everything else clippy says applies here too.
+        // a JS union; a `new` is a JS constructor, so a Default impl would be
+        // dead API. Everything else clippy says applies here too.
         "#![allow(clippy::useless_conversion, clippy::field_reassign_with_default, clippy::type_complexity, clippy::new_without_default)]\n",
     );
     let text = format!("{header}{}", code);
@@ -978,92 +838,6 @@ fn main() {
     if fs::read_to_string(&dest).ok().as_deref() != Some(formatted.as_str()) {
         fs::write(&dest, &formatted).unwrap();
     }
-}
-
-/// `code` without the items of `generated` that nothing else names: a
-/// generated data type, enum or conversion stays while an item outside
-/// `generated`, an item of `also`, or a kept one names it. Items are matched
-/// by the name they declare (an impl by its type). A name after `::` or `.`
-/// is a path or a member, and an enum's variant a variant: not references.
-fn prune(code: TokenStream, generated: &[&TokenStream], also: &[&TokenStream]) -> TokenStream {
-    fn name(item: &Item) -> Option<String> {
-        match item {
-            Item::Struct(s) => Some(s.ident.to_string()),
-            Item::Enum(e) => Some(e.ident.to_string()),
-            Item::Fn(f) => Some(f.sig.ident.to_string()),
-            Item::Type(t) => Some(t.ident.to_string()),
-            Item::Impl(i) => napi_gen::sources::self_ident(i).map(ToString::to_string),
-            _ => None,
-        }
-    }
-    fn names(ts: TokenStream, out: &mut BTreeSet<String>) {
-        use proc_macro2::{Delimiter, TokenTree};
-        let mut prev: Vec<char> = Vec::new();
-        let mut enum_head = false;
-        for t in ts {
-            match &t {
-                TokenTree::Ident(id) if id == "enum" => enum_head = true,
-                TokenTree::Ident(id)
-                    if !prev.ends_with(&[':', ':']) && prev.last() != Some(&'.') =>
-                {
-                    out.insert(id.to_string());
-                }
-                // A variant's own name is left out, what it carries is not.
-                TokenTree::Group(g) if enum_head && g.delimiter() == Delimiter::Brace => {
-                    enum_head = false;
-                    for v in g.stream() {
-                        if let TokenTree::Group(g) = v {
-                            names(g.stream(), out);
-                        }
-                    }
-                }
-                TokenTree::Group(g) => names(g.stream(), out),
-                _ => {}
-            }
-            match t {
-                TokenTree::Punct(p) => prev.push(p.as_char()),
-                _ => prev.clear(),
-            }
-        }
-    }
-    let parse = |ts: &TokenStream| -> syn::File {
-        syn::parse2(ts.clone()).expect("generated code that parses")
-    };
-    let candidates: BTreeSet<String> = generated
-        .iter()
-        .flat_map(|ts| parse(ts).items)
-        .filter_map(|i| name(&i))
-        .collect();
-    let file = parse(&code);
-    let pending = |i: &Item| name(i).is_some_and(|n| candidates.contains(&n));
-    let mut seen = BTreeSet::new();
-    let mut keep: Vec<bool> = file.items.iter().map(|i| !pending(i)).collect();
-    for (item, _) in file.items.iter().zip(&keep).filter(|(_, k)| **k) {
-        names(quote!(#item), &mut seen);
-    }
-    for ts in also {
-        names((*ts).clone(), &mut seen);
-    }
-    loop {
-        let more: Vec<usize> = (0..file.items.len())
-            .filter(|&i| !keep[i] && name(&file.items[i]).is_some_and(|n| seen.contains(&n)))
-            .collect();
-        if more.is_empty() {
-            break;
-        }
-        for i in more {
-            keep[i] = true;
-            let item = &file.items[i];
-            names(quote!(#item), &mut seen);
-        }
-    }
-    let kept = file
-        .items
-        .iter()
-        .zip(keep)
-        .filter(|(_, k)| *k)
-        .map(|(i, _)| i);
-    quote!(#(#kept)*)
 }
 
 /// The hand-written `guard` module (ADR 0002, Q26): the generated file

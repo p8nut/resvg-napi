@@ -109,6 +109,15 @@ impl Tally {
     pub fn joined(&self) -> String {
         self.names.join(",")
     }
+
+    /// Each name with its place: a list of pairs.
+    pub fn pairs(&self) -> Vec<(String, u32)> {
+        self.names
+            .iter()
+            .zip(0..)
+            .map(|(n, i)| (n.clone(), i))
+            .collect()
+    }
 }
 
 /// The styles a report can take, indexed by [`ReportOptions::style_index`].
@@ -244,6 +253,11 @@ impl Vec2 {
     pub fn translate(&mut self, dx: f32, dy: f32) {
         self.x += dx;
         self.y += dy;
+    }
+
+    /// `(x, y)`, a pair.
+    pub fn parts(&self) -> (f32, f32) {
+        (self.x, self.y)
     }
 }
 
@@ -413,6 +427,7 @@ pub struct Scene {
     root: Layer,
     /// Dots shared by name, a table of `Arc`s beside the tree.
     marks: Vec<Arc<Dot>>,
+    trail: Trail,
 }
 
 impl Scene {
@@ -447,6 +462,13 @@ impl Scene {
                 name: "x".into(),
                 at: Vec2::new(9.0, 9.0),
             })],
+            trail: Trail {
+                steps: vec![
+                    Step::Jump(Vec2::new(1.0, 0.0)),
+                    Step::Line(Vec2::new(1.0, 0.0), Vec2::new(4.0, 0.0)),
+                    Step::Stop,
+                ],
+            },
         })
     }
 
@@ -462,6 +484,32 @@ impl Scene {
     /// The first item called `name`, depth first.
     pub fn find(&self, name: &str) -> Option<&Item> {
         self.root.find(name)
+    }
+
+    /// The way through the scene: a jump to `a`, a line to `d`, a stop.
+    pub fn trail(&self) -> &Trail {
+        &self.trail
+    }
+}
+
+/// One move of a [`Trail`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Step {
+    Jump(Vec2),
+    Line(Vec2, Vec2),
+    Stop,
+}
+
+/// Steps held as a stream, not a list: its content is what
+/// [`Trail::steps`] iterates, the shape a binding hands out as an array.
+#[derive(Clone, Debug)]
+pub struct Trail {
+    steps: Vec<Step>,
+}
+
+impl Trail {
+    pub fn steps(&self) -> impl Iterator<Item = Step> + '_ {
+        self.steps.iter().copied()
     }
 }
 

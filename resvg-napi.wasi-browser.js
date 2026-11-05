@@ -1440,19 +1440,8 @@ try {
   throw __attachCleanupErrors(error, cleanupErrors)
 }
 export default __napiModule.exports
-export const FontDatabase = __napiModule.exports.FontDatabase
-export const FontFace = __napiModule.exports.FontFace
-export const Resvg = __napiModule.exports.Resvg
-export const BlendMode = __napiModule.exports.BlendMode
-export const FontFaceStyle = __napiModule.exports.FontFaceStyle
-export const ImageRendering = __napiModule.exports.ImageRendering
-export const ParseErrorCode = __napiModule.exports.ParseErrorCode
-export const renderAsync = __napiModule.exports.renderAsync
 export const setLogLevel = __napiModule.exports.setLogLevel
-export const ShapeRendering = __napiModule.exports.ShapeRendering
-export const Stretch = __napiModule.exports.Stretch
 export const takeLogs = __napiModule.exports.takeLogs
-export const TextRendering = __napiModule.exports.TextRendering
 export const fontdb = __napiModule.exports.fontdb
 export const guard = __napiModule.exports.guard
 export const resvg = __napiModule.exports.resvg

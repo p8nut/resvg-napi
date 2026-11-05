@@ -98,16 +98,6 @@ pub fn js_conv(
         quote!(&#a)
     };
     let saturating = quote!(u32::try_from(#a).unwrap_or(u32::MAX));
-    // The template's own names for the domain shapes.
-    let shapes = &config().shapes;
-    let [rect, size, matrix, segment, segments] = [
-        shapes.rect,
-        shapes.size,
-        shapes.matrix,
-        shapes.path.0,
-        shapes.path.1,
-    ]
-    .map(|n| format_ident!("{n}"));
     Some(match (js, site) {
         (Js::Bool, _) => plain(quote!(bool), d),
         (Js::I32, _) => plain(quote!(i32), d),
@@ -122,13 +112,58 @@ pub fn js_conv(
         (Js::Scalar, _) => plain(quote!(f64), quote!(f64::from(#a.get()))),
         (Js::IntNewtype(_), Carried) => return None,
         (Js::IntNewtype(_), _) => plain(quote!(u32), quote!(u32::from(#a.0))),
-        (Js::Bbox, Carried) => return None,
-        (Js::Bbox, _) => plain(quote!(#rect), quote!(#rect::from(#a))),
-        (Js::OptBbox, Method) => plain(quote!(Option<#rect>), quote!(#a.map(#rect::from))),
-        (Js::Size, Carried) => return None,
-        (Js::Size, _) => plain(quote!(#size), quote!(#size::from(#a))),
-        (Js::Matrix, Carried) => return None,
-        (Js::Matrix, _) => plain(quote!(#matrix), quote!(#matrix::from(#a))),
+        // A class cannot be an object field or a union's payload: a
+        // plain-data one is its `<Name>Object` there, the pair of its
+        // `toObject` (`class.rs`).
+        (Js::Class(t), Field) if vocab.plain.contains(t) => {
+            let o = format_ident!("{t}Object");
+            plain(quote!(#o), quote!(#o::from(#by_ref)))
+        }
+        (Js::Class(t), Carried) if vocab.plain.contains(t) => {
+            let o = format_ident!("{t}Object");
+            plain(quote!(#o), quote!(#o::from(#a)))
+        }
+        (Js::Class(_), Field | Carried) => return None,
+        (Js::Class(t), Getter | Method) => {
+            let c = format_ident!("{t}");
+            let v = if src_ty.starts_with('&') {
+                quote!(*#a)
+            } else {
+                quote!(#a)
+            };
+            plain(quote!(#c), quote!(#c::__from(#v)))
+        }
+        (Js::OptClass(t), Getter | Method) => {
+            let c = format_ident!("{t}");
+            let f = if src_ty.contains("Option<&") {
+                quote!(|x| #c::__from(*x))
+            } else {
+                quote!(#c::__from)
+            };
+            plain(quote!(Option<#c>), quote!(#a.map(#f)))
+        }
+        // Each element as a union's payload is: read through the reference
+        // the iteration binds.
+        (Js::TupleList(elems), Getter | Field | Method) => {
+            let (mut binds, mut tys, mut exprs) = (Vec::new(), Vec::new(), Vec::new());
+            for (i, (ty, js)) in elems.iter().enumerate() {
+                let x = format_ident!("x{i}");
+                let c = js_conv(js, ty, vocab, &quote!(#x), Carried)?;
+                binds.push(x);
+                tys.push(c.ty);
+                exprs.push(c.expr);
+            }
+            plain(
+                quote!(Vec<(#(#tys),*)>),
+                quote!(#a.iter().map(|(#(#binds),*)| (#(#exprs),*)).collect()),
+            )
+        }
+        (Js::Iterated(item, via), Getter | Field | Method) => {
+            let via = format_ident!("{via}");
+            let c = js_conv(item, "", vocab, &quote!(x), Getter)?;
+            let (ty, e) = (c.ty, c.expr);
+            plain(quote!(Vec<#ty>), quote!(#a.#via().map(|x| #e).collect()))
+        }
         (Js::F32List, Getter | Field) => plain(
             quote!(Vec<f64>),
             quote!(#a.iter().map(|v| f64::from(*v)).collect()),
@@ -185,7 +220,6 @@ pub fn js_conv(
             quote!(String),
             quote!(String::from_utf8_lossy(&#a).into_owned()),
         ),
-        (Js::PathData, Getter | Field) => plain(quote!(Vec<#segment>), quote!(#segments(#a))),
         (Js::Object(t), Getter | Field) => {
             let o = data_ident(t);
             reaching(quote!(#o), quote!(#o::from(#by_ref)), t)
@@ -382,6 +416,27 @@ pub fn payload_enum_code(
                     vec![quote!(#field: #expr,)],
                 )
             }
+            // Several unnamed fields: `value` is a tuple of them, an array
+            // in JS.
+            Payload::Tuple(tys) => {
+                let (mut binds, mut ftys, mut exprs) = (Vec::new(), Vec::new(), Vec::new());
+                for (j, ty) in tys.iter().enumerate() {
+                    let id = format_ident!("v{j}");
+                    let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(#id)) else {
+                        return Err(format!(
+                            "{name}::{n}.{j} carries {ty}, which cannot be a field"
+                        ));
+                    };
+                    binds.push(id);
+                    ftys.push(fty);
+                    exprs.push(expr);
+                }
+                (
+                    vec![quote!(pub value: (#(#ftys),*),)],
+                    quote!(#up::#vid(#(#binds),*)),
+                    vec![quote!(value: (#(#exprs),*),)],
+                )
+            }
             Payload::Fields(fields) => {
                 let mut decls = Vec::new();
                 let mut binds = Vec::new();
@@ -430,6 +485,40 @@ pub fn payload_enum_code(
     Ok(items)
 }
 
+/// What every generated file starts with, whatever it wraps: napi's imports,
+/// `to_f32` (what a JS number becomes as an upstream `f32`, see
+/// `class::Prim`), and the global log collection (`napi_support::logs`):
+/// `setLogLevel` and `takeLogs`.
+pub fn prelude() -> TokenStream {
+    quote! {
+        use napi::bindgen_prelude::*;
+        use napi_derive::napi;
+
+        // ponytail: the one `as` of the runtime. Narrowing a float has no std
+        // conversion; `as` rounds to nearest and saturates, which is what a
+        // JS number given for an `f32` wants.
+        fn to_f32(v: f64) -> f32 {
+            v as f32
+        }
+
+        #[doc = " Starts collecting what the wrapped crates log."]
+        #[doc = ""]
+        #[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
+        #[doc = " call repeatedly: the logger is installed once, the level always applies."]
+        #[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
+        pub fn set_log_level(level: String) -> Result<()> {
+            napi_support::logs::set_level(&level)
+        }
+
+        #[doc = " Drains the messages collected since the last call, from every call"]
+        #[doc = " and thread: concurrent work interleaves here."]
+        #[napi]
+        pub fn take_logs() -> Vec<String> {
+            napi_support::logs::take()
+        }
+    }
+}
+
 /// `Config::index_bounded`, each suffix with the highest index its table
 /// allows, read off the upstream `static` in `files`. A table that is gone
 /// fails the build.
@@ -444,48 +533,6 @@ pub fn index_bounds(files: &[syn::File]) -> Vec<(&'static str, u32)> {
             (*suffix, max)
         })
         .collect()
-}
-
-/// Maps one flat config struct to `#[napi(object)]` fields plus the code that
-/// writes them back onto the real Rust struct. Used for every option struct
-/// the binding maps, such as the toy crate's `Options`. `bounds` is
-/// [`index_bounds`]; the count returned is how many fields it matched.
-pub fn map_struct(
-    files: &[syn::File],
-    ty: &str,
-    vocab: &Vocab,
-    bounds: &[(&str, u32)],
-) -> (Vec<Field>, Vec<Skip>, usize) {
-    let named = struct_fields(files, ty);
-
-    let mut out = Vec::new();
-    let mut skipped = Vec::new();
-    let mut clamped = 0usize;
-
-    for f in &named.named {
-        if !is_pub(&f.vis) {
-            continue;
-        }
-        let ident = f.ident.clone().unwrap();
-        let name = ident.to_string();
-        let ty = ty_str(&f.ty);
-
-        if let Some(m) = map_field(f, vocab, bounds, &mut clamped) {
-            out.push(m);
-            continue;
-        }
-
-        // --- not transposable as data. These are wired by the emitter
-        // template instead (opaque class, resolver hooks, xmlwriter's
-        // `Indent`); the rest is dropped.
-        if config().hand_wired_fields.contains(&name.as_str()) {
-            skipped.push(Skip::new(&name, Some(&ty), Reason::HandWired));
-        } else {
-            skipped.push(Skip::new(&name, Some(&ty), Reason::Dropped));
-        }
-    }
-
-    (out, skipped, clamped)
 }
 
 /// What [`option_object`] makes of an upstream option struct.
@@ -504,8 +551,8 @@ pub struct OptionObject {
 ///
 /// Every field is optional. `to_upstream(&self) -> Result<Upstream, String>` starts
 /// from `Default::default()` and overrides only what JS provided, so a field
-/// left out keeps upstream's default, whatever it is. A field maps as a
-/// [`map_struct`] field does, or through `Config::providers` (a class
+/// left out keeps upstream's default, whatever it is. A field maps by its
+/// type (numbers, strings, enums...), or through `Config::providers` (a class
 /// instance supplies it) or `Config::converters` (a template function
 /// converts it); one with none of these is left out and keeps its default.
 ///
@@ -627,9 +674,9 @@ pub fn option_object(
     })
 }
 
-/// One option field as a [`map_struct`] field, or `None` when its type has
-/// no JS form here. Every field becomes optional so JS can pass a partial
-/// object, and is written back only when JS provided it.
+/// One option field, or `None` when its type has no JS form here. Every
+/// field becomes optional so JS can pass a partial object, and is written
+/// back only when JS provided it.
 fn map_field(
     f: &syn::Field,
     vocab: &Vocab,
@@ -713,36 +760,17 @@ fn map_field(
                     quote! { if let Some(v) = self.#ident { o.#ident = v.into(); } },
                 ))
             }
-            // Size is opaque with a fallible constructor: flatten to a pair.
-            Some(Js::Size) => {
-                let size_new: syn::Path =
-                    syn::parse_str(config().size_new).expect("a Config::size_new path");
-                let w = format_ident!("{}_width", name);
-                let h = format_ident!("{}_height", name);
-                Some(Field {
-                    decl: quote! {
-                        #(#doc)* pub #w: Option<f64>,
-                        #(#doc)* pub #h: Option<f64>,
-                    },
-                    assign: quote! {
-                        if let (Some(w), Some(h)) = (self.#w, self.#h)
-                            && let Some(s) = #size_new(to_f32(w), to_f32(h))
-                        {
-                            o.#ident = s;
-                        }
-                    },
-                })
-            }
-            // Class instances and nested objects belong on methods, not in a
-            // flat config object.
+            // A class instance is a `Config::providers` entry, checked before
+            // this; nested objects belong on methods, not in a flat config
+            // object.
             Some(Js::Bytes)
             | Some(Js::Count)
             | Some(Js::TryUnit)
-            | Some(Js::Matrix)
+            | Some(Js::Class(_))
+            | Some(Js::OptClass(_))
+            | Some(Js::TupleList(_))
             // Unreached by any upstream option field today.
             | Some(Js::U32)
-            | Some(Js::Bbox)
-            | Some(Js::OptBbox)
             | Some(Js::Scalar)
             | Some(Js::IntNewtype(_))
             // Read-only: a union describes what a document holds, never what a
@@ -751,7 +779,7 @@ fn map_field(
             | Some(Js::I32)
             | Some(Js::PayloadEnum(_))
             | Some(Js::PayloadEnumList(_))
-            | Some(Js::PathData)
+            | Some(Js::Iterated(..))
             | Some(Js::Tag4)
             | Some(Js::F32List)
             | Some(Js::Handle(_))
@@ -808,6 +836,8 @@ pub fn map_enums(
             #(#doc)*
             #[napi(string_enum = "camelCase")]
             #[derive(Copy, Clone)]
+            // Upstream's variant names, whatever their case.
+            #[allow(non_camel_case_types)]
             pub enum #ident { #(#variants,)* }
 
             impl From<#ident> for #up {
@@ -1047,6 +1077,7 @@ pub fn data_members(
                         | Js::Enum
                         | Js::Scalar
                         | Js::IntNewtype(_)
+                        | Js::Class(_)
                 )
             );
             let access = if copy {
@@ -1203,9 +1234,7 @@ pub fn wrapper_class(
                 ty: &t,
                 receiver: &inner,
                 receiver_mut: mutable.then_some(&inner_mut),
-                skip: &[],
                 readonly: !mutable,
-                standin: false,
             },
             vocab,
             &mut taken,
@@ -1266,12 +1295,8 @@ pub struct MethodPass<'a> {
     /// What a `&mut self` method is called on, when it differs: a
     /// copy-on-write `Arc` hands out `&mut` through `make_mut`.
     pub receiver_mut: Option<&'a TokenStream>,
-    pub skip: &'a [&'a str],
     /// An `Arc` receiver cannot hand out `&mut`, so drop mutating methods.
     pub readonly: bool,
-    /// Whether `Config::arg_standin` applies: its class is the template's,
-    /// which a namespaced class must not take.
-    pub standin: bool,
 }
 
 /// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
@@ -1291,17 +1316,11 @@ pub fn map_methods(
         ty,
         receiver,
         receiver_mut,
-        skip,
         readonly,
-        standin: with_standin,
     } = *m;
     let mut code = TokenStream::new();
     let mut skipped = Vec::new();
     let mut twins = BTreeSet::new();
-    // `Config::arg_standin`: the class JS hands over, and its resolver.
-    let standin_cfg = config().arg_standin.filter(|_| with_standin);
-    let standin = standin_cfg
-        .map(|(_, class, resolve)| (format_ident!("{class}"), format_ident!("{resolve}")));
 
     for imp in inherent_impls(files, ty) {
         for it in &imp.items {
@@ -1310,9 +1329,6 @@ pub fn map_methods(
                 continue;
             }
             let name = f.sig.ident.to_string();
-            if skip.contains(&name.as_str()) {
-                continue; // renderer internals, no meaning on the JS side
-            }
             // Already emitted on this class by an earlier pass, or a cfg twin
             // of one seen in this pass. A name is only reserved once its
             // method is emitted (below): reserving it on sight let a method
@@ -1362,7 +1378,6 @@ pub fn map_methods(
                     match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
-                        _ if standin_cfg.is_some_and(|s| ty == s.0) => Some(Arg::Standin),
                         _ => None,
                     }
                 };
@@ -1406,10 +1421,6 @@ pub fn map_methods(
                 .iter()
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat: Uint8Array),
-                    Arg::Standin => {
-                        let (class, _) = standin.as_ref().expect("a stand-in is configured");
-                        quote!(#pat: &#class)
-                    }
                     _ => quote!(#pat: String),
                 })
                 .collect();
@@ -1418,19 +1429,6 @@ pub fn map_methods(
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat.to_vec()),
                     _ => quote!(#pat),
-                })
-                .collect();
-            // A stand-in is resolved against the receiver: a key into a slot
-            // map, say, where another map's key could name a live slot here.
-            // Resolved before the call, not inside it: a `DerefMut` receiver
-            // (a copy-on-write handle) cannot be borrowed again in its own
-            // arguments.
-            let lets: Vec<TokenStream> = args
-                .iter()
-                .filter(|(_, kind)| matches!(kind, Arg::Standin))
-                .map(|(pat, _)| {
-                    let (_, resolve) = standin.as_ref().expect("a stand-in is configured");
-                    quote!(let #pat = #pat.#resolve(&#receiver);)
                 })
                 .collect();
             if readonly && mutable {
@@ -1472,10 +1470,7 @@ pub fn map_methods(
             } else {
                 (quote!(-> #ret_ty), value)
             };
-            let body = quote! {
-                #(#lets)*
-                #last
-            };
+            let body = last;
             // Every path from here emits the method.
             taken.insert(name.clone());
             let (cfg_attr, body) = match gate {
@@ -1571,209 +1566,6 @@ fn js_name(f: &syn::ImplItemFn) -> String {
     napi_args(&f.attrs)
         .and_then(|mut a| a.remove("js_name").flatten())
         .unwrap_or_else(|| lower_camel(&f.sig.ident.to_string()))
-}
-
-/// One async twin to generate: a Send-safe core the template marked with
-/// `#[async_twin(js_method, JsType)]`.
-pub struct Twin {
-    pub target: syn::Type,
-    pub core: syn::Ident,
-    /// JS name of the sync method that calls this core, for the doc comment.
-    pub sibling: Option<String>,
-    pub public: syn::Ident,
-    pub js: syn::Ident,
-    pub params: Vec<(syn::Ident, syn::Type)>,
-    pub output: syn::Type,
-}
-
-/// Collects the marked cores and *removes* the marker, which is not a real
-/// attribute: rustc would reject it. Reading the signature is enough to write
-/// the twin, so nothing about it is declared twice.
-pub fn async_twins(file: &mut syn::File) -> Vec<Twin> {
-    let mut twins = Vec::new();
-    for item in &mut file.items {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() {
-            continue;
-        }
-        // The sync sibling of a core is the `#[napi]` method whose body calls it:
-        // `render_png` calls `png_bytes`. Found here so the generated doc can
-        // name what a reader recognises, instead of the private core.
-        let siblings: Vec<(String, String)> = imp
-            .items
-            .iter()
-            .filter_map(|it| {
-                let ImplItem::Fn(f) = it else { return None };
-                let body = quote!(#f).to_string();
-                Some((body, js_name(f)))
-            })
-            .collect();
-        for it in &mut imp.items {
-            let ImplItem::Fn(f) = it else { continue };
-            let Some(pos) = f.attrs.iter().position(|a| a.path().is_ident("async_twin")) else {
-                continue;
-            };
-            let attr = f.attrs.remove(pos);
-            let args: Vec<syn::Ident> = attr
-                .parse_args_with(|input: &syn::parse::ParseBuffer| {
-                    syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::parse_terminated(
-                        input,
-                    )
-                })
-                .unwrap_or_else(|e| panic!("#[async_twin(js_method, JsType)]: {e}"))
-                .into_iter()
-                .collect();
-            let [public, js] = args.as_slice() else {
-                panic!("#[async_twin] takes the JS method name and its JS type")
-            };
-            let params = f
-                .sig
-                .inputs
-                .iter()
-                .filter_map(|a| match a {
-                    syn::FnArg::Typed(t) => match &*t.pat {
-                        syn::Pat::Ident(p) => Some((p.ident.clone(), (*t.ty).clone())),
-                        _ => panic!("async twin cores take plain named arguments"),
-                    },
-                    syn::FnArg::Receiver(_) => None,
-                })
-                .collect();
-            let ReturnType::Type(_, ret) = &f.sig.output else {
-                panic!("an async twin core returns Result<T>")
-            };
-            let output =
-                result_inner(ret).unwrap_or_else(|| panic!("{}: expected Result<T>", f.sig.ident));
-            let needle = format!("self . {} (", f.sig.ident);
-            let sibling = siblings
-                .iter()
-                .find(|(body, _)| body.contains(&needle))
-                .map(|(_, js)| js.clone());
-            twins.push(Twin {
-                target: (*imp.self_ty).clone(),
-                core: f.sig.ident.clone(),
-                sibling,
-                public: public.clone(),
-                js: js.clone(),
-                params,
-                output,
-            });
-        }
-    }
-    twins
-}
-
-/// The ceremony: a `Task` type per core, the public `#[napi]` method that
-/// schedules it, and the `AbortSignal` plumbing. Written once, applied by rule.
-pub fn emit_twins(twins: &[Twin]) -> TokenStream {
-    let mut out = TokenStream::new();
-    for t in twins {
-        // `Resvg` + `png_bytes` -> `ResvgPngBytesTask`, keeping the target's own
-        // casing: lowercasing it first produced `SvgnodePngBytesTask`.
-        let task = format_ident!(
-            "{}{}Task",
-            ty_str(&t.target),
-            t.core.to_string().to_case(convert_case::Case::Pascal)
-        );
-        let (names, types): (Vec<_>, Vec<_>) = t.params.iter().cloned().unzip();
-        let core = &t.core;
-        let public = &t.public;
-        let target = &t.target;
-        let output = &t.output;
-        let js = &t.js;
-        // `string` in TypeScript, but `String` in Rust.
-        let ts = if js == "String" {
-            "string".to_string()
-        } else {
-            js.to_string()
-        };
-        let ts_return = format!("Promise<{ts}>");
-        let doc = match &t.sibling {
-            Some(js) => format!(
-                " `{js}` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."
-            ),
-            None => " Runs on a worker thread; a queued call is dropped when the signal fires."
-                .to_string(),
-        };
-        out.extend(quote! {
-            #[doc = #doc]
-            pub struct #task {
-                recv: #target,
-                #(#names: #types,)*
-            }
-
-            impl Task for #task {
-                type Output = #output;
-                type JsValue = <#output as IntoJs>::Js;
-
-                fn compute(&mut self) -> Result<Self::Output> {
-                    self.recv.#core(#(self.#names.clone()),*)
-                }
-
-                fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-                    Ok(out.into_js())
-                }
-            }
-
-            #[napi]
-            impl #target {
-                #[doc = #doc]
-                #[napi(ts_return_type = #ts_return)]
-                pub fn #public(
-                    &self,
-                    #(#names: #types,)*
-                    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-                ) -> AsyncTask<#task> {
-                    AsyncTask::with_optional_signal(
-                        #task { recv: self.clone(), #(#names,)* },
-                        signal.map(|s| s.0),
-                    )
-                }
-            }
-        });
-    }
-    out
-}
-
-/// Puts `self.live()?` first in every JS-facing method of `class` but `open`,
-/// so a disposed instance throws instead of answering from the empty tree it
-/// was left with. A method not returning `Result` is made to: napi unwraps it,
-/// so the `.d.ts` does not change.
-pub fn guard_live(file: &mut syn::File, class: &str, open: &[&str]) {
-    for item in &mut file.items {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() || !self_ident(imp).is_some_and(|id| id == class) {
-            continue;
-        }
-        for it in &mut imp.items {
-            let ImplItem::Fn(f) = it else { continue };
-            if !f.attrs.iter().any(|a| a.path().is_ident("napi"))
-                || !matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
-                || open.contains(&f.sig.ident.to_string().as_str())
-            {
-                continue;
-            }
-            let body = &f.block;
-            let returns_result =
-                matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t).starts_with("Result<"));
-            f.block = match &f.sig.output {
-                _ if returns_result => {
-                    let stmts = &body.stmts;
-                    syn::parse_quote!({ self.live()?; #(#stmts)* })
-                }
-                // A closure, so the body's own `return` and `?` keep their meaning.
-                _ => {
-                    syn::parse_quote!({ self.live()?; #[allow(clippy::redundant_closure_call)] Ok((|| #body)()) })
-                }
-            };
-            if !returns_result {
-                let t = match &f.sig.output {
-                    ReturnType::Type(_, t) => quote!(#t),
-                    ReturnType::Default => quote!(()),
-                };
-                f.sig.output = syn::parse_quote!(-> Result<#t>);
-            }
-        }
-    }
 }
 
 /// What `console.log` prints, for every class: its getters and its cheap
@@ -1877,96 +1669,34 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     out
 }
 
-/// Method names the emitter template defines itself, per target type, read off
-/// the template rather than listed by hand: `impl Resvg { pub fn children }`
-/// means the `children` upstream method is covered, and a rule can say so.
-pub fn template_fns(code: &TokenStream) -> BTreeMap<String, Vec<String>> {
-    let file: syn::File =
-        syn::parse2(code.clone()).expect("the emitter template is not valid Rust on its own");
-    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for item in &file.items {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() {
-            continue; // trait impls are plumbing, not API
-        }
-        let target = ty_str(&imp.self_ty);
-        let names = out.entry(target).or_default();
-        for it in &imp.items {
-            if let ImplItem::Fn(f) = it {
-                names.push(f.sig.ident.to_string());
-            }
-        }
-    }
-    out
-}
-
-/// Types the template hands out, peeled of the wrappers they arrive in.
+/// The surface: every item of `parts`, each under its part's JS namespace
+/// (`toy.Point`). Returns the code, and what was left out with the reason.
 ///
-/// `SvgNode::text` returning `Option<Text>` is the only statement anywhere that
-/// `Text` should be mapped: the passes never see it, because a node payload is
-/// not a collection and only collection elements become candidates. Read off
-/// the template for the same reason `template_fns` is -- so that adding an
-/// accessor is the whole change, with no list to update beside it.
-pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
-    let file: syn::File =
-        syn::parse2(code.clone()).expect("the emitter template is not valid Rust on its own");
-    let mut out = BTreeSet::new();
-    for item in &file.items {
-        let Item::Impl(imp) = item else { continue };
-        if imp.trait_.is_some() {
-            continue; // trait impls are plumbing, not API
-        }
-        for it in &imp.items {
-            if let ImplItem::Fn(f) = it {
-                // Private helpers are not API: one returning a borrowed
-                // upstream node must not make the node a data candidate.
-                if !is_pub(&f.vis) {
-                    continue;
-                }
-                let ReturnType::Type(_, t) = &f.sig.output else {
-                    continue;
-                };
-                // Result<Option<Text>> -> Text, in any nesting order.
-                out.insert(peel_type(&ty_str(t)).to_string());
-            }
-        }
-    }
-    out
-}
-
-/// The second surface: every item of `parts` again, each under its part's JS
-/// namespace (`toy.Point`), beside the first surface it is copied from.
-/// Returns the code, and what was left out with the reason.
-///
-/// Rust forbids two items of one name, so each copied item is renamed with
-/// its namespace as a prefix -- `Point` becomes `ToyPoint`, a free function
+/// Rust forbids two items of one name, so each item is renamed with its
+/// namespace as a prefix -- `Point` becomes `ToyPoint`, a free function
 /// `point_to_js` becomes `toy_point_to_js` -- and given `js_name` and
 /// `namespace`, so the prefix stays out of JavaScript (napi's `.d.ts` still
 /// aliases a class's Rust name to it, as a type). The JS name is the upstream
-/// one: a `Config::data_renames` or `Config::enum_renames` entry is undone.
+/// one.
 ///
-/// References between copied items are renamed with them, across parts, so a
-/// type of one namespace holding a type of another points at the other's
-/// copy. A path (`a::Point`), a field or a method (`.point`) and an enum's
-/// variants are never renamed: those name upstream, not the copy.
+/// References between items are renamed with them, across parts, so a type
+/// of one namespace holding a type of another points at the other's item. A
+/// path (`a::Point`), a field or a method (`.point`) and an enum's variants
+/// are never renamed: those name upstream.
 ///
-/// napi keeps one constructor per JS class name, namespace or not (see
-/// [`class_names`]), so a copied class may not share its JS name with a
-/// class of `flat` or of an earlier part: such a copy is left out, and so is
-/// everything that names a left-out item.
+/// napi keeps one constructor per JS class name, namespace or not: it builds
+/// every instance it returns from the constructor registered under that
+/// name. So a class may not share its JS name with a class of an earlier
+/// part, unless `shared` lets it (a class only ever built by the class it is
+/// called on): such a class is left out, and so is everything that names a
+/// left-out item.
 ///
 /// napi resolves a reference to its TypeScript name when the referencing
 /// item expands, from what has expanded before it, and falls back to the
 /// Rust identifier. The copies' struct and enum definitions are therefore
 /// put before whatever names them, and every impl and function after all of
 /// them.
-pub fn namespaced(
-    parts: &[(&str, TokenStream)],
-    flat: &TokenStream,
-    shared: &BTreeSet<String>,
-) -> Surfaces {
-    // The flat classes, by JS name.
-    let flat_classes = class_names(flat);
+pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> Surfaces {
     let mut report: Vec<String> = Vec::new();
     let parsed: Vec<(&str, syn::File)> = parts
         .iter()
@@ -1976,17 +1706,7 @@ pub fn namespaced(
             (*ns, file)
         })
         .collect();
-    // The upstream name behind a renamed first-surface one.
-    let upstream = |ident: &str| -> String {
-        config()
-            .data_renames
-            .iter()
-            .chain(config().enum_renames)
-            .find(|(_, to)| *to == ident)
-            .map_or(ident, |(from, _)| from)
-            .to_string()
-    };
-    // An item is keyed by its first-surface ident and its namespace: two
+    // An item is keyed by its ident and its namespace: two
     // namespaces may each define a `Color`. The ident first, so the keys sort
     // as the idents do.
     let key = |id: &str, ns: &str| format!("{id}#{ns}");
@@ -1999,29 +1719,17 @@ pub fn namespaced(
         let pascal = ns.to_case(convert_case::Case::Pascal);
         let snake = ns.to_case(convert_case::Case::Snake);
         for item in &file.items {
-            // The prefix goes on the JS name, so the Rust name says what JS
-            // sees: `FaceInfo` copied from a first-surface `FontFace` is
-            // `<Ns>FaceInfo`.
             let (id, new) = match item {
-                Item::Struct(s) => (
-                    &s.ident,
-                    format_ident!("{pascal}{}", upstream(&s.ident.to_string())),
-                ),
-                Item::Enum(e) => (
-                    &e.ident,
-                    format_ident!("{pascal}{}", upstream(&e.ident.to_string())),
-                ),
+                Item::Struct(s) => (&s.ident, format_ident!("{pascal}{}", s.ident)),
+                Item::Enum(e) => (&e.ident, format_ident!("{pascal}{}", e.ident)),
                 Item::Fn(f) => (&f.sig.ident, format_ident!("{snake}_{}", f.sig.ident)),
                 _ => continue,
             };
-            let js = upstream(&id.to_string());
-            // Taken on the flat surface, or by an earlier namespace -- unless
-            // `shared` lets two namespaces have the name: classes only ever
-            // built by the class they are called on.
-            if class_of(item).is_some()
-                && (flat_classes.contains(&js)
-                    || (!shared.contains(&js) && !classes.insert(js.clone())))
-            {
+            let js = id.to_string();
+            // Taken by an earlier namespace -- unless `shared` lets two
+            // namespaces have the name: classes only ever built by the class
+            // they are called on.
+            if class_of(item).is_some() && !shared.contains(&js) && !classes.insert(js.clone()) {
                 out_why.insert(
                     key(&id.to_string(), ns),
                     format!("not namespaced: {ns}.{js}: a class named {js} exists already"),
@@ -2179,22 +1887,6 @@ pub(crate) fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<Strin
         .flatten()
         .unwrap_or_else(|| s.ident.to_string());
     Some((&s.ident, js, args.remove("namespace").flatten()))
-}
-
-/// The JS names of the classes `code` declares.
-///
-/// napi keeps one constructor per JS class name, whatever its namespace, and
-/// builds every instance it returns from the constructor registered under
-/// that name: two classes sharing one leave one of them handing out
-/// instances of the other. [`namespaced`] reads them off the flat surface to
-/// stay clear of.
-pub fn class_names(code: &TokenStream) -> BTreeSet<String> {
-    let file: syn::File = syn::parse2(code.clone()).expect("generated code that parses");
-    file.items
-        .iter()
-        .filter_map(class_of)
-        .map(|(_, js, _)| js)
-        .collect()
 }
 
 /// The name a struct, enum or function declares, or empty.

@@ -9,771 +9,30 @@
 )]
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use napi_support::logs::Logs;
-use napi_support::{Signal, contained};
+fn to_f32(v: f64) -> f32 {
+    v as f32
+}
+#[doc = " Starts collecting what the wrapped crates log."]
+#[doc = ""]
+#[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
+#[doc = " call repeatedly: the logger is installed once, the level always applies."]
+#[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
+pub fn set_log_level(level: String) -> Result<()> {
+    napi_support::logs::set_level(&level)
+}
+#[doc = " Drains the messages collected since the last call, from every call"]
+#[doc = " and thread: concurrent work interleaves here."]
+#[napi]
+pub fn take_logs() -> Vec<String> {
+    napi_support::logs::take()
+}
 use resvg::{tiny_skia, usvg};
 #[doc = " The resvg-specific providers (`guard.*`), written by hand: src/guard.rs."]
 mod guard;
-use guard::{GuardFontResolver, GuardImageHrefResolver, ImageMap, Misses, image_map};
-#[doc = " A shape rendering method."]
-#[doc = ""]
-#[doc = " `shape-rendering` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum ShapeRendering {
-    OptimizeSpeed,
-    CrispEdges,
-    GeometricPrecision,
-}
-impl From<ShapeRendering> for usvg::ShapeRendering {
-    fn from(v: ShapeRendering) -> Self {
-        match v {
-            ShapeRendering::OptimizeSpeed => <usvg::ShapeRendering>::OptimizeSpeed,
-            ShapeRendering::CrispEdges => <usvg::ShapeRendering>::CrispEdges,
-            ShapeRendering::GeometricPrecision => <usvg::ShapeRendering>::GeometricPrecision,
-        }
-    }
-}
-impl From<usvg::ShapeRendering> for ShapeRendering {
-    fn from(v: usvg::ShapeRendering) -> Self {
-        match v {
-            <usvg::ShapeRendering>::OptimizeSpeed => ShapeRendering::OptimizeSpeed,
-            <usvg::ShapeRendering>::CrispEdges => ShapeRendering::CrispEdges,
-            <usvg::ShapeRendering>::GeometricPrecision => ShapeRendering::GeometricPrecision,
-        }
-    }
-}
-#[doc = " A text rendering method."]
-#[doc = ""]
-#[doc = " `text-rendering` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum TextRendering {
-    OptimizeSpeed,
-    OptimizeLegibility,
-    GeometricPrecision,
-}
-impl From<TextRendering> for usvg::TextRendering {
-    fn from(v: TextRendering) -> Self {
-        match v {
-            TextRendering::OptimizeSpeed => <usvg::TextRendering>::OptimizeSpeed,
-            TextRendering::OptimizeLegibility => <usvg::TextRendering>::OptimizeLegibility,
-            TextRendering::GeometricPrecision => <usvg::TextRendering>::GeometricPrecision,
-        }
-    }
-}
-impl From<usvg::TextRendering> for TextRendering {
-    fn from(v: usvg::TextRendering) -> Self {
-        match v {
-            <usvg::TextRendering>::OptimizeSpeed => TextRendering::OptimizeSpeed,
-            <usvg::TextRendering>::OptimizeLegibility => TextRendering::OptimizeLegibility,
-            <usvg::TextRendering>::GeometricPrecision => TextRendering::GeometricPrecision,
-        }
-    }
-}
-#[doc = " An image rendering method."]
-#[doc = ""]
-#[doc = " `image-rendering` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum ImageRendering {
-    OptimizeQuality,
-    OptimizeSpeed,
-    Smooth,
-    HighQuality,
-    CrispEdges,
-    Pixelated,
-}
-impl From<ImageRendering> for usvg::ImageRendering {
-    fn from(v: ImageRendering) -> Self {
-        match v {
-            ImageRendering::OptimizeQuality => <usvg::ImageRendering>::OptimizeQuality,
-            ImageRendering::OptimizeSpeed => <usvg::ImageRendering>::OptimizeSpeed,
-            ImageRendering::Smooth => <usvg::ImageRendering>::Smooth,
-            ImageRendering::HighQuality => <usvg::ImageRendering>::HighQuality,
-            ImageRendering::CrispEdges => <usvg::ImageRendering>::CrispEdges,
-            ImageRendering::Pixelated => <usvg::ImageRendering>::Pixelated,
-        }
-    }
-}
-impl From<usvg::ImageRendering> for ImageRendering {
-    fn from(v: usvg::ImageRendering) -> Self {
-        match v {
-            <usvg::ImageRendering>::OptimizeQuality => ImageRendering::OptimizeQuality,
-            <usvg::ImageRendering>::OptimizeSpeed => ImageRendering::OptimizeSpeed,
-            <usvg::ImageRendering>::Smooth => ImageRendering::Smooth,
-            <usvg::ImageRendering>::HighQuality => ImageRendering::HighQuality,
-            <usvg::ImageRendering>::CrispEdges => ImageRendering::CrispEdges,
-            <usvg::ImageRendering>::Pixelated => ImageRendering::Pixelated,
-        }
-    }
-}
-#[doc = " A blending mode property."]
-#[doc = ""]
-#[doc = " `mix-blend-mode` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum BlendMode {
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-    PlusLighter,
-}
-impl From<BlendMode> for usvg::BlendMode {
-    fn from(v: BlendMode) -> Self {
-        match v {
-            BlendMode::Normal => <usvg::BlendMode>::Normal,
-            BlendMode::Multiply => <usvg::BlendMode>::Multiply,
-            BlendMode::Screen => <usvg::BlendMode>::Screen,
-            BlendMode::Overlay => <usvg::BlendMode>::Overlay,
-            BlendMode::Darken => <usvg::BlendMode>::Darken,
-            BlendMode::Lighten => <usvg::BlendMode>::Lighten,
-            BlendMode::ColorDodge => <usvg::BlendMode>::ColorDodge,
-            BlendMode::ColorBurn => <usvg::BlendMode>::ColorBurn,
-            BlendMode::HardLight => <usvg::BlendMode>::HardLight,
-            BlendMode::SoftLight => <usvg::BlendMode>::SoftLight,
-            BlendMode::Difference => <usvg::BlendMode>::Difference,
-            BlendMode::Exclusion => <usvg::BlendMode>::Exclusion,
-            BlendMode::Hue => <usvg::BlendMode>::Hue,
-            BlendMode::Saturation => <usvg::BlendMode>::Saturation,
-            BlendMode::Color => <usvg::BlendMode>::Color,
-            BlendMode::Luminosity => <usvg::BlendMode>::Luminosity,
-            BlendMode::PlusLighter => <usvg::BlendMode>::PlusLighter,
-        }
-    }
-}
-impl From<usvg::BlendMode> for BlendMode {
-    fn from(v: usvg::BlendMode) -> Self {
-        match v {
-            <usvg::BlendMode>::Normal => BlendMode::Normal,
-            <usvg::BlendMode>::Multiply => BlendMode::Multiply,
-            <usvg::BlendMode>::Screen => BlendMode::Screen,
-            <usvg::BlendMode>::Overlay => BlendMode::Overlay,
-            <usvg::BlendMode>::Darken => BlendMode::Darken,
-            <usvg::BlendMode>::Lighten => BlendMode::Lighten,
-            <usvg::BlendMode>::ColorDodge => BlendMode::ColorDodge,
-            <usvg::BlendMode>::ColorBurn => BlendMode::ColorBurn,
-            <usvg::BlendMode>::HardLight => BlendMode::HardLight,
-            <usvg::BlendMode>::SoftLight => BlendMode::SoftLight,
-            <usvg::BlendMode>::Difference => BlendMode::Difference,
-            <usvg::BlendMode>::Exclusion => BlendMode::Exclusion,
-            <usvg::BlendMode>::Hue => BlendMode::Hue,
-            <usvg::BlendMode>::Saturation => BlendMode::Saturation,
-            <usvg::BlendMode>::Color => BlendMode::Color,
-            <usvg::BlendMode>::Luminosity => BlendMode::Luminosity,
-            <usvg::BlendMode>::PlusLighter => BlendMode::PlusLighter,
-        }
-    }
-}
-#[doc = " Allows italic or oblique faces to be selected."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum FontFaceStyle {
-    Normal,
-    Italic,
-    Oblique,
-}
-impl From<usvg::fontdb::Style> for FontFaceStyle {
-    fn from(v: usvg::fontdb::Style) -> Self {
-        match v {
-            <usvg::fontdb::Style>::Normal => FontFaceStyle::Normal,
-            <usvg::fontdb::Style>::Italic => FontFaceStyle::Italic,
-            <usvg::fontdb::Style>::Oblique => FontFaceStyle::Oblique,
-        }
-    }
-}
-#[doc = " A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass)."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum Stretch {
-    UltraCondensed,
-    ExtraCondensed,
-    Condensed,
-    SemiCondensed,
-    Normal,
-    SemiExpanded,
-    Expanded,
-    ExtraExpanded,
-    UltraExpanded,
-}
-impl From<Stretch> for usvg::fontdb::Stretch {
-    fn from(v: Stretch) -> Self {
-        match v {
-            Stretch::UltraCondensed => <usvg::fontdb::Stretch>::UltraCondensed,
-            Stretch::ExtraCondensed => <usvg::fontdb::Stretch>::ExtraCondensed,
-            Stretch::Condensed => <usvg::fontdb::Stretch>::Condensed,
-            Stretch::SemiCondensed => <usvg::fontdb::Stretch>::SemiCondensed,
-            Stretch::Normal => <usvg::fontdb::Stretch>::Normal,
-            Stretch::SemiExpanded => <usvg::fontdb::Stretch>::SemiExpanded,
-            Stretch::Expanded => <usvg::fontdb::Stretch>::Expanded,
-            Stretch::ExtraExpanded => <usvg::fontdb::Stretch>::ExtraExpanded,
-            Stretch::UltraExpanded => <usvg::fontdb::Stretch>::UltraExpanded,
-        }
-    }
-}
-impl From<usvg::fontdb::Stretch> for Stretch {
-    fn from(v: usvg::fontdb::Stretch) -> Self {
-        match v {
-            <usvg::fontdb::Stretch>::UltraCondensed => Stretch::UltraCondensed,
-            <usvg::fontdb::Stretch>::ExtraCondensed => Stretch::ExtraCondensed,
-            <usvg::fontdb::Stretch>::Condensed => Stretch::Condensed,
-            <usvg::fontdb::Stretch>::SemiCondensed => Stretch::SemiCondensed,
-            <usvg::fontdb::Stretch>::Normal => Stretch::Normal,
-            <usvg::fontdb::Stretch>::SemiExpanded => Stretch::SemiExpanded,
-            <usvg::fontdb::Stretch>::Expanded => Stretch::Expanded,
-            <usvg::fontdb::Stretch>::ExtraExpanded => Stretch::ExtraExpanded,
-            <usvg::fontdb::Stretch>::UltraExpanded => Stretch::UltraExpanded,
-        }
-    }
-}
-#[doc = " Mirror of `usvg::Options`. Every field is optional; omitted fields"]
-#[doc = " keep the usvg default."]
-#[napi(object)]
-#[derive(Default, Clone)]
-pub struct RenderOptions {
-    #[doc = " Directory that will be used during relative paths resolving."]
-    #[doc = ""]
-    #[doc = " Expected to be the same as the directory that contains the SVG file,"]
-    #[doc = " but can be set to any."]
-    #[doc = ""]
-    #[doc = " Default: `None`"]
-    pub resources_dir: Option<String>,
-    #[doc = " Target DPI."]
-    #[doc = ""]
-    #[doc = " Impacts units conversion."]
-    #[doc = ""]
-    #[doc = " Default: 96.0"]
-    pub dpi: Option<f64>,
-    #[doc = " A default font family."]
-    #[doc = ""]
-    #[doc = " Will be used when no `font-family` attribute is set in the SVG."]
-    #[doc = ""]
-    #[doc = " Default: Times New Roman"]
-    pub font_family: Option<String>,
-    #[doc = " A default font size."]
-    #[doc = ""]
-    #[doc = " Will be used when no `font-size` attribute is set in the SVG."]
-    #[doc = ""]
-    #[doc = " Default: 12"]
-    pub font_size: Option<f64>,
-    #[doc = " A list of languages."]
-    #[doc = ""]
-    #[doc = " Will be used to resolve a `systemLanguage` conditional attribute."]
-    #[doc = ""]
-    #[doc = " Format: en, en-US."]
-    #[doc = ""]
-    #[doc = " Default: `[en]`"]
-    pub languages: Option<Vec<String>>,
-    #[doc = " Specifies the default shape rendering method."]
-    #[doc = ""]
-    #[doc = " Will be used when an SVG element's `shape-rendering` property is set to `auto`."]
-    #[doc = ""]
-    #[doc = " Default: GeometricPrecision"]
-    pub shape_rendering: Option<ShapeRendering>,
-    #[doc = " Specifies the default text rendering method."]
-    #[doc = ""]
-    #[doc = " Will be used when an SVG element's `text-rendering` property is set to `auto`."]
-    #[doc = ""]
-    #[doc = " Default: OptimizeLegibility"]
-    pub text_rendering: Option<TextRendering>,
-    #[doc = " Specifies the default image rendering method."]
-    #[doc = ""]
-    #[doc = " Will be used when an SVG element's `image-rendering` property is set to `auto`."]
-    #[doc = ""]
-    #[doc = " Default: OptimizeQuality"]
-    pub image_rendering: Option<ImageRendering>,
-    #[doc = " Default viewport size to assume if there is no `viewBox` attribute and"]
-    #[doc = " the `width` or `height` attributes are relative."]
-    #[doc = ""]
-    #[doc = " Default: `(100, 100)`"]
-    pub default_size_width: Option<f64>,
-    #[doc = " Default viewport size to assume if there is no `viewBox` attribute and"]
-    #[doc = " the `width` or `height` attributes are relative."]
-    #[doc = ""]
-    #[doc = " Default: `(100, 100)`"]
-    pub default_size_height: Option<f64>,
-    #[doc = " A CSS stylesheet that should be injected into the SVG. Can be used to overwrite"]
-    #[doc = " certain attributes."]
-    pub style_sheet: Option<String>,
-    #[doc = " The directory disk reads may not leave. Default: `resourcesDir`."]
-    #[doc = ""]
-    #[doc = " Hrefs still resolve against `resourcesDir`; this only widens"]
-    #[doc = " what they may reach, so a template beside a shared assets folder"]
-    #[doc = " can use `../assets/logo.png`. Not a usvg option: usvg reads any"]
-    #[doc = " path, and this binding confines it."]
-    pub resources_root: Option<String>,
-}
-#[doc = " System fonts are expensive to enumerate, so do it once per process."]
-fn default_fontdb() -> std::sync::Arc<usvg::fontdb::Database> {
-    static DB: std::sync::OnceLock<std::sync::Arc<usvg::fontdb::Database>> =
-        std::sync::OnceLock::new();
-    DB.get_or_init(|| {
-        let mut db = usvg::fontdb::Database::new();
-        db.load_system_fonts();
-        std::sync::Arc::new(db)
-    })
-    .clone()
-}
-impl RenderOptions {
-    fn to_usvg(&self, fonts: std::sync::Arc<usvg::fontdb::Database>) -> usvg::Options<'static> {
-        let mut o = usvg::Options::default();
-        if let Some(v) = &self.resources_dir {
-            o.resources_dir = Some(std::path::PathBuf::from(v));
-        }
-        if let Some(v) = self.dpi {
-            o.dpi = to_f32(v);
-        }
-        if let Some(v) = &self.font_family {
-            o.font_family = v.clone();
-        }
-        if let Some(v) = self.font_size {
-            o.font_size = to_f32(v);
-        }
-        if let Some(v) = &self.languages {
-            o.languages = v.clone();
-        }
-        if let Some(v) = self.shape_rendering {
-            o.shape_rendering = v.into();
-        }
-        if let Some(v) = self.text_rendering {
-            o.text_rendering = v.into();
-        }
-        if let Some(v) = self.image_rendering {
-            o.image_rendering = v.into();
-        }
-        if let (Some(w), Some(h)) = (self.default_size_width, self.default_size_height)
-            && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
-        {
-            o.default_size = s;
-        }
-        if let Some(v) = &self.style_sheet {
-            o.style_sheet = Some(v.clone());
-        }
-        o.fontdb = fonts;
-        o
-    }
-}
-#[doc = " The bytes of an SVG handed over as text or as a Uint8Array (or Buffer)."]
-fn svg_bytes(svg: Either<String, Uint8Array>) -> Vec<u8> {
-    match svg {
-        Either::A(text) => text.into_bytes(),
-        Either::B(data) => data.to_vec(),
-    }
-}
-#[doc = " The Send half of a result, and its JS half."]
-#[doc = ""]
-#[doc = " `Buffer` holds a reference into the JS heap, so it is not `Send` and"]
-#[doc = " cannot be built on a worker thread. Every async twin therefore computes"]
-#[doc = " one of these and converts on the main thread, in `Task::resolve`."]
-pub trait IntoJs {
-    type Js;
-    fn into_js(self) -> Self::Js;
-}
-impl IntoJs for Vec<u8> {
-    type Js = Buffer;
-    fn into_js(self) -> Buffer {
-        Buffer::from(self)
-    }
-}
-impl IntoJs for String {
-    type Js = String;
-    fn into_js(self) -> String {
-        self
-    }
-}
-impl IntoJs for (u32, u32, Vec<u8>) {
-    type Js = RawImage;
-    fn into_js(self) -> RawImage {
-        let (width, height, data) = self;
-        RawImage {
-            width,
-            height,
-            data: Buffer::from(data),
-        }
-    }
-}
-impl FontFace {
-    #[doc = " This face's ID in `db`, or one that matches nothing."]
-    #[doc = ""]
-    #[doc = " IDs are slotmap keys, so a face from another database can name"]
-    #[doc = " a live slot of this one. The face found there must be the same"]
-    #[doc = " face; a copy of the database (`fontdb()`) keeps the slots and"]
-    #[doc = " still matches."]
-    fn id_in(&self, db: &usvg::fontdb::Database) -> usvg::fontdb::ID {
-        let me = &self.inner;
-        match db.face(me.id) {
-            Some(f) if f.post_script_name == me.post_script_name && f.index == me.index => me.id,
-            _ => usvg::fontdb::ID::dummy(),
-        }
-    }
-}
-#[doc = " Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form)."]
-#[napi]
-pub struct FontDatabase {
-    inner: SharedDb,
-}
-#[doc = " A database shared with every parse that used it, copied on the"]
-#[doc = " first write. A plain `Database` was deep-copied -- every `FaceInfo`"]
-#[doc = " -- by each parse, `parseAsync` and `fontdb()` call. Through"]
-#[doc = " `DerefMut` the generated `&mut self` methods keep working unchanged."]
-struct SharedDb(std::sync::Arc<usvg::fontdb::Database>);
-impl std::ops::Deref for SharedDb {
-    type Target = usvg::fontdb::Database;
-    fn deref(&self) -> &usvg::fontdb::Database {
-        &self.0
-    }
-}
-impl std::ops::DerefMut for SharedDb {
-    fn deref_mut(&mut self) -> &mut usvg::fontdb::Database {
-        std::sync::Arc::make_mut(&mut self.0)
-    }
-}
-impl FontDatabase {
-    #[doc = " Snapshot of a shared database, e.g. the one a parse resolved."]
-    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
-        Self {
-            inner: SharedDb(inner),
-        }
-    }
-}
-#[napi]
-impl FontDatabase {
-    #[doc = " Which face this database would pick for a CSS font request."]
-    #[doc = ""]
-    #[doc = " Decision, not a derivation: `fontdb::Query` borrows a `&[Family]`"]
-    #[doc = " whose `Name` variant holds a `&str`, so it cannot be rebuilt from a"]
-    #[doc = " JS object. The request is taken apart into plain arguments instead;"]
-    #[doc = " `serif`, `sans-serif`, `cursive`, `fantasy` and `monospace` are"]
-    #[doc = " understood as the generic families."]
-    #[napi]
-    pub fn query(
-        &self,
-        families: Vec<String>,
-        weight: Option<u32>,
-        italic: Option<bool>,
-    ) -> Option<FontFace> {
-        let names: Vec<usvg::fontdb::Family> = families.iter().map(|f| family_of(f)).collect();
-        let query = usvg::fontdb::Query {
-            families: &names,
-            weight: usvg::fontdb::Weight(
-                u16::try_from(weight.unwrap_or(400).clamp(1, 1000)).unwrap_or(400),
-            ),
-            style: if italic.unwrap_or(false) {
-                usvg::fontdb::Style::Italic
-            } else {
-                usvg::fontdb::Style::Normal
-            },
-            ..Default::default()
-        };
-        let id = self.inner.query(&query)?;
-        self.inner.face(id).cloned().map(FontFace::wrap)
-    }
-    #[doc = " Raw bytes of a face, by PostScript name (see `faces()`)."]
-    #[doc = ""]
-    #[doc = " Decision, not a derivation: upstream exposes this through"]
-    #[doc = " `with_face_data<P: FnOnce(&[u8], u32) -> T>` plus an opaque `ID`."]
-    #[doc = " Neither a closure nor that key crosses to JS, so the lookup key is"]
-    #[doc = " the PostScript name and the bytes are copied out."]
-    #[napi]
-    pub fn face_data(&self, post_script_name: String) -> Option<Buffer> {
-        let id = self
-            .inner
-            .faces()
-            .find(|f| f.post_script_name == post_script_name)
-            .map(|f| f.id)?;
-        self.inner
-            .with_face_data(id, |data, _index| Buffer::from(data.to_vec()))
-    }
-    #[doc = " The name a family resolves to: a generic keyword (`serif`,"]
-    #[doc = " `sans-serif`, `cursive`, `fantasy`, `monospace`) becomes the family"]
-    #[doc = " this database maps it to, any other name comes back as is."]
-    #[napi]
-    pub fn family_name(&self, family: String) -> String {
-        self.inner.family_name(&family_of(&family)).to_string()
-    }
-    #[doc = " Where a face was loaded from, and its index in that file or"]
-    #[doc = " buffer. `null` for a face this database does not hold."]
-    #[napi]
-    pub fn face_source(&self, face: &FontFace) -> Option<FaceSource> {
-        let (source, index) = self.inner.face_source(face.id_in(&self.inner))?;
-        let (kind, path) = match source {
-            usvg::fontdb::Source::Binary(_) => ("binary", None),
-            usvg::fontdb::Source::File(path) => ("file", Some(path)),
-            #[cfg(not(target_family = "wasm"))]
-            usvg::fontdb::Source::SharedFile(path, _) => ("sharedFile", Some(path)),
-        };
-        Some(FaceSource {
-            kind: kind.to_string(),
-            path: path.map(|p| p.to_string_lossy().into_owned()),
-            index,
-        })
-    }
-    #[napi(constructor)]
-    pub fn new() -> Self {
-        Self {
-            inner: SharedDb(std::sync::Arc::new(usvg::fontdb::Database::new())),
-        }
-    }
-    #[doc = " Loads a font data into the `Database`."]
-    #[doc = ""]
-    #[doc = " Will load all font faces in case of a font collection."]
-    #[napi]
-    pub fn load_font_data(&mut self, data: Uint8Array) {
-        self.inner.load_font_data(data.to_vec())
-    }
-    #[doc = " Loads a font file into the `Database`."]
-    #[doc = ""]
-    #[doc = " Will load all font faces in case of a font collection."]
-    #[napi]
-    pub fn load_font_file(&mut self, path: String) -> Result<()> {
-        self.inner
-            .load_font_file(path)
-            .map_err(|e| Error::from_reason(e.to_string()))
-    }
-    #[doc = " Loads font files from the selected directory into the `Database`."]
-    #[doc = ""]
-    #[doc = " This method will scan directories recursively."]
-    #[doc = ""]
-    #[doc = " Will load `ttf`, `otf`, `ttc` and `otc` fonts."]
-    #[doc = ""]
-    #[doc = " Unlike other `load_*` methods, this one doesn't return an error."]
-    #[doc = " It will simply skip malformed fonts and will print a warning into the log for each of them."]
-    #[napi]
-    pub fn load_fonts_dir(&mut self, dir: String) {
-        self.inner.load_fonts_dir(dir)
-    }
-    #[doc = " Attempts to load system fonts."]
-    #[doc = ""]
-    #[doc = " Supports Windows, Linux and macOS."]
-    #[doc = ""]
-    #[doc = " System fonts loading is a surprisingly complicated task,"]
-    #[doc = " mostly unsolvable without interacting with system libraries."]
-    #[doc = " And since `fontdb` tries to be small and portable, this method"]
-    #[doc = " will simply scan some predefined directories."]
-    #[doc = " Which means that fonts that are not in those directories must"]
-    #[doc = " be added manually."]
-    #[napi]
-    pub fn load_system_fonts(&mut self) {
-        self.inner.load_system_fonts()
-    }
-    #[doc = " Removes a font face by `id` from the database."]
-    #[doc = ""]
-    #[doc = " Returns `false` while attempting to remove a non-existing font face."]
-    #[doc = ""]
-    #[doc = " Useful when you want to ignore some specific font face(s)"]
-    #[doc = " after loading a large directory with fonts."]
-    #[doc = " Or a specific face from a font."]
-    #[napi]
-    pub fn remove_face(&mut self, id: &FontFace) {
-        let id = id.id_in(&self.inner);
-        self.inner.remove_face(id)
-    }
-    #[doc = " Returns `true` if the `Database` contains no font faces."]
-    #[napi]
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-    #[doc = " Returns the number of font faces in the `Database`."]
-    #[doc = ""]
-    #[doc = " Note that `Database` stores font faces, not fonts."]
-    #[doc = " For example, if a caller will try to load a font collection (`*.ttc`) that contains 5 faces,"]
-    #[doc = " then the `Database` will load 5 font faces and this method will return 5, not 1."]
-    #[napi]
-    pub fn len(&self) -> u32 {
-        u32::try_from(self.inner.len()).unwrap_or(u32::MAX)
-    }
-    #[doc = " Sets the family that will be used by `Family::Serif`."]
-    #[napi]
-    pub fn set_serif_family(&mut self, family: String) {
-        self.inner.set_serif_family(family)
-    }
-    #[doc = " Sets the family that will be used by `Family::SansSerif`."]
-    #[napi]
-    pub fn set_sans_serif_family(&mut self, family: String) {
-        self.inner.set_sans_serif_family(family)
-    }
-    #[doc = " Sets the family that will be used by `Family::Cursive`."]
-    #[napi]
-    pub fn set_cursive_family(&mut self, family: String) {
-        self.inner.set_cursive_family(family)
-    }
-    #[doc = " Sets the family that will be used by `Family::Fantasy`."]
-    #[napi]
-    pub fn set_fantasy_family(&mut self, family: String) {
-        self.inner.set_fantasy_family(family)
-    }
-    #[doc = " Sets the family that will be used by `Family::Monospace`."]
-    #[napi]
-    pub fn set_monospace_family(&mut self, family: String) {
-        self.inner.set_monospace_family(family)
-    }
-    #[doc = " Returns an iterator over the internal storage."]
-    #[doc = ""]
-    #[doc = " This can be used for manual font matching."]
-    #[napi]
-    pub fn faces(&self) -> Vec<FontFace> {
-        self.inner
-            .faces()
-            .into_iter()
-            .map(|x| FontFace::wrap(x.clone()))
-            .collect()
-    }
-    #[doc = " Selects a `FaceInfo` by `id`."]
-    #[doc = ""]
-    #[doc = " Returns `None` if a face with such ID was already removed,"]
-    #[doc = " or this ID belong to the other `Database`."]
-    #[napi]
-    pub fn face(&self, id: &FontFace) -> Option<FontFace> {
-        let id = id.id_in(&self.inner);
-        self.inner.face(id).map(|x| FontFace::wrap(x.clone()))
-    }
-    #[doc = " Transfers ownership of shared font data back to the font database. This is the reverse operation"]
-    #[doc = " of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped"]
-    #[doc = " from a file on disk, then that mapping is closed and the data becomes private to the process again."]
-    #[napi]
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))]
-    pub fn make_face_data_unshared(&mut self, id: &FontFace) -> Result<()> {
-        #[cfg(not(target_family = "wasm"))]
-        {
-            let id = id.id_in(&self.inner);
-            self.inner.make_face_data_unshared(id);
-            Ok(())
-        }
-        #[cfg(target_family = "wasm")]
-        {
-            Err(Error::from_reason(
-                "makeFaceDataUnshared is not available on this target: its upstream feature is off here",
-            ))
-        }
-    }
-}
-#[doc = " A CSS family name as fontdb reads it: the five generic keywords,"]
-#[doc = " or a family name."]
-fn family_of(name: &str) -> usvg::fontdb::Family<'_> {
-    match name {
-        "serif" => usvg::fontdb::Family::Serif,
-        "sans-serif" => usvg::fontdb::Family::SansSerif,
-        "cursive" => usvg::fontdb::Family::Cursive,
-        "fantasy" => usvg::fontdb::Family::Fantasy,
-        "monospace" => usvg::fontdb::Family::Monospace,
-        other => usvg::fontdb::Family::Name(other),
-    }
-}
-#[doc = " `fontdb::Source` with the face index `faceSource` pairs it with."]
-#[doc = " The bytes of a `binary` or `sharedFile` source are not copied"]
-#[doc = " here; `faceData` reads them."]
-#[napi(object)]
-pub struct FaceSource {
-    #[napi(ts_type = "'binary' | 'file' | 'sharedFile'")]
-    pub kind: String,
-    #[doc = " The file, for `file` and `sharedFile`."]
-    pub path: Option<String>,
-    #[doc = " Index of the face in a collection (`.ttc`), 0 otherwise."]
-    pub index: u32,
-}
-#[doc = " Mirror of `usvg::WriteOptions`, for `Resvg.toString()`. Every field is"]
-#[doc = " optional; omitted fields keep the usvg default."]
-#[napi(object)]
-#[derive(Default, Clone)]
-pub struct WriteOptions {
-    #[doc = " Used to add a custom prefix to each element ID during writing."]
-    pub id_prefix: Option<String>,
-    #[doc = " Do not convert text into paths."]
-    #[doc = ""]
-    #[doc = " Default: false"]
-    pub preserve_text: Option<bool>,
-    #[doc = " Set the coordinates numeric precision."]
-    #[doc = ""]
-    #[doc = " Smaller precision can lead to a malformed output in some cases."]
-    #[doc = ""]
-    #[doc = " Default: 8"]
-    pub coordinates_precision: Option<u32>,
-    #[doc = " Set the transform values numeric precision."]
-    #[doc = ""]
-    #[doc = " Smaller precision can lead to a malformed output in some cases."]
-    #[doc = ""]
-    #[doc = " Default: 8"]
-    pub transforms_precision: Option<u32>,
-    #[doc = " Use single quote marks instead of double quote."]
-    #[doc = ""]
-    #[doc = " # Examples"]
-    #[doc = ""]
-    #[doc = " Before:"]
-    #[doc = ""]
-    #[doc = " ```text"]
-    #[doc = " <rect fill=\"red\"/>"]
-    #[doc = " ```"]
-    #[doc = ""]
-    #[doc = " After:"]
-    #[doc = ""]
-    #[doc = " ```text"]
-    #[doc = " <rect fill='red'/>"]
-    #[doc = " ```"]
-    #[doc = ""]
-    #[doc = " Default: disabled"]
-    pub use_single_quote: Option<bool>,
-    #[doc = " Indentation of nested elements: a number of spaces (0-255),"]
-    #[doc = " `'tabs'`, or `'none'` for everything on one line. Default: 4."]
-    #[napi(ts_type = "number | 'tabs' | 'none'")]
-    pub indent: Option<Either<u32, String>>,
-    #[doc = " Indentation of attributes, which then go one per line. Same"]
-    #[doc = " values as `indent`. Default: `'none'`, on the element's line."]
-    #[napi(ts_type = "number | 'tabs' | 'none'")]
-    pub attributes_indent: Option<Either<u32, String>>,
-}
-impl WriteOptions {
-    fn to_usvg(&self) -> Result<usvg::WriteOptions> {
-        let mut o = usvg::WriteOptions::default();
-        if let Some(v) = &self.id_prefix {
-            o.id_prefix = Some(v.clone());
-        }
-        if let Some(v) = self.preserve_text {
-            o.preserve_text = v;
-        }
-        if let Some(v) = self.coordinates_precision {
-            o.coordinates_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
-        }
-        if let Some(v) = self.transforms_precision {
-            o.transforms_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
-        }
-        if let Some(v) = self.use_single_quote {
-            o.use_single_quote = v;
-        }
-        o.indent = indent(&self.indent, o.indent, "indent")?;
-        o.attributes_indent = indent(
-            &self.attributes_indent,
-            o.attributes_indent,
-            "attributesIndent",
-        )?;
-        Ok(o)
-    }
-}
-#[doc = " `usvg::Indent` is xmlwriter's, a crate the generator does not read."]
-fn indent(
-    v: &Option<Either<u32, String>>,
-    fallback: usvg::Indent,
-    name: &str,
-) -> Result<usvg::Indent> {
-    match v {
-        None => Ok(fallback),
-        Some(v) => indent_from_js(v, name),
-    }
-}
+use guard::{GuardFontResolver, GuardImageHrefResolver};
 #[doc = " A number of spaces (0-255), `'tabs'` or `'none'` as a `usvg::Indent`:"]
-#[doc = " `config::GEN.converters`, for `usvg.WriteOptions` too."]
+#[doc = " `config::GEN.converters`. `Indent` is xmlwriter's, a crate the"]
+#[doc = " generator does not read."]
 fn indent_from_js(v: &Either<u32, String>, name: &str) -> Result<usvg::Indent> {
     match v {
         Either::A(n) => u8::try_from(*n)
@@ -785,866 +44,6 @@ fn indent_from_js(v: &Either<u32, String>, name: &str) -> Result<usvg::Indent> {
             _ => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
         },
     }
-}
-#[doc = " Output size / scaling of one render pass."]
-#[napi(object)]
-#[derive(Default, Clone)]
-pub struct RenderParams {
-    #[doc = " Uniform scale factor. Default: 1."]
-    pub scale: Option<f64>,
-    #[doc = " Target width in px, rounded to the nearest; keeps the aspect"]
-    #[doc = " ratio and overrides `scale`."]
-    pub width: Option<f64>,
-    #[doc = " Target height in px, rounded to the nearest; keeps the aspect"]
-    #[doc = " ratio and overrides `scale`."]
-    pub height: Option<f64>,
-    #[doc = " Background colour: any CSS3 colour string, e.g. `#eee`, `teal`,"]
-    #[doc = " `rgba(255, 0, 0, .5)`. Default: transparent."]
-    pub background: Option<String>,
-    #[doc = " Render only this rectangle, in SVG user units. `scale` / `width` /"]
-    #[doc = " `height` then size the crop, not the full viewport. Feed it"]
-    #[doc = " `absLayerBoundingBox()` to trim the document to its content."]
-    pub crop: Option<BBox>,
-    #[doc = " Refuse a canvas of more than this many pixels (4 bytes each)."]
-    #[doc = " Default: 2^26, an 8192x8192 canvas or 256 MiB. Without a cap a"]
-    #[doc = " document declaring `width=\"200000\"` aborts the whole process"]
-    #[doc = " on the failed allocation, which no try/catch can recover."]
-    #[doc = ""]
-    #[doc = " It bounds the canvas only: a group with a filter, opacity, mask or"]
-    #[doc = " clip path renders through a layer of its own, which resvg lets grow"]
-    #[doc = " to 5x the canvas each way, measured in the group's own coordinates:"]
-    #[doc = " a rotated or skewed group gets the box around that, larger still."]
-    #[doc = " Raise it knowing a render can then allocate many times this cap."]
-    pub max_pixels: Option<f64>,
-}
-#[doc = " An affine transform. Field names and order are tiny-skia's."]
-#[doc = ""]
-#[doc = " They are *not* the order of SVG's `matrix(a b c d e f)`, which"]
-#[doc = " takes `sx ky kx sy tx ty` -- upstream says so itself: \"we are"]
-#[doc = " using column-major-column-vector matrix notation, therefore it's"]
-#[doc = " ky-kx, not kx-ky\". Reading these positionally into a `matrix()`"]
-#[doc = " string mirrors the transform, silently. Name the fields:"]
-#[doc = " `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`."]
-#[napi(object)]
-#[derive(Clone, Copy)]
-pub struct Matrix {
-    pub sx: f64,
-    pub kx: f64,
-    pub ky: f64,
-    pub sy: f64,
-    pub tx: f64,
-    pub ty: f64,
-}
-impl From<usvg::Transform> for Matrix {
-    fn from(t: usvg::Transform) -> Self {
-        Self {
-            sx: t.sx.into(),
-            kx: t.kx.into(),
-            ky: t.ky.into(),
-            sy: t.sy.into(),
-            tx: t.tx.into(),
-            ty: t.ty.into(),
-        }
-    }
-}
-#[doc = " A width/height pair in SVG user units."]
-#[napi(object)]
-#[derive(Clone, Copy)]
-pub struct Dimensions {
-    pub width: f64,
-    pub height: f64,
-}
-impl From<usvg::Size> for Dimensions {
-    fn from(s: usvg::Size) -> Self {
-        Self {
-            width: s.width().into(),
-            height: s.height().into(),
-        }
-    }
-}
-#[doc = " A rectangle in SVG user units."]
-#[napi(object)]
-#[derive(Clone, Copy)]
-pub struct BBox {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-impl From<usvg::Rect> for BBox {
-    fn from(r: usvg::Rect) -> Self {
-        Self {
-            x: r.x().into(),
-            y: r.y().into(),
-            width: r.width().into(),
-            height: r.height().into(),
-        }
-    }
-}
-impl From<usvg::NonZeroRect> for BBox {
-    fn from(r: usvg::NonZeroRect) -> Self {
-        Self {
-            x: r.x().into(),
-            y: r.y().into(),
-            width: r.width().into(),
-            height: r.height().into(),
-        }
-    }
-}
-#[doc = " Un-premultiplied RGBA8 pixels, row-major, no padding."]
-#[napi(object)]
-pub struct RawImage {
-    pub width: u32,
-    pub height: u32,
-    pub data: Buffer,
-}
-#[doc = " Read-only view of a `FaceInfo`."]
-#[napi]
-pub struct FontFace {
-    inner: usvg::fontdb::FaceInfo,
-}
-impl FontFace {
-    fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
-        Self { inner }
-    }
-}
-#[napi]
-impl FontFace {
-    #[napi(getter)]
-    pub fn index(&self) -> u32 {
-        let v = &self.inner;
-        v.index
-    }
-    #[napi(getter)]
-    pub fn post_script_name(&self) -> String {
-        let v = &self.inner;
-        v.post_script_name.clone().to_string()
-    }
-    #[napi(getter)]
-    pub fn style(&self) -> FontFaceStyle {
-        let v = &self.inner;
-        FontFaceStyle::from(v.style)
-    }
-    #[napi(getter)]
-    pub fn weight(&self) -> u32 {
-        let v = &self.inner;
-        u32::from(v.weight.0)
-    }
-    #[napi(getter)]
-    pub fn stretch(&self) -> Stretch {
-        let v = &self.inner;
-        Stretch::from(v.stretch)
-    }
-    #[napi(getter)]
-    pub fn monospaced(&self) -> bool {
-        let v = &self.inner;
-        v.monospaced
-    }
-}
-#[doc = " Starts collecting what usvg and resvg report."]
-#[doc = ""]
-#[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
-#[doc = " call repeatedly: the logger is installed once, the level always applies."]
-#[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
-pub fn set_log_level(level: String) -> Result<()> {
-    napi_support::logs::set_level(&level)
-}
-#[doc = " Drains the messages collected since the last call, from every"]
-#[doc = " document and thread. Concurrent renders interleave here; a"]
-#[doc = " document's own `takeLogs()` holds only its messages."]
-#[napi]
-pub fn take_logs() -> Vec<String> {
-    napi_support::logs::take()
-}
-#[doc = " The strict policy drops `FaceInfo::families` -- it is a"]
-#[doc = " `Vec<(String, Language)>`, and no rule maps a tuple with a language"]
-#[doc = " tag. But fontdb queries by *family*, not by PostScript name, so"]
-#[doc = " without this a caller cannot find the string to put in `fontFamily`."]
-#[doc = " Decision: expose the names, drop the language tags."]
-#[napi]
-impl FontFace {
-    #[doc = " Family names of this face, English (US) first when present."]
-    #[napi(getter)]
-    pub fn families(&self) -> Vec<String> {
-        self.inner
-            .families
-            .iter()
-            .map(|(name, _)| name.clone())
-            .collect()
-    }
-}
-#[doc = " A parsed tree with the image and font hrefs it could not resolve."]
-type Parsed = (
-    usvg::Tree,
-    std::sync::Arc<[String]>,
-    std::sync::Arc<[String]>,
-);
-#[doc = " usvg's own name for a parse failure, carried as `error.code`."]
-#[napi(string_enum)]
-pub enum ParseErrorCode {
-    NotAnUtf8Str,
-    SvgzFeatureNotEnabled,
-    MalformedGZip,
-    ElementsLimitReached,
-    InvalidSize,
-    ParsingFailed,
-}
-impl From<&usvg::Error> for ParseErrorCode {
-    fn from(e: &usvg::Error) -> Self {
-        match e {
-            usvg::Error::NotAnUtf8Str => Self::NotAnUtf8Str,
-            usvg::Error::SvgzFeatureNotEnabled => Self::SvgzFeatureNotEnabled,
-            usvg::Error::MalformedGZip => Self::MalformedGZip,
-            usvg::Error::ElementsLimitReached => Self::ElementsLimitReached,
-            usvg::Error::InvalidSize => Self::InvalidSize,
-            usvg::Error::ParsingFailed(_) => Self::ParsingFailed,
-        }
-    }
-}
-#[doc = " The JS error for a parse failure, `code` included. napi's own"]
-#[doc = " `Error` can only carry its fixed `Status` as the code, and one built"]
-#[doc = " back from a JS object loses the object on WASI, so both paths below"]
-#[doc = " hand this object to JS themselves."]
-fn parse_error<'e>(env: &'e Env, e: &usvg::Error) -> Result<Object<'e>> {
-    let reason = match e { usvg :: Error :: SvgzFeatureNotEnabled => { "SVGZ is not supported: inflate it first, e.g. zlib.gunzipSync(data, { maxOutputLength })" . to_string () } e => e . to_string () , } ;
-    let mut error = env.create_error(Error::from_reason(format!("invalid SVG: {reason}")))?;
-    error.set_named_property("code", ParseErrorCode::from(e))?;
-    Ok(error)
-}
-#[doc = " Thrown from a sync call: the error is thrown here, and the one"]
-#[doc = " returned only says it is pending, so napi does not throw again."]
-fn throw_parse(env: &Env, e: &usvg::Error) -> Error {
-    match parse_error(env, e).and_then(|error| env.throw(error)) {
-        Ok(()) => Error::new(Status::PendingException, format!("invalid SVG: {e}")),
-        Err(err) => err,
-    }
-}
-#[doc = " From a worker-thread task: a rejected promise, which the task's"]
-#[doc = " own promise adopts on resolve."]
-fn rejected_parse<'e>(env: &'e Env, e: &usvg::Error) -> Result<Unknown<'e>> {
-    PromiseRaw::<Unknown>::reject(env, parse_error(env, e)?).map(|p| p.to_unknown())
-}
-#[doc = " One command of a path outline, in the document's own units."]
-#[doc = ""]
-#[doc = " `points` holds x,y pairs, and how many depends on `type`: one point"]
-#[doc = " for `moveTo` and `lineTo`, two for `quadTo` (control, end), three"]
-#[doc = " for `cubicTo` (two controls, end), none for `close`."]
-#[doc = ""]
-#[doc = " A flat list rather than a variant per command: a path can carry"]
-#[doc = " thousands of segments, and one tagged object each is already the"]
-#[doc = " expensive part."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct PathSegment {
-    #[napi(ts_type = "'moveTo' | 'lineTo' | 'quadTo' | 'cubicTo' | 'close'")]
-    pub r#type: String,
-    pub points: Vec<f64>,
-}
-#[doc = " tiny-skia stores a path as a verb stream, not a struct, so there is"]
-#[doc = " nothing for the mapper to walk -- hence this by hand."]
-fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
-    let seg = |kind: &str, pts: &[tiny_skia::Point]| PathSegment {
-        r#type: kind.to_string(),
-        points: pts
-            .iter()
-            .flat_map(|p| [f64::from(p.x), f64::from(p.y)])
-            .collect(),
-    };
-    p.segments()
-        .map(|s| match s {
-            tiny_skia::PathSegment::MoveTo(a) => seg("moveTo", &[a]),
-            tiny_skia::PathSegment::LineTo(a) => seg("lineTo", &[a]),
-            tiny_skia::PathSegment::QuadTo(a, b) => seg("quadTo", &[a, b]),
-            tiny_skia::PathSegment::CubicTo(a, b, c) => seg("cubicTo", &[a, b, c]),
-            tiny_skia::PathSegment::Close => seg("close", &[]),
-        })
-        .collect()
-}
-#[doc = " A parsed SVG, ready to be rendered any number of times."]
-#[napi]
-#[doc = ""]
-#[derive(Clone)]
-pub struct Resvg {
-    tree: std::sync::Arc<usvg::Tree>,
-    #[doc = " Source kept verbatim: resolving an image means re-parsing."]
-    svg: std::sync::Arc<Vec<u8>>,
-    options: std::sync::Arc<RenderOptions>,
-    fonts: std::sync::Arc<usvg::fontdb::Database>,
-    #[doc = " Copied on write, by `resolveImage` only."]
-    images: std::sync::Arc<ImageMap>,
-    pending_images: std::sync::Arc<[String]>,
-    pending_fonts: std::sync::Arc<[String]>,
-    logs: Logs,
-    #[doc = " Set by `dispose`: every method in `impl Resvg` checks it (emit.rs)."]
-    disposed: bool,
-}
-#[napi]
-impl Resvg {
-    #[napi(constructor)]
-    pub fn new(
-        env: Env,
-        svg: Either<String, Uint8Array>,
-        options: Option<RenderOptions>,
-        fonts: Option<&FontDatabase>,
-        images: Option<std::collections::HashMap<String, Uint8Array>>,
-    ) -> Result<Self> {
-        let svg = svg_bytes(svg);
-        let options = std::sync::Arc::new(options.unwrap_or_default());
-        let fonts = match fonts {
-            Some(f) => f.inner.0.clone(),
-            None => default_fontdb(),
-        };
-        let images = std::sync::Arc::new(image_map(images));
-        let logs = Logs::default();
-        let (tree, pending_images, pending_fonts) = logs
-            .scope(|| Self::build(&svg, &options, fonts.clone(), &images))?
-            .map_err(|e| throw_parse(&env, &e))?;
-        Ok(Self {
-            tree: std::sync::Arc::new(tree),
-            svg: std::sync::Arc::new(svg),
-            options,
-            fonts,
-            images,
-            pending_images,
-            pending_fonts,
-            logs,
-            disposed: false,
-        })
-    }
-    #[doc = " Frees the parsed tree, the source and the images now, not at garbage"]
-    #[doc = " collection; every later call throws. Also `[Symbol.dispose]` where"]
-    #[doc = " the runtime has it, so `using doc = new Resvg(svg)` frees it at the"]
-    #[doc = " end of the block. An async call holding the tree keeps it."]
-    #[napi]
-    pub fn dispose(&mut self) {
-        static EMPTY: std::sync::OnceLock<std::sync::Arc<usvg::Tree>> = std::sync::OnceLock::new();
-        self.tree = EMPTY
-            .get_or_init(|| {
-                let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/>";
-                std::sync::Arc::new(
-                    usvg::Tree::from_str(svg, &usvg::Options::default())
-                        .expect("a constant SVG parses"),
-                )
-            })
-            .clone();
-        self.svg = Default::default();
-        self.images = Default::default();
-        self.pending_images = Vec::new().into();
-        self.pending_fonts = Vec::new().into();
-        self.disposed = true;
-    }
-    #[doc = " Whether `dispose` has been called."]
-    #[napi(getter)]
-    pub fn disposed(&self) -> bool {
-        self.disposed
-    }
-    #[doc = " Hrefs of `<image>` elements that neither the supplied buffers nor the"]
-    #[doc = " filesystem could resolve. Feed them back with `resolveImage`."]
-    #[napi]
-    pub fn pending_images(&self) -> Result<Vec<String>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.pending_images.to_vec())())
-    }
-    #[doc = " Drains what usvg and resvg reported while parsing and rendering"]
-    #[doc = " this document, async twins included, and nothing from any other."]
-    #[doc = " Collected only once `setLogLevel` has set a level."]
-    #[napi(js_name = "takeLogs")]
-    pub fn take_own_logs(&self) -> Result<Vec<String>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.logs.take())())
-    }
-    #[doc = " Named font families requested by `<text>` that the database does not"]
-    #[doc = " carry, so the text was rendered with a fallback face. Load them with"]
-    #[doc = " `FontDatabase` and re-parse to fix the output."]
-    #[napi]
-    pub fn pending_fonts(&self) -> Result<Vec<String>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.pending_fonts.to_vec())())
-    }
-    #[doc = " Supplies one image and re-parses the document."]
-    #[doc = ""]
-    #[doc = " Pass everything you already have through the constructor's `images`"]
-    #[doc = " argument, or `resolveImages`, instead: this re-parses once per call."]
-    #[napi]
-    pub fn resolve_image(&mut self, href: String, data: Uint8Array) -> Result<()> {
-        self.live()?;
-        std::sync::Arc::make_mut(&mut self.images).insert(href, std::sync::Arc::new(data.to_vec()));
-        self.reparse()
-    }
-    #[doc = " Supplies several images and re-parses the document once: what"]
-    #[doc = " `pendingImages()` asked for, fetched, handed back in one call."]
-    #[doc = " An href the document does not use is kept, not an error."]
-    #[napi]
-    pub fn resolve_images(
-        &mut self,
-        images: std::collections::HashMap<String, Uint8Array>,
-    ) -> Result<()> {
-        self.live()?;
-        std::sync::Arc::make_mut(&mut self.images).extend(image_map(Some(images)));
-        self.reparse()
-    }
-    fn reparse(&mut self) -> Result<()> {
-        let (tree, pending_images, pending_fonts) = self
-            .logs
-            .scope(|| Self::build(&self.svg, &self.options, self.fonts.clone(), &self.images))?
-            .map_err(|e| Error::from_reason(format!("invalid SVG: {e}")))?;
-        self.tree = std::sync::Arc::new(tree);
-        self.pending_images = pending_images;
-        self.pending_fonts = pending_fonts;
-        Ok(())
-    }
-    #[napi(getter)]
-    pub fn width(&self) -> Result<f64> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.tree.size().width().into())())
-    }
-    #[napi(getter)]
-    pub fn height(&self) -> Result<f64> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.tree.size().height().into())())
-    }
-    #[doc = " Rasterise and encode: the Send half, so the derived twin can run it"]
-    #[doc = " on a worker thread."]
-    fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
-        encode_png(&self.draw(params.unwrap_or_default())?)
-    }
-    #[doc = " Renders to a PNG buffer."]
-    #[napi]
-    pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-        self.live()?;
-        self.png_bytes(params).map(IntoJs::into_js)
-    }
-    #[doc = " Parses on a worker thread. Same arguments as the constructor, and the"]
-    #[doc = " resolved instance still reports `pendingImages` / `pendingFonts`."]
-    #[napi(ts_return_type = "Promise<Resvg>")]
-    pub fn parse_async(
-        svg: Either<String, Uint8Array>,
-        options: Option<RenderOptions>,
-        fonts: Option<&FontDatabase>,
-        images: Option<std::collections::HashMap<String, Uint8Array>>,
-        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> AsyncTask<ParseTask> {
-        AsyncTask::with_optional_signal(
-            ParseTask {
-                svg: svg_bytes(svg),
-                options: std::sync::Arc::new(options.unwrap_or_default()),
-                fonts: fonts.map(|f| f.inner.0.clone()),
-                images: std::sync::Arc::new(image_map(images)),
-                logs: Logs::default(),
-            },
-            signal.map(|s| s.0),
-        )
-    }
-    #[doc = " Image size."]
-    #[doc = ""]
-    #[doc = " Size of an image that should be created to fit the SVG."]
-    #[doc = ""]
-    #[doc = " `width` and `height` in SVG."]
-    #[doc = ""]
-    #[doc = " Note that this does not necessarily represent the bounding box of the"]
-    #[doc = " rendered contents. Use"]
-    #[doc = " [`self.root().abs_layer_bounding_box()`](Group::abs_layer_bounding_box)"]
-    #[doc = " to retrieve it instead."]
-    #[napi]
-    pub fn size(&self) -> Result<Dimensions> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| Dimensions::from(self.tree.size()))())
-    }
-    #[doc = " Checks if the current tree has any text nodes."]
-    #[napi]
-    pub fn has_text_nodes(&self) -> Result<bool> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.tree.has_text_nodes())())
-    }
-    #[doc = " Checks if the current tree has any `defs` nodes."]
-    #[napi]
-    pub fn has_defs_nodes(&self) -> Result<bool> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.tree.has_defs_nodes())())
-    }
-    #[doc = " Returns the font database that applies to all text nodes in the tree."]
-    #[napi]
-    pub fn fontdb(&self) -> Result<FontDatabase> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| FontDatabase::wrap(self.tree.fontdb().clone()))())
-    }
-    #[doc = " Element's transform."]
-    #[doc = ""]
-    #[doc = " This is a relative transform. The one that is set via the `transform` attribute in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Result<Matrix> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| Matrix::from(self.tree.root().transform()))())
-    }
-    #[doc = " Element's absolute transform."]
-    #[doc = ""]
-    #[doc = " Contains all ancestors transforms including group's transform."]
-    #[doc = ""]
-    #[doc = " Note that subroots, like clipPaths, masks and patterns, have their own root transform,"]
-    #[doc = " which isn't affected by the node that references this subroot."]
-    #[napi]
-    pub fn abs_transform(&self) -> Result<Matrix> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| Matrix::from(self.tree.root().abs_transform()))())
-    }
-    #[doc = " Group opacity."]
-    #[doc = ""]
-    #[doc = " After the group is rendered we should combine"]
-    #[doc = " it with a parent group using the specified opacity."]
-    #[napi]
-    pub fn opacity(&self) -> Result<f64> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| f64::from(self.tree.root().opacity().get()))())
-    }
-    #[doc = " Group blend mode."]
-    #[doc = ""]
-    #[doc = " `mix-blend-mode` in SVG."]
-    #[napi]
-    pub fn blend_mode(&self) -> Result<BlendMode> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BlendMode::from(self.tree.root().blend_mode()))())
-    }
-    #[doc = " Element's object bounding box."]
-    #[doc = ""]
-    #[doc = " `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms."]
-    #[doc = ""]
-    #[doc = " Can be set to `None` in case of an empty group."]
-    #[napi]
-    pub fn bounding_box(&self) -> Result<BBox> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BBox::from(self.tree.root().bounding_box()))())
-    }
-    #[doc = " Element's bounding box in canvas coordinates."]
-    #[doc = ""]
-    #[doc = " `userSpaceOnUse` in SVG terms."]
-    #[napi]
-    pub fn abs_bounding_box(&self) -> Result<BBox> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BBox::from(self.tree.root().abs_bounding_box()))())
-    }
-    #[doc = " Element's object bounding box including stroke."]
-    #[doc = ""]
-    #[doc = " Similar to `bounding_box`, but includes stroke."]
-    #[napi]
-    pub fn stroke_bounding_box(&self) -> Result<BBox> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BBox::from(self.tree.root().stroke_bounding_box()))())
-    }
-    #[doc = " Element's bounding box including stroke in user coordinates."]
-    #[doc = ""]
-    #[doc = " Similar to `abs_bounding_box`, but includes stroke."]
-    #[napi]
-    pub fn abs_stroke_bounding_box(&self) -> Result<BBox> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BBox::from(self.tree.root().abs_stroke_bounding_box()))())
-    }
-    #[doc = " Element's \"layer\" bounding box in object units."]
-    #[doc = ""]
-    #[doc = " Conceptually, this is `stroke_bounding_box` expanded and/or clipped"]
-    #[doc = " by `filters_bounding_box`, but also including all the children."]
-    #[doc = " Groups without filters are additionally clipped by their clip path."]
-    #[doc = " This is the bounding box `resvg` will later use to allocate layers/pixmaps"]
-    #[doc = " during isolated groups rendering."]
-    #[doc = ""]
-    #[doc = " Only groups have it, because only groups can have filters."]
-    #[doc = " For other nodes layer bounding box is the same as stroke bounding box."]
-    #[doc = ""]
-    #[doc = " Unlike other bounding boxes, cannot have zero size."]
-    #[doc = ""]
-    #[doc = " Returns 0x0x1x1 for empty groups."]
-    #[napi]
-    pub fn layer_bounding_box(&self) -> Result<BBox> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BBox::from(self.tree.root().layer_bounding_box()))())
-    }
-    #[doc = " Element's \"layer\" bounding box in canvas units."]
-    #[napi]
-    pub fn abs_layer_bounding_box(&self) -> Result<BBox> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| BBox::from(self.tree.root().abs_layer_bounding_box()))())
-    }
-    #[doc = " Returns `true` if the group has any children."]
-    #[napi]
-    pub fn has_children(&self) -> Result<bool> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.tree.root().has_children())())
-    }
-    #[doc = " Calculates a node's filter bounding box."]
-    #[doc = ""]
-    #[doc = " Filters with `objectBoundingBox` and missing or zero `bounding_box` would be ignored."]
-    #[doc = ""]
-    #[doc = " Note that a filter region can act like a clipping rectangle,"]
-    #[doc = " therefore this function can produce a bounding box smaller than `bounding_box`."]
-    #[doc = ""]
-    #[doc = " Returns `None` when then group has no filters."]
-    #[doc = ""]
-    #[doc = " This function is very fast, that's why we do not store this bbox as a `Group` field."]
-    #[napi]
-    pub fn filters_bounding_box(&self) -> Result<Option<BBox>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| self.tree.root().filters_bounding_box().map(BBox::from))())
-    }
-    #[doc = " Writes the parsed tree back out as a usvg-simplified SVG string."]
-    #[doc = ""]
-    #[doc = " Text is converted to paths unless `preserveText` is set."]
-    #[napi(js_name = "toString")]
-    pub fn to_svg_string(&self, options: Option<WriteOptions>) -> Result<String> {
-        self.live()?;
-        self.svg_text(options)
-    }
-    #[doc = " Serialising a large tree is not free; this is the half a twin runs."]
-    fn svg_text(&self, options: Option<WriteOptions>) -> Result<String> {
-        let opt = options.unwrap_or_default().to_usvg()?;
-        let tree = &self.tree;
-        self.logs
-            .scope(|| contained("usvg's SVG writer", || usvg::Tree::to_string(tree, &opt)))
-    }
-    #[doc = " Rasterise only: width, height and the demultiplied pixels, all Send."]
-    fn raw_pixels(&self, params: Option<RenderParams>) -> Result<(u32, u32, Vec<u8>)> {
-        let pixmap = self.draw(params.unwrap_or_default())?;
-        let (width, height) = (pixmap.width(), pixmap.height());
-        Ok((width, height, pixmap.take_demultiplied()))
-    }
-    #[doc = " Renders to raw RGBA8 pixels."]
-    #[napi]
-    pub fn render_raw(&self, params: Option<RenderParams>) -> Result<RawImage> {
-        self.live()?;
-        self.raw_pixels(params).map(IntoJs::into_js)
-    }
-}
-impl Resvg {
-    #[doc = " The check emit.rs puts first in every `Resvg` method."]
-    fn live(&self) -> Result<()> {
-        if self.disposed {
-            return Err(Error::from_reason("this Resvg was disposed"));
-        }
-        Ok(())
-    }
-}
-impl Resvg {
-    fn build(
-        svg: &[u8],
-        options: &RenderOptions,
-        fonts: std::sync::Arc<usvg::fontdb::Database>,
-        images: &std::sync::Arc<ImageMap>,
-    ) -> Result<std::result::Result<Parsed, usvg::Error>> {
-        let missing_images = Misses::default();
-        let missing_fonts = Misses::default();
-        let mut opts = options.to_usvg(fonts);
-        let fence = guard::Fence {
-            images: images.clone(),
-            dir: None,
-            root: options
-                .resources_root
-                .as_ref()
-                .map(std::path::PathBuf::from),
-        };
-        opts.image_href_resolver =
-            guard::href_resolver(std::sync::Arc::new(fence), missing_images.clone());
-        opts.font_resolver = guard::font_resolver(missing_fonts.clone());
-        let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
-            Ok(tree) => tree,
-            Err(e) => return Ok(Err(e)),
-        };
-        Ok(Ok((tree, missing_images.take(), missing_fonts.take())))
-    }
-    fn draw(&self, p: RenderParams) -> Result<tiny_skia::Pixmap> {
-        self.logs.scope(|| draw(&self.tree, &p))
-    }
-}
-#[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
-fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
-    contained("PNG encoder", || pixmap.encode_png())?
-        .map_err(|e| Error::from_reason(format!("PNG encoding failed: {e}")))
-}
-fn draw(tree: &usvg::Tree, p: &RenderParams) -> Result<tiny_skia::Pixmap> {
-    let size = tree.size();
-    let (base_w, base_h, off_x, off_y) = match &p.crop {
-        Some(c) => (to_f32(c.width), to_f32(c.height), to_f32(c.x), to_f32(c.y)),
-        None => (size.width(), size.height(), 0.0, 0.0),
-    };
-    if !(base_w > 0.0 && base_h > 0.0) {
-        return Err(Error::from_reason(format!("empty crop: {base_w}x{base_h}")));
-    }
-    if !(off_x.is_finite() && off_y.is_finite() && base_w.is_finite() && base_h.is_finite()) {
-        return Err(Error::from_reason(format!(
-            "invalid crop: {off_x},{off_y} {base_w}x{base_h}"
-        )));
-    }
-    let (scale, mut pixmap) = canvas(base_w, base_h, p)?;
-    contained("resvg", || {
-        resvg::render(
-            tree,
-            tiny_skia::Transform::from_scale(scale, scale).pre_translate(-off_x, -off_y),
-            &mut pixmap.as_mut(),
-        )
-    })?;
-    Ok(pixmap)
-}
-fn to_f32(v: f64) -> f32 {
-    v as f32
-}
-fn to_px(v: f64) -> u32 {
-    (v as u32).max(1)
-}
-fn ratio(px: u32, base: f32) -> f32 {
-    to_f32(f64::from(px)) / base
-}
-#[doc = " Size, scale and background of one render pass."]
-fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
-    let px = |v: Option<f64>, name: &str| -> Result<Option<u32>> {
-        match v.map(f64::round) {
-            None => Ok(None),
-            Some(v) if (1.0..=f64::from(u32::MAX)).contains(&v) => Ok(Some(to_px(v))),
-            Some(_) => Err(Error::from_reason(format!(
-                "invalid {name}: {}",
-                v.unwrap_or_default()
-            ))),
-        }
-    };
-    let (width, height) = (px(p.width, "width")?, px(p.height, "height")?);
-    let (scale, w, h) = if let Some(w) = width {
-        let h = (f64::from(base_h) * f64::from(w) / f64::from(base_w)).ceil();
-        (ratio(w, base_w), w, to_px(h))
-    } else if let Some(h) = height {
-        let w = (f64::from(base_w) * f64::from(h) / f64::from(base_h)).ceil();
-        (ratio(h, base_h), to_px(w), h)
-    } else {
-        let s = p.scale.unwrap_or(1.0);
-        (
-            to_f32(s),
-            to_px((f64::from(base_w) * s).ceil()),
-            to_px((f64::from(base_h) * s).ceil()),
-        )
-    };
-    if !(scale.is_finite() && scale > 0.0) {
-        return Err(Error::from_reason(format!("invalid scale: {scale}")));
-    }
-    let max = p.max_pixels.unwrap_or(67_108_864.0);
-    if !(max.is_finite() && max > 0.0) {
-        return Err(Error::from_reason(format!("invalid maxPixels: {max}")));
-    }
-    if f64::from(w) * f64::from(h) > max {
-        return Err(Error::from_reason(format!(
-            "{w}x{h} exceeds maxPixels ({max})"
-        )));
-    }
-    let mut pixmap = tiny_skia::Pixmap::new(w, h)
-        .ok_or_else(|| Error::from_reason(format!("bad pixmap size {w}x{h}")))?;
-    if let Some(css) = &p.background {
-        let c: svgtypes::Color = css
-            .parse()
-            .map_err(|_| Error::from_reason(format!("invalid background: {css}")))?;
-        pixmap.fill(tiny_skia::Color::from_rgba8(
-            c.red, c.green, c.blue, c.alpha,
-        ));
-    }
-    Ok((scale, pixmap))
-}
-#[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
-pub struct ParseTask {
-    svg: Vec<u8>,
-    options: std::sync::Arc<RenderOptions>,
-    #[doc = " `None` for the system fonts, resolved in `compute`."]
-    fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
-    images: std::sync::Arc<ImageMap>,
-    logs: Logs,
-}
-impl<'env> napi::ScopedTask<'env> for ParseTask {
-    type Output = std::result::Result<Parsed, usvg::Error>;
-    type JsValue = Either<Resvg, Unknown<'env>>;
-    fn compute(&mut self) -> Result<Self::Output> {
-        let fonts = self.fonts.get_or_insert_with(default_fontdb).clone();
-        self.logs
-            .scope(|| Resvg::build(&self.svg, &self.options, fonts, &self.images))
-    }
-    fn resolve(&mut self, env: &'env Env, out: Self::Output) -> Result<Self::JsValue> {
-        let (tree, pending_images, pending_fonts) = match out {
-            Ok(parsed) => parsed,
-            Err(e) => return rejected_parse(env, &e).map(Either::B),
-        };
-        Ok(Either::A(Resvg {
-            tree: std::sync::Arc::new(tree),
-            svg: std::sync::Arc::new(std::mem::take(&mut self.svg)),
-            options: std::mem::take(&mut self.options),
-            fonts: self.fonts.take().unwrap_or_else(default_fontdb),
-            images: std::mem::take(&mut self.images),
-            pending_images,
-            pending_fonts,
-            logs: std::mem::take(&mut self.logs),
-            disposed: false,
-        }))
-    }
-}
-#[doc = " Parse, rasterise and PNG-encode in one worker-thread round trip."]
-pub struct RenderTask {
-    svg: Vec<u8>,
-    options: RenderOptions,
-    params: RenderParams,
-}
-impl<'env> napi::ScopedTask<'env> for RenderTask {
-    type Output = std::result::Result<Vec<u8>, usvg::Error>;
-    type JsValue = Either<Buffer, Unknown<'env>>;
-    fn compute(&mut self) -> Result<Self::Output> {
-        let tree = match Resvg::build(
-            &self.svg,
-            &self.options,
-            default_fontdb(),
-            &Default::default(),
-        )? {
-            Ok((tree, _, _)) => tree,
-            Err(e) => return Ok(Err(e)),
-        };
-        encode_png(&draw(&tree, &self.params)?).map(Ok)
-    }
-    fn resolve(&mut self, env: &'env Env, png: Self::Output) -> Result<Self::JsValue> {
-        match png {
-            Ok(png) => Ok(Either::A(Buffer::from(png))),
-            Err(e) => rejected_parse(env, &e).map(Either::B),
-        }
-    }
-}
-#[doc = " One-shot: parse and render a PNG entirely off the event loop."]
-#[doc = ""]
-#[doc = " Uses the process-wide system font database and resolves images off the"]
-#[doc = " filesystem only. For a custom `FontDatabase`, supplied image buffers or"]
-#[doc = " the `pendingImages` / `pendingFonts` reports, use `Resvg.parseAsync`."]
-#[napi(ts_return_type = "Promise<Buffer>")]
-pub fn render_async(
-    svg: Either<String, Uint8Array>,
-    options: Option<RenderOptions>,
-    params: Option<RenderParams>,
-    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-) -> AsyncTask<RenderTask> {
-    AsyncTask::with_optional_signal(
-        RenderTask {
-            svg: svg_bytes(svg),
-            options: options.unwrap_or_default(),
-            params: params.unwrap_or_default(),
-        },
-        signal.map(|s| s.0),
-    )
 }
 #[doc = " Representation of the [`<color>`] type."]
 #[doc = ""]
@@ -1745,6 +144,23 @@ pub struct TinySkiaTransformObject {
 pub struct TinySkiaRect {
     inner: napi_support::Slot<tiny_skia::Rect>,
 }
+#[doc = " A rectangle defined by left, top, right and bottom edges."]
+#[doc = ""]
+#[doc = " Similar to [`Rect`], but width and height guarantee to be non-zero and positive."]
+#[doc = ""]
+#[doc = " # Guarantees"]
+#[doc = ""]
+#[doc = " - All values are finite."]
+#[doc = " - Left edge is < right."]
+#[doc = " - Top edge is < bottom."]
+#[doc = " - Width and height are <= f32::MAX."]
+#[doc = " - Width and height are > 0.0"]
+#[doc = ""]
+#[doc = " A `tiny_skia::NonZeroRect`, held by value."]
+#[napi(js_name = "NonZeroRect", namespace = "tiny_skia")]
+pub struct TinySkiaNonZeroRect {
+    inner: napi_support::Slot<tiny_skia::NonZeroRect>,
+}
 #[doc = " A size."]
 #[doc = ""]
 #[doc = " # Guarantees"]
@@ -1756,6 +172,70 @@ pub struct TinySkiaRect {
 pub struct TinySkiaSize {
     inner: napi_support::Slot<tiny_skia::Size>,
 }
+#[doc = " A point."]
+#[doc = ""]
+#[doc = " Doesn't guarantee to be finite."]
+#[doc = ""]
+#[doc = " A `tiny_skia::Point`, held by value."]
+#[napi(js_name = "Point", namespace = "tiny_skia")]
+pub struct TinySkiaPoint {
+    inner: napi_support::Slot<tiny_skia::Point>,
+}
+#[doc = " A `Point`'s public fields, as a plain object."]
+#[napi(object, js_name = "PointObject", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaPointObject {
+    pub x: f64,
+    pub y: f64,
+}
+#[doc = " The payload-free variants of `PathSegment`."]
+#[napi(object, js_name = "PathSegmentPlain", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaPathSegmentPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'close'")]
+    pub r#type: String,
+}
+#[doc = " `PathSegment::MoveTo`."]
+#[napi(object, js_name = "PathSegmentMoveTo", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaPathSegmentMoveTo {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'moveTo'")]
+    pub r#type: String,
+    pub value: TinySkiaPointObject,
+}
+#[doc = " `PathSegment::LineTo`."]
+#[napi(object, js_name = "PathSegmentLineTo", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaPathSegmentLineTo {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'lineTo'")]
+    pub r#type: String,
+    pub value: TinySkiaPointObject,
+}
+#[doc = " `PathSegment::QuadTo`."]
+#[napi(object, js_name = "PathSegmentQuadTo", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaPathSegmentQuadTo {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'quadTo'")]
+    pub r#type: String,
+    pub value: (TinySkiaPointObject, TinySkiaPointObject),
+}
+#[doc = " `PathSegment::CubicTo`."]
+#[napi(object, js_name = "PathSegmentCubicTo", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaPathSegmentCubicTo {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'cubicTo'")]
+    pub r#type: String,
+    pub value: (
+        TinySkiaPointObject,
+        TinySkiaPointObject,
+        TinySkiaPointObject,
+    ),
+}
 #[doc = " A color interpolation mode."]
 #[doc = ""]
 #[doc = " The default is `ColorInterpolation::LinearRGB`."]
@@ -1765,6 +245,7 @@ pub struct TinySkiaSize {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgColorInterpolation {
     SRGB,
     LinearRGB,
@@ -1772,6 +253,7 @@ pub enum UsvgColorInterpolation {
 #[doc = " An edges processing mode."]
 #[napi(string_enum = "camelCase", js_name = "EdgeMode", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgEdgeMode {
     None,
     Duplicate,
@@ -1784,6 +266,7 @@ pub enum UsvgEdgeMode {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgColorChannel {
     R,
     G,
@@ -1797,6 +280,7 @@ pub enum UsvgColorChannel {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgMorphologyOperator {
     Erode,
     Dilate,
@@ -1808,6 +292,7 @@ pub enum UsvgMorphologyOperator {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgTurbulenceKind {
     FractalNoise,
     Turbulence,
@@ -1821,6 +306,7 @@ pub enum UsvgTurbulenceKind {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgShapeRendering {
     OptimizeSpeed,
     CrispEdges,
@@ -1835,6 +321,7 @@ pub enum UsvgShapeRendering {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgTextRendering {
     OptimizeSpeed,
     OptimizeLegibility,
@@ -1849,6 +336,7 @@ pub enum UsvgTextRendering {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgImageRendering {
     OptimizeQuality,
     OptimizeSpeed,
@@ -1862,6 +350,7 @@ pub enum UsvgImageRendering {
 #[doc = " `mix-blend-mode` attribute in the SVG."]
 #[napi(string_enum = "camelCase", js_name = "BlendMode", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgBlendMode {
     Normal,
     Multiply,
@@ -1890,6 +379,7 @@ pub enum UsvgBlendMode {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgSpreadMethod {
     Pad,
     Reflect,
@@ -1900,6 +390,7 @@ pub enum UsvgSpreadMethod {
 #[doc = " `stroke-linecap` attribute in the SVG."]
 #[napi(string_enum = "camelCase", js_name = "LineCap", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgLineCap {
     Butt,
     Round,
@@ -1910,6 +401,7 @@ pub enum UsvgLineCap {
 #[doc = " `stroke-linejoin` attribute in the SVG."]
 #[napi(string_enum = "camelCase", js_name = "LineJoin", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgLineJoin {
     Miter,
     MiterClip,
@@ -1921,6 +413,7 @@ pub enum UsvgLineJoin {
 #[doc = " `fill-rule` attribute in the SVG."]
 #[napi(string_enum = "camelCase", js_name = "FillRule", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgFillRule {
     NonZero,
     EvenOdd,
@@ -1928,6 +421,7 @@ pub enum UsvgFillRule {
 #[doc = " A mask type."]
 #[napi(string_enum = "camelCase", js_name = "MaskType", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgMaskType {
     Luminance,
     Alpha,
@@ -1940,6 +434,7 @@ pub enum UsvgMaskType {
 #[doc = " [`paint-order`]: https://www.w3.org/TR/SVG2/painting.html#PaintOrder"]
 #[napi(string_enum = "camelCase", js_name = "PaintOrder", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgPaintOrder {
     FillAndStroke,
     StrokeAndFill,
@@ -1947,6 +442,7 @@ pub enum UsvgPaintOrder {
 #[doc = " A font stretch property."]
 #[napi(string_enum = "camelCase", js_name = "FontStretch", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgFontStretch {
     UltraCondensed,
     ExtraCondensed,
@@ -1961,6 +457,7 @@ pub enum UsvgFontStretch {
 #[doc = " A font style property."]
 #[napi(string_enum = "camelCase", js_name = "FontStyle", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgFontStyle {
     Normal,
     Italic,
@@ -1973,6 +470,7 @@ pub enum UsvgFontStyle {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgDominantBaseline {
     Auto,
     UseScript,
@@ -1994,6 +492,7 @@ pub enum UsvgDominantBaseline {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgAlignmentBaseline {
     Auto,
     Baseline,
@@ -2015,6 +514,7 @@ pub enum UsvgAlignmentBaseline {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgLengthAdjust {
     Spacing,
     SpacingAndGlyphs,
@@ -2029,6 +529,7 @@ pub enum UsvgLengthAdjust {
     namespace = "usvg"
 )]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgFontOpticalSizing {
     Auto,
     None,
@@ -2036,6 +537,7 @@ pub enum UsvgFontOpticalSizing {
 #[doc = " A text chunk anchor property."]
 #[napi(string_enum = "camelCase", js_name = "TextAnchor", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgTextAnchor {
     Start,
     Middle,
@@ -2044,6 +546,7 @@ pub enum UsvgTextAnchor {
 #[doc = " A writing mode."]
 #[napi(string_enum = "camelCase", js_name = "WritingMode", namespace = "usvg")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum UsvgWritingMode {
     LeftToRight,
     TopToBottom,
@@ -2116,12 +619,9 @@ pub struct UsvgOptions<'a> {
     #[doc = " the `width` or `height` attributes are relative."]
     #[doc = ""]
     #[doc = " Default: `(100, 100)`"]
-    pub default_size_width: Option<f64>,
-    #[doc = " Default viewport size to assume if there is no `viewBox` attribute and"]
-    #[doc = " the `width` or `height` attributes are relative."]
     #[doc = ""]
-    #[doc = " Default: `(100, 100)`"]
-    pub default_size_height: Option<f64>,
+    #[doc = " A `tiny_skia.Size`: `tiny_skia.Size.fromWh(width, height)`."]
+    pub default_size: Option<ClassInstance<'a, TinySkiaSize>>,
     #[doc = " Specifies the way `xlink:href` in `<image>` elements should be handled."]
     #[doc = ""]
     #[doc = " Default: see type's documentation for details"]
@@ -2808,6 +1308,137 @@ pub struct UsvgOffset {
 pub struct UsvgPositionedGlyph {
     inner: napi_support::Slot<usvg::layout::PositionedGlyph>,
 }
+#[doc = " Read-only view of a `Primitive`."]
+#[napi(js_name = "Primitive", namespace = "usvg")]
+pub struct UsvgPrimitive {
+    inner: napi_support::Slot<usvg::filter::Primitive>,
+}
+#[doc = " Read-only view of a `Span`."]
+#[napi(js_name = "Span", namespace = "usvg")]
+pub struct UsvgSpan {
+    inner: napi_support::Slot<usvg::layout::Span>,
+}
+#[doc = " Plain view of a `SpecularLighting`."]
+#[napi(object, js_name = "SpecularLighting", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgSpecularLighting {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub surface_scale: f64,
+    pub specular_constant: f64,
+    pub specular_exponent: f64,
+    pub lighting_color: UsvgColor,
+    pub light_source:
+        Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>,
+}
+#[doc = " Plain view of a `Stop`."]
+#[napi(object, js_name = "Stop", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgStop {
+    pub offset: f64,
+    pub color: UsvgColor,
+    pub opacity: f64,
+}
+#[doc = " Plain view of a `Stroke`."]
+#[napi(object, js_name = "Stroke", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgStroke {
+    pub paint:
+        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
+    pub dasharray: Option<Vec<f64>>,
+    pub dashoffset: f64,
+    pub miterlimit: f64,
+    pub opacity: f64,
+    pub width: f64,
+    pub linecap: UsvgLineCap,
+    pub linejoin: UsvgLineJoin,
+}
+#[doc = " Read-only view of a `TextChunk`."]
+#[napi(js_name = "TextChunk", namespace = "usvg")]
+pub struct UsvgTextChunk {
+    inner: napi_support::Slot<usvg::TextChunk>,
+}
+#[doc = " Plain view of a `TextDecorationStyle`."]
+#[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextDecorationStyle {
+    pub fill: Option<UsvgFill>,
+    pub stroke: Option<UsvgStroke>,
+}
+#[doc = " Plain view of a `TextDecoration`."]
+#[napi(object, js_name = "TextDecoration", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextDecoration {
+    pub underline: Option<UsvgTextDecorationStyle>,
+    pub overline: Option<UsvgTextDecorationStyle>,
+    pub line_through: Option<UsvgTextDecorationStyle>,
+}
+#[doc = " Read-only view of a `TextSpan`."]
+#[napi(js_name = "TextSpan", namespace = "usvg")]
+pub struct UsvgTextSpan {
+    inner: napi_support::Slot<usvg::TextSpan>,
+}
+#[doc = " Plain view of a `Tile`."]
+#[napi(object, js_name = "Tile", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTile {
+    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+}
+#[doc = " Plain view of a `Turbulence`."]
+#[napi(object, js_name = "Turbulence", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTurbulence {
+    pub base_frequency_x: f64,
+    pub base_frequency_y: f64,
+    pub num_octaves: u32,
+    pub seed: i32,
+    pub stitch_tiles: bool,
+    pub kind: UsvgTurbulenceKind,
+}
+#[doc = " The payload-free variants of `BaselineShift`."]
+#[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBaselineShiftPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
+    pub r#type: String,
+}
+#[doc = " `BaselineShift::Number`."]
+#[napi(object, js_name = "BaselineShiftNumber", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBaselineShiftNumber {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'number'")]
+    pub r#type: String,
+    pub value: f64,
+}
+#[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
+pub struct UsvgImageKindJpeg {
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
+}
+#[doc = " `ImageKind::PNG`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindPng", namespace = "usvg")]
+pub struct UsvgImageKindPng {
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
+}
+#[doc = " `ImageKind::GIF`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindGif", namespace = "usvg")]
+pub struct UsvgImageKindGif {
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
+}
+#[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindWebp", namespace = "usvg")]
+pub struct UsvgImageKindWebp {
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
+}
+#[doc = " `ImageKind::SVG`."]
+#[napi(object, js_name = "ImageKindSvg", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgImageKindSvg {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'svg'")]
+    pub r#type: String,
+}
 #[doc = " `Kind::Blend`."]
 #[napi(object, js_name = "KindBlend", namespace = "usvg")]
 #[derive(Clone)]
@@ -2933,18 +1564,6 @@ pub struct UsvgKindOffset {
     pub r#type: String,
     pub value: UsvgOffset,
 }
-#[doc = " Plain view of a `SpecularLighting`."]
-#[napi(object, js_name = "SpecularLighting", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgSpecularLighting {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
-    pub surface_scale: f64,
-    pub specular_constant: f64,
-    pub specular_exponent: f64,
-    pub lighting_color: UsvgColor,
-    pub light_source:
-        Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>,
-}
 #[doc = " `Kind::SpecularLighting`."]
 #[napi(object, js_name = "KindSpecularLighting", namespace = "usvg")]
 #[derive(Clone)]
@@ -2953,12 +1572,6 @@ pub struct UsvgKindSpecularLighting {
     #[napi(ts_type = "'specularLighting'")]
     pub r#type: String,
     pub value: UsvgSpecularLighting,
-}
-#[doc = " Plain view of a `Tile`."]
-#[napi(object, js_name = "Tile", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgTile {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
 }
 #[doc = " `Kind::Tile`."]
 #[napi(object, js_name = "KindTile", namespace = "usvg")]
@@ -2969,17 +1582,6 @@ pub struct UsvgKindTile {
     pub r#type: String,
     pub value: UsvgTile,
 }
-#[doc = " Plain view of a `Turbulence`."]
-#[napi(object, js_name = "Turbulence", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgTurbulence {
-    pub base_frequency_x: f64,
-    pub base_frequency_y: f64,
-    pub num_octaves: u32,
-    pub seed: i32,
-    pub stitch_tiles: bool,
-    pub kind: UsvgTurbulenceKind,
-}
 #[doc = " `Kind::Turbulence`."]
 #[napi(object, js_name = "KindTurbulence", namespace = "usvg")]
 #[derive(Clone)]
@@ -2988,130 +1590,6 @@ pub struct UsvgKindTurbulence {
     #[napi(ts_type = "'turbulence'")]
     pub r#type: String,
     pub value: UsvgTurbulence,
-}
-#[doc = " Plain view of a `Primitive`."]
-#[napi(object, js_name = "Primitive", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgPrimitive {
-    pub rect: BBox,
-    pub color_interpolation: UsvgColorInterpolation,
-    pub result: String,
-    pub kind: Either17<
-        UsvgKindBlend,
-        UsvgKindColorMatrix,
-        UsvgKindComponentTransfer,
-        UsvgKindComposite,
-        UsvgKindConvolveMatrix,
-        UsvgKindDiffuseLighting,
-        UsvgKindDisplacementMap,
-        UsvgKindDropShadow,
-        UsvgKindFlood,
-        UsvgKindGaussianBlur,
-        UsvgKindImage,
-        UsvgKindMerge,
-        UsvgKindMorphology,
-        UsvgKindOffset,
-        UsvgKindSpecularLighting,
-        UsvgKindTile,
-        UsvgKindTurbulence,
-    >,
-}
-#[doc = " Read-only view of a `Span`."]
-#[napi(js_name = "Span", namespace = "usvg")]
-pub struct UsvgSpan {
-    inner: napi_support::Slot<usvg::layout::Span>,
-}
-#[doc = " Plain view of a `Stop`."]
-#[napi(object, js_name = "Stop", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgStop {
-    pub offset: f64,
-    pub color: UsvgColor,
-    pub opacity: f64,
-}
-#[doc = " Plain view of a `Stroke`."]
-#[napi(object, js_name = "Stroke", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgStroke {
-    pub paint:
-        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
-    pub dasharray: Option<Vec<f64>>,
-    pub dashoffset: f64,
-    pub miterlimit: f64,
-    pub opacity: f64,
-    pub width: f64,
-    pub linecap: UsvgLineCap,
-    pub linejoin: UsvgLineJoin,
-}
-#[doc = " Read-only view of a `TextChunk`."]
-#[napi(js_name = "TextChunk", namespace = "usvg")]
-pub struct UsvgTextChunk {
-    inner: napi_support::Slot<usvg::TextChunk>,
-}
-#[doc = " Plain view of a `TextDecorationStyle`."]
-#[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgTextDecorationStyle {
-    pub fill: Option<UsvgFill>,
-    pub stroke: Option<UsvgStroke>,
-}
-#[doc = " Plain view of a `TextDecoration`."]
-#[napi(object, js_name = "TextDecoration", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgTextDecoration {
-    pub underline: Option<UsvgTextDecorationStyle>,
-    pub overline: Option<UsvgTextDecorationStyle>,
-    pub line_through: Option<UsvgTextDecorationStyle>,
-}
-#[doc = " Read-only view of a `TextSpan`."]
-#[napi(js_name = "TextSpan", namespace = "usvg")]
-pub struct UsvgTextSpan {
-    inner: napi_support::Slot<usvg::TextSpan>,
-}
-#[doc = " The payload-free variants of `BaselineShift`."]
-#[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgBaselineShiftPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
-    pub r#type: String,
-}
-#[doc = " `BaselineShift::Number`."]
-#[napi(object, js_name = "BaselineShiftNumber", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgBaselineShiftNumber {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'number'")]
-    pub r#type: String,
-    pub value: f64,
-}
-#[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
-#[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
-pub struct UsvgImageKindJpeg {
-    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
-}
-#[doc = " `ImageKind::PNG`. The bytes are the document's own."]
-#[napi(js_name = "ImageKindPng", namespace = "usvg")]
-pub struct UsvgImageKindPng {
-    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
-}
-#[doc = " `ImageKind::GIF`. The bytes are the document's own."]
-#[napi(js_name = "ImageKindGif", namespace = "usvg")]
-pub struct UsvgImageKindGif {
-    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
-}
-#[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
-#[napi(js_name = "ImageKindWebp", namespace = "usvg")]
-pub struct UsvgImageKindWebp {
-    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
-}
-#[doc = " `ImageKind::SVG`."]
-#[napi(object, js_name = "ImageKindSvg", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgImageKindSvg {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'svg'")]
-    pub r#type: String,
 }
 #[doc = " The payload-free variants of `TextFlow`."]
 #[napi(object, js_name = "TextFlowPlain", namespace = "usvg")]
@@ -3133,14 +1611,232 @@ pub struct UsvgTextFlowPath {
 #[doc = " Allows italic or oblique faces to be selected."]
 #[napi(string_enum = "camelCase", js_name = "Style", namespace = "fontdb")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum FontdbStyle {
     Normal,
     Italic,
     Oblique,
 }
+#[doc = " A face name language."]
+#[doc = ""]
+#[doc = " Consists of Language + Region pairs."]
+#[doc = ""]
+#[doc = " <https://learn.microsoft.com/en-us/typography/opentype/spec/name#windows-language-ids>"]
+#[napi(string_enum = "camelCase", js_name = "Language", namespace = "fontdb")]
+#[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
+pub enum FontdbLanguage {
+    Unknown,
+    Afrikaans_SouthAfrica,
+    Albanian_Albania,
+    Alsatian_France,
+    Amharic_Ethiopia,
+    Arabic_Algeria,
+    Arabic_Bahrain,
+    Arabic_Egypt,
+    Arabic_Iraq,
+    Arabic_Jordan,
+    Arabic_Kuwait,
+    Arabic_Lebanon,
+    Arabic_Libya,
+    Arabic_Morocco,
+    Arabic_Oman,
+    Arabic_Qatar,
+    Arabic_SaudiArabia,
+    Arabic_Syria,
+    Arabic_Tunisia,
+    Arabic_UAE,
+    Arabic_Yemen,
+    Armenian_Armenia,
+    Assamese_India,
+    Azeri_Cyrillic_Azerbaijan,
+    Azeri_Latin_Azerbaijan,
+    Bashkir_Russia,
+    Basque_Basque,
+    Belarusian_Belarus,
+    Bengali_Bangladesh,
+    Bengali_India,
+    Bosnian_Cyrillic_BosniaAndHerzegovina,
+    Bosnian_Latin_BosniaAndHerzegovina,
+    Breton_France,
+    Bulgarian_Bulgaria,
+    Catalan_Catalan,
+    Chinese_HongKongSAR,
+    Chinese_MacaoSAR,
+    Chinese_PeoplesRepublicOfChina,
+    Chinese_Singapore,
+    Chinese_Taiwan,
+    Corsican_France,
+    Croatian_Croatia,
+    Croatian_Latin_BosniaAndHerzegovina,
+    Czech_CzechRepublic,
+    Danish_Denmark,
+    Dari_Afghanistan,
+    Divehi_Maldives,
+    Dutch_Belgium,
+    Dutch_Netherlands,
+    English_Australia,
+    English_Belize,
+    English_Canada,
+    English_Caribbean,
+    English_India,
+    English_Ireland,
+    English_Jamaica,
+    English_Malaysia,
+    English_NewZealand,
+    English_RepublicOfThePhilippines,
+    English_Singapore,
+    English_SouthAfrica,
+    English_TrinidadAndTobago,
+    English_UnitedKingdom,
+    English_UnitedStates,
+    English_Zimbabwe,
+    Estonian_Estonia,
+    Faroese_FaroeIslands,
+    Filipino_Philippines,
+    Finnish_Finland,
+    French_Belgium,
+    French_Canada,
+    French_France,
+    French_Luxembourg,
+    French_PrincipalityOfMonaco,
+    French_Switzerland,
+    Frisian_Netherlands,
+    Galician_Galician,
+    Georgian_Georgia,
+    German_Austria,
+    German_Germany,
+    German_Liechtenstein,
+    German_Luxembourg,
+    German_Switzerland,
+    Greek_Greece,
+    Greenlandic_Greenland,
+    Gujarati_India,
+    Hausa_Latin_Nigeria,
+    Hebrew_Israel,
+    Hindi_India,
+    Hungarian_Hungary,
+    Icelandic_Iceland,
+    Igbo_Nigeria,
+    Indonesian_Indonesia,
+    Inuktitut_Canada,
+    Inuktitut_Latin_Canada,
+    Irish_Ireland,
+    isiXhosa_SouthAfrica,
+    isiZulu_SouthAfrica,
+    Italian_Italy,
+    Italian_Switzerland,
+    Japanese_Japan,
+    Kannada_India,
+    Kazakh_Kazakhstan,
+    Khmer_Cambodia,
+    Kiche_Guatemala,
+    Kinyarwanda_Rwanda,
+    Kiswahili_Kenya,
+    Konkani_India,
+    Korean_Korea,
+    Kyrgyz_Kyrgyzstan,
+    Lao_LaoPDR,
+    Latvian_Latvia,
+    Lithuanian_Lithuania,
+    LowerSorbian_Germany,
+    Luxembourgish_Luxembourg,
+    Macedonian_NorthMacedonia,
+    Malay_BruneiDarussalam,
+    Malay_Malaysia,
+    Malayalam_India,
+    Maltese_Malta,
+    Maori_NewZealand,
+    Mapudungun_Chile,
+    Marathi_India,
+    Mohawk_Mohawk,
+    Mongolian_Cyrillic_Mongolia,
+    Mongolian_Traditional_PeoplesRepublicOfChina,
+    Nepali_Nepal,
+    Norwegian_Bokmal_Norway,
+    Norwegian_Nynorsk_Norway,
+    Occitan_France,
+    Odia_India,
+    Pashto_Afghanistan,
+    Polish_Poland,
+    Portuguese_Brazil,
+    Portuguese_Portugal,
+    Punjabi_India,
+    Quechua_Bolivia,
+    Quechua_Ecuador,
+    Quechua_Peru,
+    Romanian_Romania,
+    Romansh_Switzerland,
+    Russian_Russia,
+    Sami_Inari_Finland,
+    Sami_Lule_Norway,
+    Sami_Lule_Sweden,
+    Sami_Northern_Finland,
+    Sami_Northern_Norway,
+    Sami_Northern_Sweden,
+    Sami_Skolt_Finland,
+    Sami_Southern_Norway,
+    Sami_Southern_Sweden,
+    Sanskrit_India,
+    Serbian_Cyrillic_BosniaAndHerzegovina,
+    Serbian_Cyrillic_Serbia,
+    Serbian_Latin_BosniaAndHerzegovina,
+    Serbian_Latin_Serbia,
+    SesothoSaLeboa_SouthAfrica,
+    Setswana_SouthAfrica,
+    Sinhala_SriLanka,
+    Slovak_Slovakia,
+    Slovenian_Slovenia,
+    Spanish_Argentina,
+    Spanish_Bolivia,
+    Spanish_Chile,
+    Spanish_Colombia,
+    Spanish_CostaRica,
+    Spanish_DominicanRepublic,
+    Spanish_Ecuador,
+    Spanish_ElSalvador,
+    Spanish_Guatemala,
+    Spanish_Honduras,
+    Spanish_Mexico,
+    Spanish_Nicaragua,
+    Spanish_Panama,
+    Spanish_Paraguay,
+    Spanish_Peru,
+    Spanish_PuertoRico,
+    Spanish_ModernSort_Spain,
+    Spanish_TraditionalSort_Spain,
+    Spanish_UnitedStates,
+    Spanish_Uruguay,
+    Spanish_Venezuela,
+    Swedish_Finland,
+    Swedish_Sweden,
+    Syriac_Syria,
+    Tajik_Cyrillic_Tajikistan,
+    Tamazight_Latin_Algeria,
+    Tamil_India,
+    Tatar_Russia,
+    Telugu_India,
+    Thai_Thailand,
+    Tibetan_PRC,
+    Turkish_Turkey,
+    Turkmen_Turkmenistan,
+    Uighur_PRC,
+    Ukrainian_Ukraine,
+    UpperSorbian_Germany,
+    Urdu_IslamicRepublicOfPakistan,
+    Uzbek_Cyrillic_Uzbekistan,
+    Uzbek_Latin_Uzbekistan,
+    Vietnamese_Vietnam,
+    Welsh_UnitedKingdom,
+    Wolof_Senegal,
+    Yakut_Russia,
+    Yi_PRC,
+    Yoruba_Nigeria,
+}
 #[doc = " A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass)."]
 #[napi(string_enum = "camelCase", js_name = "Stretch", namespace = "fontdb")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum FontdbStretch {
     UltraCondensed,
     ExtraCondensed,
@@ -3465,6 +2161,16 @@ impl SvgtypesColor {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+impl From<&svgtypes::Color> for SvgtypesColorObject {
+    fn from(__v: &svgtypes::Color) -> Self {
+        Self {
+            red: u32::from(__v.red),
+            green: u32::from(__v.green),
+            blue: u32::from(__v.blue),
+            alpha: u32::from(__v.alpha),
+        }
     }
 }
 impl TinySkiaPixmap {
@@ -3893,6 +2599,15 @@ impl TinySkiaIntSize {
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+    #[doc = " Returns width and height as a tuple."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn dimensions(&self) -> Result<(u32, u32), String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("IntSize::dimensions", || __self.dimensions())
+            .map_err(napi_support::coded)?;
+        Ok((__v.0, __v.1))
+    }
     #[doc = " Scales current size by the specified factor."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -4068,6 +2783,17 @@ impl TinySkiaTransform {
         .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
     }
+    #[doc = " Converts `Rect` into a bounding box `Transform`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_bbox(bbox: &TinySkiaNonZeroRect) -> Result<Self, String> {
+        let __bbox = *bbox.__ref()?;
+        let __v = napi_support::contained("Transform::from_bbox", || {
+            <tiny_skia::Transform>::from_bbox(__bbox)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
     #[doc = " Checks that transform is finite."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -4159,6 +2885,15 @@ impl TinySkiaTransform {
         let __v = napi_support::contained("Transform::has_translate", || __self.has_translate())
             .map_err(napi_support::coded)?;
         Ok(__v)
+    }
+    #[doc = " Returns transform's scale part."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn get_scale(&self) -> Result<(f64, f64), String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Transform::get_scale", || __self.get_scale())
+            .map_err(napi_support::coded)?;
+        Ok((f64::from(__v.0), f64::from(__v.1)))
     }
     #[doc = " Pre-scales the current transform."]
     #[napi]
@@ -4288,6 +3023,16 @@ impl TinySkiaTransform {
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
     }
+    #[doc = " Transforms a points using the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn map_point(&self, point: &mut TinySkiaPoint) -> Result<(), String> {
+        let __point = point.__mut()?;
+        let __self = self.__ref()?;
+        napi_support::contained("Transform::map_point", || __self.map_point(__point))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
     #[doc = " Returns an inverted transform."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -4402,6 +3147,18 @@ impl TinySkiaTransform {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+impl From<&tiny_skia::Transform> for TinySkiaTransformObject {
+    fn from(__v: &tiny_skia::Transform) -> Self {
+        Self {
+            sx: f64::from(__v.sx),
+            kx: f64::from(__v.kx),
+            ky: f64::from(__v.ky),
+            sy: f64::from(__v.sy),
+            tx: f64::from(__v.tx),
+            ty: f64::from(__v.ty),
+        }
     }
 }
 impl TinySkiaRect {
@@ -4592,14 +3349,24 @@ impl TinySkiaRect {
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
+    #[doc = " Applies a bounding box transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bbox_transform(&self, bbox: &TinySkiaNonZeroRect) -> Result<TinySkiaRect, String> {
+        let __bbox = *bbox.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Rect::bbox_transform", || __self.bbox_transform(__bbox))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
     #[doc = " Converts into [`NonZeroRect`]."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn to_non_zero_rect(&self) -> Result<Option<BBox>, String> {
+    pub fn to_non_zero_rect(&self) -> Result<Option<TinySkiaNonZeroRect>, String> {
         let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::to_non_zero_rect", || __self.to_non_zero_rect())
             .map_err(napi_support::coded)?;
-        Ok(__v.map(|__v| BBox::from(__v)))
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
@@ -4609,6 +3376,207 @@ impl TinySkiaRect {
     #[napi]
     pub fn dispose(&mut self) -> Result<(), String> {
         self.inner.dispose("Rect")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+impl TinySkiaNonZeroRect {
+    fn __from(inner: tiny_skia::NonZeroRect) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::NonZeroRect, String> {
+        self.inner.get("NonZeroRect")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::NonZeroRect, String> {
+        self.inner.get_mut("NonZeroRect")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::NonZeroRect>, String> {
+        self.inner.lease("NonZeroRect")
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaNonZeroRect {
+    #[doc = " Creates new `NonZeroRect`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_ltrb(
+        left: f64,
+        top: f64,
+        right: f64,
+        bottom: f64,
+    ) -> Result<Option<TinySkiaNonZeroRect>, String> {
+        let left = to_f32(left);
+        let top = to_f32(top);
+        let right = to_f32(right);
+        let bottom = to_f32(bottom);
+        let __v = napi_support::contained("NonZeroRect::from_ltrb", || {
+            <tiny_skia::NonZeroRect>::from_ltrb(left, top, right, bottom)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
+    }
+    #[doc = " Creates new `NonZeroRect`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_xywh(
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    ) -> Result<Option<TinySkiaNonZeroRect>, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let w = to_f32(w);
+        let h = to_f32(h);
+        let __v = napi_support::contained("NonZeroRect::from_xywh", || {
+            <tiny_skia::NonZeroRect>::from_xywh(x, y, w, h)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
+    }
+    #[doc = " Returns the left edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn left(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::left", || __self.left())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the top edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn top(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::top", || __self.top())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the right edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn right(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::right", || __self.right())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the bottom edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bottom(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::bottom", || __self.bottom())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's X position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn x(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::x", || __self.x())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's Y position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn y(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::y", || __self.y())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's size."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn size(&self) -> Result<TinySkiaSize, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::size", || __self.size())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaSize::__from(__v))
+    }
+    #[doc = " Translates the rect to the specified position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn translate_to(&self, x: f64, y: f64) -> Result<Option<TinySkiaNonZeroRect>, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let __self = self.__ref()?;
+        let __v =
+            napi_support::contained("NonZeroRect::translate_to", || __self.translate_to(x, y))
+                .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
+    }
+    #[doc = " Transforms the rect using the provided `Transform`."]
+    #[doc = ""]
+    #[doc = " If the transform is a skew, the result will be a bounding box around the skewed rectangle."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn transform(&self, ts: &TinySkiaTransform) -> Result<Option<TinySkiaNonZeroRect>, String> {
+        let __ts = *ts.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::transform", || __self.transform(__ts))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
+    }
+    #[doc = " Applies a bounding box transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bbox_transform(
+        &self,
+        bbox: &TinySkiaNonZeroRect,
+    ) -> Result<TinySkiaNonZeroRect, String> {
+        let __bbox = *bbox.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::bbox_transform", || {
+            __self.bbox_transform(__bbox)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaNonZeroRect::__from(__v))
+    }
+    #[doc = " Converts into [`Rect`]."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_rect(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("NonZeroRect::to_rect", || __self.to_rect())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("NonZeroRect")?;
         Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
@@ -4741,14 +3709,14 @@ impl TinySkiaSize {
     #[doc = " Converts the current size to `NonZeroRect` at provided position."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn to_non_zero_rect(&self, x: f64, y: f64) -> Result<BBox, String> {
+    pub fn to_non_zero_rect(&self, x: f64, y: f64) -> Result<TinySkiaNonZeroRect, String> {
         let x = to_f32(x);
         let y = to_f32(y);
         let __self = self.__ref()?;
         let __v =
             napi_support::contained("Size::to_non_zero_rect", || __self.to_non_zero_rect(x, y))
                 .map_err(napi_support::coded)?;
-        Ok(BBox::from(__v))
+        Ok(TinySkiaNonZeroRect::__from(__v))
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
@@ -4764,6 +3732,271 @@ impl TinySkiaSize {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+impl TinySkiaPoint {
+    fn __from(inner: tiny_skia::Point) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::Point, String> {
+        self.inner.get("Point")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::Point, String> {
+        self.inner.get_mut("Point")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::Point>, String> {
+        self.inner.lease("Point")
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaPoint {
+    #[doc = " Creates a new `Point`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_xy(x: f64, y: f64) -> Result<Self, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let __v = napi_support::contained("Point::from_xy", || <tiny_skia::Point>::from_xy(x, y))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaPoint::__from(__v))
+    }
+    #[doc = " Creates a point at 0x0 position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn zero() -> Result<Self, String> {
+        let __v = napi_support::contained("Point::zero", <tiny_skia::Point>::zero)
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaPoint::__from(__v))
+    }
+    #[doc = " Returns true if x and y are both zero."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_zero(&self) -> Result<bool, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Point::is_zero", || __self.is_zero())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns true if both x and y are measurable values."]
+    #[doc = ""]
+    #[doc = " Both values are other than infinities and NaN."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_finite(&self) -> Result<bool, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Point::is_finite", || __self.is_finite())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Scales (fX, fY) so that length() returns one, while preserving ratio of fX to fY,"]
+    #[doc = " if possible."]
+    #[doc = ""]
+    #[doc = " If prior length is nearly zero, sets vector to (0, 0) and returns"]
+    #[doc = " false; otherwise returns true."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn normalize(&mut self) -> Result<bool, String> {
+        let __self = self.__mut()?;
+        let __v = napi_support::contained("Point::normalize", || __self.normalize())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Sets vector to (x, y) scaled so length() returns one, and so that (x, y)"]
+    #[doc = " is proportional to (x, y)."]
+    #[doc = ""]
+    #[doc = " If (x, y) length is nearly zero, sets vector to (0, 0) and returns false;"]
+    #[doc = " otherwise returns true."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_normalize(&mut self, x: f64, y: f64) -> Result<bool, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let __self = self.__mut()?;
+        let __v = napi_support::contained("Point::set_normalize", || __self.set_normalize(x, y))
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns the Euclidean distance from origin."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn length(&self) -> Result<f64, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Point::length", || __self.length())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Scales vector so that distanceToOrigin() returns length, if possible."]
+    #[doc = ""]
+    #[doc = " If former length is nearly zero, sets vector to (0, 0) and return false;"]
+    #[doc = " otherwise returns true."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_length(&mut self, length: f64) -> Result<bool, String> {
+        let length = to_f32(length);
+        let __self = self.__mut()?;
+        let __v = napi_support::contained("Point::set_length", || __self.set_length(length))
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Sets vector to (x, y) scaled to length, if possible."]
+    #[doc = ""]
+    #[doc = " If former length is nearly zero, sets vector to (0, 0) and return false;"]
+    #[doc = " otherwise returns true."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_length_from(&mut self, x: f64, y: f64, length: f64) -> Result<bool, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let length = to_f32(length);
+        let __self = self.__mut()?;
+        let __v = napi_support::contained("Point::set_length_from", || {
+            __self.set_length_from(x, y, length)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns the Euclidean distance from origin."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn distance(&self, other: &TinySkiaPoint) -> Result<f64, String> {
+        let __other = *other.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Point::distance", || __self.distance(__other))
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the dot product of two points."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn dot(&self, other: &TinySkiaPoint) -> Result<f64, String> {
+        let __other = *other.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Point::dot", || __self.dot(__other))
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the cross product of vector and vec."]
+    #[doc = ""]
+    #[doc = " Vector and vec form three-dimensional vectors with z-axis value equal to zero."]
+    #[doc = " The cross product is a three-dimensional vector with x-axis and y-axis values"]
+    #[doc = " equal to zero. The cross product z-axis component is returned."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn cross(&self, other: &TinySkiaPoint) -> Result<f64, String> {
+        let __other = *other.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Point::cross", || __self.cross(__other))
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Scales Point in-place by scale."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale(&mut self, scale: f64) -> Result<(), String> {
+        let scale = to_f32(scale);
+        let __self = self.__mut()?;
+        napi_support::contained("Point::scale", || __self.scale(scale))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[napi(getter, js_name = "x")]
+    pub fn field_x(&self) -> Result<f64, String> {
+        let __v = self.__ref()?;
+        Ok(f64::from(__v.x))
+    }
+    #[napi(setter, js_name = "x")]
+    pub fn set_field_x(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.__mut()?.x = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "y")]
+    pub fn field_y(&self) -> Result<f64, String> {
+        let __v = self.__ref()?;
+        Ok(f64::from(__v.y))
+    }
+    #[napi(setter, js_name = "y")]
+    pub fn set_field_y(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.__mut()?.y = value;
+        Ok(())
+    }
+    #[doc = " A `Point` from a plain object of its fields."]
+    #[napi]
+    pub fn from_object(obj: TinySkiaPointObject) -> Result<Self, String> {
+        Ok(Self::__from(tiny_skia::Point {
+            x: to_f32(obj.x),
+            y: to_f32(obj.y),
+        }))
+    }
+    #[doc = " Its fields, as a plain object `fromObject` takes back."]
+    #[napi]
+    pub fn to_object(&self) -> Result<TinySkiaPointObject, String> {
+        let __v = self.__ref()?;
+        Ok(TinySkiaPointObject {
+            x: f64::from(__v.x),
+            y: f64::from(__v.y),
+        })
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Point")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+impl From<&tiny_skia::Point> for TinySkiaPointObject {
+    fn from(__v: &tiny_skia::Point) -> Self {
+        Self {
+            x: f64::from(__v.x),
+            y: f64::from(__v.y),
+        }
+    }
+}
+fn tiny_skia_path_segment_to_js(
+    v: &tiny_skia::PathSegment,
+) -> Either5<
+    TinySkiaPathSegmentPlain,
+    TinySkiaPathSegmentMoveTo,
+    TinySkiaPathSegmentLineTo,
+    TinySkiaPathSegmentQuadTo,
+    TinySkiaPathSegmentCubicTo,
+> {
+    match v {
+        tiny_skia::PathSegment::Close => Either5::A(TinySkiaPathSegmentPlain {
+            r#type: "close".to_string(),
+        }),
+        tiny_skia::PathSegment::MoveTo(v) => Either5::B(TinySkiaPathSegmentMoveTo {
+            r#type: "moveTo".to_string(),
+            value: TinySkiaPointObject::from(v),
+        }),
+        tiny_skia::PathSegment::LineTo(v) => Either5::C(TinySkiaPathSegmentLineTo {
+            r#type: "lineTo".to_string(),
+            value: TinySkiaPointObject::from(v),
+        }),
+        tiny_skia::PathSegment::QuadTo(v0, v1) => Either5::D(TinySkiaPathSegmentQuadTo {
+            r#type: "quadTo".to_string(),
+            value: (TinySkiaPointObject::from(v0), TinySkiaPointObject::from(v1)),
+        }),
+        tiny_skia::PathSegment::CubicTo(v0, v1, v2) => Either5::E(TinySkiaPathSegmentCubicTo {
+            r#type: "cubicTo".to_string(),
+            value: (
+                TinySkiaPointObject::from(v0),
+                TinySkiaPointObject::from(v1),
+                TinySkiaPointObject::from(v2),
+            ),
+        }),
     }
 }
 impl From<UsvgColorInterpolation> for usvg::filter::ColorInterpolation {
@@ -5276,10 +4509,9 @@ impl UsvgOptions<'_> {
         if let Some(v) = self.image_rendering {
             o.image_rendering = v.into();
         }
-        if let (Some(w), Some(h)) = (self.default_size_width, self.default_size_height)
-            && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
-        {
-            o.default_size = s;
+        if let Some(v) = &self.default_size {
+            let v = &**v;
+            o.default_size = *v.__ref()?;
         }
         if let Some(v) = &self.image_href_resolver {
             let v = &**v;
@@ -5350,9 +4582,9 @@ impl UsvgFilter {
     #[doc = ""]
     #[doc = " `x`, `y`, `width` and `height` in the SVG."]
     #[napi]
-    pub fn rect(&self) -> Result<BBox, String> {
+    pub fn rect(&self) -> Result<TinySkiaNonZeroRect, String> {
         let __inner = self.inner.get("Filter")?;
-        Ok(BBox::from((*__inner).rect()))
+        Ok(TinySkiaNonZeroRect::__from((*__inner).rect()))
     }
     #[doc = " A list of filter primitives."]
     #[napi]
@@ -5361,7 +4593,7 @@ impl UsvgFilter {
         Ok((*__inner)
             .primitives()
             .iter()
-            .map(UsvgPrimitive::from)
+            .map(|x| UsvgPrimitive::wrap(x.clone()))
             .collect())
     }
 }
@@ -5423,9 +4655,9 @@ impl UsvgRadialGradient {
     #[doc = ""]
     #[doc = " `gradientTransform` in SVG."]
     #[napi]
-    pub fn transform(&self) -> Result<Matrix, String> {
+    pub fn transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("RadialGradient")?;
-        Ok(Matrix::from((*__inner).transform()))
+        Ok(TinySkiaTransform::__from((*__inner).transform()))
     }
     #[doc = " Gradient spreading method."]
     #[doc = ""]
@@ -5488,9 +4720,9 @@ impl UsvgLinearGradient {
     #[doc = ""]
     #[doc = " `gradientTransform` in SVG."]
     #[napi]
-    pub fn transform(&self) -> Result<Matrix, String> {
+    pub fn transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("LinearGradient")?;
-        Ok(Matrix::from((*__inner).transform()))
+        Ok(TinySkiaTransform::__from((*__inner).transform()))
     }
     #[doc = " Gradient spreading method."]
     #[doc = ""]
@@ -6069,23 +5301,23 @@ impl UsvgGroup {
     #[doc = " Returns 0x0x1x1 for empty groups."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn layer_bounding_box(&self) -> Result<BBox, String> {
+    pub fn layer_bounding_box(&self) -> Result<TinySkiaNonZeroRect, String> {
         let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Group::layer_bounding_box", || __self.layer_bounding_box())
                 .map_err(napi_support::coded)?;
-        Ok(BBox::from(__v))
+        Ok(TinySkiaNonZeroRect::__from(__v))
     }
     #[doc = " Element's \"layer\" bounding box in canvas units."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn abs_layer_bounding_box(&self) -> Result<BBox, String> {
+    pub fn abs_layer_bounding_box(&self) -> Result<TinySkiaNonZeroRect, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_layer_bounding_box", || {
             __self.abs_layer_bounding_box()
         })
         .map_err(napi_support::coded)?;
-        Ok(BBox::from(__v))
+        Ok(TinySkiaNonZeroRect::__from(__v))
     }
     #[doc = " Group's children."]
     #[napi]
@@ -6134,13 +5366,13 @@ impl UsvgGroup {
     #[doc = " This function is very fast, that's why we do not store this bbox as a `Group` field."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn filters_bounding_box(&self) -> Result<Option<BBox>, String> {
+    pub fn filters_bounding_box(&self) -> Result<Option<TinySkiaNonZeroRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::filters_bounding_box", || {
             __self.filters_bounding_box()
         })
         .map_err(napi_support::coded)?;
-        Ok(__v.map(|__v| BBox::from(__v)))
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -6256,11 +5488,27 @@ impl UsvgPath {
     #[doc = " All segments are in absolute coordinates."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn data(&self) -> Result<Vec<PathSegment>, String> {
+    pub fn data(
+        &self,
+    ) -> Result<
+        Vec<
+            Either5<
+                TinySkiaPathSegmentPlain,
+                TinySkiaPathSegmentMoveTo,
+                TinySkiaPathSegmentLineTo,
+                TinySkiaPathSegmentQuadTo,
+                TinySkiaPathSegmentCubicTo,
+            >,
+        >,
+        String,
+    > {
         let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::data", || __self.data()).map_err(napi_support::coded)?;
-        Ok(path_segments(__v))
+        Ok(__v
+            .segments()
+            .map(|x| tiny_skia_path_segment_to_js(&x))
+            .collect())
     }
     #[doc = " Element's absolute transform."]
     #[doc = ""]
@@ -6841,11 +6089,11 @@ impl UsvgMask {
     #[doc = " `x`, `y`, `width` and `height` in SVG."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn rect(&self) -> Result<BBox, String> {
+    pub fn rect(&self) -> Result<TinySkiaNonZeroRect, String> {
         let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Mask::rect", || __self.rect()).map_err(napi_support::coded)?;
-        Ok(BBox::from(__v))
+        Ok(TinySkiaNonZeroRect::__from(__v))
     }
     #[doc = " Mask type."]
     #[doc = ""]
@@ -6952,11 +6200,11 @@ impl UsvgPattern {
     #[doc = " `x`, `y`, `width` and `height` in SVG."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn rect(&self) -> Result<BBox, String> {
+    pub fn rect(&self) -> Result<TinySkiaNonZeroRect, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Pattern::rect", || __self.rect())
             .map_err(napi_support::coded)?;
-        Ok(BBox::from(__v))
+        Ok(TinySkiaNonZeroRect::__from(__v))
     }
     #[doc = " Pattern children."]
     #[napi]
@@ -7333,35 +6581,35 @@ impl UsvgPositionedGlyph {
         })
     }
     #[napi(getter)]
-    pub fn transform(&self) -> Result<Matrix, String> {
+    pub fn transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
             let v = __inner;
-            Matrix::from(v.transform())
+            TinySkiaTransform::__from(v.transform())
         })
     }
     #[napi(getter)]
-    pub fn outline_transform(&self) -> Result<Matrix, String> {
+    pub fn outline_transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
             let v = __inner;
-            Matrix::from(v.outline_transform())
+            TinySkiaTransform::__from(v.outline_transform())
         })
     }
     #[napi(getter)]
-    pub fn svg_transform(&self) -> Result<Matrix, String> {
+    pub fn svg_transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
             let v = __inner;
-            Matrix::from(v.svg_transform())
+            TinySkiaTransform::__from(v.svg_transform())
         })
     }
     #[napi(getter)]
-    pub fn colr_transform(&self) -> Result<Matrix, String> {
+    pub fn colr_transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
             let v = __inner;
-            Matrix::from(v.colr_transform())
+            TinySkiaTransform::__from(v.colr_transform())
         })
     }
     #[napi(getter)]
@@ -7381,14 +6629,69 @@ impl UsvgPositionedGlyph {
         })
     }
 }
-impl From<&usvg::filter::Primitive> for UsvgPrimitive {
-    fn from(v: &usvg::filter::Primitive) -> Self {
+impl UsvgPrimitive {
+    fn wrap(inner: usvg::filter::Primitive) -> Self {
         Self {
-            rect: BBox::from(v.rect()),
-            color_interpolation: UsvgColorInterpolation::from(v.color_interpolation()),
-            result: v.result().to_string(),
-            kind: usvg_kind_to_js(v.kind()),
+            inner: napi_support::Slot::new(inner),
         }
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPrimitive {
+    #[napi(getter)]
+    pub fn rect(&self) -> Result<TinySkiaNonZeroRect, String> {
+        let __inner = self.inner.get("Primitive")?;
+        Ok({
+            let v = __inner;
+            TinySkiaNonZeroRect::__from(v.rect())
+        })
+    }
+    #[napi(getter)]
+    pub fn color_interpolation(&self) -> Result<UsvgColorInterpolation, String> {
+        let __inner = self.inner.get("Primitive")?;
+        Ok({
+            let v = __inner;
+            UsvgColorInterpolation::from(v.color_interpolation())
+        })
+    }
+    #[napi(getter)]
+    pub fn result(&self) -> Result<String, String> {
+        let __inner = self.inner.get("Primitive")?;
+        Ok({
+            let v = __inner;
+            v.result().to_string()
+        })
+    }
+    #[napi(getter)]
+    pub fn kind(
+        &self,
+    ) -> Result<
+        Either17<
+            UsvgKindBlend,
+            UsvgKindColorMatrix,
+            UsvgKindComponentTransfer,
+            UsvgKindComposite,
+            UsvgKindConvolveMatrix,
+            UsvgKindDiffuseLighting,
+            UsvgKindDisplacementMap,
+            UsvgKindDropShadow,
+            UsvgKindFlood,
+            UsvgKindGaussianBlur,
+            UsvgKindImage,
+            UsvgKindMerge,
+            UsvgKindMorphology,
+            UsvgKindOffset,
+            UsvgKindSpecularLighting,
+            UsvgKindTile,
+            UsvgKindTurbulence,
+        >,
+        String,
+    > {
+        let __inner = self.inner.get("Primitive")?;
+        Ok({
+            let v = __inner;
+            usvg_kind_to_js(v.kind())
+        })
     }
 }
 impl UsvgSpan {
@@ -7477,7 +6780,7 @@ impl UsvgSpan {
         let __inner = self.inner.get("Span")?;
         Ok({
             let v = __inner;
-            v.underline.clone().map(|x| UsvgPath::from(&x))
+            v.underline.clone().map(|x| UsvgPath::wrap(x.clone()))
         })
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -7485,7 +6788,7 @@ impl UsvgSpan {
         let __inner = self.inner.get("Span")?;
         Ok({
             let v = __inner;
-            v.overline.clone().map(|x| UsvgPath::from(&x))
+            v.overline.clone().map(|x| UsvgPath::wrap(x.clone()))
         })
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -7493,7 +6796,7 @@ impl UsvgSpan {
         let __inner = self.inner.get("Span")?;
         Ok({
             let v = __inner;
-            v.line_through.clone().map(|x| UsvgPath::from(&x))
+            v.line_through.clone().map(|x| UsvgPath::wrap(x.clone()))
         })
     }
 }
@@ -8191,6 +7494,562 @@ impl From<usvg::fontdb::Style> for FontdbStyle {
         }
     }
 }
+impl From<FontdbLanguage> for usvg::fontdb::Language {
+    fn from(v: FontdbLanguage) -> Self {
+        match v {
+            FontdbLanguage::Unknown => <usvg::fontdb::Language>::Unknown,
+            FontdbLanguage::Afrikaans_SouthAfrica => {
+                <usvg::fontdb::Language>::Afrikaans_SouthAfrica
+            }
+            FontdbLanguage::Albanian_Albania => <usvg::fontdb::Language>::Albanian_Albania,
+            FontdbLanguage::Alsatian_France => <usvg::fontdb::Language>::Alsatian_France,
+            FontdbLanguage::Amharic_Ethiopia => <usvg::fontdb::Language>::Amharic_Ethiopia,
+            FontdbLanguage::Arabic_Algeria => <usvg::fontdb::Language>::Arabic_Algeria,
+            FontdbLanguage::Arabic_Bahrain => <usvg::fontdb::Language>::Arabic_Bahrain,
+            FontdbLanguage::Arabic_Egypt => <usvg::fontdb::Language>::Arabic_Egypt,
+            FontdbLanguage::Arabic_Iraq => <usvg::fontdb::Language>::Arabic_Iraq,
+            FontdbLanguage::Arabic_Jordan => <usvg::fontdb::Language>::Arabic_Jordan,
+            FontdbLanguage::Arabic_Kuwait => <usvg::fontdb::Language>::Arabic_Kuwait,
+            FontdbLanguage::Arabic_Lebanon => <usvg::fontdb::Language>::Arabic_Lebanon,
+            FontdbLanguage::Arabic_Libya => <usvg::fontdb::Language>::Arabic_Libya,
+            FontdbLanguage::Arabic_Morocco => <usvg::fontdb::Language>::Arabic_Morocco,
+            FontdbLanguage::Arabic_Oman => <usvg::fontdb::Language>::Arabic_Oman,
+            FontdbLanguage::Arabic_Qatar => <usvg::fontdb::Language>::Arabic_Qatar,
+            FontdbLanguage::Arabic_SaudiArabia => <usvg::fontdb::Language>::Arabic_SaudiArabia,
+            FontdbLanguage::Arabic_Syria => <usvg::fontdb::Language>::Arabic_Syria,
+            FontdbLanguage::Arabic_Tunisia => <usvg::fontdb::Language>::Arabic_Tunisia,
+            FontdbLanguage::Arabic_UAE => <usvg::fontdb::Language>::Arabic_UAE,
+            FontdbLanguage::Arabic_Yemen => <usvg::fontdb::Language>::Arabic_Yemen,
+            FontdbLanguage::Armenian_Armenia => <usvg::fontdb::Language>::Armenian_Armenia,
+            FontdbLanguage::Assamese_India => <usvg::fontdb::Language>::Assamese_India,
+            FontdbLanguage::Azeri_Cyrillic_Azerbaijan => {
+                <usvg::fontdb::Language>::Azeri_Cyrillic_Azerbaijan
+            }
+            FontdbLanguage::Azeri_Latin_Azerbaijan => {
+                <usvg::fontdb::Language>::Azeri_Latin_Azerbaijan
+            }
+            FontdbLanguage::Bashkir_Russia => <usvg::fontdb::Language>::Bashkir_Russia,
+            FontdbLanguage::Basque_Basque => <usvg::fontdb::Language>::Basque_Basque,
+            FontdbLanguage::Belarusian_Belarus => <usvg::fontdb::Language>::Belarusian_Belarus,
+            FontdbLanguage::Bengali_Bangladesh => <usvg::fontdb::Language>::Bengali_Bangladesh,
+            FontdbLanguage::Bengali_India => <usvg::fontdb::Language>::Bengali_India,
+            FontdbLanguage::Bosnian_Cyrillic_BosniaAndHerzegovina => {
+                <usvg::fontdb::Language>::Bosnian_Cyrillic_BosniaAndHerzegovina
+            }
+            FontdbLanguage::Bosnian_Latin_BosniaAndHerzegovina => {
+                <usvg::fontdb::Language>::Bosnian_Latin_BosniaAndHerzegovina
+            }
+            FontdbLanguage::Breton_France => <usvg::fontdb::Language>::Breton_France,
+            FontdbLanguage::Bulgarian_Bulgaria => <usvg::fontdb::Language>::Bulgarian_Bulgaria,
+            FontdbLanguage::Catalan_Catalan => <usvg::fontdb::Language>::Catalan_Catalan,
+            FontdbLanguage::Chinese_HongKongSAR => <usvg::fontdb::Language>::Chinese_HongKongSAR,
+            FontdbLanguage::Chinese_MacaoSAR => <usvg::fontdb::Language>::Chinese_MacaoSAR,
+            FontdbLanguage::Chinese_PeoplesRepublicOfChina => {
+                <usvg::fontdb::Language>::Chinese_PeoplesRepublicOfChina
+            }
+            FontdbLanguage::Chinese_Singapore => <usvg::fontdb::Language>::Chinese_Singapore,
+            FontdbLanguage::Chinese_Taiwan => <usvg::fontdb::Language>::Chinese_Taiwan,
+            FontdbLanguage::Corsican_France => <usvg::fontdb::Language>::Corsican_France,
+            FontdbLanguage::Croatian_Croatia => <usvg::fontdb::Language>::Croatian_Croatia,
+            FontdbLanguage::Croatian_Latin_BosniaAndHerzegovina => {
+                <usvg::fontdb::Language>::Croatian_Latin_BosniaAndHerzegovina
+            }
+            FontdbLanguage::Czech_CzechRepublic => <usvg::fontdb::Language>::Czech_CzechRepublic,
+            FontdbLanguage::Danish_Denmark => <usvg::fontdb::Language>::Danish_Denmark,
+            FontdbLanguage::Dari_Afghanistan => <usvg::fontdb::Language>::Dari_Afghanistan,
+            FontdbLanguage::Divehi_Maldives => <usvg::fontdb::Language>::Divehi_Maldives,
+            FontdbLanguage::Dutch_Belgium => <usvg::fontdb::Language>::Dutch_Belgium,
+            FontdbLanguage::Dutch_Netherlands => <usvg::fontdb::Language>::Dutch_Netherlands,
+            FontdbLanguage::English_Australia => <usvg::fontdb::Language>::English_Australia,
+            FontdbLanguage::English_Belize => <usvg::fontdb::Language>::English_Belize,
+            FontdbLanguage::English_Canada => <usvg::fontdb::Language>::English_Canada,
+            FontdbLanguage::English_Caribbean => <usvg::fontdb::Language>::English_Caribbean,
+            FontdbLanguage::English_India => <usvg::fontdb::Language>::English_India,
+            FontdbLanguage::English_Ireland => <usvg::fontdb::Language>::English_Ireland,
+            FontdbLanguage::English_Jamaica => <usvg::fontdb::Language>::English_Jamaica,
+            FontdbLanguage::English_Malaysia => <usvg::fontdb::Language>::English_Malaysia,
+            FontdbLanguage::English_NewZealand => <usvg::fontdb::Language>::English_NewZealand,
+            FontdbLanguage::English_RepublicOfThePhilippines => {
+                <usvg::fontdb::Language>::English_RepublicOfThePhilippines
+            }
+            FontdbLanguage::English_Singapore => <usvg::fontdb::Language>::English_Singapore,
+            FontdbLanguage::English_SouthAfrica => <usvg::fontdb::Language>::English_SouthAfrica,
+            FontdbLanguage::English_TrinidadAndTobago => {
+                <usvg::fontdb::Language>::English_TrinidadAndTobago
+            }
+            FontdbLanguage::English_UnitedKingdom => {
+                <usvg::fontdb::Language>::English_UnitedKingdom
+            }
+            FontdbLanguage::English_UnitedStates => <usvg::fontdb::Language>::English_UnitedStates,
+            FontdbLanguage::English_Zimbabwe => <usvg::fontdb::Language>::English_Zimbabwe,
+            FontdbLanguage::Estonian_Estonia => <usvg::fontdb::Language>::Estonian_Estonia,
+            FontdbLanguage::Faroese_FaroeIslands => <usvg::fontdb::Language>::Faroese_FaroeIslands,
+            FontdbLanguage::Filipino_Philippines => <usvg::fontdb::Language>::Filipino_Philippines,
+            FontdbLanguage::Finnish_Finland => <usvg::fontdb::Language>::Finnish_Finland,
+            FontdbLanguage::French_Belgium => <usvg::fontdb::Language>::French_Belgium,
+            FontdbLanguage::French_Canada => <usvg::fontdb::Language>::French_Canada,
+            FontdbLanguage::French_France => <usvg::fontdb::Language>::French_France,
+            FontdbLanguage::French_Luxembourg => <usvg::fontdb::Language>::French_Luxembourg,
+            FontdbLanguage::French_PrincipalityOfMonaco => {
+                <usvg::fontdb::Language>::French_PrincipalityOfMonaco
+            }
+            FontdbLanguage::French_Switzerland => <usvg::fontdb::Language>::French_Switzerland,
+            FontdbLanguage::Frisian_Netherlands => <usvg::fontdb::Language>::Frisian_Netherlands,
+            FontdbLanguage::Galician_Galician => <usvg::fontdb::Language>::Galician_Galician,
+            FontdbLanguage::Georgian_Georgia => <usvg::fontdb::Language>::Georgian_Georgia,
+            FontdbLanguage::German_Austria => <usvg::fontdb::Language>::German_Austria,
+            FontdbLanguage::German_Germany => <usvg::fontdb::Language>::German_Germany,
+            FontdbLanguage::German_Liechtenstein => <usvg::fontdb::Language>::German_Liechtenstein,
+            FontdbLanguage::German_Luxembourg => <usvg::fontdb::Language>::German_Luxembourg,
+            FontdbLanguage::German_Switzerland => <usvg::fontdb::Language>::German_Switzerland,
+            FontdbLanguage::Greek_Greece => <usvg::fontdb::Language>::Greek_Greece,
+            FontdbLanguage::Greenlandic_Greenland => {
+                <usvg::fontdb::Language>::Greenlandic_Greenland
+            }
+            FontdbLanguage::Gujarati_India => <usvg::fontdb::Language>::Gujarati_India,
+            FontdbLanguage::Hausa_Latin_Nigeria => <usvg::fontdb::Language>::Hausa_Latin_Nigeria,
+            FontdbLanguage::Hebrew_Israel => <usvg::fontdb::Language>::Hebrew_Israel,
+            FontdbLanguage::Hindi_India => <usvg::fontdb::Language>::Hindi_India,
+            FontdbLanguage::Hungarian_Hungary => <usvg::fontdb::Language>::Hungarian_Hungary,
+            FontdbLanguage::Icelandic_Iceland => <usvg::fontdb::Language>::Icelandic_Iceland,
+            FontdbLanguage::Igbo_Nigeria => <usvg::fontdb::Language>::Igbo_Nigeria,
+            FontdbLanguage::Indonesian_Indonesia => <usvg::fontdb::Language>::Indonesian_Indonesia,
+            FontdbLanguage::Inuktitut_Canada => <usvg::fontdb::Language>::Inuktitut_Canada,
+            FontdbLanguage::Inuktitut_Latin_Canada => {
+                <usvg::fontdb::Language>::Inuktitut_Latin_Canada
+            }
+            FontdbLanguage::Irish_Ireland => <usvg::fontdb::Language>::Irish_Ireland,
+            FontdbLanguage::isiXhosa_SouthAfrica => <usvg::fontdb::Language>::isiXhosa_SouthAfrica,
+            FontdbLanguage::isiZulu_SouthAfrica => <usvg::fontdb::Language>::isiZulu_SouthAfrica,
+            FontdbLanguage::Italian_Italy => <usvg::fontdb::Language>::Italian_Italy,
+            FontdbLanguage::Italian_Switzerland => <usvg::fontdb::Language>::Italian_Switzerland,
+            FontdbLanguage::Japanese_Japan => <usvg::fontdb::Language>::Japanese_Japan,
+            FontdbLanguage::Kannada_India => <usvg::fontdb::Language>::Kannada_India,
+            FontdbLanguage::Kazakh_Kazakhstan => <usvg::fontdb::Language>::Kazakh_Kazakhstan,
+            FontdbLanguage::Khmer_Cambodia => <usvg::fontdb::Language>::Khmer_Cambodia,
+            FontdbLanguage::Kiche_Guatemala => <usvg::fontdb::Language>::Kiche_Guatemala,
+            FontdbLanguage::Kinyarwanda_Rwanda => <usvg::fontdb::Language>::Kinyarwanda_Rwanda,
+            FontdbLanguage::Kiswahili_Kenya => <usvg::fontdb::Language>::Kiswahili_Kenya,
+            FontdbLanguage::Konkani_India => <usvg::fontdb::Language>::Konkani_India,
+            FontdbLanguage::Korean_Korea => <usvg::fontdb::Language>::Korean_Korea,
+            FontdbLanguage::Kyrgyz_Kyrgyzstan => <usvg::fontdb::Language>::Kyrgyz_Kyrgyzstan,
+            FontdbLanguage::Lao_LaoPDR => <usvg::fontdb::Language>::Lao_LaoPDR,
+            FontdbLanguage::Latvian_Latvia => <usvg::fontdb::Language>::Latvian_Latvia,
+            FontdbLanguage::Lithuanian_Lithuania => <usvg::fontdb::Language>::Lithuanian_Lithuania,
+            FontdbLanguage::LowerSorbian_Germany => <usvg::fontdb::Language>::LowerSorbian_Germany,
+            FontdbLanguage::Luxembourgish_Luxembourg => {
+                <usvg::fontdb::Language>::Luxembourgish_Luxembourg
+            }
+            FontdbLanguage::Macedonian_NorthMacedonia => {
+                <usvg::fontdb::Language>::Macedonian_NorthMacedonia
+            }
+            FontdbLanguage::Malay_BruneiDarussalam => {
+                <usvg::fontdb::Language>::Malay_BruneiDarussalam
+            }
+            FontdbLanguage::Malay_Malaysia => <usvg::fontdb::Language>::Malay_Malaysia,
+            FontdbLanguage::Malayalam_India => <usvg::fontdb::Language>::Malayalam_India,
+            FontdbLanguage::Maltese_Malta => <usvg::fontdb::Language>::Maltese_Malta,
+            FontdbLanguage::Maori_NewZealand => <usvg::fontdb::Language>::Maori_NewZealand,
+            FontdbLanguage::Mapudungun_Chile => <usvg::fontdb::Language>::Mapudungun_Chile,
+            FontdbLanguage::Marathi_India => <usvg::fontdb::Language>::Marathi_India,
+            FontdbLanguage::Mohawk_Mohawk => <usvg::fontdb::Language>::Mohawk_Mohawk,
+            FontdbLanguage::Mongolian_Cyrillic_Mongolia => {
+                <usvg::fontdb::Language>::Mongolian_Cyrillic_Mongolia
+            }
+            FontdbLanguage::Mongolian_Traditional_PeoplesRepublicOfChina => {
+                <usvg::fontdb::Language>::Mongolian_Traditional_PeoplesRepublicOfChina
+            }
+            FontdbLanguage::Nepali_Nepal => <usvg::fontdb::Language>::Nepali_Nepal,
+            FontdbLanguage::Norwegian_Bokmal_Norway => {
+                <usvg::fontdb::Language>::Norwegian_Bokmal_Norway
+            }
+            FontdbLanguage::Norwegian_Nynorsk_Norway => {
+                <usvg::fontdb::Language>::Norwegian_Nynorsk_Norway
+            }
+            FontdbLanguage::Occitan_France => <usvg::fontdb::Language>::Occitan_France,
+            FontdbLanguage::Odia_India => <usvg::fontdb::Language>::Odia_India,
+            FontdbLanguage::Pashto_Afghanistan => <usvg::fontdb::Language>::Pashto_Afghanistan,
+            FontdbLanguage::Polish_Poland => <usvg::fontdb::Language>::Polish_Poland,
+            FontdbLanguage::Portuguese_Brazil => <usvg::fontdb::Language>::Portuguese_Brazil,
+            FontdbLanguage::Portuguese_Portugal => <usvg::fontdb::Language>::Portuguese_Portugal,
+            FontdbLanguage::Punjabi_India => <usvg::fontdb::Language>::Punjabi_India,
+            FontdbLanguage::Quechua_Bolivia => <usvg::fontdb::Language>::Quechua_Bolivia,
+            FontdbLanguage::Quechua_Ecuador => <usvg::fontdb::Language>::Quechua_Ecuador,
+            FontdbLanguage::Quechua_Peru => <usvg::fontdb::Language>::Quechua_Peru,
+            FontdbLanguage::Romanian_Romania => <usvg::fontdb::Language>::Romanian_Romania,
+            FontdbLanguage::Romansh_Switzerland => <usvg::fontdb::Language>::Romansh_Switzerland,
+            FontdbLanguage::Russian_Russia => <usvg::fontdb::Language>::Russian_Russia,
+            FontdbLanguage::Sami_Inari_Finland => <usvg::fontdb::Language>::Sami_Inari_Finland,
+            FontdbLanguage::Sami_Lule_Norway => <usvg::fontdb::Language>::Sami_Lule_Norway,
+            FontdbLanguage::Sami_Lule_Sweden => <usvg::fontdb::Language>::Sami_Lule_Sweden,
+            FontdbLanguage::Sami_Northern_Finland => {
+                <usvg::fontdb::Language>::Sami_Northern_Finland
+            }
+            FontdbLanguage::Sami_Northern_Norway => <usvg::fontdb::Language>::Sami_Northern_Norway,
+            FontdbLanguage::Sami_Northern_Sweden => <usvg::fontdb::Language>::Sami_Northern_Sweden,
+            FontdbLanguage::Sami_Skolt_Finland => <usvg::fontdb::Language>::Sami_Skolt_Finland,
+            FontdbLanguage::Sami_Southern_Norway => <usvg::fontdb::Language>::Sami_Southern_Norway,
+            FontdbLanguage::Sami_Southern_Sweden => <usvg::fontdb::Language>::Sami_Southern_Sweden,
+            FontdbLanguage::Sanskrit_India => <usvg::fontdb::Language>::Sanskrit_India,
+            FontdbLanguage::Serbian_Cyrillic_BosniaAndHerzegovina => {
+                <usvg::fontdb::Language>::Serbian_Cyrillic_BosniaAndHerzegovina
+            }
+            FontdbLanguage::Serbian_Cyrillic_Serbia => {
+                <usvg::fontdb::Language>::Serbian_Cyrillic_Serbia
+            }
+            FontdbLanguage::Serbian_Latin_BosniaAndHerzegovina => {
+                <usvg::fontdb::Language>::Serbian_Latin_BosniaAndHerzegovina
+            }
+            FontdbLanguage::Serbian_Latin_Serbia => <usvg::fontdb::Language>::Serbian_Latin_Serbia,
+            FontdbLanguage::SesothoSaLeboa_SouthAfrica => {
+                <usvg::fontdb::Language>::SesothoSaLeboa_SouthAfrica
+            }
+            FontdbLanguage::Setswana_SouthAfrica => <usvg::fontdb::Language>::Setswana_SouthAfrica,
+            FontdbLanguage::Sinhala_SriLanka => <usvg::fontdb::Language>::Sinhala_SriLanka,
+            FontdbLanguage::Slovak_Slovakia => <usvg::fontdb::Language>::Slovak_Slovakia,
+            FontdbLanguage::Slovenian_Slovenia => <usvg::fontdb::Language>::Slovenian_Slovenia,
+            FontdbLanguage::Spanish_Argentina => <usvg::fontdb::Language>::Spanish_Argentina,
+            FontdbLanguage::Spanish_Bolivia => <usvg::fontdb::Language>::Spanish_Bolivia,
+            FontdbLanguage::Spanish_Chile => <usvg::fontdb::Language>::Spanish_Chile,
+            FontdbLanguage::Spanish_Colombia => <usvg::fontdb::Language>::Spanish_Colombia,
+            FontdbLanguage::Spanish_CostaRica => <usvg::fontdb::Language>::Spanish_CostaRica,
+            FontdbLanguage::Spanish_DominicanRepublic => {
+                <usvg::fontdb::Language>::Spanish_DominicanRepublic
+            }
+            FontdbLanguage::Spanish_Ecuador => <usvg::fontdb::Language>::Spanish_Ecuador,
+            FontdbLanguage::Spanish_ElSalvador => <usvg::fontdb::Language>::Spanish_ElSalvador,
+            FontdbLanguage::Spanish_Guatemala => <usvg::fontdb::Language>::Spanish_Guatemala,
+            FontdbLanguage::Spanish_Honduras => <usvg::fontdb::Language>::Spanish_Honduras,
+            FontdbLanguage::Spanish_Mexico => <usvg::fontdb::Language>::Spanish_Mexico,
+            FontdbLanguage::Spanish_Nicaragua => <usvg::fontdb::Language>::Spanish_Nicaragua,
+            FontdbLanguage::Spanish_Panama => <usvg::fontdb::Language>::Spanish_Panama,
+            FontdbLanguage::Spanish_Paraguay => <usvg::fontdb::Language>::Spanish_Paraguay,
+            FontdbLanguage::Spanish_Peru => <usvg::fontdb::Language>::Spanish_Peru,
+            FontdbLanguage::Spanish_PuertoRico => <usvg::fontdb::Language>::Spanish_PuertoRico,
+            FontdbLanguage::Spanish_ModernSort_Spain => {
+                <usvg::fontdb::Language>::Spanish_ModernSort_Spain
+            }
+            FontdbLanguage::Spanish_TraditionalSort_Spain => {
+                <usvg::fontdb::Language>::Spanish_TraditionalSort_Spain
+            }
+            FontdbLanguage::Spanish_UnitedStates => <usvg::fontdb::Language>::Spanish_UnitedStates,
+            FontdbLanguage::Spanish_Uruguay => <usvg::fontdb::Language>::Spanish_Uruguay,
+            FontdbLanguage::Spanish_Venezuela => <usvg::fontdb::Language>::Spanish_Venezuela,
+            FontdbLanguage::Swedish_Finland => <usvg::fontdb::Language>::Swedish_Finland,
+            FontdbLanguage::Swedish_Sweden => <usvg::fontdb::Language>::Swedish_Sweden,
+            FontdbLanguage::Syriac_Syria => <usvg::fontdb::Language>::Syriac_Syria,
+            FontdbLanguage::Tajik_Cyrillic_Tajikistan => {
+                <usvg::fontdb::Language>::Tajik_Cyrillic_Tajikistan
+            }
+            FontdbLanguage::Tamazight_Latin_Algeria => {
+                <usvg::fontdb::Language>::Tamazight_Latin_Algeria
+            }
+            FontdbLanguage::Tamil_India => <usvg::fontdb::Language>::Tamil_India,
+            FontdbLanguage::Tatar_Russia => <usvg::fontdb::Language>::Tatar_Russia,
+            FontdbLanguage::Telugu_India => <usvg::fontdb::Language>::Telugu_India,
+            FontdbLanguage::Thai_Thailand => <usvg::fontdb::Language>::Thai_Thailand,
+            FontdbLanguage::Tibetan_PRC => <usvg::fontdb::Language>::Tibetan_PRC,
+            FontdbLanguage::Turkish_Turkey => <usvg::fontdb::Language>::Turkish_Turkey,
+            FontdbLanguage::Turkmen_Turkmenistan => <usvg::fontdb::Language>::Turkmen_Turkmenistan,
+            FontdbLanguage::Uighur_PRC => <usvg::fontdb::Language>::Uighur_PRC,
+            FontdbLanguage::Ukrainian_Ukraine => <usvg::fontdb::Language>::Ukrainian_Ukraine,
+            FontdbLanguage::UpperSorbian_Germany => <usvg::fontdb::Language>::UpperSorbian_Germany,
+            FontdbLanguage::Urdu_IslamicRepublicOfPakistan => {
+                <usvg::fontdb::Language>::Urdu_IslamicRepublicOfPakistan
+            }
+            FontdbLanguage::Uzbek_Cyrillic_Uzbekistan => {
+                <usvg::fontdb::Language>::Uzbek_Cyrillic_Uzbekistan
+            }
+            FontdbLanguage::Uzbek_Latin_Uzbekistan => {
+                <usvg::fontdb::Language>::Uzbek_Latin_Uzbekistan
+            }
+            FontdbLanguage::Vietnamese_Vietnam => <usvg::fontdb::Language>::Vietnamese_Vietnam,
+            FontdbLanguage::Welsh_UnitedKingdom => <usvg::fontdb::Language>::Welsh_UnitedKingdom,
+            FontdbLanguage::Wolof_Senegal => <usvg::fontdb::Language>::Wolof_Senegal,
+            FontdbLanguage::Yakut_Russia => <usvg::fontdb::Language>::Yakut_Russia,
+            FontdbLanguage::Yi_PRC => <usvg::fontdb::Language>::Yi_PRC,
+            FontdbLanguage::Yoruba_Nigeria => <usvg::fontdb::Language>::Yoruba_Nigeria,
+        }
+    }
+}
+impl From<usvg::fontdb::Language> for FontdbLanguage {
+    fn from(v: usvg::fontdb::Language) -> Self {
+        match v {
+            <usvg::fontdb::Language>::Unknown => FontdbLanguage::Unknown,
+            <usvg::fontdb::Language>::Afrikaans_SouthAfrica => {
+                FontdbLanguage::Afrikaans_SouthAfrica
+            }
+            <usvg::fontdb::Language>::Albanian_Albania => FontdbLanguage::Albanian_Albania,
+            <usvg::fontdb::Language>::Alsatian_France => FontdbLanguage::Alsatian_France,
+            <usvg::fontdb::Language>::Amharic_Ethiopia => FontdbLanguage::Amharic_Ethiopia,
+            <usvg::fontdb::Language>::Arabic_Algeria => FontdbLanguage::Arabic_Algeria,
+            <usvg::fontdb::Language>::Arabic_Bahrain => FontdbLanguage::Arabic_Bahrain,
+            <usvg::fontdb::Language>::Arabic_Egypt => FontdbLanguage::Arabic_Egypt,
+            <usvg::fontdb::Language>::Arabic_Iraq => FontdbLanguage::Arabic_Iraq,
+            <usvg::fontdb::Language>::Arabic_Jordan => FontdbLanguage::Arabic_Jordan,
+            <usvg::fontdb::Language>::Arabic_Kuwait => FontdbLanguage::Arabic_Kuwait,
+            <usvg::fontdb::Language>::Arabic_Lebanon => FontdbLanguage::Arabic_Lebanon,
+            <usvg::fontdb::Language>::Arabic_Libya => FontdbLanguage::Arabic_Libya,
+            <usvg::fontdb::Language>::Arabic_Morocco => FontdbLanguage::Arabic_Morocco,
+            <usvg::fontdb::Language>::Arabic_Oman => FontdbLanguage::Arabic_Oman,
+            <usvg::fontdb::Language>::Arabic_Qatar => FontdbLanguage::Arabic_Qatar,
+            <usvg::fontdb::Language>::Arabic_SaudiArabia => FontdbLanguage::Arabic_SaudiArabia,
+            <usvg::fontdb::Language>::Arabic_Syria => FontdbLanguage::Arabic_Syria,
+            <usvg::fontdb::Language>::Arabic_Tunisia => FontdbLanguage::Arabic_Tunisia,
+            <usvg::fontdb::Language>::Arabic_UAE => FontdbLanguage::Arabic_UAE,
+            <usvg::fontdb::Language>::Arabic_Yemen => FontdbLanguage::Arabic_Yemen,
+            <usvg::fontdb::Language>::Armenian_Armenia => FontdbLanguage::Armenian_Armenia,
+            <usvg::fontdb::Language>::Assamese_India => FontdbLanguage::Assamese_India,
+            <usvg::fontdb::Language>::Azeri_Cyrillic_Azerbaijan => {
+                FontdbLanguage::Azeri_Cyrillic_Azerbaijan
+            }
+            <usvg::fontdb::Language>::Azeri_Latin_Azerbaijan => {
+                FontdbLanguage::Azeri_Latin_Azerbaijan
+            }
+            <usvg::fontdb::Language>::Bashkir_Russia => FontdbLanguage::Bashkir_Russia,
+            <usvg::fontdb::Language>::Basque_Basque => FontdbLanguage::Basque_Basque,
+            <usvg::fontdb::Language>::Belarusian_Belarus => FontdbLanguage::Belarusian_Belarus,
+            <usvg::fontdb::Language>::Bengali_Bangladesh => FontdbLanguage::Bengali_Bangladesh,
+            <usvg::fontdb::Language>::Bengali_India => FontdbLanguage::Bengali_India,
+            <usvg::fontdb::Language>::Bosnian_Cyrillic_BosniaAndHerzegovina => {
+                FontdbLanguage::Bosnian_Cyrillic_BosniaAndHerzegovina
+            }
+            <usvg::fontdb::Language>::Bosnian_Latin_BosniaAndHerzegovina => {
+                FontdbLanguage::Bosnian_Latin_BosniaAndHerzegovina
+            }
+            <usvg::fontdb::Language>::Breton_France => FontdbLanguage::Breton_France,
+            <usvg::fontdb::Language>::Bulgarian_Bulgaria => FontdbLanguage::Bulgarian_Bulgaria,
+            <usvg::fontdb::Language>::Catalan_Catalan => FontdbLanguage::Catalan_Catalan,
+            <usvg::fontdb::Language>::Chinese_HongKongSAR => FontdbLanguage::Chinese_HongKongSAR,
+            <usvg::fontdb::Language>::Chinese_MacaoSAR => FontdbLanguage::Chinese_MacaoSAR,
+            <usvg::fontdb::Language>::Chinese_PeoplesRepublicOfChina => {
+                FontdbLanguage::Chinese_PeoplesRepublicOfChina
+            }
+            <usvg::fontdb::Language>::Chinese_Singapore => FontdbLanguage::Chinese_Singapore,
+            <usvg::fontdb::Language>::Chinese_Taiwan => FontdbLanguage::Chinese_Taiwan,
+            <usvg::fontdb::Language>::Corsican_France => FontdbLanguage::Corsican_France,
+            <usvg::fontdb::Language>::Croatian_Croatia => FontdbLanguage::Croatian_Croatia,
+            <usvg::fontdb::Language>::Croatian_Latin_BosniaAndHerzegovina => {
+                FontdbLanguage::Croatian_Latin_BosniaAndHerzegovina
+            }
+            <usvg::fontdb::Language>::Czech_CzechRepublic => FontdbLanguage::Czech_CzechRepublic,
+            <usvg::fontdb::Language>::Danish_Denmark => FontdbLanguage::Danish_Denmark,
+            <usvg::fontdb::Language>::Dari_Afghanistan => FontdbLanguage::Dari_Afghanistan,
+            <usvg::fontdb::Language>::Divehi_Maldives => FontdbLanguage::Divehi_Maldives,
+            <usvg::fontdb::Language>::Dutch_Belgium => FontdbLanguage::Dutch_Belgium,
+            <usvg::fontdb::Language>::Dutch_Netherlands => FontdbLanguage::Dutch_Netherlands,
+            <usvg::fontdb::Language>::English_Australia => FontdbLanguage::English_Australia,
+            <usvg::fontdb::Language>::English_Belize => FontdbLanguage::English_Belize,
+            <usvg::fontdb::Language>::English_Canada => FontdbLanguage::English_Canada,
+            <usvg::fontdb::Language>::English_Caribbean => FontdbLanguage::English_Caribbean,
+            <usvg::fontdb::Language>::English_India => FontdbLanguage::English_India,
+            <usvg::fontdb::Language>::English_Ireland => FontdbLanguage::English_Ireland,
+            <usvg::fontdb::Language>::English_Jamaica => FontdbLanguage::English_Jamaica,
+            <usvg::fontdb::Language>::English_Malaysia => FontdbLanguage::English_Malaysia,
+            <usvg::fontdb::Language>::English_NewZealand => FontdbLanguage::English_NewZealand,
+            <usvg::fontdb::Language>::English_RepublicOfThePhilippines => {
+                FontdbLanguage::English_RepublicOfThePhilippines
+            }
+            <usvg::fontdb::Language>::English_Singapore => FontdbLanguage::English_Singapore,
+            <usvg::fontdb::Language>::English_SouthAfrica => FontdbLanguage::English_SouthAfrica,
+            <usvg::fontdb::Language>::English_TrinidadAndTobago => {
+                FontdbLanguage::English_TrinidadAndTobago
+            }
+            <usvg::fontdb::Language>::English_UnitedKingdom => {
+                FontdbLanguage::English_UnitedKingdom
+            }
+            <usvg::fontdb::Language>::English_UnitedStates => FontdbLanguage::English_UnitedStates,
+            <usvg::fontdb::Language>::English_Zimbabwe => FontdbLanguage::English_Zimbabwe,
+            <usvg::fontdb::Language>::Estonian_Estonia => FontdbLanguage::Estonian_Estonia,
+            <usvg::fontdb::Language>::Faroese_FaroeIslands => FontdbLanguage::Faroese_FaroeIslands,
+            <usvg::fontdb::Language>::Filipino_Philippines => FontdbLanguage::Filipino_Philippines,
+            <usvg::fontdb::Language>::Finnish_Finland => FontdbLanguage::Finnish_Finland,
+            <usvg::fontdb::Language>::French_Belgium => FontdbLanguage::French_Belgium,
+            <usvg::fontdb::Language>::French_Canada => FontdbLanguage::French_Canada,
+            <usvg::fontdb::Language>::French_France => FontdbLanguage::French_France,
+            <usvg::fontdb::Language>::French_Luxembourg => FontdbLanguage::French_Luxembourg,
+            <usvg::fontdb::Language>::French_PrincipalityOfMonaco => {
+                FontdbLanguage::French_PrincipalityOfMonaco
+            }
+            <usvg::fontdb::Language>::French_Switzerland => FontdbLanguage::French_Switzerland,
+            <usvg::fontdb::Language>::Frisian_Netherlands => FontdbLanguage::Frisian_Netherlands,
+            <usvg::fontdb::Language>::Galician_Galician => FontdbLanguage::Galician_Galician,
+            <usvg::fontdb::Language>::Georgian_Georgia => FontdbLanguage::Georgian_Georgia,
+            <usvg::fontdb::Language>::German_Austria => FontdbLanguage::German_Austria,
+            <usvg::fontdb::Language>::German_Germany => FontdbLanguage::German_Germany,
+            <usvg::fontdb::Language>::German_Liechtenstein => FontdbLanguage::German_Liechtenstein,
+            <usvg::fontdb::Language>::German_Luxembourg => FontdbLanguage::German_Luxembourg,
+            <usvg::fontdb::Language>::German_Switzerland => FontdbLanguage::German_Switzerland,
+            <usvg::fontdb::Language>::Greek_Greece => FontdbLanguage::Greek_Greece,
+            <usvg::fontdb::Language>::Greenlandic_Greenland => {
+                FontdbLanguage::Greenlandic_Greenland
+            }
+            <usvg::fontdb::Language>::Gujarati_India => FontdbLanguage::Gujarati_India,
+            <usvg::fontdb::Language>::Hausa_Latin_Nigeria => FontdbLanguage::Hausa_Latin_Nigeria,
+            <usvg::fontdb::Language>::Hebrew_Israel => FontdbLanguage::Hebrew_Israel,
+            <usvg::fontdb::Language>::Hindi_India => FontdbLanguage::Hindi_India,
+            <usvg::fontdb::Language>::Hungarian_Hungary => FontdbLanguage::Hungarian_Hungary,
+            <usvg::fontdb::Language>::Icelandic_Iceland => FontdbLanguage::Icelandic_Iceland,
+            <usvg::fontdb::Language>::Igbo_Nigeria => FontdbLanguage::Igbo_Nigeria,
+            <usvg::fontdb::Language>::Indonesian_Indonesia => FontdbLanguage::Indonesian_Indonesia,
+            <usvg::fontdb::Language>::Inuktitut_Canada => FontdbLanguage::Inuktitut_Canada,
+            <usvg::fontdb::Language>::Inuktitut_Latin_Canada => {
+                FontdbLanguage::Inuktitut_Latin_Canada
+            }
+            <usvg::fontdb::Language>::Irish_Ireland => FontdbLanguage::Irish_Ireland,
+            <usvg::fontdb::Language>::isiXhosa_SouthAfrica => FontdbLanguage::isiXhosa_SouthAfrica,
+            <usvg::fontdb::Language>::isiZulu_SouthAfrica => FontdbLanguage::isiZulu_SouthAfrica,
+            <usvg::fontdb::Language>::Italian_Italy => FontdbLanguage::Italian_Italy,
+            <usvg::fontdb::Language>::Italian_Switzerland => FontdbLanguage::Italian_Switzerland,
+            <usvg::fontdb::Language>::Japanese_Japan => FontdbLanguage::Japanese_Japan,
+            <usvg::fontdb::Language>::Kannada_India => FontdbLanguage::Kannada_India,
+            <usvg::fontdb::Language>::Kazakh_Kazakhstan => FontdbLanguage::Kazakh_Kazakhstan,
+            <usvg::fontdb::Language>::Khmer_Cambodia => FontdbLanguage::Khmer_Cambodia,
+            <usvg::fontdb::Language>::Kiche_Guatemala => FontdbLanguage::Kiche_Guatemala,
+            <usvg::fontdb::Language>::Kinyarwanda_Rwanda => FontdbLanguage::Kinyarwanda_Rwanda,
+            <usvg::fontdb::Language>::Kiswahili_Kenya => FontdbLanguage::Kiswahili_Kenya,
+            <usvg::fontdb::Language>::Konkani_India => FontdbLanguage::Konkani_India,
+            <usvg::fontdb::Language>::Korean_Korea => FontdbLanguage::Korean_Korea,
+            <usvg::fontdb::Language>::Kyrgyz_Kyrgyzstan => FontdbLanguage::Kyrgyz_Kyrgyzstan,
+            <usvg::fontdb::Language>::Lao_LaoPDR => FontdbLanguage::Lao_LaoPDR,
+            <usvg::fontdb::Language>::Latvian_Latvia => FontdbLanguage::Latvian_Latvia,
+            <usvg::fontdb::Language>::Lithuanian_Lithuania => FontdbLanguage::Lithuanian_Lithuania,
+            <usvg::fontdb::Language>::LowerSorbian_Germany => FontdbLanguage::LowerSorbian_Germany,
+            <usvg::fontdb::Language>::Luxembourgish_Luxembourg => {
+                FontdbLanguage::Luxembourgish_Luxembourg
+            }
+            <usvg::fontdb::Language>::Macedonian_NorthMacedonia => {
+                FontdbLanguage::Macedonian_NorthMacedonia
+            }
+            <usvg::fontdb::Language>::Malay_BruneiDarussalam => {
+                FontdbLanguage::Malay_BruneiDarussalam
+            }
+            <usvg::fontdb::Language>::Malay_Malaysia => FontdbLanguage::Malay_Malaysia,
+            <usvg::fontdb::Language>::Malayalam_India => FontdbLanguage::Malayalam_India,
+            <usvg::fontdb::Language>::Maltese_Malta => FontdbLanguage::Maltese_Malta,
+            <usvg::fontdb::Language>::Maori_NewZealand => FontdbLanguage::Maori_NewZealand,
+            <usvg::fontdb::Language>::Mapudungun_Chile => FontdbLanguage::Mapudungun_Chile,
+            <usvg::fontdb::Language>::Marathi_India => FontdbLanguage::Marathi_India,
+            <usvg::fontdb::Language>::Mohawk_Mohawk => FontdbLanguage::Mohawk_Mohawk,
+            <usvg::fontdb::Language>::Mongolian_Cyrillic_Mongolia => {
+                FontdbLanguage::Mongolian_Cyrillic_Mongolia
+            }
+            <usvg::fontdb::Language>::Mongolian_Traditional_PeoplesRepublicOfChina => {
+                FontdbLanguage::Mongolian_Traditional_PeoplesRepublicOfChina
+            }
+            <usvg::fontdb::Language>::Nepali_Nepal => FontdbLanguage::Nepali_Nepal,
+            <usvg::fontdb::Language>::Norwegian_Bokmal_Norway => {
+                FontdbLanguage::Norwegian_Bokmal_Norway
+            }
+            <usvg::fontdb::Language>::Norwegian_Nynorsk_Norway => {
+                FontdbLanguage::Norwegian_Nynorsk_Norway
+            }
+            <usvg::fontdb::Language>::Occitan_France => FontdbLanguage::Occitan_France,
+            <usvg::fontdb::Language>::Odia_India => FontdbLanguage::Odia_India,
+            <usvg::fontdb::Language>::Pashto_Afghanistan => FontdbLanguage::Pashto_Afghanistan,
+            <usvg::fontdb::Language>::Polish_Poland => FontdbLanguage::Polish_Poland,
+            <usvg::fontdb::Language>::Portuguese_Brazil => FontdbLanguage::Portuguese_Brazil,
+            <usvg::fontdb::Language>::Portuguese_Portugal => FontdbLanguage::Portuguese_Portugal,
+            <usvg::fontdb::Language>::Punjabi_India => FontdbLanguage::Punjabi_India,
+            <usvg::fontdb::Language>::Quechua_Bolivia => FontdbLanguage::Quechua_Bolivia,
+            <usvg::fontdb::Language>::Quechua_Ecuador => FontdbLanguage::Quechua_Ecuador,
+            <usvg::fontdb::Language>::Quechua_Peru => FontdbLanguage::Quechua_Peru,
+            <usvg::fontdb::Language>::Romanian_Romania => FontdbLanguage::Romanian_Romania,
+            <usvg::fontdb::Language>::Romansh_Switzerland => FontdbLanguage::Romansh_Switzerland,
+            <usvg::fontdb::Language>::Russian_Russia => FontdbLanguage::Russian_Russia,
+            <usvg::fontdb::Language>::Sami_Inari_Finland => FontdbLanguage::Sami_Inari_Finland,
+            <usvg::fontdb::Language>::Sami_Lule_Norway => FontdbLanguage::Sami_Lule_Norway,
+            <usvg::fontdb::Language>::Sami_Lule_Sweden => FontdbLanguage::Sami_Lule_Sweden,
+            <usvg::fontdb::Language>::Sami_Northern_Finland => {
+                FontdbLanguage::Sami_Northern_Finland
+            }
+            <usvg::fontdb::Language>::Sami_Northern_Norway => FontdbLanguage::Sami_Northern_Norway,
+            <usvg::fontdb::Language>::Sami_Northern_Sweden => FontdbLanguage::Sami_Northern_Sweden,
+            <usvg::fontdb::Language>::Sami_Skolt_Finland => FontdbLanguage::Sami_Skolt_Finland,
+            <usvg::fontdb::Language>::Sami_Southern_Norway => FontdbLanguage::Sami_Southern_Norway,
+            <usvg::fontdb::Language>::Sami_Southern_Sweden => FontdbLanguage::Sami_Southern_Sweden,
+            <usvg::fontdb::Language>::Sanskrit_India => FontdbLanguage::Sanskrit_India,
+            <usvg::fontdb::Language>::Serbian_Cyrillic_BosniaAndHerzegovina => {
+                FontdbLanguage::Serbian_Cyrillic_BosniaAndHerzegovina
+            }
+            <usvg::fontdb::Language>::Serbian_Cyrillic_Serbia => {
+                FontdbLanguage::Serbian_Cyrillic_Serbia
+            }
+            <usvg::fontdb::Language>::Serbian_Latin_BosniaAndHerzegovina => {
+                FontdbLanguage::Serbian_Latin_BosniaAndHerzegovina
+            }
+            <usvg::fontdb::Language>::Serbian_Latin_Serbia => FontdbLanguage::Serbian_Latin_Serbia,
+            <usvg::fontdb::Language>::SesothoSaLeboa_SouthAfrica => {
+                FontdbLanguage::SesothoSaLeboa_SouthAfrica
+            }
+            <usvg::fontdb::Language>::Setswana_SouthAfrica => FontdbLanguage::Setswana_SouthAfrica,
+            <usvg::fontdb::Language>::Sinhala_SriLanka => FontdbLanguage::Sinhala_SriLanka,
+            <usvg::fontdb::Language>::Slovak_Slovakia => FontdbLanguage::Slovak_Slovakia,
+            <usvg::fontdb::Language>::Slovenian_Slovenia => FontdbLanguage::Slovenian_Slovenia,
+            <usvg::fontdb::Language>::Spanish_Argentina => FontdbLanguage::Spanish_Argentina,
+            <usvg::fontdb::Language>::Spanish_Bolivia => FontdbLanguage::Spanish_Bolivia,
+            <usvg::fontdb::Language>::Spanish_Chile => FontdbLanguage::Spanish_Chile,
+            <usvg::fontdb::Language>::Spanish_Colombia => FontdbLanguage::Spanish_Colombia,
+            <usvg::fontdb::Language>::Spanish_CostaRica => FontdbLanguage::Spanish_CostaRica,
+            <usvg::fontdb::Language>::Spanish_DominicanRepublic => {
+                FontdbLanguage::Spanish_DominicanRepublic
+            }
+            <usvg::fontdb::Language>::Spanish_Ecuador => FontdbLanguage::Spanish_Ecuador,
+            <usvg::fontdb::Language>::Spanish_ElSalvador => FontdbLanguage::Spanish_ElSalvador,
+            <usvg::fontdb::Language>::Spanish_Guatemala => FontdbLanguage::Spanish_Guatemala,
+            <usvg::fontdb::Language>::Spanish_Honduras => FontdbLanguage::Spanish_Honduras,
+            <usvg::fontdb::Language>::Spanish_Mexico => FontdbLanguage::Spanish_Mexico,
+            <usvg::fontdb::Language>::Spanish_Nicaragua => FontdbLanguage::Spanish_Nicaragua,
+            <usvg::fontdb::Language>::Spanish_Panama => FontdbLanguage::Spanish_Panama,
+            <usvg::fontdb::Language>::Spanish_Paraguay => FontdbLanguage::Spanish_Paraguay,
+            <usvg::fontdb::Language>::Spanish_Peru => FontdbLanguage::Spanish_Peru,
+            <usvg::fontdb::Language>::Spanish_PuertoRico => FontdbLanguage::Spanish_PuertoRico,
+            <usvg::fontdb::Language>::Spanish_ModernSort_Spain => {
+                FontdbLanguage::Spanish_ModernSort_Spain
+            }
+            <usvg::fontdb::Language>::Spanish_TraditionalSort_Spain => {
+                FontdbLanguage::Spanish_TraditionalSort_Spain
+            }
+            <usvg::fontdb::Language>::Spanish_UnitedStates => FontdbLanguage::Spanish_UnitedStates,
+            <usvg::fontdb::Language>::Spanish_Uruguay => FontdbLanguage::Spanish_Uruguay,
+            <usvg::fontdb::Language>::Spanish_Venezuela => FontdbLanguage::Spanish_Venezuela,
+            <usvg::fontdb::Language>::Swedish_Finland => FontdbLanguage::Swedish_Finland,
+            <usvg::fontdb::Language>::Swedish_Sweden => FontdbLanguage::Swedish_Sweden,
+            <usvg::fontdb::Language>::Syriac_Syria => FontdbLanguage::Syriac_Syria,
+            <usvg::fontdb::Language>::Tajik_Cyrillic_Tajikistan => {
+                FontdbLanguage::Tajik_Cyrillic_Tajikistan
+            }
+            <usvg::fontdb::Language>::Tamazight_Latin_Algeria => {
+                FontdbLanguage::Tamazight_Latin_Algeria
+            }
+            <usvg::fontdb::Language>::Tamil_India => FontdbLanguage::Tamil_India,
+            <usvg::fontdb::Language>::Tatar_Russia => FontdbLanguage::Tatar_Russia,
+            <usvg::fontdb::Language>::Telugu_India => FontdbLanguage::Telugu_India,
+            <usvg::fontdb::Language>::Thai_Thailand => FontdbLanguage::Thai_Thailand,
+            <usvg::fontdb::Language>::Tibetan_PRC => FontdbLanguage::Tibetan_PRC,
+            <usvg::fontdb::Language>::Turkish_Turkey => FontdbLanguage::Turkish_Turkey,
+            <usvg::fontdb::Language>::Turkmen_Turkmenistan => FontdbLanguage::Turkmen_Turkmenistan,
+            <usvg::fontdb::Language>::Uighur_PRC => FontdbLanguage::Uighur_PRC,
+            <usvg::fontdb::Language>::Ukrainian_Ukraine => FontdbLanguage::Ukrainian_Ukraine,
+            <usvg::fontdb::Language>::UpperSorbian_Germany => FontdbLanguage::UpperSorbian_Germany,
+            <usvg::fontdb::Language>::Urdu_IslamicRepublicOfPakistan => {
+                FontdbLanguage::Urdu_IslamicRepublicOfPakistan
+            }
+            <usvg::fontdb::Language>::Uzbek_Cyrillic_Uzbekistan => {
+                FontdbLanguage::Uzbek_Cyrillic_Uzbekistan
+            }
+            <usvg::fontdb::Language>::Uzbek_Latin_Uzbekistan => {
+                FontdbLanguage::Uzbek_Latin_Uzbekistan
+            }
+            <usvg::fontdb::Language>::Vietnamese_Vietnam => FontdbLanguage::Vietnamese_Vietnam,
+            <usvg::fontdb::Language>::Welsh_UnitedKingdom => FontdbLanguage::Welsh_UnitedKingdom,
+            <usvg::fontdb::Language>::Wolof_Senegal => FontdbLanguage::Wolof_Senegal,
+            <usvg::fontdb::Language>::Yakut_Russia => FontdbLanguage::Yakut_Russia,
+            <usvg::fontdb::Language>::Yi_PRC => FontdbLanguage::Yi_PRC,
+            <usvg::fontdb::Language>::Yoruba_Nigeria => FontdbLanguage::Yoruba_Nigeria,
+        }
+    }
+}
 impl From<FontdbStretch> for usvg::fontdb::Stretch {
     fn from(v: FontdbStretch) -> Self {
         match v {
@@ -8500,6 +8359,18 @@ impl FontdbFaceInfo {
         })
     }
     #[napi(getter)]
+    pub fn families(&self) -> Result<Vec<(String, FontdbLanguage)>, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            v.families
+                .clone()
+                .iter()
+                .map(|(x0, x1)| (x0.to_string(), FontdbLanguage::from(*x1)))
+                .collect()
+        })
+    }
+    #[napi(getter)]
     pub fn post_script_name(&self) -> Result<String, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
@@ -8538,117 +8409,6 @@ impl FontdbFaceInfo {
             let v = __inner;
             v.monospaced
         })
-    }
-}
-#[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-pub struct ResvgPngBytesTask {
-    recv: Resvg,
-    params: Option<RenderParams>,
-}
-impl Task for ResvgPngBytesTask {
-    type Output = Vec<u8>;
-    type JsValue = <Vec<u8> as IntoJs>::Js;
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.recv.png_bytes(self.params.clone())
-    }
-    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-        Ok(out.into_js())
-    }
-}
-#[napi]
-impl Resvg {
-    #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-    #[napi(ts_return_type = "Promise<Buffer>")]
-    pub fn render_png_async(
-        &self,
-        params: Option<RenderParams>,
-        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> Result<AsyncTask<ResvgPngBytesTask>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            AsyncTask::with_optional_signal(
-                ResvgPngBytesTask {
-                    recv: self.clone(),
-                    params,
-                },
-                signal.map(|s| s.0),
-            )
-        })())
-    }
-}
-#[doc = " `toString` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-pub struct ResvgSvgTextTask {
-    recv: Resvg,
-    options: Option<WriteOptions>,
-}
-impl Task for ResvgSvgTextTask {
-    type Output = String;
-    type JsValue = <String as IntoJs>::Js;
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.recv.svg_text(self.options.clone())
-    }
-    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-        Ok(out.into_js())
-    }
-}
-#[napi]
-impl Resvg {
-    #[doc = " `toString` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-    #[napi(ts_return_type = "Promise<string>")]
-    pub fn to_string_async(
-        &self,
-        options: Option<WriteOptions>,
-        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> Result<AsyncTask<ResvgSvgTextTask>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            AsyncTask::with_optional_signal(
-                ResvgSvgTextTask {
-                    recv: self.clone(),
-                    options,
-                },
-                signal.map(|s| s.0),
-            )
-        })())
-    }
-}
-#[doc = " `renderRaw` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-pub struct ResvgRawPixelsTask {
-    recv: Resvg,
-    params: Option<RenderParams>,
-}
-impl Task for ResvgRawPixelsTask {
-    type Output = (u32, u32, Vec<u8>);
-    type JsValue = <(u32, u32, Vec<u8>) as IntoJs>::Js;
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.recv.raw_pixels(self.params.clone())
-    }
-    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-        Ok(out.into_js())
-    }
-}
-#[napi]
-impl Resvg {
-    #[doc = " `renderRaw` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-    #[napi(ts_return_type = "Promise<RawImage>")]
-    pub fn render_raw_async(
-        &self,
-        params: Option<RenderParams>,
-        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> Result<AsyncTask<ResvgRawPixelsTask>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            AsyncTask::with_optional_signal(
-                ResvgRawPixelsTask {
-                    recv: self.clone(),
-                    params,
-                },
-                signal.map(|s| s.0),
-            )
-        })())
     }
 }
 #[napi(namespace = "usvg")]
@@ -8719,6 +8479,21 @@ impl UsvgPositionedGlyph {
     #[napi]
     pub fn dispose(&mut self) -> Result<(), String> {
         self.inner.dispose("PositionedGlyph")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPrimitive {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Primitive")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8857,7 +8632,6 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         return Ok(());
     }
     let classes: &[(Option<&str>, &str)] = &[
-        (None, "Resvg"),
         (Some("fontdb"), "Database"),
         (Some("fontdb"), "FaceInfo"),
         (Some("guard"), "FontResolver"),
@@ -8865,7 +8639,9 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("svgtypes"), "Color"),
         (Some("tiny_skia"), "Color"),
         (Some("tiny_skia"), "IntSize"),
+        (Some("tiny_skia"), "NonZeroRect"),
         (Some("tiny_skia"), "Pixmap"),
+        (Some("tiny_skia"), "Point"),
         (Some("tiny_skia"), "Rect"),
         (Some("tiny_skia"), "Size"),
         (Some("tiny_skia"), "Transform"),
@@ -8883,6 +8659,7 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("usvg"), "Path"),
         (Some("usvg"), "Pattern"),
         (Some("usvg"), "PositionedGlyph"),
+        (Some("usvg"), "Primitive"),
         (Some("usvg"), "RadialGradient"),
         (Some("usvg"), "Span"),
         (Some("usvg"), "Text"),
@@ -8901,107 +8678,6 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         proto.set_property(key, dispose)?;
     }
     Ok(())
-}
-#[napi]
-impl FontDatabase {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "FontDatabase",
-            &[],
-            &["isEmpty", "len"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "FontDatabase".to_string()
-    }
-}
-#[napi]
-impl FontFace {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "FontFace",
-            &[
-                "index",
-                "postScriptName",
-                "style",
-                "weight",
-                "stretch",
-                "monospaced",
-                "families",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "FontFace".to_string()
-    }
-}
-#[napi]
-impl Resvg {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Resvg",
-            &["disposed", "width", "height"],
-            &[
-                "hasTextNodes",
-                "hasDefsNodes",
-                "opacity",
-                "blendMode",
-                "hasChildren",
-            ],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Resvg".to_string()
-    }
 }
 #[napi(namespace = "svgtypes")]
 impl SvgtypesColor {
@@ -9191,6 +8867,37 @@ impl TinySkiaRect {
     }
 }
 #[napi(namespace = "tiny_skia")]
+impl TinySkiaNonZeroRect {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "NonZeroRect",
+            &["disposed"],
+            &[
+                "left", "top", "right", "bottom", "x", "y", "width", "height",
+            ],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "NonZeroRect".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
 impl TinySkiaSize {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -9217,6 +8924,35 @@ impl TinySkiaSize {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Size".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaPoint {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Point",
+            &["x", "y", "disposed"],
+            &["isZero", "isFinite", "length"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Point".to_string()
     }
 }
 #[napi(namespace = "fontdb")]
@@ -9642,6 +9378,35 @@ impl UsvgPositionedGlyph {
     }
 }
 #[napi(namespace = "usvg")]
+impl UsvgPrimitive {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Primitive",
+            &["rect", "colorInterpolation", "result", "kind", "disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Primitive".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
 impl UsvgSpan {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -9896,6 +9661,7 @@ impl FontdbFaceInfo {
             "FaceInfo",
             &[
                 "index",
+                "families",
                 "postScriptName",
                 "style",
                 "weight",

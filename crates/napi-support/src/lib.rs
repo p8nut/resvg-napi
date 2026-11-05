@@ -4,8 +4,8 @@
 //!
 //! - [`contained`]: a panic becomes a JS error instead of aborting the process.
 //! - [`Thrown`]: an error carrying a `code` of the binding's choosing.
-//! - [`logs`]: what the wrapped crates report through `log`, bounded, globally
-//!   and per document.
+//! - [`logs`]: what the wrapped crates report through `log`, bounded,
+//!   for the whole process.
 //! - [`fs`]: reads of caller-named files, capped.
 //! - [`Signal`]: an `AbortSignal` argument, checked before napi converts it.
 //! - [`inspect`]: what `console.log` prints for a class instance.
@@ -402,13 +402,13 @@ pub fn spawn<R: Send + 'static, J: ToNapiValue + TypeName>(
 
 pub mod logs {
     //! The wrapped crates report recoverable problems through `log`. Nothing
-    //! consumes it by default, so those messages are lost; this buffers them,
-    //! for the whole process ([`take`]) and per document ([`Logs`]).
+    //! consumes it by default, so those messages are lost; this buffers them
+    //! for the whole process ([`take`]).
 
     use napi::{Error, Result};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
 
-    /// Entries kept per buffer, the truncation marker included.
+    /// Entries kept, the truncation marker included.
     pub const CAP: usize = 500;
 
     static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -427,36 +427,6 @@ pub mod logs {
         }
     }
 
-    thread_local! {
-        /// Set while a document parses or renders on this thread, so its
-        /// messages can be told apart from a concurrent render's.
-        static SINK: std::cell::RefCell<Option<Vec<String>>> =
-            const { std::cell::RefCell::new(None) };
-    }
-
-    /// One document's messages, shared with the clones its async work runs on.
-    #[derive(Default, Clone)]
-    pub struct Logs(Arc<Mutex<Vec<String>>>);
-
-    impl Logs {
-        /// Runs `f` with this thread's messages routed here as well.
-        pub fn scope<T>(&self, f: impl FnOnce() -> T) -> T {
-            let outer = SINK.with(|s| s.replace(Some(Vec::new())));
-            let out = f();
-            let got = SINK.with(|s| s.replace(outer)).unwrap_or_default();
-            let mut buf = self.0.lock().unwrap_or_else(|e| e.into_inner());
-            for line in got {
-                push_capped(&mut buf, line);
-            }
-            out
-        }
-
-        /// Drains this document's messages.
-        pub fn take(&self) -> Vec<String> {
-            std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()))
-        }
-    }
-
     struct Collector;
     static COLLECTOR: Collector = Collector;
 
@@ -467,11 +437,6 @@ pub mod logs {
 
         fn log(&self, record: &log::Record) {
             let line = format!("{} {}: {}", record.level(), record.target(), record.args());
-            SINK.with(|s| {
-                if let Some(buf) = s.borrow_mut().as_mut() {
-                    push_capped(buf, line.clone());
-                }
-            });
             // Bounded: a pathological input must not grow this forever.
             // Poison-tolerant like every other diagnostics lock: a panic
             // elsewhere must not switch logging off for the process.
@@ -494,7 +459,7 @@ pub mod logs {
         Ok(())
     }
 
-    /// Drains the messages collected since the last call, from every document
+    /// Drains the messages collected since the last call, from every call
     /// and thread.
     pub fn take() -> Vec<String> {
         std::mem::take(&mut *LOGS.lock().unwrap_or_else(|e| e.into_inner()))

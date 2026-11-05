@@ -5,10 +5,6 @@
 // `[Symbol.dispose]` is set when the module loads, only where the
 // runtime has the symbol.
 
-export interface Resvg {
-  [Symbol.dispose](): void
-}
-
 export declare namespace fontdb {
   export interface Database {
     [Symbol.dispose](): void
@@ -40,7 +36,13 @@ export declare namespace tiny_skia {
   export interface IntSize {
     [Symbol.dispose](): void
   }
+  export interface NonZeroRect {
+    [Symbol.dispose](): void
+  }
   export interface Pixmap {
+    [Symbol.dispose](): void
+  }
+  export interface Point {
     [Symbol.dispose](): void
   }
   export interface Rect {
@@ -97,6 +99,9 @@ export declare namespace usvg {
   export interface PositionedGlyph {
     [Symbol.dispose](): void
   }
+  export interface Primitive {
+    [Symbol.dispose](): void
+  }
   export interface RadialGradient {
     [Symbol.dispose](): void
   }
@@ -125,563 +130,8 @@ export declare namespace usvg {
  */
 export declare const __napiBindingTarget: 'native' | 'wasm32-wasi' | 'wasm32-wasip1'
 
-/** Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form). */
-export declare class FontDatabase {
-  /**
-   * Which face this database would pick for a CSS font request.
-   *
-   * Decision, not a derivation: `fontdb::Query` borrows a `&[Family]`
-   * whose `Name` variant holds a `&str`, so it cannot be rebuilt from a
-   * JS object. The request is taken apart into plain arguments instead;
-   * `serif`, `sans-serif`, `cursive`, `fantasy` and `monospace` are
-   * understood as the generic families.
-   */
-  query(families: Array<string>, weight?: number | undefined | null, italic?: boolean | undefined | null): FontFace | null
-  /**
-   * Raw bytes of a face, by PostScript name (see `faces()`).
-   *
-   * Decision, not a derivation: upstream exposes this through
-   * `with_face_data<P: FnOnce(&[u8], u32) -> T>` plus an opaque `ID`.
-   * Neither a closure nor that key crosses to JS, so the lookup key is
-   * the PostScript name and the bytes are copied out.
-   */
-  faceData(postScriptName: string): Buffer | null
-  /**
-   * The name a family resolves to: a generic keyword (`serif`,
-   * `sans-serif`, `cursive`, `fantasy`, `monospace`) becomes the family
-   * this database maps it to, any other name comes back as is.
-   */
-  familyName(family: string): string
-  /**
-   * Where a face was loaded from, and its index in that file or
-   * buffer. `null` for a face this database does not hold.
-   */
-  faceSource(face: FontFace): FaceSource | null
-  constructor()
-  /**
-   * Loads a font data into the `Database`.
-   *
-   * Will load all font faces in case of a font collection.
-   */
-  loadFontData(data: Uint8Array): void
-  /**
-   * Loads a font file into the `Database`.
-   *
-   * Will load all font faces in case of a font collection.
-   */
-  loadFontFile(path: string): void
-  /**
-   * Loads font files from the selected directory into the `Database`.
-   *
-   * This method will scan directories recursively.
-   *
-   * Will load `ttf`, `otf`, `ttc` and `otc` fonts.
-   *
-   * Unlike other `load_*` methods, this one doesn't return an error.
-   * It will simply skip malformed fonts and will print a warning into the log for each of them.
-   */
-  loadFontsDir(dir: string): void
-  /**
-   * Attempts to load system fonts.
-   *
-   * Supports Windows, Linux and macOS.
-   *
-   * System fonts loading is a surprisingly complicated task,
-   * mostly unsolvable without interacting with system libraries.
-   * And since `fontdb` tries to be small and portable, this method
-   * will simply scan some predefined directories.
-   * Which means that fonts that are not in those directories must
-   * be added manually.
-   */
-  loadSystemFonts(): void
-  /**
-   * Removes a font face by `id` from the database.
-   *
-   * Returns `false` while attempting to remove a non-existing font face.
-   *
-   * Useful when you want to ignore some specific font face(s)
-   * after loading a large directory with fonts.
-   * Or a specific face from a font.
-   */
-  removeFace(id: FontFace): void
-  /** Returns `true` if the `Database` contains no font faces. */
-  isEmpty(): boolean
-  /**
-   * Returns the number of font faces in the `Database`.
-   *
-   * Note that `Database` stores font faces, not fonts.
-   * For example, if a caller will try to load a font collection (`*.ttc`) that contains 5 faces,
-   * then the `Database` will load 5 font faces and this method will return 5, not 1.
-   */
-  len(): number
-  /** Sets the family that will be used by `Family::Serif`. */
-  setSerifFamily(family: string): void
-  /** Sets the family that will be used by `Family::SansSerif`. */
-  setSansSerifFamily(family: string): void
-  /** Sets the family that will be used by `Family::Cursive`. */
-  setCursiveFamily(family: string): void
-  /** Sets the family that will be used by `Family::Fantasy`. */
-  setFantasyFamily(family: string): void
-  /** Sets the family that will be used by `Family::Monospace`. */
-  setMonospaceFamily(family: string): void
-  /**
-   * Returns an iterator over the internal storage.
-   *
-   * This can be used for manual font matching.
-   */
-  faces(): Array<FontFace>
-  /**
-   * Selects a `FaceInfo` by `id`.
-   *
-   * Returns `None` if a face with such ID was already removed,
-   * or this ID belong to the other `Database`.
-   */
-  face(id: FontFace): FontFace | null
-  /**
-   * Transfers ownership of shared font data back to the font database. This is the reverse operation
-   * of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped
-   * from a file on disk, then that mapping is closed and the data becomes private to the process again.
-   */
-  makeFaceDataUnshared(id: FontFace): void
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** Read-only view of a `FaceInfo`. */
-export declare class FontFace {
-  get index(): number
-  get postScriptName(): string
-  get style(): FontFaceStyle
-  get weight(): number
-  get stretch(): Stretch
-  get monospaced(): boolean
-  /** Family names of this face, English (US) first when present. */
-  get families(): Array<string>
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** A parsed SVG, ready to be rendered any number of times. */
-export declare class Resvg {
-  constructor(svg: string | Uint8Array, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Uint8Array> | undefined | null)
-  /**
-   * Frees the parsed tree, the source and the images now, not at garbage
-   * collection; every later call throws. Also `[Symbol.dispose]` where
-   * the runtime has it, so `using doc = new Resvg(svg)` frees it at the
-   * end of the block. An async call holding the tree keeps it.
-   */
-  dispose(): void
-  /** Whether `dispose` has been called. */
-  get disposed(): boolean
-  /**
-   * Hrefs of `<image>` elements that neither the supplied buffers nor the
-   * filesystem could resolve. Feed them back with `resolveImage`.
-   */
-  pendingImages(): Array<string>
-  /**
-   * Drains what usvg and resvg reported while parsing and rendering
-   * this document, async twins included, and nothing from any other.
-   * Collected only once `setLogLevel` has set a level.
-   */
-  takeLogs(): Array<string>
-  /**
-   * Named font families requested by `<text>` that the database does not
-   * carry, so the text was rendered with a fallback face. Load them with
-   * `FontDatabase` and re-parse to fix the output.
-   */
-  pendingFonts(): Array<string>
-  /**
-   * Supplies one image and re-parses the document.
-   *
-   * Pass everything you already have through the constructor's `images`
-   * argument, or `resolveImages`, instead: this re-parses once per call.
-   */
-  resolveImage(href: string, data: Uint8Array): void
-  /**
-   * Supplies several images and re-parses the document once: what
-   * `pendingImages()` asked for, fetched, handed back in one call.
-   * An href the document does not use is kept, not an error.
-   */
-  resolveImages(images: Record<string, Uint8Array>): void
-  get width(): number
-  get height(): number
-  /** Renders to a PNG buffer. */
-  renderPng(params?: RenderParams | undefined | null): Buffer
-  /**
-   * Parses on a worker thread. Same arguments as the constructor, and the
-   * resolved instance still reports `pendingImages` / `pendingFonts`.
-   */
-  static parseAsync(svg: string | Uint8Array, options?: RenderOptions | undefined | null, fonts?: FontDatabase | undefined | null, images?: Record<string, Uint8Array> | undefined | null, signal?: AbortSignal | undefined | null): Promise<Resvg>
-  /**
-   * Image size.
-   *
-   * Size of an image that should be created to fit the SVG.
-   *
-   * `width` and `height` in SVG.
-   *
-   * Note that this does not necessarily represent the bounding box of the
-   * rendered contents. Use
-   * [`self.root().abs_layer_bounding_box()`](Group::abs_layer_bounding_box)
-   * to retrieve it instead.
-   */
-  size(): Dimensions
-  /** Checks if the current tree has any text nodes. */
-  hasTextNodes(): boolean
-  /** Checks if the current tree has any `defs` nodes. */
-  hasDefsNodes(): boolean
-  /** Returns the font database that applies to all text nodes in the tree. */
-  fontdb(): FontDatabase
-  /**
-   * Element's transform.
-   *
-   * This is a relative transform. The one that is set via the `transform` attribute in SVG.
-   */
-  transform(): Matrix
-  /**
-   * Element's absolute transform.
-   *
-   * Contains all ancestors transforms including group's transform.
-   *
-   * Note that subroots, like clipPaths, masks and patterns, have their own root transform,
-   * which isn't affected by the node that references this subroot.
-   */
-  absTransform(): Matrix
-  /**
-   * Group opacity.
-   *
-   * After the group is rendered we should combine
-   * it with a parent group using the specified opacity.
-   */
-  opacity(): number
-  /**
-   * Group blend mode.
-   *
-   * `mix-blend-mode` in SVG.
-   */
-  blendMode(): BlendMode
-  /**
-   * Element's object bounding box.
-   *
-   * `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms.
-   *
-   * Can be set to `None` in case of an empty group.
-   */
-  boundingBox(): BBox
-  /**
-   * Element's bounding box in canvas coordinates.
-   *
-   * `userSpaceOnUse` in SVG terms.
-   */
-  absBoundingBox(): BBox
-  /**
-   * Element's object bounding box including stroke.
-   *
-   * Similar to `bounding_box`, but includes stroke.
-   */
-  strokeBoundingBox(): BBox
-  /**
-   * Element's bounding box including stroke in user coordinates.
-   *
-   * Similar to `abs_bounding_box`, but includes stroke.
-   */
-  absStrokeBoundingBox(): BBox
-  /**
-   * Element's "layer" bounding box in object units.
-   *
-   * Conceptually, this is `stroke_bounding_box` expanded and/or clipped
-   * by `filters_bounding_box`, but also including all the children.
-   * Groups without filters are additionally clipped by their clip path.
-   * This is the bounding box `resvg` will later use to allocate layers/pixmaps
-   * during isolated groups rendering.
-   *
-   * Only groups have it, because only groups can have filters.
-   * For other nodes layer bounding box is the same as stroke bounding box.
-   *
-   * Unlike other bounding boxes, cannot have zero size.
-   *
-   * Returns 0x0x1x1 for empty groups.
-   */
-  layerBoundingBox(): BBox
-  /** Element's "layer" bounding box in canvas units. */
-  absLayerBoundingBox(): BBox
-  /** Returns `true` if the group has any children. */
-  hasChildren(): boolean
-  /**
-   * Calculates a node's filter bounding box.
-   *
-   * Filters with `objectBoundingBox` and missing or zero `bounding_box` would be ignored.
-   *
-   * Note that a filter region can act like a clipping rectangle,
-   * therefore this function can produce a bounding box smaller than `bounding_box`.
-   *
-   * Returns `None` when then group has no filters.
-   *
-   * This function is very fast, that's why we do not store this bbox as a `Group` field.
-   */
-  filtersBoundingBox(): BBox | null
-  /**
-   * Writes the parsed tree back out as a usvg-simplified SVG string.
-   *
-   * Text is converted to paths unless `preserveText` is set.
-   */
-  toString(options?: WriteOptions | undefined | null): string
-  /** Renders to raw RGBA8 pixels. */
-  renderRaw(params?: RenderParams | undefined | null): RawImage
-  /** `renderPng` on a worker thread: the work leaves the event loop, and a
-  queued call is dropped when the signal fires. */
-  renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
-  /** `toString` on a worker thread: the work leaves the event loop, and a
-  queued call is dropped when the signal fires. */
-  toStringAsync(options?: WriteOptions | undefined | null, signal?: AbortSignal | undefined | null): Promise<string>
-  /** `renderRaw` on a worker thread: the work leaves the event loop, and a
-  queued call is dropped when the signal fires. */
-  renderRawAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<RawImage>
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** A rectangle in SVG user units. */
-export interface BBox {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 /**
- * A blending mode property.
- *
- * `mix-blend-mode` attribute in the SVG.
- */
-export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'colorDodge' | 'colorBurn' | 'hardLight' | 'softLight' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity' | 'plusLighter'
-
-/** A width/height pair in SVG user units. */
-export interface Dimensions {
-  width: number
-  height: number
-}
-
-/**
- * `fontdb::Source` with the face index `faceSource` pairs it with.
- * The bytes of a `binary` or `sharedFile` source are not copied
- * here; `faceData` reads them.
- */
-export interface FaceSource {
-  kind: 'binary' | 'file' | 'sharedFile'
-  /** The file, for `file` and `sharedFile`. */
-  path?: string
-  /** Index of the face in a collection (`.ttc`), 0 otherwise. */
-  index: number
-}
-
-/** Allows italic or oblique faces to be selected. */
-export type FontFaceStyle = 'normal' | 'italic' | 'oblique'
-
-/**
- * An image rendering method.
- *
- * `image-rendering` attribute in the SVG.
- */
-export type ImageRendering = 'optimizeQuality' | 'optimizeSpeed' | 'smooth' | 'highQuality' | 'crispEdges' | 'pixelated'
-
-/**
- * An affine transform. Field names and order are tiny-skia's.
- *
- * They are *not* the order of SVG's `matrix(a b c d e f)`, which
- * takes `sx ky kx sy tx ty` -- upstream says so itself: "we are
- * using column-major-column-vector matrix notation, therefore it's
- * ky-kx, not kx-ky". Reading these positionally into a `matrix()`
- * string mirrors the transform, silently. Name the fields:
- * `matrix(${m.sx} ${m.ky} ${m.kx} ${m.sy} ${m.tx} ${m.ty})`.
- */
-export interface Matrix {
-  sx: number
-  kx: number
-  ky: number
-  sy: number
-  tx: number
-  ty: number
-}
-
-/** usvg's own name for a parse failure, carried as `error.code`. */
-export type ParseErrorCode = 'NotAnUtf8Str' | 'SvgzFeatureNotEnabled' | 'MalformedGZip' | 'ElementsLimitReached' | 'InvalidSize' | 'ParsingFailed'
-
-/**
- * One command of a path outline, in the document's own units.
- *
- * `points` holds x,y pairs, and how many depends on `type`: one point
- * for `moveTo` and `lineTo`, two for `quadTo` (control, end), three
- * for `cubicTo` (two controls, end), none for `close`.
- *
- * A flat list rather than a variant per command: a path can carry
- * thousands of segments, and one tagged object each is already the
- * expensive part.
- */
-export interface PathSegment {
-  type: 'moveTo' | 'lineTo' | 'quadTo' | 'cubicTo' | 'close'
-  points: Array<number>
-}
-
-/** Un-premultiplied RGBA8 pixels, row-major, no padding. */
-export interface RawImage {
-  width: number
-  height: number
-  data: Buffer
-}
-
-/**
- * One-shot: parse and render a PNG entirely off the event loop.
- *
- * Uses the process-wide system font database and resolves images off the
- * filesystem only. For a custom `FontDatabase`, supplied image buffers or
- * the `pendingImages` / `pendingFonts` reports, use `Resvg.parseAsync`.
- */
-export declare function renderAsync(svg: string | Uint8Array, options?: RenderOptions | undefined | null, params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
-
-/**
- * Mirror of `usvg::Options`. Every field is optional; omitted fields
- * keep the usvg default.
- */
-export interface RenderOptions {
-  /**
-   * Directory that will be used during relative paths resolving.
-   *
-   * Expected to be the same as the directory that contains the SVG file,
-   * but can be set to any.
-   *
-   * Default: `None`
-   */
-  resourcesDir?: string
-  /**
-   * Target DPI.
-   *
-   * Impacts units conversion.
-   *
-   * Default: 96.0
-   */
-  dpi?: number
-  /**
-   * A default font family.
-   *
-   * Will be used when no `font-family` attribute is set in the SVG.
-   *
-   * Default: Times New Roman
-   */
-  fontFamily?: string
-  /**
-   * A default font size.
-   *
-   * Will be used when no `font-size` attribute is set in the SVG.
-   *
-   * Default: 12
-   */
-  fontSize?: number
-  /**
-   * A list of languages.
-   *
-   * Will be used to resolve a `systemLanguage` conditional attribute.
-   *
-   * Format: en, en-US.
-   *
-   * Default: `[en]`
-   */
-  languages?: Array<string>
-  /**
-   * Specifies the default shape rendering method.
-   *
-   * Will be used when an SVG element's `shape-rendering` property is set to `auto`.
-   *
-   * Default: GeometricPrecision
-   */
-  shapeRendering?: ShapeRendering
-  /**
-   * Specifies the default text rendering method.
-   *
-   * Will be used when an SVG element's `text-rendering` property is set to `auto`.
-   *
-   * Default: OptimizeLegibility
-   */
-  textRendering?: TextRendering
-  /**
-   * Specifies the default image rendering method.
-   *
-   * Will be used when an SVG element's `image-rendering` property is set to `auto`.
-   *
-   * Default: OptimizeQuality
-   */
-  imageRendering?: ImageRendering
-  /**
-   * Default viewport size to assume if there is no `viewBox` attribute and
-   * the `width` or `height` attributes are relative.
-   *
-   * Default: `(100, 100)`
-   */
-  defaultSizeWidth?: number
-  /**
-   * Default viewport size to assume if there is no `viewBox` attribute and
-   * the `width` or `height` attributes are relative.
-   *
-   * Default: `(100, 100)`
-   */
-  defaultSizeHeight?: number
-  /**
-   * A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
-   * certain attributes.
-   */
-  styleSheet?: string
-  /**
-   * The directory disk reads may not leave. Default: `resourcesDir`.
-   *
-   * Hrefs still resolve against `resourcesDir`; this only widens
-   * what they may reach, so a template beside a shared assets folder
-   * can use `../assets/logo.png`. Not a usvg option: usvg reads any
-   * path, and this binding confines it.
-   */
-  resourcesRoot?: string
-}
-
-/** Output size / scaling of one render pass. */
-export interface RenderParams {
-  /** Uniform scale factor. Default: 1. */
-  scale?: number
-  /**
-   * Target width in px, rounded to the nearest; keeps the aspect
-   * ratio and overrides `scale`.
-   */
-  width?: number
-  /**
-   * Target height in px, rounded to the nearest; keeps the aspect
-   * ratio and overrides `scale`.
-   */
-  height?: number
-  /**
-   * Background colour: any CSS3 colour string, e.g. `#eee`, `teal`,
-   * `rgba(255, 0, 0, .5)`. Default: transparent.
-   */
-  background?: string
-  /**
-   * Render only this rectangle, in SVG user units. `scale` / `width` /
-   * `height` then size the crop, not the full viewport. Feed it
-   * `absLayerBoundingBox()` to trim the document to its content.
-   */
-  crop?: BBox
-  /**
-   * Refuse a canvas of more than this many pixels (4 bytes each).
-   * Default: 2^26, an 8192x8192 canvas or 256 MiB. Without a cap a
-   * document declaring `width="200000"` aborts the whole process
-   * on the failed allocation, which no try/catch can recover.
-   *
-   * It bounds the canvas only: a group with a filter, opacity, mask or
-   * clip path renders through a layer of its own, which resvg lets grow
-   * to 5x the canvas each way, measured in the group's own coordinates:
-   * a rotated or skewed group gets the box around that, larger still.
-   * Raise it knowing a render can then allocate many times this cap.
-   */
-  maxPixels?: number
-}
-
-/**
- * Starts collecting what usvg and resvg report.
+ * Starts collecting what the wrapped crates log.
  *
  * `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to
  * call repeatedly: the logger is installed once, the level always applies.
@@ -689,89 +139,10 @@ export interface RenderParams {
 export declare function setLogLevel(level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'): void
 
 /**
- * A shape rendering method.
- *
- * `shape-rendering` attribute in the SVG.
- */
-export type ShapeRendering = 'optimizeSpeed' | 'crispEdges' | 'geometricPrecision'
-
-/** A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass). */
-export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
-
-/**
- * Drains the messages collected since the last call, from every
- * document and thread. Concurrent renders interleave here; a
- * document's own `takeLogs()` holds only its messages.
+ * Drains the messages collected since the last call, from every call
+ * and thread: concurrent work interleaves here.
  */
 export declare function takeLogs(): Array<string>
-
-/**
- * A text rendering method.
- *
- * `text-rendering` attribute in the SVG.
- */
-export type TextRendering = 'optimizeSpeed' | 'optimizeLegibility' | 'geometricPrecision'
-
-/**
- * Mirror of `usvg::WriteOptions`, for `Resvg.toString()`. Every field is
- * optional; omitted fields keep the usvg default.
- */
-export interface WriteOptions {
-  /** Used to add a custom prefix to each element ID during writing. */
-  idPrefix?: string
-  /**
-   * Do not convert text into paths.
-   *
-   * Default: false
-   */
-  preserveText?: boolean
-  /**
-   * Set the coordinates numeric precision.
-   *
-   * Smaller precision can lead to a malformed output in some cases.
-   *
-   * Default: 8
-   */
-  coordinatesPrecision?: number
-  /**
-   * Set the transform values numeric precision.
-   *
-   * Smaller precision can lead to a malformed output in some cases.
-   *
-   * Default: 8
-   */
-  transformsPrecision?: number
-  /**
-   * Use single quote marks instead of double quote.
-   *
-   * # Examples
-   *
-   * Before:
-   *
-   * ```text
-   * <rect fill="red"/>
-   * ```
-   *
-   * After:
-   *
-   * ```text
-   * <rect fill='red'/>
-   * ```
-   *
-   * Default: disabled
-   */
-  useSingleQuote?: boolean
-  /**
-   * Indentation of nested elements: a number of spaces (0-255),
-   * `'tabs'`, or `'none'` for everything on one line. Default: 4.
-   */
-  indent?: number | 'tabs' | 'none'
-  /**
-   * Indentation of attributes, which then go one per line. Same
-   * values as `indent`. Default: `'none'`, on the element's line.
-   */
-  attributesIndent?: number | 'tabs' | 'none'
-}
 
 export declare namespace fontdb {
   /**
@@ -886,6 +257,7 @@ export declare namespace fontdb {
   /** Read-only view of a `FaceInfo`. */
   export class FaceInfo {
     get index(): number
+    get families(): Array<[string, fontdb.Language]>
     get postScriptName(): string
     get style(): fontdb.Style
     get weight(): number
@@ -903,6 +275,14 @@ export declare namespace fontdb {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type FontdbFaceInfo = FaceInfo
+  /**
+   * A face name language.
+   *
+   * Consists of Language + Region pairs.
+   *
+   * <https://learn.microsoft.com/en-us/typography/opentype/spec/name#windows-language-ids>
+   */
+  export type Language = 'unknown' | 'afrikaansSouthAfrica' | 'albanianAlbania' | 'alsatianFrance' | 'amharicEthiopia' | 'arabicAlgeria' | 'arabicBahrain' | 'arabicEgypt' | 'arabicIraq' | 'arabicJordan' | 'arabicKuwait' | 'arabicLebanon' | 'arabicLibya' | 'arabicMorocco' | 'arabicOman' | 'arabicQatar' | 'arabicSaudiArabia' | 'arabicSyria' | 'arabicTunisia' | 'arabicUae' | 'arabicYemen' | 'armenianArmenia' | 'assameseIndia' | 'azeriCyrillicAzerbaijan' | 'azeriLatinAzerbaijan' | 'bashkirRussia' | 'basqueBasque' | 'belarusianBelarus' | 'bengaliBangladesh' | 'bengaliIndia' | 'bosnianCyrillicBosniaAndHerzegovina' | 'bosnianLatinBosniaAndHerzegovina' | 'bretonFrance' | 'bulgarianBulgaria' | 'catalanCatalan' | 'chineseHongKongSar' | 'chineseMacaoSar' | 'chinesePeoplesRepublicOfChina' | 'chineseSingapore' | 'chineseTaiwan' | 'corsicanFrance' | 'croatianCroatia' | 'croatianLatinBosniaAndHerzegovina' | 'czechCzechRepublic' | 'danishDenmark' | 'dariAfghanistan' | 'divehiMaldives' | 'dutchBelgium' | 'dutchNetherlands' | 'englishAustralia' | 'englishBelize' | 'englishCanada' | 'englishCaribbean' | 'englishIndia' | 'englishIreland' | 'englishJamaica' | 'englishMalaysia' | 'englishNewZealand' | 'englishRepublicOfThePhilippines' | 'englishSingapore' | 'englishSouthAfrica' | 'englishTrinidadAndTobago' | 'englishUnitedKingdom' | 'englishUnitedStates' | 'englishZimbabwe' | 'estonianEstonia' | 'faroeseFaroeIslands' | 'filipinoPhilippines' | 'finnishFinland' | 'frenchBelgium' | 'frenchCanada' | 'frenchFrance' | 'frenchLuxembourg' | 'frenchPrincipalityOfMonaco' | 'frenchSwitzerland' | 'frisianNetherlands' | 'galicianGalician' | 'georgianGeorgia' | 'germanAustria' | 'germanGermany' | 'germanLiechtenstein' | 'germanLuxembourg' | 'germanSwitzerland' | 'greekGreece' | 'greenlandicGreenland' | 'gujaratiIndia' | 'hausaLatinNigeria' | 'hebrewIsrael' | 'hindiIndia' | 'hungarianHungary' | 'icelandicIceland' | 'igboNigeria' | 'indonesianIndonesia' | 'inuktitutCanada' | 'inuktitutLatinCanada' | 'irishIreland' | 'isiXhosaSouthAfrica' | 'isiZuluSouthAfrica' | 'italianItaly' | 'italianSwitzerland' | 'japaneseJapan' | 'kannadaIndia' | 'kazakhKazakhstan' | 'khmerCambodia' | 'kicheGuatemala' | 'kinyarwandaRwanda' | 'kiswahiliKenya' | 'konkaniIndia' | 'koreanKorea' | 'kyrgyzKyrgyzstan' | 'laoLaoPdr' | 'latvianLatvia' | 'lithuanianLithuania' | 'lowerSorbianGermany' | 'luxembourgishLuxembourg' | 'macedonianNorthMacedonia' | 'malayBruneiDarussalam' | 'malayMalaysia' | 'malayalamIndia' | 'malteseMalta' | 'maoriNewZealand' | 'mapudungunChile' | 'marathiIndia' | 'mohawkMohawk' | 'mongolianCyrillicMongolia' | 'mongolianTraditionalPeoplesRepublicOfChina' | 'nepaliNepal' | 'norwegianBokmalNorway' | 'norwegianNynorskNorway' | 'occitanFrance' | 'odiaIndia' | 'pashtoAfghanistan' | 'polishPoland' | 'portugueseBrazil' | 'portuguesePortugal' | 'punjabiIndia' | 'quechuaBolivia' | 'quechuaEcuador' | 'quechuaPeru' | 'romanianRomania' | 'romanshSwitzerland' | 'russianRussia' | 'samiInariFinland' | 'samiLuleNorway' | 'samiLuleSweden' | 'samiNorthernFinland' | 'samiNorthernNorway' | 'samiNorthernSweden' | 'samiSkoltFinland' | 'samiSouthernNorway' | 'samiSouthernSweden' | 'sanskritIndia' | 'serbianCyrillicBosniaAndHerzegovina' | 'serbianCyrillicSerbia' | 'serbianLatinBosniaAndHerzegovina' | 'serbianLatinSerbia' | 'sesothoSaLeboaSouthAfrica' | 'setswanaSouthAfrica' | 'sinhalaSriLanka' | 'slovakSlovakia' | 'slovenianSlovenia' | 'spanishArgentina' | 'spanishBolivia' | 'spanishChile' | 'spanishColombia' | 'spanishCostaRica' | 'spanishDominicanRepublic' | 'spanishEcuador' | 'spanishElSalvador' | 'spanishGuatemala' | 'spanishHonduras' | 'spanishMexico' | 'spanishNicaragua' | 'spanishPanama' | 'spanishParaguay' | 'spanishPeru' | 'spanishPuertoRico' | 'spanishModernSortSpain' | 'spanishTraditionalSortSpain' | 'spanishUnitedStates' | 'spanishUruguay' | 'spanishVenezuela' | 'swedishFinland' | 'swedishSweden' | 'syriacSyria' | 'tajikCyrillicTajikistan' | 'tamazightLatinAlgeria' | 'tamilIndia' | 'tatarRussia' | 'teluguIndia' | 'thaiThailand' | 'tibetanPrc' | 'turkishTurkey' | 'turkmenTurkmenistan' | 'uighurPrc' | 'ukrainianUkraine' | 'upperSorbianGermany' | 'urduIslamicRepublicOfPakistan' | 'uzbekCyrillicUzbekistan' | 'uzbekLatinUzbekistan' | 'vietnameseVietnam' | 'welshUnitedKingdom' | 'wolofSenegal' | 'yakutRussia' | 'yiPrc' | 'yorubaNigeria'
   /** A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass). */
   export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
   /** Allows italic or oblique faces to be selected. */
@@ -1211,6 +591,8 @@ export declare namespace tiny_skia {
     width(): number
     /** Returns height. */
     height(): number
+    /** Returns width and height as a tuple. */
+    dimensions(): [number, number]
     /** Scales current size by the specified factor. */
     scaleBy(factor: number): tiny_skia.IntSize | null
     /** Scales current size to the specified size. */
@@ -1235,6 +617,70 @@ export declare namespace tiny_skia {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type TinySkiaIntSize = IntSize
+  /**
+   * A rectangle defined by left, top, right and bottom edges.
+   *
+   * Similar to [`Rect`], but width and height guarantee to be non-zero and positive.
+   *
+   * # Guarantees
+   *
+   * - All values are finite.
+   * - Left edge is < right.
+   * - Top edge is < bottom.
+   * - Width and height are <= f32::MAX.
+   * - Width and height are > 0.0
+   *
+   * A `tiny_skia::NonZeroRect`, held by value.
+   */
+  export class NonZeroRect {
+    /** Creates new `NonZeroRect`. */
+    static fromLtrb(left: number, top: number, right: number, bottom: number): tiny_skia.NonZeroRect | null
+    /** Creates new `NonZeroRect`. */
+    static fromXywh(x: number, y: number, w: number, h: number): tiny_skia.NonZeroRect | null
+    /** Returns the left edge. */
+    left(): number
+    /** Returns the top edge. */
+    top(): number
+    /** Returns the right edge. */
+    right(): number
+    /** Returns the bottom edge. */
+    bottom(): number
+    /** Returns rect's X position. */
+    x(): number
+    /** Returns rect's Y position. */
+    y(): number
+    /** Returns rect's width. */
+    width(): number
+    /** Returns rect's height. */
+    height(): number
+    /** Returns rect's size. */
+    size(): tiny_skia.Size
+    /** Translates the rect to the specified position. */
+    translateTo(x: number, y: number): tiny_skia.NonZeroRect | null
+    /**
+     * Transforms the rect using the provided `Transform`.
+     *
+     * If the transform is a skew, the result will be a bounding box around the skewed rectangle.
+     */
+    transform(ts: tiny_skia.Transform): tiny_skia.NonZeroRect | null
+    /** Applies a bounding box transform. */
+    bboxTransform(bbox: tiny_skia.NonZeroRect): tiny_skia.NonZeroRect
+    /** Converts into [`Rect`]. */
+    toRect(): tiny_skia.Rect
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaNonZeroRect = NonZeroRect
   /**
    * A container that owns premultiplied RGBA pixels.
    *
@@ -1327,6 +773,94 @@ export declare namespace tiny_skia {
   }
   export type TinySkiaPixmap = Pixmap
   /**
+   * A point.
+   *
+   * Doesn't guarantee to be finite.
+   *
+   * A `tiny_skia::Point`, held by value.
+   */
+  export class Point {
+    /** Creates a new `Point`. */
+    static fromXy(x: number, y: number): tiny_skia.Point
+    /** Creates a point at 0x0 position. */
+    static zero(): tiny_skia.Point
+    /** Returns true if x and y are both zero. */
+    isZero(): boolean
+    /**
+     * Returns true if both x and y are measurable values.
+     *
+     * Both values are other than infinities and NaN.
+     */
+    isFinite(): boolean
+    /**
+     * Scales (fX, fY) so that length() returns one, while preserving ratio of fX to fY,
+     * if possible.
+     *
+     * If prior length is nearly zero, sets vector to (0, 0) and returns
+     * false; otherwise returns true.
+     */
+    normalize(): boolean
+    /**
+     * Sets vector to (x, y) scaled so length() returns one, and so that (x, y)
+     * is proportional to (x, y).
+     *
+     * If (x, y) length is nearly zero, sets vector to (0, 0) and returns false;
+     * otherwise returns true.
+     */
+    setNormalize(x: number, y: number): boolean
+    /** Returns the Euclidean distance from origin. */
+    length(): number
+    /**
+     * Scales vector so that distanceToOrigin() returns length, if possible.
+     *
+     * If former length is nearly zero, sets vector to (0, 0) and return false;
+     * otherwise returns true.
+     */
+    setLength(length: number): boolean
+    /**
+     * Sets vector to (x, y) scaled to length, if possible.
+     *
+     * If former length is nearly zero, sets vector to (0, 0) and return false;
+     * otherwise returns true.
+     */
+    setLengthFrom(x: number, y: number, length: number): boolean
+    /** Returns the Euclidean distance from origin. */
+    distance(other: tiny_skia.Point): number
+    /** Returns the dot product of two points. */
+    dot(other: tiny_skia.Point): number
+    /**
+     * Returns the cross product of vector and vec.
+     *
+     * Vector and vec form three-dimensional vectors with z-axis value equal to zero.
+     * The cross product is a three-dimensional vector with x-axis and y-axis values
+     * equal to zero. The cross product z-axis component is returned.
+     */
+    cross(other: tiny_skia.Point): number
+    /** Scales Point in-place by scale. */
+    scale(scale: number): void
+    get x(): number
+    set x(value: number)
+    get y(): number
+    set y(value: number)
+    /** A `Point` from a plain object of its fields. */
+    static fromObject(obj: tiny_skia.PointObject): tiny_skia.Point
+    /** Its fields, as a plain object `fromObject` takes back. */
+    toObject(): tiny_skia.PointObject
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaPoint = Point
+  /**
    * A rectangle defined by left, top, right and bottom edges.
    *
    * Can have zero width and/or height. But not a negative one.
@@ -1385,8 +919,10 @@ export declare namespace tiny_skia {
      * If the transform is a skew, the result will be a bounding box around the skewed rectangle.
      */
     transform(ts: tiny_skia.Transform): tiny_skia.Rect | null
+    /** Applies a bounding box transform. */
+    bboxTransform(bbox: tiny_skia.NonZeroRect): tiny_skia.Rect
     /** Converts into [`NonZeroRect`]. */
-    toNonZeroRect(): BBox | null
+    toNonZeroRect(): tiny_skia.NonZeroRect | null
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
@@ -1432,7 +968,7 @@ export declare namespace tiny_skia {
     /** Converts the current size to `Rect` at provided position. */
     toRect(x: number, y: number): tiny_skia.Rect | null
     /** Converts the current size to `NonZeroRect` at provided position. */
-    toNonZeroRect(x: number, y: number): BBox
+    toNonZeroRect(x: number, y: number): tiny_skia.NonZeroRect
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
@@ -1483,6 +1019,8 @@ export declare namespace tiny_skia {
      * `angle` in degrees.
      */
     static fromRotateAt(angle: number, tx: number, ty: number): tiny_skia.Transform
+    /** Converts `Rect` into a bounding box `Transform`. */
+    static fromBbox(bbox: tiny_skia.NonZeroRect): tiny_skia.Transform
     /** Checks that transform is finite. */
     isFinite(): boolean
     /** Checks that transform is finite and has non-zero scale. */
@@ -1503,6 +1041,8 @@ export declare namespace tiny_skia {
     hasSkew(): boolean
     /** Checks that transform contains a translate part. */
     hasTranslate(): boolean
+    /** Returns transform's scale part. */
+    getScale(): [number, number]
     /** Pre-scales the current transform. */
     preScale(sx: number, sy: number): tiny_skia.Transform
     /** Post-scales the current transform. */
@@ -1539,6 +1079,8 @@ export declare namespace tiny_skia {
     preConcat(other: tiny_skia.Transform): tiny_skia.Transform
     /** Post-concats the current transform. */
     postConcat(other: tiny_skia.Transform): tiny_skia.Transform
+    /** Transforms a points using the current transform. */
+    mapPoint(point: tiny_skia.Point): void
     /** Returns an inverted transform. */
     invert(): tiny_skia.Transform | null
     get sx(): number
@@ -1571,6 +1113,40 @@ export declare namespace tiny_skia {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type TinySkiaTransform = Transform
+  /** `PathSegment::CubicTo`. */
+  export interface PathSegmentCubicTo {
+    /** Discriminant. Narrow on this. */
+    type: 'cubicTo'
+    value: [tiny_skia.PointObject, tiny_skia.PointObject, tiny_skia.PointObject]
+  }
+  /** `PathSegment::LineTo`. */
+  export interface PathSegmentLineTo {
+    /** Discriminant. Narrow on this. */
+    type: 'lineTo'
+    value: tiny_skia.PointObject
+  }
+  /** `PathSegment::MoveTo`. */
+  export interface PathSegmentMoveTo {
+    /** Discriminant. Narrow on this. */
+    type: 'moveTo'
+    value: tiny_skia.PointObject
+  }
+  /** The payload-free variants of `PathSegment`. */
+  export interface PathSegmentPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'close'
+  }
+  /** `PathSegment::QuadTo`. */
+  export interface PathSegmentQuadTo {
+    /** Discriminant. Narrow on this. */
+    type: 'quadTo'
+    value: [tiny_skia.PointObject, tiny_skia.PointObject]
+  }
+  /** A `Point`'s public fields, as a plain object. */
+  export interface PointObject {
+    x: number
+    y: number
+  }
   /** A `Transform`'s public fields, as a plain object. */
   export interface TransformObject {
     sx: number
@@ -1641,7 +1217,7 @@ export declare namespace usvg {
      *
      * `x`, `y`, `width` and `height` in the SVG.
      */
-    rect(): BBox
+    rect(): tiny_skia.NonZeroRect
     /** A list of filter primitives. */
     primitives(): Array<usvg.Primitive>
     /**
@@ -1776,9 +1352,9 @@ export declare namespace usvg {
      *
      * Returns 0x0x1x1 for empty groups.
      */
-    layerBoundingBox(): BBox
+    layerBoundingBox(): tiny_skia.NonZeroRect
     /** Element's "layer" bounding box in canvas units. */
-    absLayerBoundingBox(): BBox
+    absLayerBoundingBox(): tiny_skia.NonZeroRect
     /** Group's children. */
     children(): Array<usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText>
     /** Checks if this group should be isolated during rendering. */
@@ -1797,7 +1373,7 @@ export declare namespace usvg {
      *
      * This function is very fast, that's why we do not store this bbox as a `Group` field.
      */
-    filtersBoundingBox(): BBox | null
+    filtersBoundingBox(): tiny_skia.NonZeroRect | null
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -1975,7 +1551,7 @@ export declare namespace usvg {
      *
      * `gradientTransform` in SVG.
      */
-    transform(): Matrix
+    transform(): tiny_skia.Transform
     /**
      * Gradient spreading method.
      *
@@ -2017,7 +1593,7 @@ export declare namespace usvg {
      *
      * `x`, `y`, `width` and `height` in SVG.
      */
-    rect(): BBox
+    rect(): tiny_skia.NonZeroRect
     /**
      * Mask type.
      *
@@ -2091,7 +1667,7 @@ export declare namespace usvg {
      *
      * All segments are in absolute coordinates.
      */
-    data(): Array<PathSegment>
+    data(): Array<tiny_skia.PathSegmentPlain | tiny_skia.PathSegmentMoveTo | tiny_skia.PathSegmentLineTo | tiny_skia.PathSegmentQuadTo | tiny_skia.PathSegmentCubicTo>
     /**
      * Element's absolute transform.
      *
@@ -2166,7 +1742,7 @@ export declare namespace usvg {
      *
      * `x`, `y`, `width` and `height` in SVG.
      */
-    rect(): BBox
+    rect(): tiny_skia.NonZeroRect
     /** Pattern children. */
     root(): usvg.Group
     /**
@@ -2186,10 +1762,10 @@ export declare namespace usvg {
   /** Read-only view of a `PositionedGlyph`. */
   export class PositionedGlyph {
     get fontSize(): number
-    get transform(): Matrix
-    get outlineTransform(): Matrix
-    get svgTransform(): Matrix
-    get colrTransform(): Matrix
+    get transform(): tiny_skia.Transform
+    get outlineTransform(): tiny_skia.Transform
+    get svgTransform(): tiny_skia.Transform
+    get colrTransform(): tiny_skia.Transform
     get id(): number
     get text(): string
     /**
@@ -2204,6 +1780,24 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgPositionedGlyph = PositionedGlyph
+  /** Read-only view of a `Primitive`. */
+  export class Primitive {
+    get rect(): tiny_skia.NonZeroRect
+    get colorInterpolation(): usvg.ColorInterpolation
+    get result(): string
+    get kind(): usvg.KindBlend | usvg.KindColorMatrix | usvg.KindComponentTransfer | usvg.KindComposite | usvg.KindConvolveMatrix | usvg.KindDiffuseLighting | usvg.KindDisplacementMap | usvg.KindDropShadow | usvg.KindFlood | usvg.KindGaussianBlur | usvg.KindImage | usvg.KindMerge | usvg.KindMorphology | usvg.KindOffset | usvg.KindSpecularLighting | usvg.KindTile | usvg.KindTurbulence
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgPrimitive = Primitive
   /** Read-only handle on a `usvg::RadialGradient`. */
   export class RadialGradient {
     /** `cx` coordinate. */
@@ -2230,7 +1824,7 @@ export declare namespace usvg {
      *
      * `gradientTransform` in SVG.
      */
-    transform(): Matrix
+    transform(): tiny_skia.Transform
     /**
      * Gradient spreading method.
      *
@@ -3013,15 +2607,10 @@ export declare namespace usvg {
      * the `width` or `height` attributes are relative.
      *
      * Default: `(100, 100)`
-     */
-    defaultSizeWidth?: number
-    /**
-     * Default viewport size to assume if there is no `viewBox` attribute and
-     * the `width` or `height` attributes are relative.
      *
-     * Default: `(100, 100)`
+     * A `tiny_skia.Size`: `tiny_skia.Size.fromWh(width, height)`.
      */
-    defaultSizeHeight?: number
+    defaultSize?: tiny_skia.Size
     /**
      * Specifies the way `xlink:href` in `<image>` elements should be handled.
      *
@@ -3100,13 +2689,6 @@ export declare namespace usvg {
     x: number
     y: number
     z: number
-  }
-  /** Plain view of a `Primitive`. */
-  export interface Primitive {
-    rect: BBox
-    colorInterpolation: usvg.ColorInterpolation
-    result: string
-    kind: usvg.KindBlend | usvg.KindColorMatrix | usvg.KindComponentTransfer | usvg.KindComposite | usvg.KindConvolveMatrix | usvg.KindDiffuseLighting | usvg.KindDisplacementMap | usvg.KindDropShadow | usvg.KindFlood | usvg.KindGaussianBlur | usvg.KindImage | usvg.KindMerge | usvg.KindMorphology | usvg.KindOffset | usvg.KindSpecularLighting | usvg.KindTile | usvg.KindTurbulence
   }
   /**
    * A shape rendering method.

@@ -38,29 +38,19 @@ export declare namespace toy {
   }
 }
 
-/** A new `toy.Counter`, built from the flat `Options`. */
-export declare function counter(options?: Options | undefined | null): toy.Counter
+/**
+ * Starts collecting what the wrapped crates log.
+ *
+ * `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to
+ * call repeatedly: the logger is installed once, the level always applies.
+ */
+export declare function setLogLevel(level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'): void
 
-/** Which way a counter counts. */
-export declare const enum Direction {
-  Up = 'up',
-  Down = 'down',
-}
-
-/** How to build a `Counter`: every field optional. */
-export interface Options {
-  /** What the counter is called. */
-  label?: string
-  /** How far one tick moves it. */
-  step?: number
-  direction?: Direction
-}
-
-/** Plain view of a `Point`. */
-export interface Point {
-  x: number
-  y: number
-}
+/**
+ * Drains the messages collected since the last call, from every call
+ * and thread: concurrent work interleaves here.
+ */
+export declare function takeLogs(): Array<string>
 
 export declare namespace alt {
   /**
@@ -268,6 +258,8 @@ export declare namespace toy {
     marks(): Array<toy.Dot>
     /** The first item called `name`, depth first. */
     find(name: string): toy.ItemLayer | toy.ItemDot | null
+    /** The way through the scene: a jump to `a`, a line to `d`, a stop. */
+    trail(): Array<toy.StepPlain | toy.StepJump | toy.StepLine>
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -308,6 +300,8 @@ export declare namespace toy {
      * as `joined` throws. `signal` drops the call while it is still queued.
      */
     joinedAsync(signal?: AbortSignal | undefined | null): Promise<string>
+    /** Each name with its place: a list of pairs. */
+    pairs(): Array<[string, number]>
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -338,6 +332,8 @@ export declare namespace toy {
     /** `None` for the zero vector, which has no direction. */
     normalized(): toy.Vec2 | null
     translate(dx: number, dy: number): void
+    /** `(x, y)`, a pair. */
+    parts(): [number, number]
     /** Parses a `Vec2`, as Rust's `FromStr` does. Throws when it does not parse. */
     static fromStr(s: string): toy.Vec2
     /** The `Vec2` as Rust's `Display` writes it. */
@@ -474,6 +470,23 @@ export declare namespace toy {
    * as `spin` throws. `signal` drops the call while it is still queued.
    */
   export function spinAsync(rounds: number, signal?: AbortSignal | undefined | null): Promise<number>
+  /** `Step::Jump`. */
+  export interface StepJump {
+    /** Discriminant. Narrow on this. */
+    type: 'jump'
+    value: toy.Vec2Object
+  }
+  /** `Step::Line`. */
+  export interface StepLine {
+    /** Discriminant. Narrow on this. */
+    type: 'line'
+    value: [toy.Vec2Object, toy.Vec2Object]
+  }
+  /** The payload-free variants of `Step`. */
+  export interface StepPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'stop'
+  }
   /** A `Vec2`'s public fields, as a plain object. */
   export interface Vec2Object {
     x: number

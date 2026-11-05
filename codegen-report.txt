@@ -1,34 +1,23 @@
-FaceInfo member covered by the template: families: Vec<(String,Language)>
 FaceInfo member not exposed: id: ID
 FaceInfo member not exposed: source: Source
-FaceInfo: partial mapping, emitted as read-only class FontFace
+FaceInfo: partial mapping, emitted as read-only class FaceInfo
 Font member not exposed: families: &[FontFamily]
 Font: partial mapping, emitted as read-only class Font
 Image: partial mapping, emitted as read-only class Image
 ImageKind::SVG carries Tree, which has no mappable data: emitted without a value
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
+Path: partial mapping, emitted as read-only class Path
 PositionedGlyph member not exposed: font: ID
 PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
+Primitive: partial mapping, emitted as read-only class Primitive
 Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
 TextSpan: partial mapping, emitted as read-only class TextSpan
-async twin generated: Resvg::png_bytes -> render_png_async (Promise<Buffer>)
-async twin generated: Resvg::raw_pixels -> render_raw_async (Promise<RawImage>)
-async twin generated: Resvg::svg_text -> to_string_async (Promise<String>)
 data type ID skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
-fontdb::Database method covered by the template as `face_data`: with_face_data (arg: P)
-fontdb::Database method covered by the template, not generated: face_source (returns Option<(Source,u32)>)
-fontdb::Database method covered by the template, not generated: family_name (arg: &'aFamily)
-fontdb::Database method covered by the template, not generated: new (no receiver)
-fontdb::Database method covered by the template, not generated: query (arg: &Query)
-fontdb::Database method not exposed: load_font_source (arg: Source)
-fontdb::Database method not exposed: make_shared_face_data (returns Option<(std::sync::Arc<dynAsRef<[u8]>+Send+Sync>,u32)>)
-fontdb::Database method not exposed: push_face_info (arg: FaceInfo)
 names defined more than once across the sources, keyed by module: Image
-object (String,Language) skipped: not a public struct
 object Arc<ClipPath> skipped: not a public struct
 object Arc<LinearGradient> skipped: not a public struct
 object Arc<Mask> skipped: not a public struct
@@ -44,9 +33,9 @@ object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
-payload enum Source not mapped: SharedFile carries 2 unnamed fields, and a tuple has no names to give them
-payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, ImageKind, Input, Kind, LightSource, Paint, TextFlow, TransferFunction
-payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5)
+payload enum Source not mapped: Binary carries alloc::sync::Arc<dynAsRef<[u8]>+Sync+Send>, and it maps to None
+payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, ImageKind, Input, Kind, LightSource, Paint, PathSegment, TextFlow, TransferFunction
+payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
 svgtypes::Color is a class: Value, plain data, a JS name another namespace has
 tiny_skia::Color is a class: Value, a JS name another namespace has
 tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)
@@ -54,8 +43,9 @@ tiny_skia::Color member not in the class: from_rgba_unchecked (unsafe)
 tiny_skia::Color member not in the class: premultiply (returns PremultipliedColor)
 tiny_skia::Color member not in the class: to_color_u8 (returns ColorU8)
 tiny_skia::IntSize is a class: Value
-tiny_skia::IntSize member not in the class: dimensions (returns (u32,u32))
 tiny_skia::IntSize member not in the class: to_int_rect (returns IntRect)
+tiny_skia::NonZeroRect is a class: Value
+tiny_skia::NonZeroRect member not in the class: to_int_rect (returns IntRect)
 tiny_skia::Pixmap is a class: Owned
 tiny_skia::Pixmap member not in the class: apply_mask (arg: &Mask)
 tiny_skia::Pixmap member not in the class: as_mut (returns PixmapMut<'_>)
@@ -69,47 +59,31 @@ tiny_skia::Pixmap member not in the class: pixel (returns PremultipliedColorU8)
 tiny_skia::Pixmap member not in the class: pixels (returns &[PremultipliedColorU8])
 tiny_skia::Pixmap member not in the class: pixels_mut (returns &mut[PremultipliedColorU8])
 tiny_skia::Pixmap member not in the class: stroke_path (arg: &Path)
+tiny_skia::Point is a class: Value, plain data
+tiny_skia::Point member not in the class: from_f32x2 (arg: f32x2)
+tiny_skia::Point member not in the class: to_f32x2 (returns f32x2)
 tiny_skia::Rect is a class: Value
-tiny_skia::Rect member not in the class: bbox_transform (arg: NonZeroRect)
 tiny_skia::Rect member not in the class: from_points (arg: &[Point])
 tiny_skia::Rect member not in the class: round (returns IntRect)
 tiny_skia::Rect member not in the class: round_out (returns IntRect)
 tiny_skia::Size is a class: Value
 tiny_skia::Transform is a class: Value, plain data
-tiny_skia::Transform member not in the class: from_bbox (arg: NonZeroRect)
-tiny_skia::Transform member not in the class: get_scale (returns (f32,f32))
-tiny_skia::Transform member not in the class: map_point (arg: &mutPoint)
 tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])
 usvg index bound for `*_precision` derived from POW_VEC: 12
 usvg sources: usvg-0.49.0
 usvg::ClipPath is a class: Projected
 usvg::Group is a class: Projected
-usvg::Group method not exposed: children (returns &[Node])
-usvg::Group method not exposed: clip_path (returns Option<&ClipPath>)
-usvg::Group method not exposed: mask (returns Option<&Mask>)
 usvg::Image is a class: Projected
-usvg::Image is a projection, not a copy of the flat data type
+usvg::Image is a projection, not a data type
 usvg::Mask is a class: Projected
 usvg::Node is a union of projections
-usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
-usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
-usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)
 usvg::Path is a class: Projected
-usvg::Path is a projection, not a copy of the flat data type
+usvg::Path is a projection, not a data type
 usvg::Pattern is a class: Projected
 usvg::Text is a class: Projected
-usvg::Text is a projection, not a copy of the flat data type
+usvg::Text is a projection, not a data type
 usvg::Tree is a class: Shared
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
-usvg::Tree method covered by the template as `new`: from_data (no receiver)
-usvg::Tree method covered by the template as `new`: from_data_nested (no receiver)
-usvg::Tree method covered by the template as `new`: from_str (no receiver)
-usvg::Tree method covered by the template as `new`: from_xmltree (no receiver)
-usvg::Tree method covered by the template as `to_svg_string`: to_string (arg: &WriteOptions)
-usvg::Tree method not exposed: node_by_id (returns Option<&Node>)
-usvg::Tree method not exposed: root (returns &Group)
-usvg::WriteOptions field not exposed: attributes_indent: Indent (handled manually by the template)
-usvg::WriteOptions field not exposed: indent: Indent (handled manually by the template)
 usvg::fontdb::Database is a class: SharedCow
 usvg::fontdb::Database member not in the class: face (arg: ID)
 usvg::fontdb::Database member not in the class: face_source (arg: ID)

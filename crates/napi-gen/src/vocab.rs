@@ -16,8 +16,8 @@ use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
+use crate::config;
 use crate::sources::{is_pub, self_ident};
-use crate::{config, renamed};
 
 /// Normalised textual form of a type, e.g. `Option<std::path::PathBuf>`.
 pub fn ty_str(ty: &Type) -> String {
@@ -28,8 +28,7 @@ pub fn ty_str(ty: &Type) -> String {
 ///
 /// Recognition of Rust types lives here, once. The field mapper and the method
 /// mapper then each decide how to *emit* a given `Js` -- an assignment in one
-/// case, a wrapper body in the other. Before this, "Rect means BBox" was known
-/// only to returns and "Vec<String>" only to fields.
+/// case, a wrapper body in the other.
 #[derive(Clone, PartialEq, Debug)]
 pub enum Js {
     F32,
@@ -42,12 +41,16 @@ pub enum Js {
     OptPath,
     StrList,
     Bytes,
-    Size,
-    Bbox,
-    OptBbox,
     TryUnit,
     Enum,
-    Matrix,
+    // A listed class held by value (`Copy`), by its upstream name: what the
+    // class's `__from` wraps. A plain-data one is its `<Name>Object` where a
+    // class cannot go (an object field, a union's payload).
+    Class(String),
+    OptClass(String),
+    // `Vec<(A, B)>` or `&[(A, B)]`: an `Array<[A, B]>`, each element mapped
+    // as a union's payload is.
+    TupleList(Vec<(String, Js)>),
     // A newtype over f32 with a `get(&self) -> f32`, e.g. `Opacity`.
     Scalar,
     // `Arc<T>`: shareable, so a wrapper class can own one.
@@ -73,9 +76,9 @@ pub enum Js {
     // `[u8; 4]`: an OpenType axis tag, four ASCII bytes -- `b"wght"`. A string
     // on the JS side, which is how every font tool spells it.
     Tag4,
-    // `Config::path_data_types`: a verb/point stream rather than a struct, so
-    // the template flattens it into segments.
-    PathData,
+    // `Config::iterated`: the list a method iterates, each item mapped as
+    // its type is. (The item's type, the method.)
+    Iterated(Box<Js>, String),
     // An upstream enum carrying payloads, emitted as a discriminated union.
     PayloadEnum(String),
     PayloadEnumList(String),
@@ -91,6 +94,21 @@ pub enum Payload {
     /// `Linear { slope: f32, intercept: f32 }` -- named fields, exposed under
     /// their own names, which is a better shape than wrapping them in `value`.
     Fields(Vec<(String, String)>),
+    /// `Line(Point, Point)` -- unnamed fields, exposed as `value`, an array
+    /// of them: a tuple, as `Vec<(A, B)>` is one.
+    Tuple(Vec<String>),
+}
+
+impl Payload {
+    /// The types it carries.
+    pub fn carried(&self) -> Vec<&String> {
+        match self {
+            Payload::None => Vec::new(),
+            Payload::Value(t) => vec![t],
+            Payload::Fields(f) => f.iter().map(|(_, t)| t).collect(),
+            Payload::Tuple(ts) => ts.iter().collect(),
+        }
+    }
 }
 
 /// One upstream enum whose variants carry payloads. A crate may have dozens; a rule
@@ -226,6 +244,13 @@ impl PayloadEnum {
             if vocab.classify(p).is_none() && vocab.structs.contains(bare(p)) {
                 return Ok(());
             }
+            if let Some(Js::Class(t)) = vocab.classify(p) {
+                return if vocab.plain.contains(&t) {
+                    Ok(())
+                } else {
+                    Err(format!("{t} is a class that is not plain data"))
+                };
+            }
             match vocab.classify(p) {
                 Some(
                     Js::Str
@@ -268,9 +293,8 @@ impl PayloadEnum {
 
         self.variants.iter().find_map(|(n, p)| {
             let carried: Vec<(Option<&str>, &String)> = match p {
-                Payload::None => Vec::new(),
-                Payload::Value(t) => vec![(None, t)],
                 Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
+                p => p.carried().into_iter().map(|t| (None, t)).collect(),
             };
             let sole = matches!(p, Payload::Value(_));
             carried.into_iter().find_map(|(field, t)| {
@@ -285,40 +309,6 @@ impl PayloadEnum {
     pub fn conv_ident(&self, name: &str) -> proc_macro2::Ident {
         format_ident!("{}_to_js", name.to_case(Case::Snake))
     }
-}
-
-/// Structs shaped like a 2D affine transform: exactly the `f32` fields
-/// `Config::matrix_fields` names (`sx kx ky sy tx ty`, say), and nothing else.
-///
-/// This used to be `"Transform" => Js::Matrix`, an arm keyed on a bare name --
-/// and a bare name stops meaning one type the moment a second crate is parsed.
-/// The shape is what the mapping was ever about: six numbers in that order are
-/// a matrix whatever the crate that declares them calls itself.
-pub fn matrix_like(files: &[syn::File]) -> BTreeSet<String> {
-    let want: BTreeSet<&str> = config().matrix_fields.iter().copied().collect();
-    let mut found = BTreeSet::new();
-    for item in files.iter().flat_map(|f| &f.items) {
-        let Item::Struct(st) = item else { continue };
-        if !is_pub(&st.vis) {
-            continue;
-        }
-        let Fields::Named(named) = &st.fields else {
-            continue;
-        };
-        if named.named.iter().any(|f| ty_str(&f.ty) != "f32") {
-            continue;
-        }
-        let got: BTreeSet<String> = named
-            .named
-            .iter()
-            .filter_map(|f| f.ident.as_ref())
-            .map(|i| i.to_string())
-            .collect();
-        if got.iter().map(String::as_str).collect::<BTreeSet<_>>() == want {
-            found.insert(st.ident.to_string());
-        }
-    }
-    found
 }
 
 /// Types with an `id(&self) -> &str`, directly or through a Deref the sources
@@ -378,13 +368,9 @@ pub fn payload_shape(
                     "{name}() has empty parens, which no JS shape mirrors"
                 ));
             }
-            // A tuple of more than one field has no name to give either half,
-            // so there is nothing honest to call them.
+            // Several unnamed fields: a tuple, `value: [a, b]`.
             Fields::Unnamed(f) => {
-                return Err(format!(
-                    "{name} carries {} unnamed fields, and a tuple has no names to give them",
-                    f.unnamed.len()
-                ));
+                Payload::Tuple(f.unnamed.iter().map(|x| qualify(ty_str(&x.ty))).collect())
             }
             Fields::Named(f) => Payload::Fields(
                 f.named
@@ -402,9 +388,8 @@ pub fn payload_shape(
     Ok(out)
 }
 
-/// Payload enums, found by shape. Skips any with a variant carrying more than
-/// one field or named fields: those have no single obvious `value`, and saying
-/// so in the report beats guessing.
+/// Payload enums, found by shape: an enum with a variant that carries
+/// something.
 pub fn payload_enums(
     files: &[syn::File],
     // The module these files contribute to, and the names upstream defines twice.
@@ -561,8 +546,12 @@ pub struct Vocab {
     pub ints: BTreeSet<String>,
     pub objects: BTreeSet<String>,
     pub values: BTreeSet<String>,
-    /// Structs shaped like a transform, found by `matrix_like`.
-    pub matrices: BTreeSet<String>,
+    /// The listed classes held by value (`Copy`) that a member may name by
+    /// their upstream name: no discovery source defines that name itself
+    /// (`Js::Class`).
+    pub classes: BTreeSet<String>,
+    /// Those of them that are plain data, with a `<Name>Object`.
+    pub plain: BTreeSet<String>,
 }
 
 impl Vocab {
@@ -588,8 +577,35 @@ impl Vocab {
 
     pub fn classify(&self, ty: &str) -> Option<Js> {
         let t = self.resolve(ty);
-        if self.matrices.contains(&t) {
-            return Some(Js::Matrix);
+        let unref = t.trim_start_matches('&');
+        if self.classes.contains(unref) {
+            return Some(Js::Class(unref.to_string()));
+        }
+        if let Some(inner) = unref
+            .strip_prefix("Option<")
+            .and_then(|r| r.strip_suffix('>'))
+            .map(|r| r.trim_start_matches('&'))
+            && self.classes.contains(inner)
+        {
+            return Some(Js::OptClass(inner.to_string()));
+        }
+        if let Some(it) = config().iterated.iter().find(|i| i.ty == unref) {
+            return self
+                .classify(it.item)
+                .map(|item| Js::Iterated(Box::new(item), it.via.to_string()));
+        }
+        // `Vec<(A, B)>`, `&[(A, B)]`: every element must map.
+        if let Some(inner) = unref
+            .strip_prefix("Vec<")
+            .and_then(|r| r.strip_suffix('>'))
+            .or_else(|| unref.strip_prefix('[').and_then(|r| r.strip_suffix(']')))
+            && let Some(elems) = tuple_elems(inner)
+        {
+            let mapped: Option<Vec<(String, Js)>> = elems
+                .into_iter()
+                .map(|e| self.classify(&e).map(|j| (e, j)))
+                .collect();
+            return mapped.map(Js::TupleList);
         }
         if let Some(js) = classify(&t, &self.enums, &self.scalars) {
             return Some(js);
@@ -665,11 +681,6 @@ pub fn classify(
         "Vec<u8>" | "&[u8]" | "Arc<Vec<u8>>" | "&Arc<Vec<u8>>" | "std::sync::Arc<Vec<u8>>" => {
             Js::Bytes
         }
-        // The template's domain shapes, by the upstream spellings config lists.
-        s if config().size_types.contains(&s) => Js::Size,
-        // geometry newtypes over four f32 with public accessors
-        s if config().rect_types.contains(&s) => Js::Bbox,
-        s if config().opt_rect_types.contains(&s) => Js::OptBbox,
         s if s.starts_with("Result<(),") => Js::TryUnit,
         // Arc-held definitions can be owned by a wrapper class.
         s if s.starts_with("&[Arc<") && s.ends_with(">]") => {
@@ -679,7 +690,6 @@ pub fn classify(
             Js::Handle(s[5..s.len() - 1].to_string())
         }
         s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
-        s if config().path_data_types.contains(&s) => Js::PathData,
         s if config().tag4_types.contains(&s) => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
         // Payload enums are classified by name here and given their union
@@ -779,6 +789,39 @@ pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
     out
 }
 
+/// A tuple type's elements, `(A,B)` -> `[A, B]`: split at the top level, so
+/// `(Vec<(A,B)>,C)` has two. None for anything but a tuple of two or more.
+pub fn tuple_elems(t: &str) -> Option<Vec<String>> {
+    let inner = t.strip_prefix('(')?.strip_suffix(')')?;
+    let (mut out, mut depth, mut cur) = (Vec::new(), 0i32, String::new());
+    for c in inner.chars() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(std::mem::take(&mut cur));
+                continue;
+            }
+            _ => {}
+        }
+        cur.push(c);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    (out.len() > 1).then_some(out)
+}
+
+/// What a member's type is about, [`peel_type`]'s answer, or each element's
+/// when that is a tuple: `Vec<(String,Language)>` names both.
+pub fn peeled(t: &str) -> Vec<String> {
+    let p = peel_type(t);
+    match tuple_elems(p) {
+        Some(elems) => elems.iter().flat_map(|e| peeled(e)).collect(),
+        None => vec![p.to_string()],
+    }
+}
+
 /// Every type named by a field of a public struct.
 ///
 /// `returned_types` finds what methods hand back, which is how enums behind
@@ -794,8 +837,7 @@ pub fn field_types(files: &[syn::File]) -> BTreeSet<String> {
             continue;
         }
         for f in &st.fields {
-            let t = ty_str(&f.ty);
-            out.insert(peel_type(&t).to_string());
+            out.extend(peeled(&ty_str(&f.ty)));
         }
     }
     out
@@ -906,9 +948,6 @@ pub enum Arg {
     Str,
     PathStr,
     Bytes,
-    // `Config::arg_standin`: an opaque key with no JS form, handed over as
-    // the class instance that carries it.
-    Standin,
 }
 
 /// `impl Deref for X { type Target = Y }` -> Y. Upstream uses it as inheritance
@@ -945,12 +984,6 @@ pub fn bare(key: &str) -> &str {
 
 /// The JS name of a data type, whatever its registry key.
 ///
-/// One function owns this because the naming has three rules and they were
-/// spread over eighteen call sites, only some of which knew about the rename:
-/// `Js::Object` built the ident with a bare `format_ident!` while `Js::Value`
-/// went through here, so an object called `FaceInfo` would have been emitted
-/// under that name. It only worked because FaceInfo maps partially.
-///
 /// A key can be module-qualified. A crate may define `Image` twice -- in
 /// `filter.rs` and in `mod.rs` -- and the two cannot share a bare key without the path
 /// resolving to one and the members to the other.
@@ -959,29 +992,17 @@ pub fn data_ident(ty: &str) -> proc_macro2::Ident {
         let head = module.rsplit("::").next().unwrap_or(module);
         return format_ident!("{}{name}", head.to_case(Case::Pascal));
     }
-    format_ident!("{}", renamed(config().data_renames, ty))
+    format_ident!("{}", ty)
 }
 
-/// JS name for a mapped enum.
-///
-/// `Style` alone says nothing next to another crate's `FontStyle`, and the two would
-/// sit side by side in the exports with identical variants: one is what a text
-/// run asked for, the other what a loaded face is. Renamed for the same reason
-/// `FaceInfo` is emitted as `FontFace`.
+/// JS name for a mapped enum: its upstream name.
 pub fn enum_ident(name: &str) -> proc_macro2::Ident {
-    format_ident!("{}", renamed(config().enum_renames, name))
+    format_ident!("{}", name)
 }
 
 /// JS class name for an Arc-held upstream type: `filter::Filter` -> `Filter`.
 pub fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
-    let last = ty.rsplit("::").next().unwrap_or(ty);
-    // `Config::hand_wrapped`: a type with a hand-written class keeps its name.
-    let name = config()
-        .hand_wrapped
-        .iter()
-        .find(|(h, _)| *h == ty)
-        .map_or(last, |(_, n)| n);
-    format_ident!("{}", name)
+    format_ident!("{}", ty.rsplit("::").next().unwrap_or(ty))
 }
 
 /// Rust path of that definition, as reachable from our crate.

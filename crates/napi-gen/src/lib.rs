@@ -64,38 +64,15 @@ pub struct Config {
     /// a crate it does not parse), converted from a JS value by a template
     /// function instead.
     pub converters: &'static [Converter],
-    /// A struct with these fields is a transform, mapped to `Shapes::matrix`.
-    pub matrix_fields: &'static [&'static str],
-    /// Upstream type spellings for the template's domain shapes.
-    pub size_types: &'static [&'static str],
-    pub rect_types: &'static [&'static str],
-    pub opt_rect_types: &'static [&'static str],
-    pub path_data_types: &'static [&'static str],
+    /// An `[u8; 4]` spelling: an OpenType tag, a string in JS.
     pub tag4_types: &'static [&'static str],
-    /// What the template calls those shapes: the types generated code
-    /// converts them into.
-    pub shapes: Shapes,
-    /// The upstream size type's fallible `(width, height)` constructor, as a
-    /// path from the generated file. An option field of that type is
-    /// flattened into a `*_width`/`*_height` pair and rebuilt through it.
-    pub size_new: &'static str,
-    /// An argument type JS hands over as a class instance instead: (the
-    /// upstream type, the class, and the class's method that resolves it
-    /// against the receiver before the call).
-    pub arg_standin: Option<(&'static str, &'static str, &'static str)>,
-    /// Option fields the template wires by hand; every other unmappable field
-    /// is dropped.
-    pub hand_wired_fields: &'static [&'static str],
+    /// Types JS sees as the list one of their methods iterates (see
+    /// [`Iterated`]).
+    pub iterated: &'static [Iterated],
     /// The tree's own types: never followed as data.
     pub node_types: &'static [&'static str],
     /// Conversions, not data: members never counted as unmapped data.
     pub not_data: &'static [&'static str],
-    /// Upstream handle types the template wraps by hand, with their class.
-    pub hand_wrapped: &'static [(&'static str, &'static str)],
-    /// Data types emitted under another name.
-    pub data_renames: &'static [(&'static str, &'static str)],
-    /// Enums emitted under another name.
-    pub enum_renames: &'static [(&'static str, &'static str)],
     /// Upstream Cargo features an emitted method can be gated on, and what
     /// each is for the binding crate: `"true"` (always built) or a cfg it is
     /// built under. A gate listed nowhere fails the build.
@@ -151,18 +128,17 @@ pub struct View {
     pub via: &'static str,
 }
 
-/// The template types the domain shapes become. Each has a `From` impl for
-/// every upstream spelling [`Config`] lists for it.
-pub struct Shapes {
-    /// What a `rect_types` or `opt_rect_types` value becomes.
-    pub rect: &'static str,
-    /// What a `size_types` value becomes.
-    pub size: &'static str,
-    /// What a struct with the `matrix_fields` becomes.
-    pub matrix: &'static str,
-    /// What a `path_data_types` value becomes: the segment type, and the
-    /// template function that returns a `Vec` of them.
-    pub path: (&'static str, &'static str),
+/// "A value of type `ty` is the list its method `via` iterates, each item an
+/// `item`": JS gets an `Array` of the items, each mapped as `item` maps. For a
+/// type with no JS form of its own whose content an iterator hands out (a
+/// stream of payload-enum segments, say).
+pub struct Iterated {
+    /// The type, as the generator spells it (no spaces, no `&`).
+    pub ty: &'static str,
+    /// Its `&self` method returning the iterator.
+    pub via: &'static str,
+    /// The iterator's item type, by name.
+    pub item: &'static str,
 }
 
 /// "An option field of type `ty` is supplied by an instance of `class`
@@ -222,12 +198,4 @@ pub fn namespace_of(root: &str) -> Option<&'static str> {
         .iter()
         .find(|(r, _)| *r == root)
         .map(|(_, ns)| *ns)
-}
-
-/// `name` through a rename table, or unchanged.
-pub fn renamed<'a>(table: &[(&str, &'a str)], name: &'a str) -> &'a str {
-    table
-        .iter()
-        .find(|(from, _)| *from == name)
-        .map_or(name, |(_, to)| to)
 }

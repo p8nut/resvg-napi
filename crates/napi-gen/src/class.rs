@@ -396,6 +396,16 @@ impl<'a> Classes<'a> {
             .collect()
     }
 
+    /// The classes held by value (`Copy`), by upstream name, each with
+    /// whether it is plain data: what `Vocab::classes` and `Vocab::plain`
+    /// start from.
+    pub fn by_value(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.classes
+            .iter()
+            .filter(|c| c.holding == Holding::Value)
+            .map(|c| (c.name.as_str(), !c.plain.is_empty()))
+    }
+
     /// Whether `ty` (an upstream root-relative key such as `a::Ty` or `Ty`)
     /// is a listed class of the source at `root`.
     pub fn lists(&self, root: &str, ty: &str) -> bool {
@@ -686,6 +696,21 @@ impl<'a> Classes<'a> {
                 _ => p.js_out(&v),
             };
             return Ok(Ret { ty: p.js(), conv });
+        }
+        // A tuple of numbers, booleans or strings: an array, `[A, B]`.
+        if let (None, Type::Tuple(t)) = (r, inner)
+            && let Some(prims) = t.elems.iter().map(Prim::of).collect::<Option<Vec<_>>>()
+            && prims.len() > 1
+        {
+            let tys = prims.iter().map(|p| p.js());
+            let convs = prims.iter().enumerate().map(|(i, p)| {
+                let i = syn::Index::from(i);
+                p.js_out(&quote!(#v.#i))
+            });
+            return Ok(Ret {
+                ty: quote!((#(#tys),*)),
+                conv: quote!((#(#convs),*)),
+            });
         }
         // `Arc<T>` of a class holding an `Arc`.
         if is(inner, "Arc", 1)
@@ -1136,6 +1161,14 @@ impl<'a> Classes<'a> {
                 #[derive(Clone)]
                 pub struct #obj {
                     #(pub #fields: #js,)*
+                }
+
+                // Where a class cannot go (an object field, a union's
+                // payload), the value is this object (`Js::Class`).
+                impl From<&#up> for #obj {
+                    fn from(__v: &#up) -> Self {
+                        Self { #(#fields: #to_js,)* }
+                    }
                 }
             });
             if taken.insert("from_object".into()) && taken.insert("to_object".into()) {

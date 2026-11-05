@@ -5,6 +5,20 @@ use napi_derive::napi;
 fn to_f32(v: f64) -> f32 {
     v as f32
 }
+#[doc = " Starts collecting what the wrapped crates log."]
+#[doc = ""]
+#[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
+#[doc = " call repeatedly: the logger is installed once, the level always applies."]
+#[napi(ts_args_type = "level: 'off' | 'error' | 'warn' | 'info' | 'debug' | 'trace'")]
+pub fn set_log_level(level: String) -> Result<()> {
+    napi_support::logs::set_level(&level)
+}
+#[doc = " Drains the messages collected since the last call, from every call"]
+#[doc = " and thread: concurrent work interleaves here."]
+#[napi]
+pub fn take_logs() -> Vec<String> {
+    napi_support::logs::take()
+}
 #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
 fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
     match v {
@@ -16,69 +30,9 @@ fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
     }
 }
 #[doc = " Which way a counter counts."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum Direction {
-    Up,
-    Down,
-}
-impl From<Direction> for toy::Direction {
-    fn from(v: Direction) -> Self {
-        match v {
-            Direction::Up => <toy::Direction>::Up,
-            Direction::Down => <toy::Direction>::Down,
-        }
-    }
-}
-impl From<toy::Direction> for Direction {
-    fn from(v: toy::Direction) -> Self {
-        match v {
-            <toy::Direction>::Up => Direction::Up,
-            <toy::Direction>::Down => Direction::Down,
-        }
-    }
-}
-#[doc = " Plain view of a `Point`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
-}
-impl From<&toy::Point> for Point {
-    fn from(v: &toy::Point) -> Self {
-        Self {
-            x: f64::from(v.x),
-            y: f64::from(v.y),
-        }
-    }
-}
-#[doc = " How to build a `Counter`: every field optional."]
-#[napi(object)]
-#[derive(Default)]
-pub struct Options {
-    #[doc = " What the counter is called."]
-    pub label: Option<String>,
-    #[doc = " How far one tick moves it."]
-    pub step: Option<f64>,
-    pub direction: Option<Direction>,
-}
-impl Options {
-    fn apply(&self, o: &mut toy::Options) {
-        if let Some(v) = &self.label {
-            o.label = v.clone();
-        }
-        if let Some(v) = self.step {
-            o.step = to_f32(v);
-        }
-        if let Some(v) = self.direction {
-            o.direction = v.into();
-        }
-    }
-}
-#[doc = " Which way a counter counts."]
 #[napi(string_enum = "camelCase", js_name = "Direction", namespace = "toy")]
 #[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
 pub enum ToyDirection {
     Up,
     Down,
@@ -89,6 +43,39 @@ pub enum ToyDirection {
 pub struct ToyPoint {
     pub x: f64,
     pub y: f64,
+}
+#[doc = " The payload-free variants of `Step`."]
+#[napi(object, js_name = "StepPlain", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyStepPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'stop'")]
+    pub r#type: String,
+}
+#[doc = " A `Vec2`'s public fields, as a plain object."]
+#[napi(object, js_name = "Vec2Object", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyVec2Object {
+    pub x: f64,
+    pub y: f64,
+}
+#[doc = " `Step::Jump`."]
+#[napi(object, js_name = "StepJump", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyStepJump {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'jump'")]
+    pub r#type: String,
+    pub value: ToyVec2Object,
+}
+#[doc = " `Step::Line`."]
+#[napi(object, js_name = "StepLine", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyStepLine {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'line'")]
+    pub r#type: String,
+    pub value: (ToyVec2Object, ToyVec2Object),
 }
 #[doc = " Names counted so far. Unlike [`Counter`] it is `Clone` and changes in"]
 #[doc = " place, which is the shape a binding copies on write."]
@@ -153,13 +140,6 @@ pub struct ToyCounter {
 #[napi(js_name = "Vec2", namespace = "toy")]
 pub struct ToyVec2 {
     inner: napi_support::Slot<toy::Vec2>,
-}
-#[doc = " A `Vec2`'s public fields, as a plain object."]
-#[napi(object, js_name = "Vec2Object", namespace = "toy")]
-#[derive(Clone)]
-pub struct ToyVec2Object {
-    pub x: f64,
-    pub y: f64,
 }
 #[doc = " A colour whose channels are private: a class with accessors, not plain"]
 #[doc = " data. [`alt::Color`] has its name."]
@@ -273,6 +253,21 @@ impl From<&toy::Point> for ToyPoint {
             x: f64::from(v.x),
             y: f64::from(v.y),
         }
+    }
+}
+fn toy_step_to_js(v: &toy::Step) -> Either3<ToyStepPlain, ToyStepJump, ToyStepLine> {
+    match v {
+        toy::Step::Stop => Either3::A(ToyStepPlain {
+            r#type: "stop".to_string(),
+        }),
+        toy::Step::Jump(v) => Either3::B(ToyStepJump {
+            r#type: "jump".to_string(),
+            value: ToyVec2Object::from(v),
+        }),
+        toy::Step::Line(v0, v1) => Either3::C(ToyStepLine {
+            r#type: "line".to_string(),
+            value: (ToyVec2Object::from(v0), ToyVec2Object::from(v1)),
+        }),
     }
 }
 impl ToyReportOptions<'_> {
@@ -504,6 +499,15 @@ impl ToyTally {
             signal,
         )
     }
+    #[doc = " Each name with its place: a list of pairs."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn pairs(&self) -> Result<Vec<(String, u32)>, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::pairs", || __self.pairs())
+            .map_err(napi_support::coded)?;
+        Ok(__v.iter().map(|(x0, x1)| (x0.to_string(), *x1)).collect())
+    }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
     #[doc = " holds it."]
@@ -600,6 +604,15 @@ impl ToyVec2 {
             .map_err(napi_support::coded)?;
         Ok(())
     }
+    #[doc = " `(x, y)`, a pair."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn parts(&self) -> Result<(f64, f64), String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Vec2::parts", || __self.parts())
+            .map_err(napi_support::coded)?;
+        Ok((f64::from(__v.0), f64::from(__v.1)))
+    }
     #[doc = " Parses a `Vec2`, as Rust's `FromStr` does. Throws when it does not parse."]
     #[napi]
     #[allow(clippy::should_implement_trait)]
@@ -672,6 +685,14 @@ impl ToyVec2 {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+impl From<&toy::Vec2> for ToyVec2Object {
+    fn from(__v: &toy::Vec2) -> Self {
+        Self {
+            x: f64::from(__v.x),
+            y: f64::from(__v.y),
+        }
     }
 }
 impl ToyColor {
@@ -975,6 +996,15 @@ impl ToyScene {
             __b.then(move |__s| __s.find(&name)).map(toy_item_to_js)
         })
         .map_err(napi_support::coded)
+    }
+    #[doc = " The way through the scene: a jump to `a`, a line to `d`, a stop."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn trail(&self) -> Result<Vec<Either3<ToyStepPlain, ToyStepJump, ToyStepLine>>, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Scene::trail", || __self.trail())
+            .map_err(napi_support::coded)?;
+        Ok(__v.steps().map(|x| toy_step_to_js(&x)).collect())
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -1450,14 +1480,14 @@ impl AltColor {
         self.inner.disposed()
     }
 }
-#[doc = " A new `toy.Counter`, built from the flat `Options`."]
-#[napi]
-pub fn counter(options: Option<Options>) -> ToyCounter {
-    let mut o = toy::Options::default();
-    if let Some(options) = options {
-        options.apply(&mut o);
+impl From<&toy::alt::Color> for AltColorObject {
+    fn from(__v: &toy::alt::Color) -> Self {
+        Self {
+            red: u32::from(__v.red),
+            green: u32::from(__v.green),
+            blue: u32::from(__v.blue),
+        }
     }
-    ToyCounter::wrap(toy::Counter::new(&o))
 }
 #[doc = " A second handle on the same `Tally`: shared until one of them writes."]
 #[napi(js_name = "share", namespace = "toy")]

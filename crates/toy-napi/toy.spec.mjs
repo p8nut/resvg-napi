@@ -13,7 +13,7 @@ assert.ok(binary, 'build it first: npx napi build --cwd crates/toy-napi --platfo
 const toy = createRequire(dir)(`./${binary}`);
 
 test('a shared class wraps the Arc and maps its &self methods', () => {
-  const c = toy.counter();
+  const c = new toy.toy.Counter();
   assert.ok(c instanceof toy.toy.Counter);
   assert.equal(c.label(), 'counter');
   assert.equal(c.step(), 1);
@@ -21,22 +21,22 @@ test('a shared class wraps the Arc and maps its &self methods', () => {
 });
 
 test('an option struct is a partial object over Default', () => {
-  const c = toy.counter({ label: 'down', step: 2.5, direction: 'down' });
+  const c = new toy.toy.Counter({ label: 'down', step: 2.5, direction: 'down' });
   assert.equal(c.label(), 'down');
   assert.equal(c.step(), -2.5);
-  assert.equal(toy.counter({ step: 3 }).label(), 'counter');
+  assert.equal(new toy.toy.Counter({ step: 3 }).label(), 'counter');
 });
 
 test('a plain data struct is an object copy', () => {
-  assert.deepEqual(toy.counter().origin(), { x: 0, y: 0 });
+  assert.deepEqual(new toy.toy.Counter().origin(), { x: 0, y: 0 });
 });
 
 test('a unit enum is a string enum, and a wrong variant throws', () => {
-  assert.throws(() => toy.counter({ direction: 'sideways' }));
+  assert.throws(() => new toy.toy.Counter({ direction: 'sideways' }));
 });
 
 test('util.inspect prints the cheap methods under the class name', () => {
-  const c = toy.counter();
+  const c = new toy.toy.Counter();
   assert.equal(Object.prototype.toString.call(c), '[object Counter]');
   assert.match(inspect(c), /^Counter \{.*label: 'counter'.*\}$/s);
 });
@@ -50,13 +50,14 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   ]);
   assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
-  assert.notEqual(ns.Direction, toy.Direction, 'an enum object of its own');
-  // A flat function hands out the namespaced class: one constructor per
-  // class name, whatever the namespace.
+  // Nothing at the root but the generic prelude: one constructor per class
+  // name, whatever the namespace, and every class is in its namespace.
+  assert.deepEqual(Object.keys(toy).filter((k) => !k.startsWith('__')).sort(),
+    ['alt', 'setLogLevel', 'takeLogs', 'toy']);
   assert.equal(toy.Counter, undefined);
   assert.equal(typeof ns.Counter, 'function');
   assert.equal(ns.Counter.name, 'Counter');
-  const c = toy.counter();
+  const c = new toy.toy.Counter();
   assert.ok(c instanceof ns.Counter);
   assert.equal(c.constructor.name, 'Counter');
   assert.equal(c.label(), 'counter');
@@ -121,7 +122,7 @@ test('a provider field takes a class instance, shared not copied', () => {
   assert.equal(toy.toy.report(t, { base }), 'tally[plain]: a,b,x');
   // Only an instance of the providing class: not a look-alike, not another class.
   assert.throws(() => toy.toy.report(t, { base: {} }));
-  assert.throws(() => toy.toy.report(t, { base: toy.counter() }), /Tally/);
+  assert.throws(() => toy.toy.report(t, { base: new toy.toy.Counter() }), /Tally/);
   assert.throws(() => toy.toy.report(t, { base: 'a' }));
 });
 
@@ -255,6 +256,28 @@ test('plain data: field accessors, and fromObject/toObject in a pair', () => {
   assert.equal(toy.toy.Color.prototype.toObject, undefined);
 });
 
+test('a tuple is an array: a list of pairs, a pair, a tuple payload', () => {
+  const { Tally, Vec2, Scene } = toy.toy;
+  const t = new Tally();
+  t.push('a');
+  t.push('b');
+  assert.deepEqual(t.pairs(), [['a', 0], ['b', 1]], 'Vec<(String, u32)>');
+  assert.deepEqual(new Vec2(1.5, -2).parts(), [1.5, -2], '(f32, f32)');
+  // `Trail` is what its `steps()` iterates (`Config::iterated`): each step a
+  // union, a plain-data class carried as its object, two of them as a tuple.
+  assert.deepEqual(Scene.demo().trail(), [
+    { type: 'jump', value: { x: 1, y: 0 } },
+    { type: 'line', value: [{ x: 1, y: 0 }, { x: 4, y: 0 }] },
+    { type: 'stop' },
+  ]);
+});
+
+test('the log functions of the prelude: a level, and a drain', () => {
+  assert.throws(() => toy.setLogLevel('loud'), /unknown log level/);
+  toy.setLogLevel('warn');
+  assert.ok(Array.isArray(toy.takeLogs()));
+});
+
 test('FromStr gives fromStr, Display gives toString, independently', () => {
   const { Vec2 } = toy.toy;
   const v = Vec2.fromStr('1.5, -2');
@@ -367,7 +390,7 @@ test('dispose() ends an instance of each holding, and `using` calls it', () => {
   const holdings = {
     value: [new Vec2(1, 2), (v) => v.length()],
     owned: [new Canvas(2, 2), (c) => c.width()],
-    shared: [toy.counter(), (c) => c.label()],
+    shared: [new toy.toy.Counter(), (c) => c.label()],
     cow: [new Tally(), (t) => t.len()],
     projected: [Scene.demo().root(), (l) => l.name()],
   };

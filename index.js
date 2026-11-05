@@ -835,19 +835,8 @@ function __napiStampBindingTarget(exportsObject, target) {
 // linked import resolves to `undefined`.
 module.exports.__napiBindingTarget = __napiStampBindingTarget(nativeBinding, __napiLoadedBindingTarget)
 module.exports = nativeBinding
-module.exports.FontDatabase = nativeBinding.FontDatabase
-module.exports.FontFace = nativeBinding.FontFace
-module.exports.Resvg = nativeBinding.Resvg
-module.exports.BlendMode = nativeBinding.BlendMode
-module.exports.FontFaceStyle = nativeBinding.FontFaceStyle
-module.exports.ImageRendering = nativeBinding.ImageRendering
-module.exports.ParseErrorCode = nativeBinding.ParseErrorCode
-module.exports.renderAsync = nativeBinding.renderAsync
 module.exports.setLogLevel = nativeBinding.setLogLevel
-module.exports.ShapeRendering = nativeBinding.ShapeRendering
-module.exports.Stretch = nativeBinding.Stretch
 module.exports.takeLogs = nativeBinding.takeLogs
-module.exports.TextRendering = nativeBinding.TextRendering
 module.exports.fontdb = nativeBinding.fontdb
 module.exports.guard = nativeBinding.guard
 module.exports.resvg = nativeBinding.resvg

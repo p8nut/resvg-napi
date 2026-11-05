@@ -5,10 +5,6 @@
 // `[Symbol.dispose]` is set when the module loads, only where the
 // runtime has the symbol.
 
-export interface Resvg {
-  [Symbol.dispose](): void
-}
-
 export declare namespace fontdb {
   export interface Database {
     [Symbol.dispose](): void
@@ -40,7 +36,13 @@ export declare namespace tiny_skia {
   export interface IntSize {
     [Symbol.dispose](): void
   }
+  export interface NonZeroRect {
+    [Symbol.dispose](): void
+  }
   export interface Pixmap {
+    [Symbol.dispose](): void
+  }
+  export interface Point {
     [Symbol.dispose](): void
   }
   export interface Rect {
@@ -95,6 +97,9 @@ export declare namespace usvg {
     [Symbol.dispose](): void
   }
   export interface PositionedGlyph {
+    [Symbol.dispose](): void
+  }
+  export interface Primitive {
     [Symbol.dispose](): void
   }
   export interface RadialGradient {

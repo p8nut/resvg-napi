@@ -6,7 +6,7 @@
 
 import { toValueSync } from 'liquidjs';
 import qrcode from 'qrcode-generator';
-import { nodeExtent } from '../fit.mjs';
+import { createHelpers } from '../helpers.browser.mjs';
 
 const escapeXml = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -18,29 +18,20 @@ const round = (n) => Math.round(n * 100) / 100;
  * Width of a string, straight from the renderer that will draw it: the
  * `measure` both pages hand to registerSvgFilters.
  *
- * The probe parses with a fresh `guard.ImageHrefResolver` unless `options`
- * brings one: the raw default would read any local path an `<image href>`
- * names, and the guard is the default of every helper that parses.
+ * The helpers' `measureText` (`resvg-napi/helpers`), on the binding the page
+ * loaded, with the database it renders with: it parses with a fresh
+ * `guard.ImageHrefResolver` unless `options` brings one. A string that does
+ * not parse measures 0, so a template keeps rendering.
  *
- * @param binding the binding (native or wasm): its `usvg` namespace parses
+ * @param binding the binding (native or wasm)
  * @param db      the `fontdb.Database` holding the fonts the document renders with
  * @param text    the string
  * @param fontSize, family  defaults: 12, `options.fontFamily`
  * @param options extra `usvg.Options` (e.g. `languages`, `fontFamily`)
  */
 export function measureText(binding, db, text, { fontSize = 12, family } = {}, options = {}) {
-  const fam = family ?? options.fontFamily ?? 'sans-serif';
-  const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
-    + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`
-    + `${escapeXml(text)}</text></svg>`;
   try {
-    const node = binding.usvg.Tree.fromStr(probe, {
-      imageHrefResolver: new binding.guard.ImageHrefResolver(),
-      ...options,
-      fontFamily: fam,
-      fontdb: db,
-    }).nodeById('m');
-    return (node && nodeExtent(node)?.width) ?? 0;
+    return createHelpers(binding).measureText(text, { ...options, fontSize, family, fonts: db });
   } catch {
     return 0;
   }

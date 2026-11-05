@@ -36,6 +36,41 @@ export function assess({ name, promised, shipped }) {
 }
 
 /**
+ * Every file `exports` points at, from every condition, nested or not. A
+ * target outside `files[]` resolves in the repository and is missing once
+ * installed: `import 'pkg/helpers'` then fails with ERR_MODULE_NOT_FOUND, on
+ * the consumer's machine and nowhere else.
+ *
+ * @param {unknown} exports  the manifest's `exports`
+ * @returns {string[]} the targets, as written (`./helpers.mjs`)
+ */
+export function exportTargets(exports) {
+  if (typeof exports === 'string') return [exports];
+  if (Array.isArray(exports)) return exports.flatMap(exportTargets);
+  if (exports && typeof exports === 'object') return Object.values(exports).flatMap(exportTargets);
+  return [];
+}
+
+/**
+ * The `exports` targets the tarball does not hold, and the ones that are not
+ * a `./` path (Node refuses those).
+ *
+ * @param {{name: string, exports: unknown, shipped: string[]}} pkg
+ * @returns {string[]} what is wrong, empty when nothing is
+ */
+export function unexported({ name, exports, shipped }) {
+  const reasons = [];
+  for (const target of new Set(exportTargets(exports))) {
+    if (!target.startsWith('./')) {
+      reasons.push(`${name} exports ${target}, which is not a ./ path`);
+    } else if (!target.includes('*') && !shipped.includes(target.slice(2))) {
+      reasons.push(`${name} exports ${target} but the tarball has no such path`);
+    }
+  }
+  return reasons;
+}
+
+/**
  * An optionalDependency with no `os` and no `cpu` is not optional in practice:
  * npm has nothing to match against, so it installs it everywhere. The wasm
  * package was in exactly that state from napi CLI 3.8.0 to 3.10.10, so
@@ -170,6 +205,7 @@ if (import.meta.main) {
   const wasi = platforms[`${root.name}-wasm32-wasi`];
   const reasons = [
     ...assess({ name: root.name, promised: root.files ?? [], shipped }),
+    ...unexported({ name: root.name, exports: root.exports, shipped }),
     ...unconstrained(root.optionalDependencies ?? {}, platforms),
     ...anonymous([
       { name: root.name, manifest: root },
@@ -184,5 +220,5 @@ if (import.meta.main) {
     for (const r of reasons) console.error(`  - ${r}`);
     process.exit(1);
   }
-  console.log('every files[] promise kept, every manifest in step');
+  console.log('every files[] promise kept, every exports target shipped, every manifest in step');
 }

@@ -12,8 +12,11 @@
   },
   "include": [
     "fit.d.mts",
+    "helpers.browser.d.mts",
+    "helpers.d.mts",
     "index.d.ts",
     "test/fit-types.mts",
+    "test/helpers-types.mts",
     "test/types.mts"
   ]
 }

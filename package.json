@@ -16,6 +16,26 @@
     "fontdb"
   ],
   "main": "index.js",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "browser": "./browser.js",
+      "default": "./index.js"
+    },
+    "./helpers": {
+      "browser": {
+        "types": "./helpers.browser.d.mts",
+        "default": "./helpers.browser.mjs"
+      },
+      "types": "./helpers.d.mts",
+      "default": "./helpers.mjs"
+    },
+    "./fit.mjs": {
+      "types": "./fit.d.mts",
+      "default": "./fit.mjs"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "build": "napi build --platform --release",
     "test": "npm run test:node && npm run test:examples",
@@ -73,6 +93,10 @@
     "browser.js",
     "fit.d.mts",
     "fit.mjs",
+    "helpers.browser.d.mts",
+    "helpers.browser.mjs",
+    "helpers.d.mts",
+    "helpers.mjs",
     "index.d.ts",
     "index.js",
     "resvg-napi.wasi-browser.js",

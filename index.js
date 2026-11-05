@@ -849,6 +849,7 @@ module.exports.Stretch = nativeBinding.Stretch
 module.exports.takeLogs = nativeBinding.takeLogs
 module.exports.TextRendering = nativeBinding.TextRendering
 module.exports.fontdb = nativeBinding.fontdb
+module.exports.guard = nativeBinding.guard
 module.exports.resvg = nativeBinding.resvg
 module.exports.svgtypes = nativeBinding.svgtypes
 module.exports.tiny_skia = nativeBinding.tiny_skia

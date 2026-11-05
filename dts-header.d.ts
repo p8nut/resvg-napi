@@ -18,6 +18,15 @@ export declare namespace fontdb {
   }
 }
 
+export declare namespace guard {
+  export interface FontResolver {
+    [Symbol.dispose](): void
+  }
+  export interface ImageHrefResolver {
+    [Symbol.dispose](): void
+  }
+}
+
 export declare namespace svgtypes {
   export interface Color {
     [Symbol.dispose](): void

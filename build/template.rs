@@ -53,9 +53,12 @@ pub fn template(
         use napi::bindgen_prelude::*;
         use napi_derive::napi;
         use resvg::{tiny_skia, usvg};
-        use napi_support::fs::read_regular;
         use napi_support::logs::Logs;
         use napi_support::{Signal, contained};
+
+        #[doc = " The resvg-specific providers (`guard.*`), written by hand: src/guard.rs."]
+        mod guard;
+        use guard::{GuardFontResolver, GuardImageHrefResolver, ImageMap, Misses, image_map};
 
         #enums
 
@@ -98,24 +101,12 @@ pub fn template(
             }
         }
 
-        type ImageMap = std::collections::HashMap<String, std::sync::Arc<Vec<u8>>>;
-
         #[doc = " The bytes of an SVG handed over as text or as a Uint8Array (or Buffer)."]
         fn svg_bytes(svg: Either<String, Uint8Array>) -> Vec<u8> {
             match svg {
                 Either::A(text) => text.into_bytes(),
                 Either::B(data) => data.to_vec(),
             }
-        }
-
-        #[doc = " JS `{ href: Buffer }` -> the map the href resolver reads, copied"]
-        #[doc = " off the JS heap so a worker thread can hold it."]
-        fn image_map(images: Option<std::collections::HashMap<String, Uint8Array>>) -> ImageMap {
-            images
-                .unwrap_or_default()
-                .into_iter()
-                .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
-                .collect()
         }
 
         #[doc = " The Send half of a result, and its JS half."]
@@ -150,134 +141,6 @@ pub fn template(
                 }
             }
         }
-
-        #[doc = " Hrefs no resolver could satisfy during the last parse."]
-        #[derive(Default, Clone)]
-        struct Misses(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
-
-        impl Misses {
-            #[doc = " Records `name`, once: a `<use>` of an image resolves it again."]
-            #[doc = " Poison-tolerant: this mutex only accumulates diagnostics, so a"]
-            #[doc = " panic elsewhere must not take the render down with it."]
-            fn note(&self, name: &str) {
-                let mut seen = self.0.lock().unwrap_or_else(|e| e.into_inner());
-                if !seen.iter().any(|s| s == name) {
-                    seen.push(name.to_string());
-                }
-            }
-
-            #[doc = " Drains what was recorded."]
-            fn take(&self) -> std::sync::Arc<[String]> {
-                std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner())).into()
-            }
-        }
-
-        #[doc = " `usvg::ImageHrefResolver` demands `Send + Sync`, so a JS callback cannot"]
-        #[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
-        #[doc = " unresolved is reported back to JS for a second pass."]
-        fn href_resolver(
-            images: std::sync::Arc<ImageMap>,
-            misses: Misses,
-            root: Option<std::path::PathBuf>,
-        ) -> usvg::ImageHrefResolver<'static> {
-            let sniff = checked(usvg::ImageHrefResolver::default_data_resolver());
-            usvg::ImageHrefResolver {
-                // Also what a nested SVG's own images go through: usvg forwards
-                // `resolve_data` into the sub-document's options.
-                resolve_data: checked(usvg::ImageHrefResolver::default_data_resolver()),
-                resolve_string: Box::new(move |href: &str, opts: &usvg::Options| {
-                    // 1. buffer supplied by JS -- let usvg sniff the format itself.
-                    // One it cannot use (refused, or not an image at all) is a
-                    // miss like any other, not an image that silently vanishes.
-                    if let Some(data) = images.get(href)
-                        && let Some(kind) = sniff("text/plain", data.clone(), opts)
-                    {
-                        return Some(kind);
-                    }
-                    // 2. a file under `resourcesDir`, and nowhere else. usvg's
-                    // default reads any absolute path, and a relative one off
-                    // the working directory, so an untrusted document could
-                    // pull local files into its pixels or `toString()` output,
-                    // or exhaust memory reading `/dev/zero`.
-                    // Read here rather than through usvg's string resolver,
-                    // which re-opens the path by name after the checks. Its
-                    // format rule is kept: SVG by extension, magic otherwise.
-                    if let Some(path) = under_resources_dir(href, opts, root.as_deref())
-                        && let Some(data) = read_regular(&path)
-                    {
-                        let svg = path
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
-                        let mime = if svg { "image/svg+xml" } else { "text/plain" };
-                        if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
-                            return Some(kind);
-                        }
-                    }
-                    // 3. give up, but tell JS about it
-                    misses.note(href);
-                    None
-                }),
-            }
-        }
-
-        #[doc = " Largest raster image accepted, by the size its header declares: 2^28"]
-        #[doc = " px. resvg decodes at render time with no limit of its own, so a 1 KB"]
-        #[doc = " JPEG declaring 65535x65535 would ask for 16 GiB there."]
-        const MAX_IMAGE_PIXELS: u64 = 1 << 28;
-
-        #[doc = " `resolve` behind the two checks usvg and resvg leave out: gzip data"]
-        #[doc = " (SVGZ, unsupported, see Cargo.toml) is refused, and so is a raster"]
-        #[doc = " image whose header declares more than `MAX_IMAGE_PIXELS`. Refusals"]
-        #[doc = " are logged."]
-        fn checked(resolve: usvg::ImageHrefDataResolverFn<'static>) -> usvg::ImageHrefDataResolverFn<'static> {
-            Box::new(move |mime: &str, data: std::sync::Arc<Vec<u8>>, opts: &usvg::Options| {
-                if data.starts_with(&[0x1f, 0x8b]) {
-                    log::warn!("{}: image refused, SVGZ is not supported", env!("CARGO_PKG_NAME"));
-                    return None;
-                }
-                // Fail closed: anything a decoder would treat as raster -- by
-                // its mime or by the magic usvg itself sniffs -- needs a size
-                // read off its header, or it is not drawn.
-                let raster = matches!(mime, "image/jpg" | "image/jpeg" | "image/png" | "image/gif" | "image/webp")
-                    || matches!(
-                        imagesize::image_type(&data),
-                        Ok(imagesize::ImageType::Png | imagesize::ImageType::Jpeg | imagesize::ImageType::Gif | imagesize::ImageType::Webp)
-                    );
-                if raster {
-                    let px = imagesize::blob_size(&data)
-                        .map(|s| (s.width as u64).saturating_mul(s.height as u64));
-                    match px {
-                        Ok(px) if px <= MAX_IMAGE_PIXELS => {}
-                        Ok(_) | Err(_) => {
-                            log::warn!(
-                                "{}: image refused, {} exceeds {MAX_IMAGE_PIXELS} px or has no readable size",
-                                env!("CARGO_PKG_NAME"),
-                                px.map_or("header".into(), |px| format!("{px} px")),
-                            );
-                            return None;
-                        }
-                    }
-                }
-                resolve(mime, data, opts)
-            })
-        }
-
-        #[doc = " `href` resolved against `resourcesDir`, if it lands inside `root`"]
-        #[doc = " (default: `resourcesDir` itself). Canonicalised, so `..` and"]
-        #[doc = " symlinks cannot step outside it. What the path names is checked"]
-        #[doc = " by `read_regular`, on the open descriptor."]
-        fn under_resources_dir(
-            href: &str,
-            opts: &usvg::Options,
-            root: Option<&std::path::Path>,
-        ) -> Option<std::path::PathBuf> {
-            let dir = opts.resources_dir.as_deref()?;
-            let root = root.unwrap_or(dir).canonicalize().ok()?;
-            let path = dir.join(href).canonicalize().ok()?;
-            path.starts_with(&root).then_some(path)
-        }
-
 
         impl FontFace {
             #[doc = " This face's ID in `db`, or one that matches nothing."]
@@ -606,36 +469,6 @@ pub fn template(
             pub width: u32,
             pub height: u32,
             pub data: Buffer,
-        }
-
-        #[doc = " Same trick for fonts: the resolver is `Send + Sync` too, so instead of"]
-        #[doc = " calling into JS we wrap the default selector and note every named family"]
-        #[doc = " the database does not carry -- i.e. text that silently fell back."]
-        fn font_resolver(misses: Misses) -> usvg::FontResolver<'static> {
-            let select = usvg::FontResolver::default_font_selector();
-            usvg::FontResolver {
-                select_font: Box::new(
-                    move |font: &usvg::Font,
-                          db: &mut std::sync::Arc<usvg::fontdb::Database>| {
-                        for family in font.families() {
-                            let usvg::FontFamily::Named(name) = family else {
-                                continue; // serif/sans-serif/... always map to something
-                            };
-                            // ponytail: name presence over `faces()`, weight and style
-                            // ignored. Switch to `Database::query` if that granularity
-                            // ever matters.
-                            let known = db.faces().any(|f| {
-                                f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
-                            });
-                            if !known {
-                                misses.note(name);
-                            }
-                        }
-                        select(font, db)
-                    },
-                ),
-                select_fallback: usvg::FontResolver::default_fallback_selector(),
-            }
         }
 
         #object_code
@@ -1012,13 +845,14 @@ pub fn template(
                 let missing_images = Misses::default();
                 let missing_fonts = Misses::default();
                 let mut opts = options.to_usvg(fonts);
+                let fence = guard::Fence {
+                    images: images.clone(),
+                    dir: None,
+                    root: options.resources_root.as_ref().map(std::path::PathBuf::from),
+                };
                 opts.image_href_resolver =
-                    href_resolver(
-                        images.clone(),
-                        missing_images.clone(),
-                        options.resources_root.as_ref().map(std::path::PathBuf::from),
-                    );
-                opts.font_resolver = font_resolver(missing_fonts.clone());
+                    guard::href_resolver(std::sync::Arc::new(fence), missing_images.clone());
+                opts.font_resolver = guard::font_resolver(missing_fonts.clone());
                 let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
                     Ok(tree) => tree,
                     Err(e) => return Ok(Err(e)),

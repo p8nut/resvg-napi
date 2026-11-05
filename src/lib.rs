@@ -9,10 +9,12 @@
 )]
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use napi_support::fs::read_regular;
 use napi_support::logs::Logs;
 use napi_support::{Signal, contained};
 use resvg::{tiny_skia, usvg};
+#[doc = " The resvg-specific providers (`guard.*`), written by hand: src/guard.rs."]
+mod guard;
+use guard::{GuardFontResolver, GuardImageHrefResolver, ImageMap, Misses, image_map};
 #[doc = " A shape rendering method."]
 #[doc = ""]
 #[doc = " `shape-rendering` attribute in the SVG."]
@@ -364,22 +366,12 @@ impl RenderOptions {
         o
     }
 }
-type ImageMap = std::collections::HashMap<String, std::sync::Arc<Vec<u8>>>;
 #[doc = " The bytes of an SVG handed over as text or as a Uint8Array (or Buffer)."]
 fn svg_bytes(svg: Either<String, Uint8Array>) -> Vec<u8> {
     match svg {
         Either::A(text) => text.into_bytes(),
         Either::B(data) => data.to_vec(),
     }
-}
-#[doc = " JS `{ href: Buffer }` -> the map the href resolver reads, copied"]
-#[doc = " off the JS heap so a worker thread can hold it."]
-fn image_map(images: Option<std::collections::HashMap<String, Uint8Array>>) -> ImageMap {
-    images
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(href, buf)| (href, std::sync::Arc::new(buf.to_vec())))
-        .collect()
 }
 #[doc = " The Send half of a result, and its JS half."]
 #[doc = ""]
@@ -412,121 +404,6 @@ impl IntoJs for (u32, u32, Vec<u8>) {
             data: Buffer::from(data),
         }
     }
-}
-#[doc = " Hrefs no resolver could satisfy during the last parse."]
-#[derive(Default, Clone)]
-struct Misses(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
-impl Misses {
-    #[doc = " Records `name`, once: a `<use>` of an image resolves it again."]
-    #[doc = " Poison-tolerant: this mutex only accumulates diagnostics, so a"]
-    #[doc = " panic elsewhere must not take the render down with it."]
-    fn note(&self, name: &str) {
-        let mut seen = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        if !seen.iter().any(|s| s == name) {
-            seen.push(name.to_string());
-        }
-    }
-    #[doc = " Drains what was recorded."]
-    fn take(&self) -> std::sync::Arc<[String]> {
-        std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner())).into()
-    }
-}
-#[doc = " `usvg::ImageHrefResolver` demands `Send + Sync`, so a JS callback cannot"]
-#[doc = " live in it. Buffers are handed over up front instead, and whatever stays"]
-#[doc = " unresolved is reported back to JS for a second pass."]
-fn href_resolver(
-    images: std::sync::Arc<ImageMap>,
-    misses: Misses,
-    root: Option<std::path::PathBuf>,
-) -> usvg::ImageHrefResolver<'static> {
-    let sniff = checked(usvg::ImageHrefResolver::default_data_resolver());
-    usvg::ImageHrefResolver {
-        resolve_data: checked(usvg::ImageHrefResolver::default_data_resolver()),
-        resolve_string: Box::new(move |href: &str, opts: &usvg::Options| {
-            if let Some(data) = images.get(href)
-                && let Some(kind) = sniff("text/plain", data.clone(), opts)
-            {
-                return Some(kind);
-            }
-            if let Some(path) = under_resources_dir(href, opts, root.as_deref())
-                && let Some(data) = read_regular(&path)
-            {
-                let svg = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("svg"));
-                let mime = if svg { "image/svg+xml" } else { "text/plain" };
-                if let Some(kind) = sniff(mime, std::sync::Arc::new(data), opts) {
-                    return Some(kind);
-                }
-            }
-            misses.note(href);
-            None
-        }),
-    }
-}
-#[doc = " Largest raster image accepted, by the size its header declares: 2^28"]
-#[doc = " px. resvg decodes at render time with no limit of its own, so a 1 KB"]
-#[doc = " JPEG declaring 65535x65535 would ask for 16 GiB there."]
-const MAX_IMAGE_PIXELS: u64 = 1 << 28;
-#[doc = " `resolve` behind the two checks usvg and resvg leave out: gzip data"]
-#[doc = " (SVGZ, unsupported, see Cargo.toml) is refused, and so is a raster"]
-#[doc = " image whose header declares more than `MAX_IMAGE_PIXELS`. Refusals"]
-#[doc = " are logged."]
-fn checked(
-    resolve: usvg::ImageHrefDataResolverFn<'static>,
-) -> usvg::ImageHrefDataResolverFn<'static> {
-    Box::new(
-        move |mime: &str, data: std::sync::Arc<Vec<u8>>, opts: &usvg::Options| {
-            if data.starts_with(&[0x1f, 0x8b]) {
-                log::warn!(
-                    "{}: image refused, SVGZ is not supported",
-                    env!("CARGO_PKG_NAME")
-                );
-                return None;
-            }
-            let raster = matches!(
-                mime,
-                "image/jpg" | "image/jpeg" | "image/png" | "image/gif" | "image/webp"
-            ) || matches!(
-                imagesize::image_type(&data),
-                Ok(imagesize::ImageType::Png
-                    | imagesize::ImageType::Jpeg
-                    | imagesize::ImageType::Gif
-                    | imagesize::ImageType::Webp)
-            );
-            if raster {
-                let px = imagesize::blob_size(&data)
-                    .map(|s| (s.width as u64).saturating_mul(s.height as u64));
-                match px {
-                    Ok(px) if px <= MAX_IMAGE_PIXELS => {}
-                    Ok(_) | Err(_) => {
-                        log::warn!(
-                            "{}: image refused, {} exceeds {MAX_IMAGE_PIXELS} px or has no readable size",
-                            env!("CARGO_PKG_NAME"),
-                            px.map_or("header".into(), |px| format!("{px} px")),
-                        );
-                        return None;
-                    }
-                }
-            }
-            resolve(mime, data, opts)
-        },
-    )
-}
-#[doc = " `href` resolved against `resourcesDir`, if it lands inside `root`"]
-#[doc = " (default: `resourcesDir` itself). Canonicalised, so `..` and"]
-#[doc = " symlinks cannot step outside it. What the path names is checked"]
-#[doc = " by `read_regular`, on the open descriptor."]
-fn under_resources_dir(
-    href: &str,
-    opts: &usvg::Options,
-    root: Option<&std::path::Path>,
-) -> Option<std::path::PathBuf> {
-    let dir = opts.resources_dir.as_deref()?;
-    let root = root.unwrap_or(dir).canonicalize().ok()?;
-    let path = dir.join(href).canonicalize().ok()?;
-    path.starts_with(&root).then_some(path)
 }
 impl FontFace {
     #[doc = " This face's ID in `db`, or one that matches nothing."]
@@ -1020,31 +897,6 @@ pub struct RawImage {
     pub width: u32,
     pub height: u32,
     pub data: Buffer,
-}
-#[doc = " Same trick for fonts: the resolver is `Send + Sync` too, so instead of"]
-#[doc = " calling into JS we wrap the default selector and note every named family"]
-#[doc = " the database does not carry -- i.e. text that silently fell back."]
-fn font_resolver(misses: Misses) -> usvg::FontResolver<'static> {
-    let select = usvg::FontResolver::default_font_selector();
-    usvg::FontResolver {
-        select_font: Box::new(
-            move |font: &usvg::Font, db: &mut std::sync::Arc<usvg::fontdb::Database>| {
-                for family in font.families() {
-                    let usvg::FontFamily::Named(name) = family else {
-                        continue;
-                    };
-                    let known = db
-                        .faces()
-                        .any(|f| f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)));
-                    if !known {
-                        misses.note(name);
-                    }
-                }
-                select(font, db)
-            },
-        ),
-        select_fallback: usvg::FontResolver::default_fallback_selector(),
-    }
 }
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi]
@@ -1600,15 +1452,17 @@ impl Resvg {
         let missing_images = Misses::default();
         let missing_fonts = Misses::default();
         let mut opts = options.to_usvg(fonts);
-        opts.image_href_resolver = href_resolver(
-            images.clone(),
-            missing_images.clone(),
-            options
+        let fence = guard::Fence {
+            images: images.clone(),
+            dir: None,
+            root: options
                 .resources_root
                 .as_ref()
                 .map(std::path::PathBuf::from),
-        );
-        opts.font_resolver = font_resolver(missing_fonts.clone());
+        };
+        opts.image_href_resolver =
+            guard::href_resolver(std::sync::Arc::new(fence), missing_images.clone());
+        opts.font_resolver = guard::font_resolver(missing_fonts.clone());
         let tree = match contained("usvg", || usvg::Tree::from_data(svg, &opts))? {
             Ok(tree) => tree,
             Err(e) => return Ok(Err(e)),
@@ -2268,6 +2122,21 @@ pub struct UsvgOptions<'a> {
     #[doc = ""]
     #[doc = " Default: `(100, 100)`"]
     pub default_size_height: Option<f64>,
+    #[doc = " Specifies the way `xlink:href` in `<image>` elements should be handled."]
+    #[doc = ""]
+    #[doc = " Default: see type's documentation for details"]
+    #[doc = ""]
+    #[doc = " A `guard.ImageHrefResolver`: supplied images, files fenced to a"]
+    #[doc = " directory, SVGZ and oversized images refused, misses recorded."]
+    #[doc = " Left out, usvg's default applies, as in Rust: it reads any path"]
+    #[doc = " an `<image href>` names and decodes any image. Do not parse"]
+    #[doc = " untrusted SVG without one. One instance per parse."]
+    pub image_href_resolver: Option<ClassInstance<'a, GuardImageHrefResolver>>,
+    #[doc = " Specifies how fonts should be resolved and loaded."]
+    #[doc = ""]
+    #[doc = " A `guard.FontResolver`, recording the named families the"]
+    #[doc = " database lacks. Left out, usvg's default selection applies."]
+    pub font_resolver: Option<ClassInstance<'a, GuardFontResolver>>,
     #[doc = " A database of fonts usable by text."]
     #[doc = ""]
     #[doc = " This is a base database. If a custom `font_resolver` is specified,"]
@@ -5411,6 +5280,14 @@ impl UsvgOptions<'_> {
             && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
         {
             o.default_size = s;
+        }
+        if let Some(v) = &self.image_href_resolver {
+            let v = &**v;
+            o.image_href_resolver = v.resolver()?;
+        }
+        if let Some(v) = &self.font_resolver {
+            let v = &**v;
+            o.font_resolver = v.resolver()?;
         }
         if let Some(v) = &self.fontdb {
             let v = &**v;
@@ -8983,6 +8860,8 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (None, "Resvg"),
         (Some("fontdb"), "Database"),
         (Some("fontdb"), "FaceInfo"),
+        (Some("guard"), "FontResolver"),
+        (Some("guard"), "ImageHrefResolver"),
         (Some("svgtypes"), "Color"),
         (Some("tiny_skia"), "Color"),
         (Some("tiny_skia"), "IntSize"),
@@ -10034,5 +9913,63 @@ impl FontdbFaceInfo {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "FaceInfo".to_string()
+    }
+}
+#[napi(namespace = "guard")]
+impl GuardImageHrefResolver {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ImageHrefResolver",
+            &["disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ImageHrefResolver".to_string()
+    }
+}
+#[napi(namespace = "guard")]
+impl GuardFontResolver {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "FontResolver",
+            &["disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "FontResolver".to_string()
     }
 }

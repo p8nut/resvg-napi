@@ -233,6 +233,39 @@ Step 9 added `Config::asynchronous` and `napi_gen::twin` (CONTRIBUTING,
   to queue behind deterministically; the root queues behind a slow render
   on one worker thread, as `test/async.mjs` does.
 
+Step 10 added the `guard` module, `src/guard.rs` (CONTRIBUTING, "The
+`guard` module"; `test/api/guard.mjs`): `guard.ImageHrefResolver` and
+`guard.FontResolver`, the providers of `usvg.Options.imageHrefResolver` and
+`fontResolver` (`Config::providers`, as `fontdb`). What it found:
+
+- No generator hook was needed. The module is a real Rust file at the root,
+  hand-written, that the template declares (`mod guard;`); the provider
+  entries name its classes by ident. `build.rs` parses it beside the
+  generated file only so `dispose::aliases` and `inspect_members` see its
+  classes (`[Symbol.dispose]`, `util.inspect`), and stages an empty
+  stand-in beside its rustfmt copy, which otherwise gives up on the
+  out-of-line module and leaves `src/lib.rs` unformatted.
+- The checks moved, not copied: `href_resolver`, `checked`,
+  `MAX_IMAGE_PIXELS`, the fence, `font_resolver`, `Misses` and
+  `image_map` left the template for `src/guard.rs`, and the flat `Resvg`
+  calls them (`guard::Fence` with no directory of its own: the parse
+  options' `resourcesDir`, as before).
+- A provider builds a fresh usvg resolver per parse over the instance's
+  `Arc`s, so the async twins needed nothing: `to_upstream` runs on the main
+  thread, the resolver (`Send + Sync` boxes) moves to the worker with the
+  options, and `misses()` reads what it noted once the promise settled.
+  `misses()` is a snapshot, not a drain. One instance reused, concurrently
+  or not, lists the misses of every parse (tested, documented): one per parse.
+- The resolver's `resourcesDir` falls back to the parse options': with
+  neither, no file is read.
+- The default for helpers: `fit.mjs` exports `guardedParse(binding,
+  options)`, a `render` for `fitTextWidths` with a fresh resolver per
+  parse, which the README and `test/fit.mjs` use; the demo's
+  `measureText` passes a fresh one unless its options bring one, and the
+  bench's tree (behind fitting and the Nodes panel) parses through
+  `guardedParse`, which now also sees the dropped images. Step 11's helpers
+  take it from there.
+
 ## Status
 
 - [x] 1
@@ -246,7 +279,7 @@ Step 9 added `Config::asynchronous` and `napi_gen::twin` (CONTRIBUTING,
 - [x] 7b
 - [x] 8
 - [x] 9
-- [ ] 10
+- [x] 10
 - [ ] 11
 - [ ] 12
 - [ ] 13

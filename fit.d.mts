@@ -5,7 +5,7 @@
  * unlike `index.d.ts`, so they can drift. `npm run typecheck` reads them.
  */
 
-import type { usvg, BBox } from './index.js'
+import type { usvg, guard, BBox } from './index.js'
 
 /** What fitting reads of a parsed `usvg.Tree`. */
 type Renderer = Pick<usvg.Tree, 'size' | 'nodeById'>
@@ -57,14 +57,30 @@ export function nodeExtent(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage
 /** Elements carrying a width constraint, with the tag text needed to rewrite it. */
 export function findWidthConstraints(svg: string): WidthConstraint[]
 
+/** What `guardedParse` passes on: `usvg.Options`, with the resolver's own. */
+export type GuardedParseOptions = Omit<usvg.Options, 'imageHrefResolver'> &
+  Pick<guard.ImageHrefResolverOptions, 'images' | 'resourcesRoot'>
+
+/**
+ * A `render` for `fitTextWidths` that is safe on untrusted SVG: each parse
+ * gets a fresh `guard.ImageHrefResolver` (images supplied by href, files only
+ * under `resourcesDir`, SVGZ and oversized images refused). The raw
+ * `usvg.Tree.fromStr` resolves `<image href>` from any local path instead.
+ */
+export function guardedParse(
+  binding: { usvg: typeof usvg; guard: typeof guard },
+  options?: GuardedParseOptions,
+): (svg: string) => usvg.Tree
+
 /**
  * Fits every `data-maxwidth` element by compressing it horizontally.
  *
  * @param svg     source, after any templating
- * @param render  `(svg) => usvg.Tree`; supply fonts and options here. The raw
- *                 `usvg.Tree.fromStr` resolves `<image href>` from any local
- *                 path: do not pass untrusted SVG through it without a safe
- *                 image resolver.
+ * @param render  `(svg) => usvg.Tree`; supply fonts and options here.
+ *                 `guardedParse(binding, options)` is the safe default. The
+ *                 raw `usvg.Tree.fromStr` resolves `<image href>` from any
+ *                 local path: do not pass untrusted SVG through it without a
+ *                 `guard.ImageHrefResolver`.
  */
 export function fitTextWidths(
   svg: string,

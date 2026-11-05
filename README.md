@@ -111,6 +111,10 @@ if (n?.kind === 'text') n.value.chunks()  // chunks, layouted spans, positioned 
 if (n?.kind === 'group') n.value.opacity() // transform, blendMode, isolate, filters…
 ```
 
+Like usvg's in Rust, these options read any local path an `<image href>`
+names: parse untrusted SVG with the `guard` providers ([Untrusted
+SVG](#untrusted-svg)).
+
 Each value keeps its tree alive and finds its node again on each call, so it
 outlives the `tree` variable. `text.flattened()` is that text's glyphs as a
 group of paths, the outlines `renderPng` draws. A span carries what it is drawn
@@ -137,6 +141,36 @@ const paint = n.value.fill()?.paint
 if (paint?.type === 'color') paint.value   // { red, green, blue }
 else paint?.id                             // the gradient or pattern it names
 ```
+
+## Untrusted SVG
+
+The namespaced API behaves like Rust: without a resolver, usvg reads any local
+path an `<image href>` names (`/etc/…`, `../`, a FIFO) and decodes any image,
+however large it says it is. The `guard` providers are the opt-in that does
+not, and every helper that parses caller SVG uses them:
+
+```js
+import { usvg, guard } from 'resvg-napi'
+
+const images = new guard.ImageHrefResolver({
+  images: { 'logo.png': logoBytes }, // tried first, by href
+  resourcesDir: '/srv/templates',    // files only from here (resourcesRoot widens it)
+})
+const fonts = new guard.FontResolver()
+const tree = usvg.Tree.fromStr(svg, { fontdb: db, imageHrefResolver: images, fontResolver: fonts })
+images.misses() // hrefs nothing resolved: ['photo.jpg']
+fonts.misses()  // named families the database lacks: ['Brand Sans']
+```
+
+`guard.ImageHrefResolver` reads files only under `resourcesDir` (its own, or
+the parse options'; with neither, none), canonicalised so `..`, absolute paths
+and symlinks cannot leave it, and only regular files of at most 256 MiB,
+opened without following a final symlink. Whatever the source, it refuses
+gzip data (SVGZ) and any raster image whose header declares more than 2^28
+pixels, and logs the refusal. The async twins (`fromDataAsync`,
+`fromStrAsync`) carry the resolvers to the worker thread; `misses()` reads
+what they recorded once the promise settled. Use one instance per parse: one
+shared between parses lists the misses of them all.
 
 ## Measure text and geometry
 
@@ -262,16 +296,18 @@ constraint from the source, measures the text with `nodeExtent` on the
 templates use by hand):
 
 ```js
-import { fitTextWidths } from 'resvg-napi/fit.mjs'
+import binding from 'resvg-napi'
+import { fitTextWidths, guardedParse } from 'resvg-napi/fit.mjs'
 
 const { svg, adjustments, problems } = fitTextWidths(source,
-  (s) => usvg.Tree.fromStr(s, { fontFamily, fontdb: db }))
+  guardedParse(binding, { fontFamily, fontdb: db, resourcesDir, images }))
 // adjustments: [{ id: 'surname', from: 200.23, to: 90, factor: 0.4495, measured: 90.0031 }]
 ```
 
-`usvg.Tree.fromStr` with default options resolves `<image href>` from any
-local path, as usvg does in Rust. Only pass trusted SVG through `render` until
-the safe resolver of the 0.10 helpers lands.
+`guardedParse` parses each pass with a fresh `guard.ImageHrefResolver` (see
+[Untrusted SVG](#untrusted-svg)). A plain `(s) => usvg.Tree.fromStr(s, …)`
+works too, but without a resolver usvg resolves `<image href>` from any local
+path, as it does in Rust: only for trusted SVG.
 
 The limit is read in **the document's own units**, the ones the attribute is
 written in. That matters: `width="85.6mm"` with a `viewBox` 240.94 wide makes usvg

@@ -1,8 +1,8 @@
 // The second surface: one namespace per crate (`usvg.*`, `fontdb.*`,
-// `tiny_skia.*`, `svgtypes.*`, `resvg.*`), Rust names, beside the flat exports
-// it will replace. This checks its shape against index.d.ts: every class,
-// enum and function declared is there at runtime, under its Rust name, with
-// the members declared. What they do is for render.mjs, errors.mjs and
+// `tiny_skia.*`, `svgtypes.*`, `resvg.*`, and the hand-written `guard.*`), Rust
+// names, beside the flat exports it will replace. This checks its shape
+// against index.d.ts: every class, enum and function declared is there at
+// runtime, under its Rust name, with the members declared. What they do is for render.mjs, errors.mjs and
 // conversions.mjs beside it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ import { declarations } from '../../scripts/api-diff.mjs';
 import { testFonts } from '../support.mjs';
 
 const dts = declarations(readFileSync(new URL('../../index.d.ts', import.meta.url), 'utf8'));
-const NAMESPACES = ['usvg', 'fontdb', 'tiny_skia', 'svgtypes', 'resvg'];
+const NAMESPACES = ['usvg', 'fontdb', 'tiny_skia', 'svgtypes', 'resvg', 'guard'];
 
 /** `{ classes, enums, functions, types }` a namespace declares, by name. */
 function declared(ns) {

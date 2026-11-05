@@ -1,7 +1,7 @@
 // Compile-time check that fit.d.mts describes fit.mjs. It is hand-written, so
 // unlike index.d.ts it can drift -- and a declaration that lies about a shape is
 // worse than none, because it type-checks the wrong code.
-import { findWidthConstraints, fitTextWidths, nodeExtent } from '../fit.mjs';
+import { findWidthConstraints, fitTextWidths, guardedParse, nodeExtent } from '../fit.mjs';
 import binding from '../index.js';
 import type { WidthConstraint, Adjustment, FitResult } from '../fit.d.mts';
 
@@ -25,6 +25,12 @@ for (const a of out.adjustments as Adjustment[]) {
 
 const node = binding.usvg.Tree.fromStr('<svg/>').nodeById('x');
 if (node) console.log(nodeExtent(node)?.width);
+
+// The safe default: usvg.Options plus the resolver's images and resourcesRoot.
+const guarded = guardedParse(binding, { fontFamily: 'x', resourcesDir: '.', images: { a: new Uint8Array() }, resourcesRoot: '..' });
+fitTextWidths('<svg/>', guarded);
+// @ts-expect-error the resolver is guardedParse's own
+guardedParse(binding, { imageHrefResolver: new binding.guard.ImageHrefResolver() });
 
 // @ts-expect-error the render callback must return a parsed tree
 fitTextWidths('<svg/>', () => 42);

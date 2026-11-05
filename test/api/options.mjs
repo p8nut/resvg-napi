@@ -47,18 +47,21 @@ test('usvg.Options and usvg.WriteOptions: every field optional', () => {
 test('the same fields as the flat options, from the same upstream structs', () => {
   const flat = (n) => Object.keys(fields(n)).sort();
   // `resourcesRoot` is the flat surface's own fence, not a usvg field; the
-  // font database is a `Resvg` argument there and a field here.
+  // font database is a `Resvg` argument there and a field here, and the
+  // resolvers are the flat surface's own, fixed, and providers here.
   const render = flat('RenderOptions').filter((f) => f !== 'resourcesRoot');
-  assert.deepEqual(Object.keys(fields('usvg.Options')).sort(), [...render, 'fontdb'].sort());
+  assert.deepEqual(
+    Object.keys(fields('usvg.Options')).sort(),
+    [...render, 'fontdb', 'imageHrefResolver', 'fontResolver'].sort(),
+  );
   assert.deepEqual(Object.keys(fields('usvg.WriteOptions')).sort(), flat('WriteOptions'));
 });
 
-test('usvg.Options.fontdb takes a fontdb.Database (a provider field)', () => {
+test('usvg.Options: fontdb and the resolvers are provider fields', () => {
   assert.equal(fields('usvg.Options').fontdb, '?: fontdb.Database');
-  // The resolvers get their provider classes in step 10 (`guard`): until
-  // then they are left out, and usvg's default resolvers apply.
-  assert.equal(fields('usvg.Options').imageHrefResolver, undefined);
-  assert.equal(fields('usvg.Options').fontResolver, undefined);
+  // The resolvers take the `guard` providers (test/api/guard.mjs).
+  assert.equal(fields('usvg.Options').imageHrefResolver, '?: guard.ImageHrefResolver');
+  assert.equal(fields('usvg.Options').fontResolver, '?: guard.FontResolver');
 });
 
 test('enum fields are the namespaced enums, indent its JS form', () => {

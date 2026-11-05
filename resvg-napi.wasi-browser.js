@@ -1454,6 +1454,7 @@ export const Stretch = __napiModule.exports.Stretch
 export const takeLogs = __napiModule.exports.takeLogs
 export const TextRendering = __napiModule.exports.TextRendering
 export const fontdb = __napiModule.exports.fontdb
+export const guard = __napiModule.exports.guard
 export const resvg = __napiModule.exports.resvg
 export const svgtypes = __napiModule.exports.svgtypes
 export const tiny_skia = __napiModule.exports.tiny_skia

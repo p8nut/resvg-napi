@@ -94,8 +94,6 @@ usvg::Node is a union of projections
 usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
 usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
 usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)
-usvg::Options field not in the option object: font_resolver: FontResolver<'a> (no provider: keeps the default)
-usvg::Options field not in the option object: image_href_resolver: ImageHrefResolver<'a> (no provider: keeps the default)
 usvg::Path is a class: Projected
 usvg::Path is a projection, not a copy of the flat data type
 usvg::Pattern is a class: Projected

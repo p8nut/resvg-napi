@@ -129,17 +129,36 @@ pub const GEN: Config = Config {
     option_objects: &[PARSE_OPTIONS, WRITE_OPTIONS],
     // Option fields with no JS form, supplied by a class instance (Q26, Q27).
     // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
-    // copied. The resolvers (`ImageHrefResolver`, `FontResolver`) get their
-    // provider classes with the `guard` module in step 10 of the migration;
-    // until then the fields are left out and usvg's default resolvers apply.
-    providers: &[Provider {
-        ty: "Arc<fontdb::Database>",
-        class: "Database",
-        provide: "v.__ref()?.clone()",
-        doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
-              Left out, the database is empty, as in Rust: text then renders\n\
-              nothing. Load fonts into a `fontdb.Database` and pass it here.",
-    }],
+    // copied. The resolvers take the hand-written `guard` providers
+    // (src/guard.rs): left out, usvg's default resolvers apply, which read
+    // any path and decode any image, as in Rust (Q10).
+    providers: &[
+        Provider {
+            ty: "Arc<fontdb::Database>",
+            class: "Database",
+            provide: "v.__ref()?.clone()",
+            doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
+                  Left out, the database is empty, as in Rust: text then renders\n\
+                  nothing. Load fonts into a `fontdb.Database` and pass it here.",
+        },
+        Provider {
+            ty: "ImageHrefResolver<'a>",
+            class: "GuardImageHrefResolver",
+            provide: "v.resolver()?",
+            doc: "A `guard.ImageHrefResolver`: supplied images, files fenced to a\n\
+                  directory, SVGZ and oversized images refused, misses recorded.\n\
+                  Left out, usvg's default applies, as in Rust: it reads any path\n\
+                  an `<image href>` names and decodes any image. Do not parse\n\
+                  untrusted SVG without one. One instance per parse.",
+        },
+        Provider {
+            ty: "FontResolver<'a>",
+            class: "GuardFontResolver",
+            provide: "v.resolver()?",
+            doc: "A `guard.FontResolver`, recording the named families the\n\
+                  database lacks. Left out, usvg's default selection applies.",
+        },
+    ],
     // `WriteOptions::indent` and `attributes_indent` are xmlwriter's `Indent`,
     // a payload enum of a crate the generator does not parse: the template's
     // `indent_from_js` reads a number of spaces, `'tabs'` or `'none'`.

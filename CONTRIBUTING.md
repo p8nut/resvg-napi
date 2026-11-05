@@ -37,6 +37,7 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
 | `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
+| `src/guard.rs` | **the resvg-specific guards, written by hand**: the `guard` providers and the resolvers the flat `Resvg` uses (below) |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
 
 What the template needs that has nothing to do with resvg lives in its own
@@ -168,12 +169,12 @@ field maps as the flat options' fields do, or through one of three hooks:
   instance of class `C` providing it". The field takes the instance as a
   `ClassInstance<'a, C>`, so the object gets a lifetime, and the provider's
   expression makes the value out of it. `Options::fontdb` takes a
-  `fontdb.Database` and shares its `Arc`. napi checks the class: another
-  class's instance, or a plain object, throws (natively by type tag, on WASI by
-  the class recorded at wrap time). The resolvers (ADR 0002, Q26) get their
-  provider classes in step 10; until then a field with no JS form and no
-  provider is left out of the type and keeps its default, and the report lists
-  it as `no provider`.
+  `fontdb.Database` and shares its `Arc`; `imageHrefResolver` and
+  `fontResolver` take the `guard` classes (below, ADR 0002, Q26). napi checks
+  the class: another class's instance, or a plain object, throws (natively by
+  type tag, on WASI by the class recorded at wrap time). A field with no JS
+  form and no provider is left out of the type and keeps its default, and the
+  report lists it as `no provider`.
 - **Converters** (`Config::converters`): "a field of type `T` takes the JS
   type `J`, converted by the template function `f`". For a type the generator
   cannot read, such as xmlwriter's `Indent`, a payload enum of a crate it does not
@@ -190,6 +191,40 @@ out, it is `O::default()`. The toy tests the conversion through
 `toy.report(tally, options)`, its generated free function: omitted fields
 equal `Default`, the provider field takes only a `toy.Tally`, the converter,
 and the clamp.
+
+### The `guard` module
+
+`src/guard.rs` is hand-written and resvg-specific, like the template, so it
+lives at the root, outside the boundary grep ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md),
+"Safety"). The generated `src/lib.rs` declares it (`mod guard;`, from the
+template), and `build.rs` reads it beside the generated file so its classes
+get `[Symbol.dispose]` and `util.inspect` like the others. It holds:
+
+- `guard.ImageHrefResolver({ images, resourcesDir, resourcesRoot })`, the
+  provider of `usvg.Options.imageHrefResolver`: supplied buffers first, then
+  files under `resourcesDir` (its own, else the parse options') through
+  `napi_support::fs::read_regular` (`O_NOFOLLOW`, regular files, 256 MiB),
+  canonicalised against `resourcesRoot`; gzip data (SVGZ) and raster images
+  declaring more than 2^28 px refused and logged; `misses()`.
+- `guard.FontResolver()`, the provider of `fontResolver`: usvg's
+  selectors, noting the named families the database lacks; `misses()`.
+- the functions both are built on (`href_resolver`, `font_resolver`,
+  `Misses`, `image_map`), which the flat `Resvg` calls too until step 13:
+  one copy of the checks.
+
+A provider makes a fresh usvg resolver per parse, sharing the instance's
+images and misses (`Arc`s): an async twin moves it to the worker, and what
+the worker notes is read on the main thread after the promise settles. One
+instance per parse is the rule; one reused, even concurrently, lists the
+misses of every parse it served.
+
+**The raw default is unsafe by design.** Without a provider, `usvg.Options`
+keeps usvg's `Default` resolvers, as Rust does (Q10): they read any path an
+`<image href>` names and decode any image. `test/api/guard.mjs` proves the
+raw parse reads a file outside `resourcesDir`, and the guard does not. So
+every helper that parses caller SVG passes a fresh provider: `fit.mjs`'s
+`guardedParse(binding, options)`, the demo's `measureText` and its tree
+panel.
 
 ### Classes and free functions
 

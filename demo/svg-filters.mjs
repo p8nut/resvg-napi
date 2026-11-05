@@ -18,6 +18,10 @@ const round = (n) => Math.round(n * 100) / 100;
  * Width of a string, straight from the renderer that will draw it: the
  * `measure` both pages hand to registerSvgFilters.
  *
+ * The probe parses with a fresh `guard.ImageHrefResolver` unless `options`
+ * brings one: the raw default would read any local path an `<image href>`
+ * names, and the guard is the default of every helper that parses.
+ *
  * @param binding the binding (native or wasm): its `usvg` namespace parses
  * @param db      the `fontdb.Database` holding the fonts the document renders with
  * @param text    the string
@@ -30,7 +34,12 @@ export function measureText(binding, db, text, { fontSize = 12, family } = {}, o
     + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`
     + `${escapeXml(text)}</text></svg>`;
   try {
-    const node = binding.usvg.Tree.fromStr(probe, { ...options, fontFamily: fam, fontdb: db }).nodeById('m');
+    const node = binding.usvg.Tree.fromStr(probe, {
+      imageHrefResolver: new binding.guard.ImageHrefResolver(),
+      ...options,
+      fontFamily: fam,
+      fontdb: db,
+    }).nodeById('m');
     return (node && nodeExtent(node)?.width) ?? 0;
   } catch {
     return 0;

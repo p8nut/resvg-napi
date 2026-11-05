@@ -18,6 +18,15 @@ export declare namespace fontdb {
   }
 }
 
+export declare namespace guard {
+  export interface FontResolver {
+    [Symbol.dispose](): void
+  }
+  export interface ImageHrefResolver {
+    [Symbol.dispose](): void
+  }
+}
+
 export declare namespace svgtypes {
   export interface Color {
     [Symbol.dispose](): void
@@ -898,6 +907,95 @@ export declare namespace fontdb {
   export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
   /** Allows italic or oblique faces to be selected. */
   export type Style = 'normal' | 'italic' | 'oblique'
+}
+
+export declare namespace guard {
+  /**
+   * usvg's font selection, recording the named families the database does
+   * not carry: the provider for `usvg.Options.fontResolver`. Text in such a
+   * family is drawn with a fallback face, or not at all.
+   *
+   * `misses()` lists them. Use one instance per parse: an instance used for
+   * several lists the misses of them all.
+   */
+  export class FontResolver {
+    constructor()
+    /**
+     * The named families the database lacked, each once, in the order met:
+     * during every parse this instance served so far, async ones included
+     * once they settled.
+     */
+    misses(): Array<string>
+    /**
+     * Every later call throws `Disposed`, and so does passing it to a parse.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type GuardFontResolver = FontResolver
+  /**
+   * usvg's image href resolution, fenced: the provider for
+   * `usvg.Options.imageHrefResolver`.
+   *
+   * - Supplied `images` first, by href.
+   * - Then a file under `resourcesDir` (or the parse options'), and nowhere
+   *   else: canonicalised, so `..`, an absolute path or a symlink cannot leave
+   *   it (`resourcesRoot` widens the fence); only a regular file, opened
+   *   without following a final symlink, of at most 256 MiB.
+   * - `data:` URLs as usvg reads them.
+   * - Whatever the source, gzip data (SVGZ) is refused, and so is a raster
+   *   image whose header declares more than 2^28 px, or no readable size.
+   *   Refusals are logged (`setLogLevel('warn')`).
+   *
+   * What stays unresolved is listed by `misses()`. Use one instance per
+   * parse: an instance used for several, at once or in turn, lists the misses
+   * of them all.
+   */
+  export class ImageHrefResolver {
+    constructor(options?: guard.ImageHrefResolverOptions | undefined | null)
+    /**
+     * The hrefs no source resolved, each once, in the order met: during
+     * every parse this instance served so far, async ones included once
+     * they settled.
+     */
+    misses(): Array<string>
+    /**
+     * Drops the supplied images now, not at garbage collection: every later
+     * call throws `Disposed`, and so does passing it to a parse. A parse
+     * already running keeps what it holds. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type GuardImageHrefResolver = ImageHrefResolver
+  /** What `new guard.ImageHrefResolver(options)` reads from. */
+  export interface ImageHrefResolverOptions {
+    /**
+     * Image bytes by href, tried first: an `<image href>` equal to a key
+     * gets its value, whatever the format (sniffed, then checked like a
+     * file).
+     */
+    images?: Record<string, Uint8Array>
+    /**
+     * The directory relative hrefs resolve against, and the only one files
+     * are read from. Default: the parse options' `resourcesDir`. With
+     * neither, no file is read.
+     */
+    resourcesDir?: string
+    /**
+     * Widens what hrefs may reach to this directory, an ancestor of
+     * `resourcesDir`, so a template beside a shared assets folder can use
+     * `../assets/logo.png`. Default: `resourcesDir` itself.
+     */
+    resourcesRoot?: string
+  }
 }
 
 export declare namespace resvg {
@@ -2924,6 +3022,25 @@ export declare namespace usvg {
      * Default: `(100, 100)`
      */
     defaultSizeHeight?: number
+    /**
+     * Specifies the way `xlink:href` in `<image>` elements should be handled.
+     *
+     * Default: see type's documentation for details
+     *
+     * A `guard.ImageHrefResolver`: supplied images, files fenced to a
+     * directory, SVGZ and oversized images refused, misses recorded.
+     * Left out, usvg's default applies, as in Rust: it reads any path
+     * an `<image href>` names and decodes any image. Do not parse
+     * untrusted SVG without one. One instance per parse.
+     */
+    imageHrefResolver?: guard.ImageHrefResolver
+    /**
+     * Specifies how fonts should be resolved and loaded.
+     *
+     * A `guard.FontResolver`, recording the named families the
+     * database lacks. Left out, usvg's default selection applies.
+     */
+    fontResolver?: guard.FontResolver
     /**
      * A database of fonts usable by text.
      *

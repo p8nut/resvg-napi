@@ -89,6 +89,7 @@ fn main() {
     // The generated file is also an *input* to watch: if someone deletes or
     // stubs src/lib.rs, the script must re-run and regenerate it.
     println!("cargo::rerun-if-changed=src/lib.rs");
+    println!("cargo::rerun-if-changed={GUARD}");
     println!("cargo::rerun-if-env-changed={CODEGEN_LOG}");
 
     let locked = locked_versions();
@@ -930,12 +931,17 @@ fn main() {
         // `dispose()` on every class, and `[Symbol.dispose]` with its
         // declaration (napi's `dtsHeaderFile`).
         napi_gen::dispose::slotted(&mut file);
-        let (alias, dts_header) = napi_gen::dispose::aliases(&file);
+        // The hand-written `guard` module's classes (src/guard.rs) get
+        // `[Symbol.dispose]` and `util.inspect` like the generated ones: the
+        // two passes read them beside the file, which does not hold them.
+        let mut whole = file.clone();
+        whole.items.extend(guard_module().items);
+        let (alias, dts_header) = napi_gen::dispose::aliases(&whole);
         write_if_changed(
             &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join(DTS_HEADER),
             &dts_header,
         );
-        let inspect = inspect_members(&file);
+        let inspect = inspect_members(&whole);
         code = quote! { #file #alias #inspect };
     }
 
@@ -958,6 +964,9 @@ fn main() {
     // Staging copy, handy for inspection: $OUT_DIR/bindings.rs
     let staged = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
     fs::write(&staged, &text).unwrap();
+    // rustfmt follows `mod guard;` and gives up when the file is not beside
+    // the staged copy: an empty stand-in is enough.
+    fs::write(staged.with_file_name("guard.rs"), "").unwrap();
     rustfmt(&staged);
 
     // Real target. It has to be the crate root itself: `napi-derive` keeps a
@@ -1055,6 +1064,17 @@ fn prune(code: TokenStream, generated: &[&TokenStream], also: &[&TokenStream]) -
         .filter(|(_, k)| *k)
         .map(|(i, _)| i);
     quote!(#(#kept)*)
+}
+
+/// The hand-written `guard` module (ADR 0002, Q26): the generated file
+/// declares it (`mod guard;`, in the template), and reads its classes.
+const GUARD: &str = "src/guard.rs";
+
+/// [`GUARD`], parsed.
+fn guard_module() -> syn::File {
+    let path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join(GUARD);
+    let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{GUARD}: {e}"));
+    syn::parse_file(&text).unwrap_or_else(|e| panic!("{GUARD}: {e}"))
 }
 
 /// The `.d.ts` header napi writes first (`napi.dtsHeaderFile` in

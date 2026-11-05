@@ -376,7 +376,7 @@
 </div>
 
 <script type="module">
-  const { Liquid, eachNode, measureText, fitTextWidths, nodeExtent, registerSvgFilters, referencedPartials }
+  const { Liquid, eachNode, measureText, fitTextWidths, guardedParse, nodeExtent, registerSvgFilters, referencedPartials }
     = await import('./liquid.js');
 
   // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
@@ -1186,11 +1186,11 @@
     return Object.keys(opts).length ? opts : undefined;
   }
 
-  // The parsed tree of the namespaced surface, with the same options and
-  // fonts. Images dropped on the page are `Resvg`'s alone: usvg's default
-  // resolver reads data URLs only, here.
+  // The parsed tree of the namespaced surface, with the same options, fonts
+  // and dropped images. A fresh `guard.ImageHrefResolver` per parse: the
+  // pasted SVG is untrusted, and usvg's default resolver would read any path.
   function parseTree(svg) {
-    return mod.usvg.Tree.fromStr(svg, { ...defaults(), fontdb: db });
+    return guardedParse(mod, { ...defaults(), fontdb: db, images: Object.fromEntries(images) })(svg);
   }
 
   // Anything dropped or pasted lands here. A font goes into the database; an

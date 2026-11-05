@@ -130,13 +130,32 @@ function ensureIds(svg) {
 }
 
 /**
+ * A `render` for `fitTextWidths` that is safe on untrusted SVG: each parse
+ * gets a fresh `guard.ImageHrefResolver` (images supplied by href, files only
+ * under `resourcesDir`, SVGZ and oversized images refused). The raw
+ * `usvg.Tree.fromStr` resolves `<image href>` from any local path instead.
+ *
+ * @param binding  the binding (native or wasm): `{ usvg, guard }`
+ * @param options  `usvg.Options` (`fontdb`, `fontFamily`, `resourcesDir`...),
+ *                 plus the resolver's `images` and `resourcesRoot`
+ * @returns (svg) => usvg.Tree
+ */
+export function guardedParse({ usvg, guard }, { images, resourcesRoot, ...options } = {}) {
+  return (svg) => usvg.Tree.fromStr(svg, {
+    ...options,
+    imageHrefResolver: new guard.ImageHrefResolver({ images, resourcesRoot }),
+  });
+}
+
+/**
  * Fits every `data-maxwidth` element by compressing it horizontally.
  *
  * @param svg     source, after any templating
- * @param render  (svg) => usvg.Tree; supply fonts and options here. The raw
+ * @param render  (svg) => usvg.Tree; supply fonts and options here.
+ *                 `guardedParse(binding, options)` is the safe default. The raw
  *                 usvg.Tree.fromStr resolves <image href> from any local path:
- *                 do not pass untrusted SVG through it without a safe image
- *                 resolver (see docs/migration-0.10.md, step 10).
+ *                 do not pass untrusted SVG through it without a
+ *                 `guard.ImageHrefResolver`.
  * @returns { svg, adjustments, problems }
  */
 export function fitTextWidths(svg, render) {

@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { inspect } from 'node:util';
 import binding from '../../index.js';
 
-const { usvg, fontdb, tiny_skia, svgtypes, resvg } = binding;
-const NAMESPACES = { usvg, fontdb, tiny_skia, svgtypes, resvg };
+const { usvg, fontdb, tiny_skia, svgtypes, resvg, guard } = binding;
+const NAMESPACES = { usvg, fontdb, tiny_skia, svgtypes, resvg, guard };
 
 const FONT = readFileSync(new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url));
 const PNG = new tiny_skia.Pixmap(1, 1).encodePng().toString('base64');
@@ -71,6 +71,8 @@ function everyClass() {
     'usvg.Span': span,
     'usvg.PositionedGlyph': span.positionedGlyphs[0],
     'usvg.ImageKindPng': image.kind(),
+    'guard.ImageHrefResolver': new guard.ImageHrefResolver(),
+    'guard.FontResolver': new guard.FontResolver(),
   };
 }
 

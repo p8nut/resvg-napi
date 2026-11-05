@@ -519,10 +519,18 @@ pub fn template(
         ) -> Result<usvg::Indent> {
             match v {
                 None => Ok(fallback),
-                Some(Either::A(n)) => u8::try_from(*n)
+                Some(v) => indent_from_js(v, name),
+            }
+        }
+
+        #[doc = " A number of spaces (0-255), `'tabs'` or `'none'` as a `usvg::Indent`:"]
+        #[doc = " `config::GEN.converters`, for `usvg.WriteOptions` too."]
+        fn indent_from_js(v: &Either<u32, String>, name: &str) -> Result<usvg::Indent> {
+            match v {
+                Either::A(n) => u8::try_from(*n)
                     .map(usvg::Indent::Spaces)
                     .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
-                Some(Either::B(s)) => match s.as_str() {
+                Either::B(s) => match s.as_str() {
                     "tabs" => Ok(usvg::Indent::Tabs),
                     "none" => Ok(usvg::Indent::None),
                     _ => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),

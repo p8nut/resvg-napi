@@ -43,7 +43,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
-  assert.deepEqual(Object.keys(ns).sort(), ['Counter', 'Direction', 'Tally', 'share', 'shared', 'tally']);
+  assert.deepEqual(Object.keys(ns).sort(), ['Counter', 'Direction', 'Tally', 'report', 'share', 'shared', 'tally']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
   assert.notEqual(ns.Direction, toy.Direction, 'an enum object of its own');
   // napi keeps one constructor per class name: had the flat `Counter` kept
@@ -82,4 +82,51 @@ test('a Clone handle gets its &mut methods through Arc::make_mut', () => {
   a.clear();
   assert.equal(a.len(), 0);
   assert.equal(b.len(), 3);
+});
+
+test('an option object: every field optional, the rest from Default', () => {
+  const t = toy.toy.tally();
+  t.push('x');
+  t.push('y');
+  // `ReportOptions::default()`: title `tally`, STYLES[0], no base, no padding.
+  const byDefault = 'tally[plain]: x,y';
+  assert.equal(toy.toy.report(t), byDefault);
+  assert.equal(toy.toy.report(t, {}), byDefault);
+  assert.equal(toy.toy.report(t, { title: undefined, width: undefined }), byDefault);
+  // One field changes that field only.
+  assert.equal(toy.toy.report(t, { title: 'n' }), 'n[plain]: x,y');
+  assert.equal(toy.toy.report(t, { styleIndex: 1 }), 'tally[loud]: x,y');
+});
+
+test('an index-bounded field is clamped to its table', () => {
+  const t = toy.toy.tally();
+  // STYLES has three entries: anything past the last is the last, never an
+  // out-of-bounds index (a panic upstream).
+  assert.equal(toy.toy.report(t, { styleIndex: 2 }), 'tally[quiet]: ');
+  assert.equal(toy.toy.report(t, { styleIndex: 200 }), 'tally[quiet]: ');
+  assert.equal(toy.toy.report(t, { styleIndex: 1e6 }), 'tally[quiet]: ');
+});
+
+test('a provider field takes a class instance, shared not copied', () => {
+  const base = toy.toy.tally();
+  base.push('a');
+  const t = toy.toy.tally();
+  t.push('x');
+  assert.equal(toy.toy.report(t, { base }), 'tally[plain]: a,x');
+  // The instance is read when the options are converted: a later write shows.
+  base.push('b');
+  assert.equal(toy.toy.report(t, { base }), 'tally[plain]: a,b,x');
+  // Only an instance of the providing class: not a look-alike, not another class.
+  assert.throws(() => toy.toy.report(t, { base: {} }));
+  assert.throws(() => toy.toy.report(t, { base: toy.counter() }), /Tally/);
+  assert.throws(() => toy.toy.report(t, { base: 'a' }));
+});
+
+test('a converter field takes its JS form, and refuses anything else', () => {
+  const t = toy.toy.tally();
+  t.push('x');
+  assert.equal(toy.toy.report(t, { width: 20 }), 'tally[plain]: x.....');
+  assert.equal(toy.toy.report(t, { width: 'auto' }), 'tally[plain]: x');
+  assert.throws(() => toy.toy.report(t, { width: 'wide' }), /invalid width: "wide"/);
+  assert.throws(() => toy.toy.report(t, { width: 256 }), /invalid width: 256/);
 });

@@ -165,6 +165,18 @@ pub fn derives(files: &[syn::File], ty: &str, tr: &str) -> bool {
         })
 }
 
+/// Whether the public struct `ty` has `Default`: derived, or an
+/// `impl Default for ty`.
+pub fn has_default(files: &[syn::File], ty: &str) -> bool {
+    derives(files, ty, "Default")
+        || files.iter().flat_map(|f| &f.items).any(|i| {
+            matches!(i, Item::Impl(imp)
+                if imp.trait_.as_ref().is_some_and(|(p, _)| {
+                    p.segments.last().is_some_and(|s| s.ident == "Default")
+                }) && self_ident(imp).is_some_and(|id| id == ty))
+        })
+}
+
 /// Renames a kept item to the name the crate root exports it under, so what is
 /// parsed downstream is what a caller of the crate can actually write.
 fn rename(item: &mut Item, from: &str, to: &str) {

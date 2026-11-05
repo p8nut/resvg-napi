@@ -12,6 +12,7 @@ import {
   type Path,
   type PathSegment,
   type ParseErrorCode,
+  type usvg,
 } from '../index.js';
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80">
@@ -136,3 +137,11 @@ void renderAsync(bytes);
 // declares `[Symbol.dispose]`. No `using` statement here: this file also runs,
 // and Node parses one only from 24.
 new Resvg(svg) satisfies Disposable;
+
+// 10. the namespaced option objects: every field optional, indent in its JS
+//     form, and `fontdb` only a `fontdb.Database` instance (a provider).
+const nsOptions: usvg.Options = {};
+const nsWrite: usvg.WriteOptions = { indent: 'tabs', attributesIndent: 2, coordinatesPrecision: 3 };
+// @ts-expect-error a plain object is not a `fontdb.Database`
+const nsBadFonts: usvg.Options = { fontdb: {} };
+void [nsOptions, nsWrite, nsBadFonts];

@@ -196,14 +196,14 @@ fn main() {
         );
     }
 
-    // The table has N entries, so the highest usable index is N - 1.
-    let precision_max = u32::try_from(static_array_len(primary_files, GEN.clamp.1) - 1)
-        .expect("a clamp table that fits u32");
-    report!(
-        "{} precision clamp derived from {}: {precision_max}",
-        primary.root_str,
-        GEN.clamp.1
-    );
+    // Each index-bounded field's highest usable index, read off its table.
+    let bounds = index_bounds(primary_files);
+    for ((suffix, table), (_, max)) in GEN.index_bounded.iter().zip(&bounds) {
+        report!(
+            "{} index bound for `*{suffix}` derived from {table}: {max}",
+            primary.root_str
+        );
+    }
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
     let mut referenced = struct_field_types(primary_files, PARSE_OPTIONS);
@@ -516,21 +516,50 @@ fn main() {
         }
     }
 
-    let (fields, skipped_fields, _) =
-        map_struct(primary_files, PARSE_OPTIONS, &vocab, precision_max);
+    let (fields, skipped_fields, _) = map_struct(primary_files, PARSE_OPTIONS, &vocab, &bounds);
     let (write_fields, skipped_write, clamped) =
-        map_struct(primary_files, WRITE_OPTIONS, &vocab, precision_max);
-    // The write options are where the clamped indices live (config::GEN.clamp),
-    // found by a name suffix. A rename upstream would match nothing, fall
-    // through to u8::MAX, and hand usvg an index 242 places past the end of a
-    // 13-entry table -- an out-of-bounds panic inside an `extern "C"` callback,
-    // which aborts the process rather than throwing. Loud here instead.
+        map_struct(primary_files, WRITE_OPTIONS, &vocab, &bounds);
+    // The write options are where the clamped indices live
+    // (config::GEN.index_bounded), found by a name suffix. A rename upstream
+    // would match nothing, fall through to u8::MAX, and hand usvg an index 242
+    // places past the end of a 13-entry table -- an out-of-bounds panic inside
+    // an `extern "C"` callback, which aborts the process rather than throwing.
+    // Loud here instead.
     assert!(
         clamped > 0,
-        "no {WRITE_OPTIONS} field matched `*{}`: either upstream renamed them, \
-         in which case this clamp now protects nothing, or they are gone",
-        GEN.clamp.0
+        "no {WRITE_OPTIONS} field matched an index bound: either upstream renamed \
+         them, in which case the clamp now protects nothing, or they are gone"
     );
+
+    // The option structs as plain objects of the namespaced surface
+    // (`usvg.Options`, `usvg.WriteOptions`): every field optional over
+    // `Default`, the font database supplied by a `fontdb.Database`.
+    for name in GEN.option_objects {
+        let Some(obj) = option_object(primary_files, name, &vocab, modules, &primary.root, &bounds)
+        else {
+            report!(
+                "{}::{name} not an option object: no Default to fill it from",
+                primary.root_str
+            );
+            continue;
+        };
+        // The same guard as above, for the namespaced copy.
+        assert!(
+            *name != WRITE_OPTIONS || obj.bounded == clamped,
+            "{name}: the option object clamps {} fields, the flat one {clamped}",
+            obj.bounded
+        );
+        for s in obj.skipped {
+            report!(
+                "{}::{name} field not in the option object: {s}",
+                primary.root_str
+            );
+        }
+        mirrored
+            .entry(primary.root_str)
+            .or_default()
+            .extend(obj.code);
+    }
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
     // class for each, then follow the handles *those* classes return. The type

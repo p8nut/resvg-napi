@@ -13,10 +13,9 @@ use convert_case::Casing;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 use syn::{Fields, ImplItem, Item, ReturnType};
 
-use crate::config::*;
+use crate::config;
 use crate::sources::{inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
@@ -459,7 +458,7 @@ pub fn map_struct(
                 // panic unwinding out of an `extern "C"` callback, so a process
                 // abort rather than a JS exception. The caller counts what this
                 // matched and fails the build when it matches nothing.
-                let max = if name.ends_with(CLAMP.0) {
+                let max = if name.ends_with(config().clamp.0) {
                     clamped += 1;
                     precision_max
                 } else {
@@ -503,7 +502,7 @@ pub fn map_struct(
                 quote! { if let Some(v) = &self.#ident { o.#ident = v.clone(); } },
             )),
             Some(Js::Enum) => {
-                // The JS name, after ENUM_RENAMES, as every other site spells it.
+                // The JS name, after `Config::enum_renames`, as every other site spells it.
                 let e = enum_ident(&vocab.resolve(&ty));
                 Some(field(
                     &ident,
@@ -571,7 +570,7 @@ pub fn map_struct(
         // --- not transposable as data. These are wired by the emitter
         // template instead (opaque class, resolver hooks, xmlwriter's
         // `Indent`); the rest is dropped.
-        if HAND_WIRED_FIELDS.contains(&name.as_str()) {
+        if config().hand_wired_fields.contains(&name.as_str()) {
             skipped.push(Skip::new(&name, Some(&ty), Reason::HandWired));
         } else {
             skipped.push(Skip::new(&name, Some(&ty), Reason::Dropped));
@@ -708,20 +707,20 @@ pub fn data_members(
     let mut skipped = Vec::new();
     let mut reached = BTreeSet::new();
 
-    // `NOT_DATA` (config): conversions such as `Stroke::to_tiny_skia`.
+    // `Config::not_data`: conversions such as `Stroke::to_tiny_skia`.
 
     // The tree itself. Group, Node and Tree are what a handle exists for, and
     // following one into the data registry drags every definition type behind
     // it -- `Text::flattened` and `filter::Image::root` both hand back a Group.
     // A type rule rather than the two member names, because the next one to
-    // return a Group should need no edit here: `NODE_TYPES` (config).
+    // return a Group should need no edit here: `Config::node_types`.
 
     let mut push = |name: &str, ty_s: &str, access: TokenStream| {
-        if NOT_DATA.contains(&name) {
+        if config().not_data.contains(&name) {
             return;
         }
         let peeled = peel_type(ty_s);
-        if NODE_TYPES.contains(&bare(peeled)) {
+        if config().node_types.contains(&bare(peeled)) {
             return;
         }
         let id = format_ident!("{}", name);
@@ -1230,7 +1229,7 @@ pub fn map_methods(
                     match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
-                        _ if ty == ARG_STANDIN.0 => Some(Arg::Face),
+                        _ if ty == config().arg_standin.0 => Some(Arg::Face),
                         _ => None,
                     }
                 };
@@ -1275,7 +1274,7 @@ pub fn map_methods(
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat: Uint8Array),
                     Arg::Face => {
-                        let standin = format_ident!("{}", ARG_STANDIN.1);
+                        let standin = format_ident!("{}", config().arg_standin.1);
                         quote!(#pat: &#standin)
                     }
                     _ => quote!(#pat: String),

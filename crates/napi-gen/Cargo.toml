@@ -1,0 +1,16 @@
+[package]
+name = "napi-gen"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0 OR MIT"
+description = "Build-time generator of napi-rs bindings from the wrapped crates' own sources: syn reads upstream, quote emits the binding"
+publish = false
+
+[dependencies]
+# The version napi-derive-backend already pulls in: napi names JS members
+# with it, so the generator spelling them the same way is the point.
+convert_case = "0.12.0"
+syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
+quote = "1.0.35"
+proc-macro2 = "1.0.91"

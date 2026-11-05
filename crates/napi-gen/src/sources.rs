@@ -12,11 +12,28 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use syn::{Ident, Item, ItemImpl, Visibility};
 
-/// Exact versions picked by the resolver, straight out of our own Cargo.lock.
+/// The Cargo.lock the building crate resolves against: its own, or the
+/// workspace's above it when it is a member. The nearest one walking up from
+/// `CARGO_MANIFEST_DIR`, which is the one cargo uses.
+pub fn lockfile() -> PathBuf {
+    let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    manifest
+        .ancestors()
+        .map(|d| d.join("Cargo.lock"))
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "no Cargo.lock in {} or above it; run `cargo generate-lockfile`",
+                manifest.display()
+            )
+        })
+}
+
+/// Exact versions picked by the resolver, straight out of the Cargo.lock.
 /// Cheap hand-rolled scan: no serde/toml build-dependency needed. A crate in
 /// the graph twice keeps every version, and `locate` refuses to pick one.
 pub fn locked_versions() -> BTreeMap<String, Vec<String>> {
-    let lock = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("Cargo.lock");
+    let lock = lockfile();
     println!("cargo::rerun-if-changed={}", lock.display());
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     // Without it every crate would fall through to whatever the registry

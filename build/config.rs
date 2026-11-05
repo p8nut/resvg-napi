@@ -9,6 +9,8 @@
 //! wrapped impl blocks (`PASSES`), the clamp, and the upstream spellings of
 //! the template's domain shapes.
 
+use napi_gen::Config;
+
 /// One crate the binding wraps.
 pub struct Upstream {
     /// The Cargo package, and a file that identifies its sources.
@@ -40,25 +42,6 @@ pub const GENERATED_FROM: &str = "the resvg/usvg/fontdb sources";
 /// The path the vocabulary-only crates' types are reached by: usvg re-exports
 /// what of tiny-skia-path can appear.
 pub const VOCAB_ROOT: &str = "usvg";
-
-/// An option field indexing an upstream table without a bounds check, by its
-/// name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
-/// table's length; the build fails if the suffix matches nothing.
-pub const CLAMP: (&str, &str) = ("_precision", "POW_VEC");
-
-/// A struct with these fields is a transform (tiny-skia's), mapped to `Matrix`.
-pub const MATRIX_FIELDS: &[&str] = &["sx", "kx", "ky", "sy", "tx", "ty"];
-
-/// Upstream type spellings for the template's domain shapes.
-pub const SIZE_TYPES: &[&str] = &["Size", "usvg::Size"];
-pub const RECT_TYPES: &[&str] = &["Rect", "NonZeroRect"];
-pub const OPT_RECT_TYPES: &[&str] = &["Option<NonZeroRect>"];
-pub const PATH_DATA_TYPES: &[&str] = &["tiny_skia_path::Path", "&tiny_skia_path::Path"];
-pub const TAG4_TYPES: &[&str] = &["[u8;4]", "&[u8;4]"];
-
-/// An argument type JS hands over as a class instance instead: a fontdb face
-/// ID arrives as the `FontFace` it names, resolved by `id_in`.
-pub const ARG_STANDIN: (&str, &str) = ("ID", "FontFace");
 
 /// One wrapped `impl` block: which upstream type's methods land on which
 /// class, called on what. `receiver` and `prologue` are Rust source.
@@ -149,16 +132,6 @@ pub const VOCAB_CRATES: &[&str] = &["tiny-skia-path", "strict-num"];
 pub const PARSE_OPTIONS: &str = "Options";
 pub const WRITE_OPTIONS: &str = "WriteOptions";
 
-/// Option fields the template wires by hand (opaque class, resolver hooks,
-/// xmlwriter's `Indent`); every other unmappable field is dropped.
-pub const HAND_WIRED_FIELDS: &[&str] = &[
-    "fontdb",
-    "image_href_resolver",
-    "font_resolver",
-    "indent",
-    "attributes_indent",
-];
-
 /// Upstream names the template exposes under a *different* one. A rule cannot
 /// find these -- the rename is the decision -- so they are declared, and
 /// checked: a stale entry fails the build instead of rotting in a log line.
@@ -187,50 +160,65 @@ pub const RESERVED: &[&str] = &[
     "RenderParams",
 ];
 
-/// The tree itself. Group, Node and Tree are what a handle exists for, and
-/// following one into the data registry drags every definition type behind it --
-/// `Text::flattened` and `filter::Image::root` both hand back a Group, and
-/// `ImageKind` carries a Tree. Filtered both as a member and as a candidate
-/// seed, because either route reaches the same place.
-pub const NODE_TYPES: &[&str] = &["Group", "Node", "Tree"];
-
-/// Conversions, not data: `Stroke::to_tiny_skia` hands the caller a
-/// tiny-skia value to draw with. Counting it as an unmapped member would
-/// demote Stroke to a read-only class, and any object holding one -- `Path`
-/// -- would then carry a field napi cannot round-trip.
-pub const NOT_DATA: &[&str] = &["to_tiny_skia"];
-
-/// Upstream handle types the template wraps by hand, with the class name
-/// they get. Handle discovery skips them; `wrapper_ident` names them.
-pub const HAND_WRAPPED: &[(&str, &str)] = &[("fontdb::Database", "FontDatabase")];
-
-/// Data types emitted under another name: `FaceInfo` reads as `FontFace`.
-pub const DATA_RENAMES: &[(&str, &str)] = &[("FaceInfo", "FontFace")];
-
-/// Enums emitted under another name. `Style` alone says nothing next to usvg's
-/// own `FontStyle`, and the two would sit side by side in the exports with
-/// identical variants: one is what a text run asked for, the other what a
-/// loaded face is.
-pub const ENUM_RENAMES: &[(&str, &str)] = &[("Style", "FontFaceStyle")];
-
-/// Upstream Cargo features an emitted method can be gated on, and what each is
-/// for this crate: `"true"` (always built) or a cfg of ours it is built under.
-/// Names are global across the parsed crates (fontdb's `memmap`, usvg's
-/// `text`); one listed nowhere fails the build, so a new gate upstream is a
-/// decision here, not a silent miss. Must agree with Cargo.toml,
-/// which drops resvg's `memmap-fonts` -- fontdb's `memmap` -- on wasm.
-pub const FEATURES: &[(&str, &str)] = &[
-    ("std", "true"),
-    ("text", "true"),
-    ("fs", "true"),
-    ("fontconfig", "true"),
-    ("memmap", "not(target_family = \"wasm\")"),
-];
-
-/// `name` through a rename table, or unchanged.
-pub fn renamed<'a>(table: &[(&str, &'a str)], name: &'a str) -> &'a str {
-    table
-        .iter()
-        .find(|(from, _)| *from == name)
-        .map_or(name, |(_, to)| to)
-}
+/// What the generic phases (`napi-gen`) read: resvg's answers to its questions.
+pub const GEN: Config = Config {
+    log_env: crate::CODEGEN_LOG,
+    // An option field indexing an upstream table without a bounds check, by its
+    // name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
+    // table's length; the build fails if the suffix matches nothing.
+    clamp: ("_precision", "POW_VEC"),
+    // A struct with these fields is a transform (tiny-skia's), mapped to `Matrix`.
+    matrix_fields: &["sx", "kx", "ky", "sy", "tx", "ty"],
+    // Upstream type spellings for the template's domain shapes.
+    size_types: &["Size", "usvg::Size"],
+    rect_types: &["Rect", "NonZeroRect"],
+    opt_rect_types: &["Option<NonZeroRect>"],
+    path_data_types: &["tiny_skia_path::Path", "&tiny_skia_path::Path"],
+    tag4_types: &["[u8;4]", "&[u8;4]"],
+    // An argument type JS hands over as a class instance instead: a fontdb face
+    // ID arrives as the `FontFace` it names, resolved by `id_in`.
+    arg_standin: ("ID", "FontFace"),
+    // Option fields the template wires by hand (opaque class, resolver hooks,
+    // xmlwriter's `Indent`); every other unmappable field is dropped.
+    hand_wired_fields: &[
+        "fontdb",
+        "image_href_resolver",
+        "font_resolver",
+        "indent",
+        "attributes_indent",
+    ],
+    // The tree itself. Group, Node and Tree are what a handle exists for, and
+    // following one into the data registry drags every definition type behind it --
+    // `Text::flattened` and `filter::Image::root` both hand back a Group, and
+    // `ImageKind` carries a Tree. Filtered both as a member and as a candidate
+    // seed, because either route reaches the same place.
+    node_types: &["Group", "Node", "Tree"],
+    // Conversions, not data: `Stroke::to_tiny_skia` hands the caller a
+    // tiny-skia value to draw with. Counting it as an unmapped member would
+    // demote Stroke to a read-only class, and any object holding one -- `Path`
+    // -- would then carry a field napi cannot round-trip.
+    not_data: &["to_tiny_skia"],
+    // Upstream handle types the template wraps by hand, with the class name
+    // they get. Handle discovery skips them; `wrapper_ident` names them.
+    hand_wrapped: &[("fontdb::Database", "FontDatabase")],
+    // Data types emitted under another name: `FaceInfo` reads as `FontFace`.
+    data_renames: &[("FaceInfo", "FontFace")],
+    // Enums emitted under another name. `Style` alone says nothing next to usvg's
+    // own `FontStyle`, and the two would sit side by side in the exports with
+    // identical variants: one is what a text run asked for, the other what a
+    // loaded face is.
+    enum_renames: &[("Style", "FontFaceStyle")],
+    // Upstream Cargo features an emitted method can be gated on, and what each is
+    // for this crate: `"true"` (always built) or a cfg of ours it is built under.
+    // Names are global across the parsed crates (fontdb's `memmap`, usvg's
+    // `text`); one listed nowhere fails the build, so a new gate upstream is a
+    // decision here, not a silent miss. Must agree with Cargo.toml,
+    // which drops resvg's `memmap-fonts` -- fontdb's `memmap` -- on wasm.
+    features: &[
+        ("std", "true"),
+        ("text", "true"),
+        ("fs", "true"),
+        ("fontconfig", "true"),
+        ("memmap", "not(target_family = \"wasm\")"),
+    ],
+};

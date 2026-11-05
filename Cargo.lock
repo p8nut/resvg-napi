@@ -406,6 +406,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "napi-gen"
+version = "0.1.0"
+dependencies = [
+ "convert_case",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "napi-support"
 version = "0.1.0"
 dependencies = [
@@ -535,12 +545,12 @@ dependencies = [
 name = "resvg-napi"
 version = "0.9.0"
 dependencies = [
- "convert_case",
  "imagesize",
  "log",
  "napi",
  "napi-build",
  "napi-derive",
+ "napi-gen",
  "napi-support",
  "proc-macro2",
  "quote",

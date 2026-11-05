@@ -266,6 +266,38 @@ Step 10 added the `guard` module, `src/guard.rs` (CONTRIBUTING, "The
   `guardedParse`, which now also sees the dropped images. Step 11's helpers
   take it from there.
 
+Step 11 added `resvg-napi/helpers` (CONTRIBUTING, "The helpers";
+`test/helpers/`): `helpers.browser.mjs`, which loads no binding and exports
+`createHelpers(binding)`, and `helpers.mjs`, the Node entry bound to
+`./index.js`; `package.json` gained `exports`. What it found:
+
+- No Rust. `background` goes through `svgtypes.Color.fromStr` and
+  `tiny_skia.Color.fromRgba8`, `maxPixels` is checked in JS before
+  `new tiny_skia.Pixmap`, and the async helpers chain the generated twins
+  (`fromStrAsync`, `renderAsync`, `encodePngAsync`): three worker trips for a
+  parse and a render (Q29).
+- Byte for byte with the flat `Resvg`, once the canvas arithmetic is Rust's:
+  f32 roundings through `Math.fround`, saturating `as u32`, and a node's
+  boxes as `NonZeroRect` has them (`rect.toNonZeroRect()`: its width is
+  `(x + w) - x` in f32, not the `Rect`'s). `nodeExtent` uses it too.
+- The flat `renderNodePng` applied a group's own transform twice: it passed
+  the group's `absTransform()`, and `resvg::render_node` applies the
+  group's transform again. The helper passes the parent's, and draws where
+  the document cropped to the node draws (`test/helpers/node.mjs`). Groups
+  without a transform of their own, and every other node, come out as before.
+- System fonts: one scan per binding, shared. The async helpers scan with
+  `loadSystemFontsAsync`; the sync ones scan in place on first use, and if
+  both race, whichever finishes first is kept.
+- The guard cannot be turned off from the helpers: a caller may pass a
+  provider of its own (to read its `misses()`), and a trusted document with
+  usvg's default resolvers is parsed with the raw API and rendered as a tree.
+- `exports` closes deep imports: `resvg-napi/index.js` and the WASI shims are
+  no longer importable by path. `browser.js` stays the `browser` condition of
+  `"."`, so bundlers resolve as they did.
+- `fit.mjs` is a shim over `helpers.browser.mjs` until step 13, and the
+  demo's `measureText` calls the helpers' (`createHelpers(binding)`); the rest
+  of the demo moves in step 12.
+
 ## Status
 
 - [x] 1
@@ -280,7 +312,7 @@ Step 10 added the `guard` module, `src/guard.rs` (CONTRIBUTING, "The
 - [x] 8
 - [x] 9
 - [x] 10
-- [ ] 11
+- [x] 11
 - [ ] 12
 - [ ] 13
 - [ ] 14

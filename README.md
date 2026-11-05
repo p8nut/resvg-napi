@@ -41,6 +41,79 @@ await renderAsync(svg, options, { width: 1200 })        // off the event loop
 `index.d.ts` is the reference — it is generated, so it cannot drift. What follows
 is the map.
 
+## Helpers
+
+`resvg-napi/helpers` is the short way: SVG in, PNG out, safe on untrusted
+input by default. It is plain JS on the namespaced API below.
+
+```js
+import { renderPng, renderPngAsync, parse, renderNodePng, measureText } from 'resvg-napi/helpers'
+
+renderPng(svg)                                         // Buffer, system fonts
+renderPng(svg, { width: 1200, background: '#fff' })    // sized, on white
+await renderPngAsync(svg, { scale: 2, signal })        // off the event loop
+
+const { tree, pendingImages, pendingFonts } = parse(svg, {
+  fonts: ['Brand.ttf', brandBytes],     // or a fontdb.Database; default: the system's
+  images: { 'logo.png': logoBytes },     // tried first, by href
+  resourcesDir: '/srv/templates',        // files only from here
+})
+renderPng(tree, { crop: { x: 0, y: 0, width: 100, height: 50 } })
+renderNodePng(tree.nodeById('badge'), { scale: 4 })   // one element, sized to it
+measureText('Ada Lovelace', { fontSize: 14, family: 'Inter' })
+```
+
+| | |
+|---|---|
+| `parse(svg, options?)` · `parseAsync` | `{ tree, pendingImages, pendingFonts }` |
+| `renderPng(svg \| tree, options?)` · `renderPngAsync` | PNG `Buffer` |
+| `renderRaw(svg \| tree, options?)` · `renderRawAsync` | `{ width, height, data }`, un-premultiplied RGBA8 |
+| `renderNodePng(node, params?)` · `renderNodePngAsync` | one `usvg.Node`, in a PNG the size of its extent |
+| `measureText(text, options?)` | the width a string draws at, in user units |
+| `fitTextWidths(svg, options?)` | [fit `data-maxwidth` text](#fitting-text-to-a-width) |
+| `nodeExtent(node)` | where a node draws: a group's layer box, a shape's stroke box |
+| `systemFonts()` · `systemFontsAsync()` | the shared system font database |
+
+- **Options.** `usvg.Options` (`fontFamily`, `dpi`, `languages`,
+  `resourcesDir`...) plus `fonts`, `images` and `resourcesRoot`; a render takes
+  `width` / `height` / `scale`, `background` (any CSS colour), `crop` and
+  `maxPixels` in the same object. Given a parsed tree, a render ignores the
+  parse options and leaves the tree as it was.
+- **Safe by default.** Every parse gets a fresh `guard.ImageHrefResolver`
+  and `guard.FontResolver` ([Untrusted SVG](#untrusted-svg)): files only under
+  `resourcesDir`, SVGZ refused with advice (`SvgzFeatureNotEnabled`, see
+  [Troubleshooting](#troubleshooting)). Pass your own provider as
+  `imageHrefResolver` / `fontResolver` to read its `misses()`. There is no
+  unguarded parse here: for trusted SVG and usvg's own resolvers, parse with
+  `usvg.Tree.fromStr` and hand the tree to `renderPng`.
+- **Fonts.** Without `fonts`, the system fonts, scanned once and shared: on a
+  worker thread by the async helpers, in place by the sync ones (the first sync
+  call pays for the scan). Under WASI the system has none: pass `fonts`.
+- **`maxPixels`** (default 2^26, an 8192×8192 canvas) is checked before the
+  canvas is allocated, so a document declaring `width="200000"` throws instead
+  of aborting the process.
+- **The async helpers** take a `signal`. A parse, a render and a PNG encode
+  are one worker trip each.
+
+The output is the flat `Resvg`'s, byte for byte, for the same document and
+params (`test/helpers/`). One deliberate difference: `renderNodePng` places a
+group with a `transform` of its own where it draws, where the flat one applied
+that transform twice.
+
+In a browser, the bundler's `browser` condition resolves `resvg-napi/helpers`
+to a variant that loads no binding: build the set on the module the page
+loaded.
+
+```js
+import { createHelpers } from 'resvg-napi/helpers'
+import * as binding from './resvg.js'   // the wasm loader
+const { renderPng } = createHelpers(binding)
+```
+
+The package has an `exports` map: `resvg-napi`, `resvg-napi/helpers`,
+`resvg-napi/fit.mjs` (until 0.10.0) and `resvg-napi/package.json`. Other deep
+imports are closed.
+
 ## Render SVG to PNG
 
 Parse once with `new Resvg(svg, options?, fonts?, images?)`, then render as often
@@ -177,7 +250,7 @@ shared between parses lists the misses of them all.
 Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`
 and `absStrokeBoundingBox()`, and a group `layerBoundingBox()` and
 `absLayerBoundingBox()` — in the document's own units, which is not the
-canvas. `nodeExtent(node)` from `resvg-napi/fit` is where a node will draw:
+canvas. `nodeExtent(node)` from `resvg-napi/helpers` is where a node will draw:
 a group's layer box, a shape's or a text's stroke box. See
 [Fitting text to a width](#fitting-text-to-a-width) for why the units bite.
 
@@ -289,25 +362,27 @@ on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
 ## Fitting text to a width
 
 An Illustrator template says how wide a field may be on the element itself
-(`data-maxwidth="85"`), which is not SVG — resvg drops it. `fit.mjs` reads the
+(`data-maxwidth="85"`), which is not SVG — resvg drops it. `fitTextWidths` reads the
 constraint from the source, measures the text with `nodeExtent` on the
 `usvg.Tree` you parse it with, and compresses the element horizontally, composing a
 `scale(k 1)` onto whatever transform it already has (the same device those
 templates use by hand):
 
 ```js
-import binding from 'resvg-napi'
-import { fitTextWidths, guardedParse } from 'resvg-napi/fit.mjs'
+import { fitTextWidths } from 'resvg-napi/helpers'
 
 const { svg, adjustments, problems } = fitTextWidths(source,
-  guardedParse(binding, { fontFamily, fontdb: db, resourcesDir, images }))
+  { fontFamily, fonts: db, resourcesDir, images })
 // adjustments: [{ id: 'surname', from: 200.23, to: 90, factor: 0.4495, measured: 90.0031 }]
 ```
 
-`guardedParse` parses each pass with a fresh `guard.ImageHrefResolver` (see
-[Untrusted SVG](#untrusted-svg)). A plain `(s) => usvg.Tree.fromStr(s, …)`
-works too, but without a resolver usvg resolves `<image href>` from any local
-path, as it does in Rust: only for trusted SVG.
+Each pass parses as the helpers' `parse` does, through the guard (see
+[Untrusted SVG](#untrusted-svg)). A `render` function, `(s) => usvg.Tree`,
+works in place of the options; `guardedParse(binding, options)` is one that
+keeps the guard. A plain `(s) => usvg.Tree.fromStr(s, …)` works too, but
+without a resolver usvg resolves `<image href>` from any local path, as it
+does in Rust: only for trusted SVG. `resvg-napi/fit.mjs`, where this used to
+live, re-exports it until 0.10.0.
 
 The limit is read in **the document's own units**, the ones the attribute is
 written in. That matters: `width="85.6mm"` with a `viewBox` 240.94 wide makes usvg

@@ -222,9 +222,49 @@ misses of every parse it served.
 keeps usvg's `Default` resolvers, as Rust does (Q10): they read any path an
 `<image href>` names and decode any image. `test/api/guard.mjs` proves the
 raw parse reads a file outside `resourcesDir`, and the guard does not. So
-every helper that parses caller SVG passes a fresh provider: `fit.mjs`'s
-`guardedParse(binding, options)`, the demo's `measureText` and its tree
-panel.
+every helper that parses caller SVG passes a fresh provider: the helpers'
+`parse` and everything built on it, `guardedParse(binding, options)`, the
+demo's `measureText` and its tree panel.
+
+### The helpers
+
+`resvg-napi/helpers` is JS on the generated API, nothing else
+([ADR 0001](docs/adr/0001-thin-generic-wrapper.md), "Helpers sit beside it,
+in JS"). Two files and their hand-written declarations:
+
+- `helpers.browser.mjs` (`helpers.browser.d.mts`) loads no binding.
+  `createHelpers(binding)` builds the set on the binding it is given, one set
+  per binding (a `WeakMap`), so the system fonts are scanned once per binding.
+  It also holds the binding-free functions: `nodeExtent`, `fitTextWidths(svg,
+  render)`, `findWidthConstraints`, `guardedParse`. `fit.mjs` re-exports
+  those four until step 13.
+- `helpers.mjs` (`helpers.d.mts`) is the Node entry: the same exports, plus
+  the set bound to `./index.js`, as the default export and as named exports.
+
+`package.json` `exports` picks one: `"./helpers"` resolves to
+`helpers.browser.mjs` under the `browser` condition (a bundler), to
+`helpers.mjs` otherwise. `"."` keeps `browser.js` for bundlers and `index.js`
+for Node, `"./fit.mjs"` is the shim, and `"./package.json"` is readable.
+Everything else is closed: a new public file needs an entry, and
+`npm run check:package` fails when an `exports` target is not in the tarball.
+
+The rules the helpers keep:
+
+- **The guard is the default.** Every parse gets a fresh
+  `guard.ImageHrefResolver` and `guard.FontResolver`, unless the caller
+  passes one. There is no option that turns it off.
+- **Same bytes as the flat `Resvg`.** `renderPng`, `renderRaw` and
+  `renderNodePng` redo the old Rust `canvas()` in JS: the same f32 roundings
+  (`Math.fround`), the same saturating casts, the same order of checks and the
+  same messages. `test/helpers/` compares the bytes over every sizing path and
+  the four examples. Change that arithmetic only with the flat render beside
+  it, until step 13 removes it.
+- **`maxPixels` before allocating.** The size is checked before
+  `new tiny_skia.Pixmap`, which aborts the process on a failed allocation
+  (ADR 0002, Q25).
+- **No new Rust.** A helper moves to Rust only under ADR 0001's rule (measured
+  crossings, or a `Send + Sync` callback), into the resvg-specific code, never
+  the generator.
 
 ### Classes and free functions
 
@@ -518,7 +558,7 @@ npm run build         # napi build --platform --release
 npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
-npm run typecheck     # tsc --strict over index.d.ts and test/types.mts
+npm run typecheck     # tsc --strict over the .d.ts / .d.mts files and test/*.mts
 npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```
 

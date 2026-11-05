@@ -9,9 +9,14 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
+// `import.meta.resolve` is unflagged from Node 20.6; the oldest Node CI runs
+// (20.3, `engines`) has it behind a flag only, and resolved nothing without it.
+const flag = typeof import.meta.resolve === 'function' ? [] : ['--experimental-import-meta-resolve'];
+
 /** Where `specifier` resolves from inside the package, under `conditions`. */
 function resolved(specifier, conditions = []) {
   const child = spawnSync(process.execPath, [
+    ...flag,
     ...conditions.map((c) => `--conditions=${c}`),
     '--input-type=module',
     '-e', `try { console.log(import.meta.resolve(${JSON.stringify(specifier)})) } catch (e) { console.log(e.code) }`,

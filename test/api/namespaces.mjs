@@ -1,8 +1,9 @@
-// The second surface: one namespace per crate (`usvg.*`, `fontdb.*`), Rust
-// names, beside the flat exports it will replace. Nothing in it can be built
-// from JS yet -- factories come with step 6 of docs/migration-0.10.md -- so
-// this checks its shape against index.d.ts: every class and enum declared
-// is there at runtime, under its Rust name, with the members declared.
+// The second surface: one namespace per crate (`usvg.*`, `fontdb.*`,
+// `tiny_skia.*`, `svgtypes.*`, `resvg.*`), Rust names, beside the flat exports
+// it will replace. This checks its shape against index.d.ts: every class,
+// enum and function declared is there at runtime, under its Rust name, with
+// the members declared. What they do is for render.mjs, errors.mjs and
+// conversions.mjs beside it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -12,11 +13,11 @@ import { declarations } from '../../scripts/api-diff.mjs';
 import { testFonts } from '../support.mjs';
 
 const dts = declarations(readFileSync(new URL('../../index.d.ts', import.meta.url), 'utf8'));
-const NAMESPACES = ['usvg', 'fontdb'];
+const NAMESPACES = ['usvg', 'fontdb', 'tiny_skia', 'svgtypes', 'resvg'];
 
-/** `{ classes, enums, types }` a namespace declares, by name. */
+/** `{ classes, enums, functions, types }` a namespace declares, by name. */
 function declared(ns) {
-  const out = { classes: new Map(), enums: new Map(), types: new Set() };
+  const out = { classes: new Map(), enums: new Map(), functions: new Set(), types: new Set() };
   for (const [key, sig] of dts) {
     const [head, name, member, ...more] = key.split('.');
     if (head !== ns || !name || more.length) continue;
@@ -27,6 +28,7 @@ function declared(ns) {
     // A string enum is declared as a union of its values.
     const values = sig.match(/^type = ((?:'[^']*'(?: \| )?)+)$/);
     if (sig.startsWith('class')) out.classes.set(name, []);
+    else if (sig.startsWith('function')) out.functions.add(name);
     else if (values) out.enums.set(name, [...values[1].matchAll(/'([^']*)'/g)].map((m) => m[1]));
     else out.types.add(name);
   }
@@ -40,10 +42,11 @@ test('each crate is a namespace export', () => {
   }
 });
 
-test('every class and enum declared is there, under its Rust name', () => {
+test('every class, enum and function declared is there, under its Rust name', () => {
   for (const ns of NAMESPACES) {
-    const { classes, enums } = declared(ns);
-    assert.ok(enums.size > 0, `${ns} declares enums`);
+    const { classes, enums, functions } = declared(ns);
+    assert.ok(classes.size + functions.size > 0, `${ns} declares classes or functions`);
+    for (const name of functions) assert.equal(typeof binding[ns][name], 'function', `${ns}.${name}`);
     for (const [name] of classes) {
       assert.equal(typeof binding[ns][name], 'function', `${ns}.${name}`);
       assert.equal(binding[ns][name].name, name, `${ns}.${name}: the class's own name`);
@@ -56,9 +59,9 @@ test('every class and enum declared is there, under its Rust name', () => {
       assert.deepEqual(Object.values(e).sort(), [...values].sort(), `${ns}.${name} values`);
     }
     // What runs is what is declared: no runtime export the d.ts does not name.
-    const known = new Set([...classes.keys(), ...enums.keys()]);
+    const known = new Set([...classes.keys(), ...enums.keys(), ...functions]);
     for (const name of Object.keys(binding[ns])) {
-      assert.ok(known.has(name), `${ns}.${name} is declared as a class or an enum`);
+      assert.ok(known.has(name), `${ns}.${name} is declared as a class, an enum or a function`);
     }
   }
 });
@@ -76,7 +79,7 @@ test('the Rust names, not the flat surface\'s renames', () => {
   // type alias of the class (`fontdb.FontdbDatabase`), never as a value.
   for (const ns of NAMESPACES) {
     for (const name of Object.keys(binding[ns])) {
-      assert.doesNotMatch(name, /^(Usvg|Fontdb)/, `${ns}.${name}`);
+      assert.doesNotMatch(name, /^(Usvg|Fontdb|TinySkia|Svgtypes|Resvg)/, `${ns}.${name}`);
     }
   }
   // A type is in the namespace of the crate that defines it: fontdb's face
@@ -190,8 +193,10 @@ test('fontdb.Database: Rust methods in camelCase, the &mut ones included', () =>
     assert.ok(methods.includes(m), `declared: ${m}`);
     assert.equal(typeof Database.prototype[m], 'function', `fontdb.Database.prototype.${m}`);
   }
-  // `Database::new` is an associated function: no constructor until step 6.
-  assert.throws(() => new Database());
+  // `Database::new` is the constructor: an empty database.
+  const db = new Database();
+  assert.ok(db instanceof Database);
+  assert.equal(db.len(), 0);
 });
 
 test('fontdb.FaceInfo: a read-only class of getters', () => {

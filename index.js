@@ -887,4 +887,7 @@ module.exports.TextRendering = nativeBinding.TextRendering
 module.exports.TurbulenceKind = nativeBinding.TurbulenceKind
 module.exports.WritingMode = nativeBinding.WritingMode
 module.exports.fontdb = nativeBinding.fontdb
+module.exports.resvg = nativeBinding.resvg
+module.exports.svgtypes = nativeBinding.svgtypes
+module.exports.tiny_skia = nativeBinding.tiny_skia
 module.exports.usvg = nativeBinding.usvg

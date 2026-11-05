@@ -66,6 +66,39 @@ payload enum Node not mapped: Group carries Box<Group>, and it maps to None
 payload enum Source not mapped: SharedFile carries 2 unnamed fields, and a tuple has no names to give them
 payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, ImageKind, Input, Kind, LightSource, Paint, TextFlow, TransferFunction
 payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), TextFlow(2), TransferFunction(5)
+svgtypes::Color is a class: Value, plain data, a JS name another namespace has
+tiny_skia::Color is a class: Value, a JS name another namespace has
+tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)
+tiny_skia::Color member not in the class: from_rgba_unchecked (unsafe)
+tiny_skia::Color member not in the class: premultiply (returns PremultipliedColor)
+tiny_skia::Color member not in the class: to_color_u8 (returns ColorU8)
+tiny_skia::IntSize is a class: Value
+tiny_skia::IntSize member not in the class: dimensions (returns (u32,u32))
+tiny_skia::IntSize member not in the class: to_int_rect (returns IntRect)
+tiny_skia::Pixmap is a class: Owned
+tiny_skia::Pixmap member not in the class: apply_mask (arg: &Mask)
+tiny_skia::Pixmap member not in the class: as_mut (returns PixmapMut<'_>)
+tiny_skia::Pixmap member not in the class: as_ref (returns PixmapRef<'_>)
+tiny_skia::Pixmap member not in the class: clone_rect (arg: IntRect)
+tiny_skia::Pixmap member not in the class: data_mut (returns &mut[u8])
+tiny_skia::Pixmap member not in the class: draw_pixmap (arg: PixmapRef)
+tiny_skia::Pixmap member not in the class: fill_path (arg: &Path)
+tiny_skia::Pixmap member not in the class: fill_rect (arg: &Paint)
+tiny_skia::Pixmap member not in the class: pixel (returns PremultipliedColorU8)
+tiny_skia::Pixmap member not in the class: pixels (returns &[PremultipliedColorU8])
+tiny_skia::Pixmap member not in the class: pixels_mut (returns &mut[PremultipliedColorU8])
+tiny_skia::Pixmap member not in the class: stroke_path (arg: &Path)
+tiny_skia::Rect is a class: Value
+tiny_skia::Rect member not in the class: bbox_transform (arg: NonZeroRect)
+tiny_skia::Rect member not in the class: from_points (arg: &[Point])
+tiny_skia::Rect member not in the class: round (returns IntRect)
+tiny_skia::Rect member not in the class: round_out (returns IntRect)
+tiny_skia::Size is a class: Value
+tiny_skia::Transform is a class: Value, plain data
+tiny_skia::Transform member not in the class: from_bbox (arg: NonZeroRect)
+tiny_skia::Transform member not in the class: get_scale (returns (f32,f32))
+tiny_skia::Transform member not in the class: map_point (arg: &mutPoint)
+tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])
 usvg index bound for `*_precision` derived from POW_VEC: 12
 usvg sources: usvg-0.49.0
 usvg::ClipPath method covered by the content view: root (returns &Group)
@@ -90,6 +123,10 @@ usvg::Options field not in the option object: font_resolver: FontResolver<'a> (n
 usvg::Options field not in the option object: image_href_resolver: ImageHrefResolver<'a> (no provider: keeps the default)
 usvg::Pattern method covered by the content view: root (returns &Group)
 usvg::Pattern method not in the namespaced class: root (returns &Group)
+usvg::Tree is a class: Shared
+usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
+usvg::Tree member not in the class: node_by_id (returns &Node)
+usvg::Tree member not in the class: root (returns &Group)
 usvg::Tree method covered by the template as `children`: root (returns &Group)
 usvg::Tree method covered by the template as `new`: from_data (no receiver)
 usvg::Tree method covered by the template as `new`: from_data_nested (no receiver)
@@ -99,16 +136,16 @@ usvg::Tree method covered by the template as `node`: node_by_id (returns Option<
 usvg::Tree method covered by the template as `to_svg_string`: to_string (arg: &WriteOptions)
 usvg::WriteOptions field not exposed: attributes_indent: Indent (handled manually by the template)
 usvg::WriteOptions field not exposed: indent: Indent (handled manually by the template)
-usvg::fontdb::Database method not in the namespaced class: face (arg: ID)
-usvg::fontdb::Database method not in the namespaced class: face_source (arg: ID)
-usvg::fontdb::Database method not in the namespaced class: family_name (arg: &'aFamily)
-usvg::fontdb::Database method not in the namespaced class: load_font_source (arg: Source)
-usvg::fontdb::Database method not in the namespaced class: make_face_data_unshared (arg: ID)
-usvg::fontdb::Database method not in the namespaced class: make_shared_face_data (arg: ID)
-usvg::fontdb::Database method not in the namespaced class: new (no receiver)
-usvg::fontdb::Database method not in the namespaced class: push_face_info (arg: FaceInfo)
-usvg::fontdb::Database method not in the namespaced class: query (arg: &Query)
-usvg::fontdb::Database method not in the namespaced class: remove_face (arg: ID)
-usvg::fontdb::Database method not in the namespaced class: with_face_data (arg: ID)
+usvg::fontdb::Database is a class: SharedCow
+usvg::fontdb::Database member not in the class: face (arg: ID)
+usvg::fontdb::Database member not in the class: face_source (arg: ID)
+usvg::fontdb::Database member not in the class: family_name (arg: &'aFamily)
+usvg::fontdb::Database member not in the class: load_font_source (arg: Source)
+usvg::fontdb::Database member not in the class: make_face_data_unshared (arg: ID)
+usvg::fontdb::Database member not in the class: make_shared_face_data (unsafe)
+usvg::fontdb::Database member not in the class: push_face_info (arg: FaceInfo)
+usvg::fontdb::Database member not in the class: query (arg: &Query)
+usvg::fontdb::Database member not in the class: remove_face (arg: ID)
+usvg::fontdb::Database member not in the class: with_face_data (arg: ID)
 vocabulary derived: 7 f32 newtypes, 7 type aliases
 wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database

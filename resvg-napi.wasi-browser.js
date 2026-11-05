@@ -1492,4 +1492,7 @@ export const TextRendering = __napiModule.exports.TextRendering
 export const TurbulenceKind = __napiModule.exports.TurbulenceKind
 export const WritingMode = __napiModule.exports.WritingMode
 export const fontdb = __napiModule.exports.fontdb
+export const resvg = __napiModule.exports.resvg
+export const svgtypes = __napiModule.exports.svgtypes
+export const tiny_skia = __napiModule.exports.tiny_skia
 export const usvg = __napiModule.exports.usvg

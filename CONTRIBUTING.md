@@ -84,15 +84,18 @@ change is resvg-shaped. Fix the generator, not the toy.
 ### The namespaced surface
 
 Beside the flat exports, the generator emits a second surface with one
-namespace per crate, `usvg.*` and `fontdb.*`, under the Rust names
+namespace per crate, `usvg.*`, `fontdb.*`, `tiny_skia.*`, `svgtypes.*` and
+`resvg.*`, under the Rust names
 ([ADR 0002, Q21](docs/adr/0002-api-details.md)). The two coexist until step 13
 of the migration removes the flat one. Three rules make it, all generic:
 
 - **One namespace per source.** `Config::namespaces` maps a source's root to
   its namespace (`("usvg::fontdb", "fontdb")`). A type goes in the namespace
-  of the source that defines it. A type only re-exported from a crate parsed
-  for vocabulary (tiny-skia's) is left out until that crate has a namespace
-  of its own.
+  of the source that defines it. tiny-skia, svgtypes and resvg are sources of
+  the classes and functions `GEN` lists only (`config::CLASS_CRATES`), never
+  of discovery, and tiny-skia is read with tiny-skia-path, whose
+  `Transform`, `Rect` and `Size` it re-exports: they are `tiny_skia.*`. A type
+  usvg only re-exports from them is not `usvg.*`.
 - **A prefix on the Rust name.** `napi_gen::emit::namespaced` copies the data
   types, enums, unions and handle classes the passes produced. It renames
   each one with its namespace as a prefix: `FaceInfo` becomes `FontdbFaceInfo`,

@@ -593,14 +593,23 @@ fn main() {
                 .and_then(|last| t.strip_prefix(&format!("{last}::")))
                 .filter(|_| src.root_str.contains("::"))
                 .unwrap_or(&t);
-            let (code, skipped, _) = wrapper_class(
-                &src.files,
-                key,
-                &vocab,
-                modules,
-                &src.root,
-                Surface::Namespaced,
-            );
+            // A class `GEN.classes` lists is `napi_gen::class`'s, below.
+            let listed = GEN
+                .classes
+                .iter()
+                .any(|(r, n)| *r == src.root_str && *n == bare(key));
+            let (code, skipped, _) = if listed {
+                Default::default()
+            } else {
+                wrapper_class(
+                    &src.files,
+                    key,
+                    &vocab,
+                    modules,
+                    &src.root,
+                    Surface::Namespaced,
+                )
+            };
             for s in skipped {
                 report!(
                     "{}::{key} method not in the namespaced class: {s}",
@@ -652,6 +661,87 @@ fn main() {
         "wrapper classes generated: {}",
         done.iter().cloned().collect::<Vec<_>>().join(", ")
     );
+
+    // The classes and free functions of the second surface (`GEN.classes`,
+    // `GEN.functions`): over the wrapped crates, and over the crates parsed
+    // for them alone (`CLASS_CRATES`), each read as one source. The crate
+    // root's files are where its free functions are.
+    struct ClassCrate {
+        files: Vec<syn::File>,
+        lib: Vec<syn::File>,
+        modules: BTreeMap<String, String>,
+        root: &'static str,
+    }
+    let extra: Vec<ClassCrate> = CLASS_CRATES
+        .iter()
+        .map(|(pkgs, root)| {
+            let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
+            for pkg in *pkgs {
+                let dir = locate(pkg, "lib.rs", &locked);
+                let all = parse_crate(&dir);
+                let tree = ModTree::load(&dir, &all);
+                for (path, file) in tree.public_view(&all, &dir) {
+                    if path == dir.join("lib.rs") && lib.is_empty() {
+                        lib.push(file.clone());
+                    }
+                    files.push(file);
+                }
+                for (name, at) in tree.paths {
+                    modules.entry(name).or_insert(at);
+                }
+            }
+            ClassCrate {
+                files,
+                lib,
+                modules,
+                root,
+            }
+        })
+        .collect();
+    let classes = napi_gen::class::Classes::new(
+        sources
+            .iter()
+            .map(|s| napi_gen::class::Source {
+                root: s.root_str,
+                files: &s.files,
+                modules: &s.tree.paths,
+            })
+            .chain(extra.iter().map(|c| napi_gen::class::Source {
+                root: c.root,
+                files: &c.files,
+                modules: &c.modules,
+            }))
+            .collect(),
+    );
+    for (i, c) in classes.classes.iter().enumerate() {
+        let root = classes.sources[c.source].root;
+        let (code, skipped) = classes.class(i, &vocab);
+        let mut what = format!("{:?}", c.holding);
+        if !c.plain.is_empty() {
+            what.push_str(", plain data");
+        }
+        if c.shared_name {
+            what.push_str(", a JS name another namespace has");
+        }
+        report!("{root}::{} is a class: {what}", c.name);
+        for s in skipped {
+            report!("{root}::{} member not in the class: {s}", c.name);
+        }
+        mirrored.entry(root).or_default().extend(code);
+    }
+    for ClassCrate { lib, root, .. } in &extra {
+        let (code, skipped) = classes.functions(root, lib, &vocab);
+        for s in skipped {
+            report!("{root} function not exposed: {s}");
+        }
+        mirrored.entry(root).or_default().extend(code);
+    }
+    for (s, code) in classes.error_codes() {
+        mirrored
+            .entry(classes.sources[s].root)
+            .or_default()
+            .extend(code);
+    }
 
     // One declarative table (config::PASSES) instead of four call sites:
     // adding a wrapped `impl` block is a single row.
@@ -842,7 +932,7 @@ fn main() {
         // napi keeps one constructor per JS class name: a flat class with
         // the name of a namespaced one is renamed (`GEN.legacy_prefix`)
         // until the flat surface goes.
-        let surfaces = namespaced(&parts, &code, &BTreeSet::new());
+        let surfaces = namespaced(&parts, &code, &classes.shared_names());
         for line in surfaces.report {
             report!("{line}");
         }

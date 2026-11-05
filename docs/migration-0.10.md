@@ -69,6 +69,32 @@ Step 5 left out:
   converter, not a generated union: `Indent` is xmlwriter's, which the
   generator does not parse, and payload enums are output-only so far.
 
+Step 6 came in two pull requests: 6a, the generator (`napi_gen::class`, the
+`classes`, `functions` and `views` hooks, the toy), and 6b, the wiring and
+the root's tests (`test/api/render.mjs`, `errors.mjs`, `conversions.mjs`,
+and the option objects' runtime checks step 5 left). What it found:
+
+- napi builds an instance a function returns from the constructor it
+  registered under the class's JS name, one per name. `tiny_skia.Color` and
+  `svgtypes.Color` share theirs, so each is only ever returned by its own
+  constructor and factories, which build from the class they are called on.
+  `tiny_skia::Color::from_rgba` returns `Option<Self>` and is left out: use
+  `fromRgba8`. Another class of a shared name meets the same rule.
+- `Rect`, `Size` and `IntSize` keep their fields private in Rust, so they get
+  no `fromObject`/`toObject` (Q31 named them): only `Transform` and
+  `svgtypes.Color` are plain data. Their factories (`fromLtrb`, `fromWh`) are
+  how JS makes one.
+- Members returning a type the namespaced surface has no class for still
+  use the flat shapes (`Rect.toNonZeroRect()` gives a `BBox`), as the usvg
+  classes do (`Matrix`, `BBox`, `Dimensions`). They move with step 7 or 13.
+- `usvg.Options.defaultSize` stays flattened (`defaultSizeWidth`,
+  `defaultSizeHeight`): a provider field taking a `tiny_skia.Size` would
+  change its shape, which is a decision of its own.
+
+Left for later: `resvg.renderNode` and `tree.root()` (step 7), `dispose()`
+on the owned classes, built on the slot that a consuming method empties
+(step 8), async twins (step 9).
+
 ## Status
 
 - [x] 1
@@ -77,7 +103,7 @@ Step 5 left out:
 - [x] 4
 - [x] 4b
 - [x] 5
-- [ ] 6
+- [x] 6
 - [ ] 7
 - [ ] 8
 - [ ] 9

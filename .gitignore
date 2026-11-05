@@ -12,6 +12,7 @@ out.png
 demo/resvg.js
 demo/wasi-worker-browser.mjs
 demo/liquid.js
+demo/helpers.js
 demo/examples/index.json
 demo/examples/*.png
 

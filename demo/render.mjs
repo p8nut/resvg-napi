@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Headless twin of the bench: Liquid with the same filter vocabulary, then the
-// native binding. `node demo/render.mjs examples/badge-sheet.svg` proves an
-// example still renders without opening a browser.
+// Headless twin of the bench: Liquid with the same filter vocabulary, then
+// `resvg-napi/helpers` on the native binding. `node demo/render.mjs
+// examples/badge-sheet.svg` proves an example still renders without opening a
+// browser.
 //
 //   node demo/render.mjs <template.svg> [out.png]
 //
@@ -12,7 +13,11 @@ import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Liquid } from 'liquidjs';
-import mod from '../index.js';
+// The package by its own name, as a user imports it: `resvg-napi` for the
+// binding (fonts, logs), `resvg-napi/helpers` for parsing and rendering.
+import binding from 'resvg-napi';
+import { parse, renderPng } from 'resvg-napi/helpers';
+import { familyName } from './font-names.mjs';
 import { measureText, registerSvgFilters, referencedPartials } from './svg-filters.mjs';
 
 // fileURLToPath, not `.pathname`: on Windows the latter yields
@@ -38,36 +43,31 @@ if (!templateArg) {
 const template = resolve(here, templateArg);
 const out = outArg ? resolve(outArg) : template.replace(/\.svg$/, '.png');
 
-mod.setLogLevel('warn');
+binding.setLogLevel('warn');
 
-// Two databases loaded alike: `Resvg` renders with a `FontDatabase`, and
-// `measureText` parses through `usvg.Tree`, which takes a `fontdb.Database`.
-// One, once the demo moves to the helpers (step 12 of the migration).
-const fonts = new mod.FontDatabase();
-const db = new mod.fontdb.Database();
+// One database for everything: rendering, and measuring for the filters.
+const db = new binding.fontdb.Database();
 const fontFiles = [join(here, 'DejaVuSans.ttf'),
   ...(existsSync(join(here, 'fonts')) ? readdirSync(join(here, 'fonts'))
     .filter((f) => /\.(ttf|otf)$/i.test(f)).map((f) => join(here, 'fonts', f)) : [])]
   .filter(existsSync);
+let family;
 for (const file of fontFiles) {
   const data = readFileSync(file);
-  fonts.loadFontData(data);
   db.loadFontData(data);
+  family ??= familyName(data);
 }
 // Local files first, so the generic families below point at a known face; then
 // the system, for the glyphs the local files do not have (emoji, scripts).
-fonts.loadSystemFonts();
 db.loadSystemFonts();
 // The examples ask for `sans-serif`; point every generic family at what we have.
-const family = fonts.faces()[0].families[0];
 for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
                    'setCursiveFamily', 'setFantasyFamily']) {
-  fonts[set](family);
   db[set](family);
 }
 const options = { fontFamily: family, languages };
 
-const measure = (text, opts) => measureText(mod, db, text, opts, options);
+const measure = (text, opts) => measureText(binding, db, text, opts, options);
 
 // Output lands inside XML, so every `{{ }}` is escaped; a filter that returns
 // markup (`qr`, `wrap`) is piped through `raw` in the template.
@@ -96,13 +96,17 @@ if (left && emitsLiteralBraces) {
   console.log(`  note: ${left.length} literal brace(s) from a {% raw %} block, not checked`);
 }
 
-const doc = new mod.Resvg(rendered, options, fonts);
-writeFileSync(out, doc.renderPng({ scale: 2 }));
+// The helpers parse through `guard`'s resolvers: an `<image href>` resolves
+// from the document (`data:`) and nothing is read from disk, and what did not
+// resolve comes back in `pendingImages` / `pendingFonts`.
+const { tree, pendingImages, pendingFonts } = parse(rendered, { ...options, fonts: db });
+writeFileSync(out, renderPng(tree, { scale: 2 }));
+const size = tree.size();
 
-console.log(`${basename(template)}: ${doc.width}×${doc.height} units`
+console.log(`${basename(template)}: ${size.width()}×${size.height()} units`
   + `${wanted.length ? `, partials [${wanted.join(', ')}]` : ''}`
   + `${Object.keys(scope).length ? `, vars [${Object.keys(scope).join(', ')}]` : ''} → ${out}`);
-const logs = mod.takeLogs();
+const logs = binding.takeLogs();
 for (const line of logs) console.log('  ' + line);
 
 // `npm run test:examples` runs this over four documents, and it used to pass
@@ -125,8 +129,6 @@ if (strict) {
   // the two font-*selection* messages, matched as written.
   const environmental = /usvg::text: (No match for .* font-family|Fallback from .* to )/;
   const defects = logs.filter((l) => !environmental.test(l));
-  const pendingFonts = doc.pendingFonts();
-  const pendingImages = doc.pendingImages();
   if (pendingFonts.length) {
     console.log(`  note: ${pendingFonts.length} font(s) this machine does not have: ${pendingFonts.join(', ')}`);
   }

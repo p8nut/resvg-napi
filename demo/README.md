@@ -13,9 +13,25 @@ Two pages:
 
 - **`index.html`** -- the first thing a visitor sees: an SVG editor, the PNG
   resvg draws from it, four plain examples (shapes, text, gradient, filter) and
-  the Node.js call that does the same. No templates, no options beyond scale.
+  the Node.js call that does the same (`renderPng` from `resvg-napi/helpers`).
+  No templates, no options beyond scale.
 - **`bench.html`** -- the proof bench, linked from the simple page and
   described below: everything else the API can do.
+
+Both pages, and `render.mjs`, use the API the way a user would:
+[`resvg-napi/helpers`](../README.md#helpers) for parsing and rendering --
+`createHelpers(binding)` on the loaded wasm module in the browser, the
+`resvg-napi/helpers` entry in Node -- and the namespaced API (`usvg`,
+`fontdb`, `resvg`...) where the helpers stop: the one `fontdb.Database` of
+the page's fonts, the Nodes panel's walk of `tree.root().children()`, the
+global `takeLogs()`. The demo is the helpers' real-world test (ADR 0001).
+
+One thing the namespaced API does not give yet: a font's family names.
+fontdb keeps them as `(String, Language)` pairs, which the generator does not
+map, so `fontdb.FaceInfo` has no `families`. The demo needs the first font's
+family to point the generic ones (`sans-serif`...) at it, and reads it from
+the font's `name` table the way fontdb does, in
+[`font-names.mjs`](font-names.mjs).
 
 ![the proof bench](assets/screenshot.png)
 
@@ -35,13 +51,14 @@ slug line so a problem is visible without scrolling.
 The page parses the SVG first and **asks for what the document is missing**, then
 lets you supply it:
 
-- **fonts** — `pendingFonts()` gives the named families the database does not
-  have; a text element with no font loaded gets its own prompt (a generic
+- **fonts** — `pendingFonts` (from the helpers' `parse`) gives the named
+  families the database does not have; a text element with no font loaded gets its own prompt (a generic
   `font-family` never appears as a named family). Each named family gets a
   **fetch** button, and there is a box for one by name at any time — see
   *Fonts without a file* below.
-- **images** — `pendingImages()` gives the hrefs neither the uploads nor the
-  filesystem resolved, one file field per href, because the file/href pairing has
+- **images** — `pendingImages` gives the hrefs the uploads did not resolve
+  (the helpers' `guard.ImageHrefResolver` reads no file without a
+  `resourcesDir`), one file field per href, because the file/href pairing has
   to be explicit.
 - **a variable used as an image href** gets a *file* field, a drop target and a
   text field (for a `data:` URI or a file name) instead of a plain text one:
@@ -80,8 +97,8 @@ browser driven by automation swallows the dialog, for one: drop on the zone or o
 the row itself, paste (⌘/Ctrl-V), or the per-item field.  a font goes to
 the database, an image is matched to a pending href by file name when it matches
 and to the first one still waiting otherwise. Uploads are kept in a page-level
-map and handed to every parse, so they survive edits and re-renders — unlike
-`resolveImage`, which only patches one instance.
+map, the helpers' `images` option, and handed to every parse, so they survive
+edits and re-renders.
 
 ## Fonts without a file
 
@@ -133,7 +150,7 @@ templated document can be previewed:
   indices (`a[0].b`). A dynamic key (`{{ x[y.z] }}`) has no fixed field, so it is
   skipped.
 - A field left empty renders back to its own `{{ name }}`, which is why an image
-  variable stays visible to `pendingImages()` and can still be uploaded. The
+  variable stays visible to `pendingImages` and can still be uploaded. The
   exception is a chain containing `default:` — that field starts empty so the
   template's own default is what you see.
 - A variable that is piped through filters shows the whole chain on its own row
@@ -153,7 +170,8 @@ templated document can be previewed:
   in-memory `fs`. A `.liquid` file is always a fragment; a `.svg` is one only
   when the template renders it by that name, otherwise it is an image.
 - Four filters exist because a renderer is in the room, and all four ask resvg
-  how wide a string is (`nodeExtent(tree.nodeById('m'))`, on a `usvg.Tree`):
+  how wide a string is (the helpers' `measureText`, which parses a probe and
+  reads `nodeExtent(tree.nodeById('m'))`):
   `fit: width, size` cuts a string to an ellipsis that fits, by bisection;
   `wrap: width, size[, lineHeight] | raw` breaks text into `<tspan>` lines, which SVG
   1.1 will not do for you (place the block with a `transform` — a tspan's `x` is
@@ -183,7 +201,7 @@ keystroke destroys the focused input mid-word.
 
 The **rendered source** view under the source box holds the exact string handed
 to resvg. Every Liquid question is a guess without it. Under it, **resolved
-tree** is `Resvg.toString()`: what usvg made of that string, with the CSS
+tree** is `usvg.Tree.toString()`: what usvg made of that string, with the CSS
 applied, `use` expanded and inheritance settled. The *keep text nodes* box
 flips `preserveText`, which is the difference between 23 KB of `<text>` and
 175 KB of outlines on the same document — a good look at what
@@ -192,9 +210,9 @@ flips `preserveText`, which is the difference between 23 KB of `<text>` and
 The **Nodes** panel is the `usvg.Tree`, indented by depth, one row per element
 with its canvas size. Clicking a row outlines it on the proof (`nodeExtent()`,
 no checkbox needed); *png* saves that element alone, cropped to its own extent,
-through `resvg.renderNode` — no `id` needed, and a QR group comes out as a
-128×128 transparent PNG. The tree is parsed with usvg's default image resolver,
-so images dropped on the page are drawn by `Resvg` but missing from it.
+through the helpers' `renderNodePng` (`resvg.renderNode` underneath) — no `id`
+needed, and a QR group comes out as a 128×128 transparent PNG. It is the tree
+the proof was drawn from: one parse, dropped images included.
 
 The **stylesheet** field is usvg's `style_sheet` option: CSS injected at parse
 time, so a theme needs no edit to the document. One detail worth knowing, and
@@ -240,8 +258,11 @@ can come from variables: both new examples paint from `ink`, `paper`, `accent`.
 
 `render.mjs` is the headless twin of the bench: the same filter vocabulary,
 partials read from the template's directory, variables from `<template>.json`,
-fonts from `DejaVuSans.ttf` if it is there plus the system's (local first,
-so the generic families point at a known face). `npm test` runs all four, and
+fonts from `DejaVuSans.ttf` if it is there and `fonts/`, plus the system's
+(local first, so the generic families point at a known face), all in one
+`fontdb.Database`, parsed and rendered with `parse` and `renderPng` from
+`resvg-napi/helpers`; `--strict` reads `pendingImages` / `pendingFonts` from
+the parse and the global `takeLogs()`. `npm test` runs all four, and
 fails if any Liquid tag survives into the output — except when the template uses
 `{% raw %}`, which emits braces on purpose. Two things the tour records because they
 cost an afternoon: a filter cannot go in a tag argument (`x: col | times: 306,
@@ -255,8 +276,7 @@ stripped in `source()`.
 
 ## Browser specifics
 
-Three things the demo has to handle, all visible in
-`bench.html`:
+Four things the demo has to handle, in `bench.html` and `build.mjs`:
 
 - **COOP + COEP headers.** The wasm is built for `wasm32-wasip1-threads`, so it
   wants a shared memory, so it needs `SharedArrayBuffer`, so the page must be
@@ -266,6 +286,11 @@ Three things the demo has to handle, all visible in
   but its `from` must accept a `SharedArrayBuffer`, or every buffer comes back
   empty. It lives in `buffer-shim.mjs`, which `build.mjs` injects into the
   `resvg.js` bundle.
+- **No Node in the bundles.** `build.mjs` bundles `helpers.browser.mjs` (what
+  `resvg-napi/helpers` resolves to under the `browser` condition) for
+  `index.html`, and `liquid-entry.mjs`, which carries it too, for the bench,
+  all with esbuild's `platform: 'browser'`: a `node:` import reaching one
+  fails the build.
 - **Copy out of shared memory.** `Blob`, `fetch` bodies and `postMessage` all
   refuse views backed by a `SharedArrayBuffer`; `new Uint8Array(buf)` copies.
 

@@ -223,8 +223,8 @@ keeps usvg's `Default` resolvers, as Rust does (Q10): they read any path an
 `<image href>` names and decode any image. `test/api/guard.mjs` proves the
 raw parse reads a file outside `resourcesDir`, and the guard does not. So
 every helper that parses caller SVG passes a fresh provider: the helpers'
-`parse` and everything built on it, `guardedParse(binding, options)`, the
-demo's `measureText` and its tree panel.
+`parse` and everything built on it, and `guardedParse(binding, options)`.
+The demo parses only through the helpers.
 
 ### The helpers
 
@@ -265,6 +265,27 @@ The rules the helpers keep:
 - **No new Rust.** A helper moves to Rust only under ADR 0001's rule (measured
   crossings, or a `Send + Sync` callback), into the resvg-specific code, never
   the generator.
+
+Two consumers keep both surfaces honest, one each:
+
+- **The demo uses the helpers** (`demo/README.md`): `createHelpers(binding)`
+  on the wasm module in the pages, `resvg-napi/helpers` by its package name
+  in `demo/render.mjs`, and the namespaced API only where the helpers stop
+  (the `fontdb.Database`, the Nodes panel's tree walk, `takeLogs()`). It is
+  their real-world test: something the demo needs and the helpers lack is a
+  finding, not a reason to reach for the raw API around them. `npm run
+  test:examples` renders the four examples with `--strict`.
+- **The conformance harness uses the raw API**, call for call as upstream's
+  `crates/resvg/tests/integration/main.rs`: one `fontdb.Database` of the
+  corpus fonts (sorted, the five generic families set),
+  `usvg.Tree.fromData(data, { fontdb, resourcesDir })` with usvg's default
+  resolvers, `size().toIntSize().scaleToWidth(300)`, `resvg.render` with
+  `Transform.fromScale` on each axis, then `takeDemultiplied()`. No guard:
+  upstream has none, and the corpus reaches only `tests/resources` through
+  its `../../../resources` hrefs. `npm run conformance:fetch` gets the corpus
+  at the tag `Cargo.lock` builds, and `npm run conformance` compares with
+  `conformance/baseline.txt` (`-- -w` rewrites it). A moved baseline is
+  investigated before it is rewritten.
 
 ### Classes and free functions
 
@@ -558,6 +579,7 @@ npm run build         # napi build --platform --release
 npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
+npm run conformance   # resvg's corpus against its references (conformance:fetch first)
 npm run typecheck     # tsc --strict over the .d.ts / .d.mts files and test/*.mts
 npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```

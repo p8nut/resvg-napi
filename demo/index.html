@@ -122,11 +122,11 @@
 
   function showCode() {
     const scale = Number($('scale').value) || 1;
-    $('code').textContent = `import { Resvg } from 'resvg-napi'   // npm install resvg-napi
+    $('code').textContent = `import { renderPng } from 'resvg-napi/helpers'   // npm install resvg-napi
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const svg = readFileSync('input.svg', 'utf8')
-const png = new Resvg(svg).renderPng({ scale: ${scale} })
+const png = renderPng(svg, { scale: ${scale} })
 writeFileSync('out.png', png)`;
   }
 
@@ -143,12 +143,12 @@ writeFileSync('out.png', png)`;
   select('shapes');
   showCode();
 
-  let mod, fonts, url;
+  let helpers, db, url;
   function render() {
-    if (!mod) return;
+    if (!helpers) return;
     const t0 = performance.now();
     try {
-      const png = new mod.Resvg($('src').value, null, fonts).renderPng({ scale: Number($('scale').value) || 1 });
+      const png = helpers.renderPng($('src').value, { fonts: db, scale: Number($('scale').value) || 1 });
       // A view over the wasm's shared memory: Blob refuses it, so copy out.
       const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
       if (url) URL.revokeObjectURL(url);
@@ -167,15 +167,19 @@ writeFileSync('out.png', png)`;
 
   try {
     if (!globalThis.crossOriginIsolated) throw new Error('This page needs cross-origin isolation; reload it, or serve it with demo/serve.mjs.');
-    mod = await import('./resvg.js');
-    fonts = new mod.FontDatabase();
+    // The wasm binding, and `resvg-napi/helpers` built on it: helpers.js is
+    // helpers.browser.mjs, what a bundler's `browser` condition resolves to.
+    const mod = await import('./resvg.js');
+    const { createHelpers } = await import('./helpers.js');
+    db = new mod.fontdb.Database();
     // The browser sandbox has no system fonts: load one and point the generic
-    // families at it, or the text example draws nothing.
+    // families at it, or the text example draws nothing. The family is the one
+    // this file declares.
     const ttf = await fetch('./fonts/IBMPlexSans-Latin.ttf').then((r) => r.arrayBuffer());
-    fonts.loadFontData(new Uint8Array(ttf));
-    const family = fonts.faces()[0].families[0];
+    db.loadFontData(new Uint8Array(ttf));
     for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily'])
-      fonts[set](family);
+      db[set]('IBM Plex Sans');
+    helpers = createHelpers(mod);
     render();
   } catch (e) {
     status(`Could not start: ${e.message}`, true);

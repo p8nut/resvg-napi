@@ -1,4 +1,4 @@
-// Everything the page needs next to it: the wasm, the three bundles, and the
+// Everything the pages need next to them: the wasm, the four bundles, and the
 // list the example picker reads. One script rather than a five-command chain in
 // package.json, because the Pages workflow builds the same page and static
 // hosting cannot answer the `/examples/` route serve.mjs used to.
@@ -15,18 +15,25 @@ await copyFile(join(root, 'resvg-napi.wasm32-wasi.wasm'),
   join(here, 'resvg-napi.wasm32-wasi.wasm'));
 
 // The loader and its worker are the generated shims; liquid-entry pulls in
-// liquidjs, the SVG filters and the QR generator. The loader carries the
-// Buffer polyfill, so no page has to install it before importing.
+// liquidjs, the SVG filters, the QR generator and the helpers (the bench);
+// helpers.browser.mjs alone is what `resvg-napi/helpers` resolves to under a
+// bundler's `browser` condition (index.html). The loader carries the Buffer
+// polyfill, so no page has to install it before importing.
+//
+// `platform: 'browser'`, which is esbuild's default, said out loud: a `node:`
+// import reaching any of these bundles fails the build instead of the page.
 for (const [entry, out, inject = []] of [
   ['resvg-napi.wasi-browser.js', 'resvg.js', [join(here, 'buffer-shim.mjs')]],
   ['wasi-worker-browser.mjs', 'wasi-worker-browser.mjs'],
   ['demo/liquid-entry.mjs', 'liquid.js'],
+  ['helpers.browser.mjs', 'helpers.js'],
 ]) {
   await build({
     entryPoints: [join(root, entry)],
     outfile: join(here, out),
     bundle: true,
     format: 'esm',
+    platform: 'browser',
     inject,
   });
 }
@@ -40,4 +47,4 @@ const heads = await Promise.all(files.map((f) =>
 const names = files.filter((_, i) => /<svg[\s>]/.test(heads[i]));
 await writeFile(join(examples, 'index.json'), `${JSON.stringify(names)}\n`);
 
-console.log(`demo/: wasm, 3 bundles, ${names.length} examples`);
+console.log(`demo/: wasm, 4 bundles, ${names.length} examples`);

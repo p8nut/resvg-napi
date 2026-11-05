@@ -298,6 +298,44 @@ Step 11 added `resvg-napi/helpers` (CONTRIBUTING, "The helpers";
   demo's `measureText` calls the helpers' (`createHelpers(binding)`); the rest
   of the demo moves in step 12.
 
+Step 12 moved the demo to the helpers and the conformance harness to the raw
+API (CONTRIBUTING, "The helpers"; `demo/README.md`). Nothing in `demo/` or
+`scripts/conformance.mjs` names `Resvg`, `FontDatabase` or `RenderOptions`
+any more. What it found:
+
+- `demo/render.mjs` imports the package by its own name (`resvg-napi`,
+  `resvg-napi/helpers`: Node resolves a package's self-reference through
+  `exports`), parses with `parse`, renders with `renderPng`, and reads
+  `pendingImages` / `pendingFonts` from the parse and the global `takeLogs()`.
+  The four examples come out byte for byte as the flat `Resvg` drew them.
+- The two databases 7b kept (a `FontDatabase` to render, a `fontdb.Database`
+  to measure) are one `fontdb.Database`, in `render.mjs` and in both pages.
+- The pages: `index.html` imports `helpers.js`, a fourth bundle of
+  `helpers.browser.mjs` (what the `browser` condition of `resvg-napi/helpers`
+  resolves to), and the bench gets `createHelpers` from `liquid.js`, which
+  bundled it already for the filters. All four bundles build with
+  `platform: 'browser'`, so a `node:` import fails the build. The bench parses
+  once per render: that tree draws the proof (`renderPng(tree, params)`, crop
+  from `tree.root().absLayerBoundingBox()`), fills the measurements, the
+  resolved tree (`tree.toString`) and the Nodes panel, whose *png* is the
+  helpers' `renderNodePng`. The panel now sees the dropped images too.
+- The helpers lacked nothing; the namespaced API lacks a font's family names.
+  fontdb keeps `FaceInfo::families` as `Vec<(String, Language)>`, which the
+  generator does not map, so `fontdb.FaceInfo` has no `families` (the flat
+  `FontFace.families` is hand-written in the template and leaves with step
+  13). The demo needs the first font's family for the generic families and
+  reads it from the font's `name` table as fontdb does
+  (`demo/font-names.mjs`; it agrees with `FontFace.families[0]` on all 369
+  fonts of a Fedora system, the demo's and the corpus's). A generic mapping
+  of the pair, or of its name alone, would let step 13 or later drop it.
+- `scripts/conformance.mjs` makes upstream's calls: `usvg.Tree.fromData`
+  with `fontdb` and `resourcesDir` and usvg's default resolvers (no guard, as
+  upstream; the corpus's only outward hrefs are `../../../resources/*`, which
+  the old `resourcesRoot` fence allowed anyway), `toIntSize().scaleToWidth(300)`,
+  `resvg.render` with the per-axis scale, `takeDemultiplied()`. The fonts load
+  sorted, as upstream's do. The baseline did not move: 2 of 1742, the two
+  SVGZ images, by the same 57544 pixels.
+
 ## Status
 
 - [x] 1
@@ -313,6 +351,6 @@ Step 11 added `resvg-napi/helpers` (CONTRIBUTING, "The helpers";
 - [x] 9
 - [x] 10
 - [x] 11
-- [ ] 12
+- [x] 12
 - [ ] 13
 - [ ] 14

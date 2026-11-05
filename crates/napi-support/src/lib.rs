@@ -3,6 +3,7 @@
 //! keeps its own `#[napi]` surface and calls into these.
 //!
 //! - [`contained`]: a panic becomes a JS error instead of aborting the process.
+//! - [`Thrown`]: an error carrying a `code` of the binding's choosing.
 //! - [`logs`]: what the wrapped crates report through `log`, bounded, globally
 //!   and per document.
 //! - [`fs`]: reads of caller-named files, capped.
@@ -31,6 +32,37 @@ pub fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
             None => format!("{what} panicked"),
         })
     })
+}
+
+/// What a generated method throws: a JS `Error` whose `code` is a string of
+/// the binding's choosing (napi sets `error.code` from it), not napi's fixed
+/// `Status`. A wrapped `Result<T, E>` throws with `E`'s variant name as the
+/// code and its `Display` as the message.
+pub type Thrown = Error<String>;
+
+/// A [`Thrown`] with this `code` and `message`.
+pub fn thrown(code: &str, message: impl std::fmt::Display) -> Thrown {
+    Error::new(code.to_string(), message.to_string())
+}
+
+/// napi's own error as a [`Thrown`]: its `Status` becomes the code.
+pub fn coded(e: Error) -> Thrown {
+    Error::new(e.status.as_ref().to_string(), e.reason.clone())
+}
+
+/// The error for a number that does not fit the upstream integer: `name` is
+/// the JS argument or field.
+pub fn invalid(name: &str, value: impl std::fmt::Display) -> Thrown {
+    thrown("InvalidArg", format!("invalid {name}: {value}"))
+}
+
+/// The error for an instance whose value an earlier call consumed (a method
+/// taking `self` in Rust).
+pub fn consumed(class: &str) -> Thrown {
+    thrown(
+        "Consumed",
+        format!("this {class} was consumed by an earlier call"),
+    )
 }
 
 pub mod logs {

@@ -276,4 +276,7 @@ pub const GEN: Config = Config {
     // renamed `LegacyClipPath`, `LegacyText`: napi keeps one constructor per
     // class name. Both go with the flat surface in step 13 (decision Q36).
     legacy_prefix: Some("Legacy"),
+    classes: &[],
+    functions: &[],
+    views: &[],
 };

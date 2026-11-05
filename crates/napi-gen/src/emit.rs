@@ -1373,32 +1373,7 @@ pub fn map_methods(
             if taken.contains(&name) || !twins.insert(name.clone()) {
                 continue;
             }
-            // Upstream may gate this method on a feature this crate does not
-            // build everywhere. Its twins in the same impl (one method written
-            // once per setting of a feature) count together.
-            let gated = crate::cfg::Pred::Any(
-                imp.items
-                    .iter()
-                    .filter_map(|i| match i {
-                        ImplItem::Fn(g) if g.sig.ident == f.sig.ident => {
-                            Some(crate::cfg::Pred::All(vec![
-                                crate::cfg::of(&imp.attrs),
-                                crate::cfg::of(&g.attrs),
-                            ]))
-                        }
-                        _ => None,
-                    })
-                    .collect(),
-            );
-            // napi-derive registers every method of a `#[napi] impl` whatever
-            // its `#[cfg]`, so a gated method cannot be compiled out. It is
-            // kept on every target, with its body gated instead: where the
-            // upstream item is missing it throws, and the JS surface stays the
-            // same everywhere.
-            let gate = match crate::cfg::gate(&gated) {
-                crate::cfg::Gate::Always => None,
-                crate::cfg::Gate::When(p, n) => Some((p, n)),
-            };
+            let gate = method_gate(imp, f);
 
             // generic param -> bound text, so `P: AsRef<std::path::Path>` can
             // be classified.
@@ -1593,6 +1568,34 @@ pub fn map_methods(
     }
 
     (code, skipped)
+}
+
+/// The cfg a method's body is built under, and its negation, when upstream
+/// gates it on a feature this crate does not build everywhere; `None` when
+/// it is always there. Its twins in the same impl (one method written once
+/// per setting of a feature) count together.
+///
+/// napi-derive registers every method of a `#[napi] impl` whatever its
+/// `#[cfg]`, so a gated method cannot be compiled out. It is kept on every
+/// target, with its body gated instead: where the upstream item is missing
+/// it throws, and the JS surface stays the same everywhere.
+pub fn method_gate(imp: &syn::ItemImpl, f: &syn::ImplItemFn) -> Option<(TokenStream, TokenStream)> {
+    let gated = crate::cfg::Pred::Any(
+        imp.items
+            .iter()
+            .filter_map(|i| match i {
+                ImplItem::Fn(g) if g.sig.ident == f.sig.ident => Some(crate::cfg::Pred::All(vec![
+                    crate::cfg::of(&imp.attrs),
+                    crate::cfg::of(&g.attrs),
+                ])),
+                _ => None,
+            })
+            .collect(),
+    );
+    match crate::cfg::gate(&gated) {
+        crate::cfg::Gate::Always => None,
+        crate::cfg::Gate::When(p, n) => Some((p, n)),
+    }
 }
 
 /// The keys of an item's `#[napi(..)]`, with their string values:
@@ -1864,7 +1867,8 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
             .iter()
             .find_map(|w| name.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
         {
-            name = inner.to_string();
+            // `Result<T, String>`: a string error code, the value is `T`.
+            name = inner.strip_suffix(",String").unwrap_or(inner).to_string();
         }
         scalars.contains(&name)
     };
@@ -1895,7 +1899,12 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
                 && !["setter", "constructor", "factory"]
                     .iter()
                     .any(|k| args.contains_key(*k))
-                && matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
+                // `&self` only: printing must not write or consume.
+                && matches!(
+                    f.sig.inputs.first(),
+                    Some(syn::FnArg::Receiver(r))
+                        if matches!(r.kind, syn::ReceiverKind::Reference(_, _, None))
+                )
                 && f.sig.inputs.len() == 1
                 && scalar(&f.sig.output)
             {
@@ -2015,7 +2024,11 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
 /// Rust identifier. The copies' struct and enum definitions are therefore
 /// put before whatever names them, and every impl and function after all of
 /// them.
-pub fn namespaced(parts: &[(&str, TokenStream)], flat: &TokenStream) -> Surfaces {
+pub fn namespaced(
+    parts: &[(&str, TokenStream)],
+    flat: &TokenStream,
+    shared: &BTreeSet<String>,
+) -> Surfaces {
     // The flat classes, by JS name, with their Rust ident.
     let flat_file: syn::File = syn::parse2(flat.clone()).expect("a flat surface that parses");
     let flat_classes: BTreeMap<String, String> = flat_file
@@ -2046,7 +2059,11 @@ pub fn namespaced(parts: &[(&str, TokenStream)], flat: &TokenStream) -> Surfaces
             .map_or(ident, |(from, _)| from)
             .to_string()
     };
-    // first-surface ident -> (copy's ident, JS name, namespace)
+    // An item is keyed by its first-surface ident and its namespace: two
+    // namespaces may each define a `Color`. The ident first, so the keys sort
+    // as the idents do.
+    let key = |id: &str, ns: &str| format!("{id}#{ns}");
+    // key -> (copy's ident, JS name, namespace)
     let mut names: BTreeMap<String, (proc_macro2::Ident, String, &str)> = BTreeMap::new();
     // What is left out, with the reason; the rest follows from it below.
     let mut out_why: BTreeMap<String, String> = BTreeMap::new();
@@ -2085,33 +2102,52 @@ pub fn namespaced(parts: &[(&str, TokenStream)], flat: &TokenStream) -> Surfaces
                         ));
                         legacy.insert(old.clone(), new);
                     }
+                    // A name `shared` lets two namespaces have: classes
+                    // only ever built by the class they are called on.
+                    (None, _) if shared.contains(&js) => {}
                     // Taken on the flat surface with no prefix to move it
                     // by, or by an earlier namespace.
                     (flat, _) if flat.is_some() || !classes.insert(js.clone()) => {
                         out_why.insert(
-                            id.to_string(),
+                            key(&id.to_string(), ns),
                             format!("not namespaced: {ns}.{js}: a class named {js} exists already"),
                         );
                     }
                     _ => {}
                 }
             }
-            let prior = names.insert(id.to_string(), (new, js, ns));
-            assert!(
-                prior.is_none(),
-                "{id} is defined twice across the namespaces"
-            );
+            let prior = names.insert(key(&id.to_string(), ns), (new, js, ns));
+            assert!(prior.is_none(), "{id} is defined twice in namespace {ns}");
         }
     }
-    let renames: BTreeMap<String, proc_macro2::Ident> = names
+    // A copy's ident -> its key.
+    let keys: BTreeMap<String, String> = names
         .iter()
-        .map(|(k, (new, _, _))| (k.clone(), new.clone()))
+        .map(|(k, (new, _, _))| (new.to_string(), k.clone()))
         .collect();
 
-    // (first-surface ident or empty, whether a definition, the item renamed,
-    // the copied idents it names)
+    // (key or empty, whether a definition, the item renamed, the keys of the
+    // copies it names)
     let mut items: Vec<(String, bool, TokenStream, BTreeSet<String>)> = Vec::new();
     for (ns, file) in &parsed {
+        // What a name means in this part: its own item, or else the one
+        // other namespace's item of that name. One that two other namespaces
+        // define stays as it is.
+        let mut renames: BTreeMap<String, proc_macro2::Ident> = BTreeMap::new();
+        let mut elsewhere: BTreeMap<&str, Vec<&proc_macro2::Ident>> = BTreeMap::new();
+        for (k, (new, _, n)) in &names {
+            let id = k.rsplit_once('#').map_or(k.as_str(), |(id, _)| id);
+            if n == ns {
+                renames.insert(id.to_string(), new.clone());
+            } else {
+                elsewhere.entry(id).or_default().push(new);
+            }
+        }
+        for (id, news) in elsewhere {
+            if let [new] = news[..] {
+                renames.entry(id.to_string()).or_insert_with(|| new.clone());
+            }
+        }
         for item in &file.items {
             let mut item = item.clone();
             let own = match &mut item {
@@ -2120,20 +2156,25 @@ pub fn namespaced(parts: &[(&str, TokenStream)], flat: &TokenStream) -> Surfaces
                 _ => None,
             };
             if let Some((id, attrs)) = own {
-                let (_, js, ns) = &names[&id];
+                let (_, js, ns) = &names[&key(&id, ns)];
                 with_napi_args(attrs, quote!(js_name = #js, namespace = #ns));
             } else if let Item::Impl(imp) = &mut item {
                 // An impl joins its class in the `.d.ts` only under the
                 // class's namespace.
                 let ns = self_ident(imp)
-                    .and_then(|id| names.get(&id.to_string()))
+                    .and_then(|id| renames.get(&id.to_string()))
+                    .and_then(|new| names.get(&keys[&new.to_string()]))
                     .map_or(*ns, |(_, _, n)| n);
                 with_napi_args(&mut imp.attrs, quote!(namespace = #ns));
             }
             let is_def = matches!(item, Item::Struct(_) | Item::Enum(_));
-            let id = item_name(&item);
+            let id = match item_name(&item) {
+                n if n.is_empty() => n,
+                n => key(&n, ns),
+            };
             let mut named = BTreeSet::new();
             let code = rename_idents(quote!(#item), &renames, &mut named);
+            let mut named: BTreeSet<String> = named.iter().map(|n| keys[n].clone()).collect();
             named.remove(&id);
             items.push((id, is_def, code, named));
         }
@@ -2303,7 +2344,7 @@ fn rename_idents(
                 let member = i >= 1 && punct(i - 1, '.');
                 match renames.get(&id.to_string()) {
                     Some(new) if !path && !member => {
-                        named.insert(id.to_string());
+                        named.insert(new.to_string());
                         let mut new = new.clone();
                         new.set_span(id.span());
                         out.push(TokenTree::Ident(new));

@@ -35,9 +35,86 @@ export interface Point {
   y: number
 }
 
+export declare namespace alt {
+  /**
+   * A colour as plain data: every field public.
+   *
+   * A `toy::alt::Color`, held by value.
+   */
+  export class Color {
+    constructor(red: number, green: number, blue: number)
+    static black(): Color
+    /** Pure red: a static named like a field, as upstream crates have. */
+    static red(): Color
+    /** Parses a `Color`, as Rust's `FromStr` does. Throws when it does not parse. */
+    static fromStr(s: string): Color
+    get red(): number
+    set red(value: number)
+    get green(): number
+    set green(value: number)
+    get blue(): number
+    set blue(value: number)
+    /** A `Color` from a plain object of its fields. */
+    static fromObject(obj: alt.ColorObject): Color
+    /** Its fields, as a plain object `fromObject` takes back. */
+    toObject(): alt.ColorObject
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type AltColor = Color
+  /** A `Color`'s public fields, as a plain object. */
+  export interface ColorObject {
+    red: number
+    green: number
+    blue: number
+  }
+}
+
 export declare namespace toy {
-  /** Read-only handle on a `toy::Counter`. */
+  /**
+   * A grid of bytes, owned and written in place.
+   *
+   * A `toy::Canvas`, owned. A method that consumes it in Rust leaves this
+   * instance spent: every later call throws.
+   */
+  export class Canvas {
+    /** `None` when a side is zero. */
+    constructor(width: number, height: number)
+    /** From `"<width>x<height>"`. */
+    static fromText(text: string): toy.Canvas
+    width(): number
+    height(): number
+    /** Sets every byte to the colour's red channel. */
+    fill(color: toy.Color): void
+    data(): Buffer
+    /** The bytes, the canvas consumed. */
+    intoData(): Buffer
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyCanvas = Canvas
+  /**
+   * A colour whose channels are private: a class with accessors, not plain
+   * data. [`alt::Color`] has its name.
+   *
+   * A `toy::Color`, held by value.
+   */
+  export class Color {
+    static fromRgb(r: number, g: number, b: number): Color
+    red(): number
+    setRed(r: number): void
+    isGray(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyColor = Color
+  /**
+   * An immutable counter, shared behind an `Arc`.
+   *
+   * A shared, read-only `toy::Counter`.
+   */
   export class Counter {
+    constructor(options?: toy.Options | undefined | null)
     label(): string
     step(): number
     direction(): toy.Direction
@@ -46,8 +123,14 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyCounter = Counter
-  /** Handle on a `toy::Tally`, copied on the first write while shared. */
+  /**
+   * Names counted so far. Unlike [`Counter`] it is `Clone` and changes in
+   * place, which is the shape a binding copies on write.
+   *
+   * A shared `toy::Tally`, copied on the first write while shared.
+   */
   export class Tally {
+    constructor()
     push(name: string): void
     clear(): void
     len(): number
@@ -57,17 +140,75 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyTally = Tally
+  /**
+   * A vector in the plane: plain data, `Copy`, parsed from `"x,y"` and
+   * printed back the same way.
+   *
+   * A `toy::Vec2`, held by value.
+   */
+  export class Vec2 {
+    constructor(x: number, y: number)
+    static zero(): toy.Vec2
+    length(): number
+    scaled(k: number): toy.Vec2
+    plus(other: toy.Vec2): toy.Vec2
+    /** `None` for the zero vector, which has no direction. */
+    normalized(): toy.Vec2 | null
+    translate(dx: number, dy: number): void
+    /** Parses a `Vec2`, as Rust's `FromStr` does. Throws when it does not parse. */
+    static fromStr(s: string): toy.Vec2
+    /** The `Vec2` as Rust's `Display` writes it. */
+    toString(): string
+    get x(): number
+    set x(value: number)
+    get y(): number
+    set y(value: number)
+    /** A `Vec2` from a plain object of its fields. */
+    static fromObject(obj: toy.Vec2Object): toy.Vec2
+    /** Its fields, as a plain object `fromObject` takes back. */
+    toObject(): toy.Vec2Object
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyVec2 = Vec2
   /** Which way a counter counts. */
   export const enum Direction {
     Up = 'up',
     Down = 'down',
+  }
+  /**
+   * How to build a [`Counter`].
+   *
+   * Every field is optional: one left out keeps the `Default` value.
+   */
+  export interface Options {
+    /** What the counter is called. */
+    label?: string
+    /** How far one tick moves it. */
+    step?: number
+    direction?: toy.Direction
+  }
+  /**
+   * Paints the byte at `at` with the colour's red channel, and returns its
+   * index.
+   */
+  export function paint(view: toy.Canvas, at: toy.Vec2, color: toy.Color): number
+  /** The `code` a thrown `toy::PaintError` carries: the variant's name. The message is its `Display`. */
+  export const enum PaintErrorCode {
+    OutOfBounds = 'OutOfBounds',
+  }
+  /** The `code` a thrown `toy::ParseError` carries: the variant's name. The message is its `Display`. */
+  export const enum ParseErrorCode {
+    Empty = 'Empty',
+    BadNumber = 'BadNumber',
+    Missing = 'Missing',
   }
   /** Plain view of a `Point`. */
   export interface Point {
     x: number
     y: number
   }
-  /** `toy::report`: what `ReportOptions::to_upstream` made of `options`. */
+  /** One line about `tally`: `title[style]: base names,tally names`. */
   export function report(tally: toy.Tally, options?: toy.ReportOptions | undefined | null): string
   /**
    * How [`report`] writes its line.
@@ -102,6 +243,9 @@ export declare namespace toy {
   export function share(t: toy.Tally): toy.Tally
   /** Whether two handles still share one value. */
   export function shared(a: toy.Tally, b: toy.Tally): boolean
-  /** A new, empty `toy.Tally`. */
-  export function tally(): toy.Tally
+  /** A `Vec2`'s public fields, as a plain object. */
+  export interface Vec2Object {
+    x: number
+    y: number
+  }
 }

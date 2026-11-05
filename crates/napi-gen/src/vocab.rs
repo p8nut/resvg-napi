@@ -503,6 +503,11 @@ pub enum Reason {
     Arg,
     Returns,
     NeedsMut,
+    /// An `unsafe fn`: JS cannot uphold its contract.
+    Unsafe,
+    /// Returns a class whose JS name another namespace has, outside that
+    /// class's own constructor and factories (`class::Class::shared_name`).
+    SharedName,
 }
 
 impl Skip {
@@ -530,6 +535,12 @@ impl std::fmt::Display for Skip {
             Reason::Arg => write!(f, "{n} (arg: {t})"),
             Reason::Returns => write!(f, "{n} (returns {t})"),
             Reason::NeedsMut => write!(f, "{n} (needs &mut self)"),
+            Reason::Unsafe => write!(f, "{n} (unsafe)"),
+            Reason::SharedName => write!(
+                f,
+                "{n} (returns {t}, a class whose JS name another namespace has: \
+                 only its constructor and factories may)"
+            ),
         }
     }
 }

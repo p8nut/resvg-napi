@@ -2,7 +2,11 @@
 //! same generator as the root crate, so the generic half is tested on a crate
 //! it was not written for.
 
+use std::fmt;
+use std::str::FromStr;
 use std::sync::Arc;
+
+pub mod alt;
 
 /// Which way a counter counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -172,4 +176,232 @@ pub fn report(tally: &Tally, options: &ReportOptions) -> String {
         }
     }
     (options.finish)(line)
+}
+
+/// Why a [`Vec2`], a [`Canvas`] or an [`alt::Color`] did not parse.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ParseError {
+    /// Nothing to parse.
+    Empty,
+    /// A part that is not a number.
+    BadNumber(String),
+    /// A part that is missing.
+    Missing { part: &'static str },
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseError::Empty => write!(f, "nothing to parse"),
+            ParseError::BadNumber(s) => write!(f, "not a number: {s:?}"),
+            ParseError::Missing { part } => write!(f, "missing {part}"),
+        }
+    }
+}
+
+/// One number of a separated list.
+fn number<T: FromStr>(part: Option<&str>, name: &'static str) -> Result<T, ParseError> {
+    let part = part.ok_or(ParseError::Missing { part: name })?.trim();
+    part.parse()
+        .map_err(|_| ParseError::BadNumber(part.to_string()))
+}
+
+/// A vector in the plane: plain data, `Copy`, parsed from `"x,y"` and
+/// printed back the same way.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Vec2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Vec2 {
+    pub fn new(x: f32, y: f32) -> Self {
+        Vec2 { x, y }
+    }
+
+    pub fn zero() -> Self {
+        Vec2::default()
+    }
+
+    pub fn length(&self) -> f32 {
+        self.x.hypot(self.y)
+    }
+
+    pub fn scaled(&self, k: f32) -> Self {
+        Vec2::new(self.x * k, self.y * k)
+    }
+
+    pub fn plus(&self, other: Vec2) -> Self {
+        Vec2::new(self.x + other.x, self.y + other.y)
+    }
+
+    /// `None` for the zero vector, which has no direction.
+    pub fn normalized(&self) -> Option<Self> {
+        let l = self.length();
+        (l > 0.0).then(|| self.scaled(1.0 / l))
+    }
+
+    pub fn translate(&mut self, dx: f32, dy: f32) {
+        self.x += dx;
+        self.y += dy;
+    }
+}
+
+impl FromStr for Vec2 {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, ParseError> {
+        if s.trim().is_empty() {
+            return Err(ParseError::Empty);
+        }
+        let mut parts = s.split(',');
+        Ok(Vec2::new(
+            number(parts.next(), "x")?,
+            number(parts.next(), "y")?,
+        ))
+    }
+}
+
+impl fmt::Display for Vec2 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{},{}", self.x, self.y)
+    }
+}
+
+/// A colour whose channels are private: a class with accessors, not plain
+/// data. [`alt::Color`] has its name.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+impl Color {
+    pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+        Color { r, g, b }
+    }
+
+    /// `None` when a channel is over 255.
+    pub fn checked(r: u32, g: u32, b: u32) -> Option<Self> {
+        Some(Color::from_rgb(
+            r.try_into().ok()?,
+            g.try_into().ok()?,
+            b.try_into().ok()?,
+        ))
+    }
+
+    pub fn red(&self) -> u8 {
+        self.r
+    }
+
+    pub fn set_red(&mut self, r: u8) {
+        self.r = r;
+    }
+
+    pub fn is_gray(&self) -> bool {
+        self.r == self.g && self.g == self.b
+    }
+}
+
+/// A grid of bytes, owned and written in place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Canvas {
+    width: u32,
+    data: Vec<u8>,
+}
+
+impl Canvas {
+    /// `None` when a side is zero.
+    pub fn new(width: u32, height: u32) -> Option<Self> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let len = usize::try_from(u64::from(width) * u64::from(height)).ok()?;
+        Some(Canvas {
+            width,
+            data: vec![0; len],
+        })
+    }
+
+    /// From `"<width>x<height>"`.
+    pub fn from_text(text: &str) -> Result<Self, ParseError> {
+        if text.trim().is_empty() {
+            return Err(ParseError::Empty);
+        }
+        let mut parts = text.split('x');
+        let (w, h) = (
+            number(parts.next(), "width")?,
+            number(parts.next(), "height")?,
+        );
+        Canvas::new(w, h).ok_or(ParseError::BadNumber(text.to_string()))
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        u32::try_from(self.data.len()).unwrap_or(u32::MAX) / self.width
+    }
+
+    /// Sets every byte to the colour's red channel.
+    pub fn fill(&mut self, color: Color) {
+        self.data.fill(color.r);
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// A writable view of the bytes, for [`paint`].
+    pub fn as_view(&mut self) -> CanvasView<'_> {
+        CanvasView {
+            width: self.width,
+            data: &mut self.data,
+        }
+    }
+
+    /// The bytes, the canvas consumed.
+    pub fn into_data(self) -> Vec<u8> {
+        self.data
+    }
+}
+
+/// A canvas borrowed for writing.
+pub struct CanvasView<'a> {
+    width: u32,
+    data: &'a mut [u8],
+}
+
+/// Why [`paint`] refused.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PaintError {
+    /// The point is off the canvas.
+    OutOfBounds(f32, f32),
+}
+
+impl fmt::Display for PaintError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let PaintError::OutOfBounds(x, y) = self;
+        write!(f, "{x},{y} is off the canvas")
+    }
+}
+
+/// Paints the byte at `at` with the colour's red channel, and returns its
+/// index.
+pub fn paint(view: &mut CanvasView<'_>, at: Vec2, color: Color) -> Result<u32, PaintError> {
+    let off = PaintError::OutOfBounds(at.x, at.y);
+    if !(at.x >= 0.0 && at.y >= 0.0) {
+        return Err(off);
+    }
+    let width = f64::from(view.width);
+    let (x, y) = (f64::from(at.x).floor(), f64::from(at.y).floor());
+    let i = y * width + x;
+    if x >= width || i >= view.data.len() as f64 {
+        return Err(off);
+    }
+    let i = i as usize;
+    view.data[i] = color.r;
+    u32::try_from(i).map_err(|_| off)
 }

@@ -43,7 +43,11 @@ test('util.inspect prints the cheap methods under the class name', () => {
 
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
-  assert.deepEqual(Object.keys(ns).sort(), ['Counter', 'Direction', 'Tally', 'report', 'share', 'shared', 'tally']);
+  assert.deepEqual(Object.keys(ns).sort(), [
+    'Canvas', 'Color', 'Counter', 'Direction', 'PaintErrorCode', 'ParseErrorCode', 'Tally', 'Vec2',
+    'paint', 'report', 'share', 'shared',
+  ]);
+  assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
   assert.notEqual(ns.Direction, toy.Direction, 'an enum object of its own');
   // napi keeps one constructor per class name: had the flat `Counter` kept
@@ -57,7 +61,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   assert.ok(!(c instanceof ns.Counter));
   assert.equal(c.constructor.name, 'LegacyCounter');
   assert.equal(c.label(), 'counter');
-  const t = ns.tally();
+  const t = new ns.Tally();
   assert.ok(t instanceof ns.Tally);
   assert.equal(t.constructor.name, 'Tally');
   assert.equal(Object.prototype.toString.call(t), '[object Tally]');
@@ -65,7 +69,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
 });
 
 test('a Clone handle gets its &mut methods through Arc::make_mut', () => {
-  const a = toy.toy.tally();
+  const a = new toy.toy.Tally();
   assert.equal(a.isEmpty(), true);
   a.push('x');
   a.push('y');
@@ -85,7 +89,7 @@ test('a Clone handle gets its &mut methods through Arc::make_mut', () => {
 });
 
 test('an option object: every field optional, the rest from Default', () => {
-  const t = toy.toy.tally();
+  const t = new toy.toy.Tally();
   t.push('x');
   t.push('y');
   // `ReportOptions::default()`: title `tally`, STYLES[0], no base, no padding.
@@ -99,7 +103,7 @@ test('an option object: every field optional, the rest from Default', () => {
 });
 
 test('an index-bounded field is clamped to its table', () => {
-  const t = toy.toy.tally();
+  const t = new toy.toy.Tally();
   // STYLES has three entries: anything past the last is the last, never an
   // out-of-bounds index (a panic upstream).
   assert.equal(toy.toy.report(t, { styleIndex: 2 }), 'tally[quiet]: ');
@@ -108,9 +112,9 @@ test('an index-bounded field is clamped to its table', () => {
 });
 
 test('a provider field takes a class instance, shared not copied', () => {
-  const base = toy.toy.tally();
+  const base = new toy.toy.Tally();
   base.push('a');
-  const t = toy.toy.tally();
+  const t = new toy.toy.Tally();
   t.push('x');
   assert.equal(toy.toy.report(t, { base }), 'tally[plain]: a,x');
   // The instance is read when the options are converted: a later write shows.
@@ -123,10 +127,172 @@ test('a provider field takes a class instance, shared not copied', () => {
 });
 
 test('a converter field takes its JS form, and refuses anything else', () => {
-  const t = toy.toy.tally();
+  const t = new toy.toy.Tally();
   t.push('x');
   assert.equal(toy.toy.report(t, { width: 20 }), 'tally[plain]: x.....');
   assert.equal(toy.toy.report(t, { width: 'auto' }), 'tally[plain]: x');
   assert.throws(() => toy.toy.report(t, { width: 'wide' }), /invalid width: "wide"/);
   assert.throws(() => toy.toy.report(t, { width: 256 }), /invalid width: 256/);
+});
+
+// Classes with constructors and statics, free functions, `Result` errors,
+// owned and consuming classes, and the conversions (`napi_gen::class`).
+
+/** What a generated function throws: `code` and `message`. */
+function throwsCoded(fn, code, message) {
+  assert.throws(fn, (e) => {
+    assert.ok(e instanceof Error);
+    assert.equal(e.code, code);
+    if (message instanceof RegExp) assert.match(e.message, message);
+    else assert.equal(e.message, message);
+    return true;
+  });
+}
+
+test('`new` is the constructor, over an option object or none', () => {
+  const { Counter, Tally } = toy.toy;
+  const c = new Counter({ label: 'up', step: 2 });
+  assert.ok(c instanceof Counter);
+  assert.equal(c.label(), 'up');
+  assert.equal(c.step(), 2);
+  // Omitted, the option object is `Options::default()`.
+  assert.equal(new Counter().label(), 'counter');
+  assert.deepEqual(new Counter().origin(), { x: 0, y: 0 });
+  assert.equal(new Tally().isEmpty(), true);
+});
+
+test('`new` returning None throws: a JS constructor cannot return null', () => {
+  const { Canvas } = toy.toy;
+  const c = new Canvas(3, 2);
+  assert.equal(c.width(), 3);
+  assert.equal(c.height(), 2);
+  throwsCoded(() => new Canvas(0, 2), 'InvalidArg', /Canvas::new returned None/);
+});
+
+test('other associated functions are statics: Option is null, Result throws', () => {
+  const { Vec2, Canvas, Color } = toy.toy;
+  const z = Vec2.zero();
+  assert.ok(z instanceof Vec2);
+  assert.equal(z.normalized(), null);
+  const n = new Vec2(3, 4).normalized();
+  assert.ok(n instanceof Vec2);
+  assert.ok(Math.abs(n.length() - 1) < 1e-6);
+  const c = Canvas.fromText('4x2');
+  assert.ok(c instanceof Canvas);
+  assert.equal(c.width(), 4);
+  assert.ok(Color.fromRgb(1, 2, 3) instanceof Color);
+});
+
+test('a Result whose error is an upstream enum throws its variant name as `code`', () => {
+  const { Canvas, Vec2, ParseErrorCode } = toy.toy;
+  // The message is the error's `Display`, unchanged.
+  throwsCoded(() => Canvas.fromText(''), 'Empty', 'nothing to parse');
+  throwsCoded(() => Canvas.fromText('4xz'), 'BadNumber', 'not a number: "z"');
+  throwsCoded(() => Canvas.fromText('4'), 'Missing', 'missing height');
+  throwsCoded(() => Vec2.fromStr('1'), 'Missing', 'missing y');
+  // The codes are a type, and an object, of their own.
+  assert.deepEqual(Object.values(ParseErrorCode).sort(), ['BadNumber', 'Empty', 'Missing']);
+});
+
+test('a number that does not fit the upstream integer throws, never wraps', () => {
+  throwsCoded(() => toy.toy.Color.fromRgb(256, 0, 0), 'InvalidArg', 'invalid r: 256');
+  throwsCoded(() => new toy.alt.Color(0, 0, 300), 'InvalidArg', 'invalid blue: 300');
+});
+
+test('a free function lands in its namespace, and takes classes as arguments', () => {
+  const { Canvas, Vec2, Color, paint, PaintErrorCode } = toy.toy;
+  const c = new Canvas(3, 2);
+  // `&mut CanvasView` is borrowed from the Canvas for the call (`views`).
+  assert.equal(paint(c, new Vec2(1, 1), Color.fromRgb(9, 0, 0)), 4);
+  assert.deepEqual([...c.data()], [0, 0, 0, 0, 9, 0]);
+  throwsCoded(() => paint(c, new Vec2(5, 0), Color.fromRgb(1, 1, 1)), 'OutOfBounds', '5,0 is off the canvas');
+  assert.deepEqual(Object.values(PaintErrorCode), ['OutOfBounds']);
+  // Another class's instance is refused.
+  assert.throws(() => paint(new Vec2(0, 0), new Vec2(0, 0), Color.fromRgb(1, 1, 1)));
+});
+
+test('an owned class: &mut methods write it, a consuming one spends it', () => {
+  const { Canvas, Color, Vec2, paint } = toy.toy;
+  const c = new Canvas(2, 2);
+  c.fill(Color.fromRgb(7, 0, 0));
+  assert.deepEqual([...c.data()], [7, 7, 7, 7]);
+  const bytes = c.intoData();
+  assert.ok(Buffer.isBuffer(bytes));
+  assert.deepEqual([...bytes], [7, 7, 7, 7]);
+  // Rust moved the value out: every later call throws.
+  throwsCoded(() => c.width(), 'Consumed', 'this Canvas was consumed by an earlier call');
+  throwsCoded(() => c.intoData(), 'Consumed', /consumed/);
+  throwsCoded(() => paint(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Consumed', /consumed/);
+});
+
+test('a Copy class: by value, its methods take a copy, &mut writes its own', () => {
+  const { Vec2, Color } = toy.toy;
+  const a = new Vec2(1, 2);
+  const b = a.scaled(2);
+  assert.deepEqual(b.toObject(), { x: 2, y: 4 });
+  assert.deepEqual(a.toObject(), { x: 1, y: 2 }, 'scaled took a copy');
+  assert.deepEqual(a.plus(b).toObject(), { x: 3, y: 6 });
+  a.translate(10, 0);
+  assert.deepEqual(a.toObject(), { x: 11, y: 2 });
+  const c = Color.fromRgb(1, 2, 3);
+  c.setRed(5);
+  assert.equal(c.red(), 5);
+  assert.equal(c.isGray(), false);
+});
+
+test('plain data: field accessors, and fromObject/toObject in a pair', () => {
+  const { Vec2 } = toy.toy;
+  const v = Vec2.fromObject({ x: 1.5, y: -2 });
+  assert.equal(v.x, 1.5);
+  v.y = 4;
+  assert.deepEqual(v.toObject(), { x: 1.5, y: 4 });
+  assert.deepEqual(Vec2.fromObject(v.toObject()).toObject(), v.toObject());
+  assert.throws(() => Vec2.fromObject({ x: 1 }), /y/);
+  const c = toy.alt.Color.fromObject({ red: 1, green: 2, blue: 3 });
+  assert.deepEqual(c.toObject(), { red: 1, green: 2, blue: 3 });
+  throwsCoded(() => { c.red = 256; }, 'InvalidArg', 'invalid red: 256');
+  // A class whose fields are private has neither.
+  assert.equal(toy.toy.Color.fromObject, undefined);
+  assert.equal(toy.toy.Color.prototype.toObject, undefined);
+});
+
+test('FromStr gives fromStr, Display gives toString, independently', () => {
+  const { Vec2 } = toy.toy;
+  const v = Vec2.fromStr('1.5, -2');
+  assert.deepEqual(v.toObject(), { x: 1.5, y: -2 });
+  assert.equal(v.toString(), '1.5,-2');
+  assert.equal(`${v}`, '1.5,-2');
+  throwsCoded(() => Vec2.fromStr(''), 'Empty', 'nothing to parse');
+  // alt::Color has FromStr and no Display: one direction only.
+  const c = toy.alt.Color.fromStr('1,2,3');
+  assert.deepEqual(c.toObject(), { red: 1, green: 2, blue: 3 });
+  throwsCoded(() => toy.alt.Color.fromStr('1,x,3'), 'BadNumber', 'not a number: "x"');
+  assert.equal(Object.hasOwn(toy.alt.Color.prototype, 'toString'), false);
+});
+
+test('two namespaces each have a Color: built by their own class, never mixed', () => {
+  const A = toy.toy.Color;
+  const B = toy.alt.Color;
+  assert.notEqual(A, B);
+  assert.equal(A.name, 'Color');
+  assert.equal(B.name, 'Color');
+  // Every way to get one is the class's own constructor or a factory.
+  const a = A.fromRgb(1, 2, 3);
+  assert.ok(a instanceof A && !(a instanceof B));
+  for (const b of [new B(1, 2, 3), B.black(), B.red(), B.fromStr('1,2,3'), B.fromObject({ red: 0, green: 0, blue: 0 })]) {
+    assert.ok(b instanceof B && !(b instanceof A));
+  }
+  // A static named like a field: `Color.red()` and `color.red` both.
+  assert.equal(B.red().red, 255);
+  // `checked` returns `Option<Self>`, which only napi's registry could
+  // build: left out (see build.rs).
+  assert.equal(A.checked, undefined);
+  // Each refuses the other.
+  assert.throws(() => new toy.toy.Canvas(1, 1).fill(new B(1, 2, 3)));
+});
+
+test('inspect prints the cheap &self members, never a &mut or consuming one', () => {
+  assert.match(inspect(new toy.toy.Vec2(1, 2)), /^Vec2 \{.*x: 1.*y: 2.*length: /s);
+  assert.match(inspect(new toy.toy.Canvas(2, 3)), /^Canvas \{.*width: 2.*height: 3.*\}$/s);
+  assert.doesNotMatch(inspect(new toy.toy.Canvas(2, 3)), /intoData/);
 });

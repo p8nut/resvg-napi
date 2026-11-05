@@ -1,15 +1,12 @@
 //! Generates the whole NAPI binding layer from the *actual* resvg / usvg /
 //! fontdb sources: `syn` parses them, `quote` re-emits Rust.
 //!
-//! One phase per file, and this one orchestrates them:
+//! The generic phases live in their own crate, `crates/napi-gen` (sources,
+//! vocab, emit, cfg); this one fills its config and orchestrates them:
 //!
 //!   build/config.rs    the resvg-specific lists: renames, reserved names,
-//!                      hand-wired fields. What another crate would rewrite
-//!   build/sources.rs   finding and parsing upstream
-//!                      (env override -> cargo registry)
-//!   build/vocab.rs     what a Rust type means on the JS side -- newtypes,
-//!                      aliases, `Deref` chains, payload enums, naming
-//!   build/emit.rs      turning those answers into tokens napi can expand
+//!                      hand-wired fields, and the `napi_gen::Config` they
+//!                      make. What another crate would rewrite
 //!   build/template.rs  the API decisions, written by hand. With config.rs,
 //!                      the only files here not describing upstream
 //!   build.rs           this: the passes, their order, the fixpoints, the
@@ -28,45 +25,27 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Item;
 
-/// The codegen's own report: what it derived from upstream, and what it left
-/// alone with the reason. Cargo gives a build script no channel but
-/// `cargo::warning`, so this competes with real warnings -- clippy's four were
-/// buried under 101 lines of it. Off unless asked for.
-macro_rules! report {
-    ($($arg:tt)*) => {
-        if env::var_os($crate::CODEGEN_LOG).is_some() {
-            println!("cargo::warning={}", format!($($arg)*));
-        }
-    };
-}
-
-/// The env var that turns the report on.
+/// The env var that turns the codegen's report (`napi_gen::report!`) on.
 const CODEGEN_LOG: &str = "RESVG_NAPI_CODEGEN_LOG";
 
-// Each phase in its own file. `#[path]` because Cargo compiles this one as a
+// The resvg-specific files. `#[path]` because Cargo compiles this one as a
 // crate root, so a plain `mod` would look for the file beside it -- in the
 // repository root.
-#[path = "build/cfg.rs"]
-mod cfg;
 #[path = "build/config.rs"]
 mod config;
-#[path = "build/emit.rs"]
-mod emit;
-#[path = "build/sources.rs"]
-mod sources;
 #[path = "build/template.rs"]
 mod template;
-#[path = "build/vocab.rs"]
-mod vocab;
 
 use config::*;
-use emit::*;
-use sources::*;
+use napi_gen::emit::*;
+use napi_gen::report;
+use napi_gen::sources::*;
+use napi_gen::vocab::*;
 use template::*;
-use vocab::*;
 
 fn main() {
     napi_build::setup();
+    napi_gen::configure(GEN);
     // One table: a kind that both a getter and a method can return has the
     // same JS type at both, whatever expression each uses to get there.
     {
@@ -100,10 +79,11 @@ fn main() {
         }
     }
     println!("cargo::rerun-if-changed=build.rs");
-    // The generator is six files now, and Cargo watches only what it is told:
-    // without these, editing a phase module would leave src/lib.rs stale and the
-    // CI drift check would fail on someone else's machine rather than here.
-    for m in ["cfg", "config", "sources", "vocab", "emit", "template"] {
+    // Cargo watches only what it is told: without these, editing config or the
+    // template would leave src/lib.rs stale and the CI drift check would fail
+    // on someone else's machine rather than here. napi-gen, a path dependency,
+    // Cargo tracks on its own.
+    for m in ["config", "template"] {
         println!("cargo::rerun-if-changed=build/{m}.rs");
     }
     // The generated file is also an *input* to watch: if someone deletes or
@@ -217,12 +197,12 @@ fn main() {
     }
 
     // The table has N entries, so the highest usable index is N - 1.
-    let precision_max = u32::try_from(static_array_len(primary_files, CLAMP.1) - 1)
+    let precision_max = u32::try_from(static_array_len(primary_files, GEN.clamp.1) - 1)
         .expect("a clamp table that fits u32");
     report!(
         "{} precision clamp derived from {}: {precision_max}",
         primary.root_str,
-        CLAMP.1
+        GEN.clamp.1
     );
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
@@ -268,7 +248,7 @@ fn main() {
                     Payload::Value(t) => vec![t],
                     Payload::Fields(f) => f.into_iter().map(|(_, t)| t).collect(),
                 })
-                .filter(|t| !NODE_TYPES.contains(&bare(t)))
+                .filter(|t| !GEN.node_types.contains(&bare(t)))
                 .filter(|t| struct_fields_opt(primary_files, bare(t)).is_some()),
         )
         // Plus whatever the template hands out itself.
@@ -533,7 +513,7 @@ fn main() {
         map_struct(primary_files, PARSE_OPTIONS, &vocab, precision_max);
     let (write_fields, skipped_write, clamped) =
         map_struct(primary_files, WRITE_OPTIONS, &vocab, precision_max);
-    // The write options are where the clamped indices live (config::CLAMP),
+    // The write options are where the clamped indices live (config::GEN.clamp),
     // found by a name suffix. A rename upstream would match nothing, fall
     // through to u8::MAX, and hand usvg an index 242 places past the end of a
     // 13-entry table -- an out-of-bounds panic inside an `extern "C"` callback,
@@ -542,7 +522,7 @@ fn main() {
         clamped > 0,
         "no {WRITE_OPTIONS} field matched `*{}`: either upstream renamed them, \
          in which case this clamp now protects nothing, or they are gone",
-        CLAMP.0
+        GEN.clamp.0
     );
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
@@ -569,7 +549,7 @@ fn main() {
             continue;
         }
         // `fontdb::Database` maps onto the hand-written FontDatabase class.
-        if HAND_WRAPPED.iter().any(|(h, _)| *h == t) {
+        if GEN.hand_wrapped.iter().any(|(h, _)| *h == t) {
             continue;
         }
         let src = defines(&t).unwrap_or(&sources[0]);

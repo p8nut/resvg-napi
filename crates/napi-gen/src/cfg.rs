@@ -4,7 +4,7 @@
 // and those features are not ours: one this crate turns off for a target makes
 // the item vanish there, and a binding that calls it stops compiling. So a
 // method's `#[cfg]` -- its own and its impl block's -- is translated before
-// emission: each `feature = "x"` becomes what `config::FEATURES` says it is for
+// emission: each `feature = "x"` becomes what `Config::features` says it is for
 // this crate (always on, or on under a cfg of ours), anything else (`unix`,
 // `target_os = ..`) is kept as written. A method whose twins together are on
 // everywhere is emitted plain, the rest carry the translated cfg.
@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::config::FEATURES;
+use crate::config;
 
 /// A cfg predicate, features already translated.
 #[derive(Clone)]
@@ -83,13 +83,13 @@ fn translate(meta: &syn::Meta) -> Pred {
                 panic!("cfg(feature = ..) without a string");
             };
             let name = s.value();
-            match FEATURES.iter().find(|(f, _)| *f == name) {
+            match config().features.iter().find(|(f, _)| *f == name) {
                 Some((_, "true")) => Pred::True,
                 Some((_, ours)) => {
-                    translate(&syn::parse_str(ours).expect("a config::FEATURES cfg that parses"))
+                    translate(&syn::parse_str(ours).expect("a Config::features cfg that parses"))
                 }
                 None => panic!(
-                    "an emitted upstream method is gated on feature {name:?}, which config::FEATURES \
+                    "an emitted upstream method is gated on feature {name:?}, which Config::features \
                      does not list: say whether this crate always builds it (\"true\") or under \
                      which cfg"
                 ),

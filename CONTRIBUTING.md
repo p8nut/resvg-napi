@@ -1,8 +1,8 @@
 # Contributing
 
 Almost none of `src/lib.rs` is written by hand. Read this before changing it --
-or rather, before changing the generator in `build.rs` and `build/`, which is
-what writes it.
+or rather, before changing the generator in `build.rs`, `build/` and
+`crates/napi-gen`, which is what writes it.
 
 Where the project is heading is recorded as decisions in [`docs/adr/`](docs/adr/).
 [ADR 0001](docs/adr/0001-thin-generic-wrapper.md) makes the API a direct
@@ -20,15 +20,18 @@ the precision clamp read out of usvg's `POW_VEC` — is derived. The hand-writte
 part is the API shape: what a `Pixmap` becomes, how images and fonts are
 resolved, what runs on a worker thread.
 
-It is a handful of files, one per phase:
+It is a handful of files, one per phase. The generic phases are a crate of
+their own, `crates/napi-gen`, a build-dependency of this one: `build.rs` fills
+its `Config` and hands it over with `napi_gen::configure` before running them.
 
 | | |
 |---|---|
-| `build/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version `Cargo.lock` names |
-| `build/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
-| `build/emit.rs` | turning those answers into tokens napi can expand |
-| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates. Wrapping another crate starts by rewriting this file and `template.rs` |
-| `build/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `config::FEATURES` |
+| `crates/napi-gen/src/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version the workspace's `Cargo.lock` names |
+| `crates/napi-gen/src/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
+| `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand |
+| `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
+| `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
+| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs` |
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
 

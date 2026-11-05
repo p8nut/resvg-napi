@@ -32,7 +32,7 @@ napi-derive = "3.7.0"
 # Its defaults minus `memmap-fonts`, added back below for every target that has
 # mmap: WASI does not, and with it fontdb's load_font_file answered
 # "unsupported" while load_fonts_dir loaded nothing and said nothing. The
-# generator knows (build/config.rs FEATURES) and gates what depends on it.
+# generator knows (build/config.rs, `features`) and gates what depends on it.
 # No `svgz` either: usvg inflates it with no cap, a decompression bomb
 # (linebender/resvg#1138, fix proposed in #1139 with a fixed 1 GiB cap). SVGZ
 # input is refused; callers inflate it themselves, Node's zlib has
@@ -59,9 +59,9 @@ resvg = { version = "0.49.0", default-features = false, features = ["memmap-font
 
 [build-dependencies]
 napi-build = "2.6.0"
-# The version napi-derive-backend already pulls in: napi names JS members
-# with it, so the generator spelling them the same way is the point.
-convert_case = "0.12.0"
+# The generic generator; build.rs fills its config and runs the passes.
+napi-gen = { path = "crates/napi-gen" }
+# build.rs and build/template.rs write and read tokens themselves too.
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
 quote = "1.0.35"
 proc-macro2 = "1.0.91"
@@ -71,4 +71,4 @@ lto = true
 strip = "symbols"
 
 [workspace]
-members = ["crates/napi-support"]
+members = ["crates/napi-support", "crates/napi-gen"]

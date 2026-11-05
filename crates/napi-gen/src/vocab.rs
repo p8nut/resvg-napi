@@ -16,8 +16,8 @@ use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
-use crate::config::*;
 use crate::sources::{is_pub, self_ident};
+use crate::{config, renamed};
 
 /// Normalised textual form of a type, e.g. `Option<std::path::PathBuf>`.
 pub fn ty_str(ty: &Type) -> String {
@@ -295,7 +295,7 @@ impl PayloadEnum {
 /// The shape is what the mapping was ever about: six numbers in that order are
 /// a matrix whatever the crate that declares them calls itself.
 pub fn matrix_like(files: &[syn::File]) -> BTreeSet<String> {
-    let want: BTreeSet<&str> = crate::config::MATRIX_FIELDS.iter().copied().collect();
+    let want: BTreeSet<&str> = config().matrix_fields.iter().copied().collect();
     let mut found = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Struct(st) = item else { continue };
@@ -651,10 +651,10 @@ pub fn classify(
             Js::Bytes
         }
         // The template's domain shapes, by the upstream spellings config lists.
-        s if crate::config::SIZE_TYPES.contains(&s) => Js::Size,
+        s if config().size_types.contains(&s) => Js::Size,
         // geometry newtypes over four f32 with public accessors
-        s if crate::config::RECT_TYPES.contains(&s) => Js::Bbox,
-        s if crate::config::OPT_RECT_TYPES.contains(&s) => Js::OptBbox,
+        s if config().rect_types.contains(&s) => Js::Bbox,
+        s if config().opt_rect_types.contains(&s) => Js::OptBbox,
         s if s.starts_with("Result<(),") => Js::TryUnit,
         // Arc-held definitions can be owned by a wrapper class.
         s if s.starts_with("&[Arc<") && s.ends_with(">]") => {
@@ -664,8 +664,8 @@ pub fn classify(
             Js::Handle(s[5..s.len() - 1].to_string())
         }
         s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
-        s if crate::config::PATH_DATA_TYPES.contains(&s) => Js::PathData,
-        s if crate::config::TAG4_TYPES.contains(&s) => Js::Tag4,
+        s if config().path_data_types.contains(&s) => Js::PathData,
+        s if config().tag4_types.contains(&s) => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
         // Payload enums are classified by name here and given their union
         // further down; `map_enums` only mirrors the unit ones.
@@ -944,7 +944,7 @@ pub fn data_ident(ty: &str) -> proc_macro2::Ident {
         let head = module.rsplit("::").next().unwrap_or(module);
         return format_ident!("{}{name}", head.to_case(Case::Pascal));
     }
-    format_ident!("{}", renamed(DATA_RENAMES, ty))
+    format_ident!("{}", renamed(config().data_renames, ty))
 }
 
 /// JS name for a mapped enum.
@@ -954,14 +954,15 @@ pub fn data_ident(ty: &str) -> proc_macro2::Ident {
 /// run asked for, the other what a loaded face is. Renamed for the same reason
 /// `FaceInfo` is emitted as `FontFace`.
 pub fn enum_ident(name: &str) -> proc_macro2::Ident {
-    format_ident!("{}", renamed(ENUM_RENAMES, name))
+    format_ident!("{}", renamed(config().enum_renames, name))
 }
 
 /// JS class name for an Arc-held usvg definition: `filter::Filter` -> `Filter`.
 pub fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
     let last = ty.rsplit("::").next().unwrap_or(ty);
     // `fontdb::Database` already has a hand-written class.
-    let name = HAND_WRAPPED
+    let name = config()
+        .hand_wrapped
         .iter()
         .find(|(h, _)| *h == ty)
         .map_or(last, |(_, n)| n);

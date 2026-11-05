@@ -6,6 +6,7 @@
 
 import { toValueSync } from 'liquidjs';
 import qrcode from 'qrcode-generator';
+import { nodeExtent } from '../fit.mjs';
 
 const escapeXml = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -17,19 +18,20 @@ const round = (n) => Math.round(n * 100) / 100;
  * Width of a string, straight from the renderer that will draw it: the
  * `measure` both pages hand to registerSvgFilters.
  *
- * @param Resvg   the binding's class (native or wasm)
- * @param fonts   the FontDatabase the document will render with
+ * @param binding the binding (native or wasm): its `usvg` namespace parses
+ * @param db      the `fontdb.Database` holding the fonts the document renders with
  * @param text    the string
- * @param fontSize, family  defaults: 12, the database's first family
- * @param options extra Resvg options (e.g. `languages`)
+ * @param fontSize, family  defaults: 12, `options.fontFamily`
+ * @param options extra `usvg.Options` (e.g. `languages`, `fontFamily`)
  */
-export function measureText(Resvg, fonts, text, { fontSize = 12, family } = {}, options = {}) {
-  const fam = family ?? fonts?.faces()[0]?.families[0] ?? 'sans-serif';
+export function measureText(binding, db, text, { fontSize = 12, family } = {}, options = {}) {
+  const fam = family ?? options.fontFamily ?? 'sans-serif';
   const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
     + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`
     + `${escapeXml(text)}</text></svg>`;
   try {
-    return new Resvg(probe, { ...options, fontFamily: fam }, fonts).node('m')?.extent()?.width ?? 0;
+    const node = binding.usvg.Tree.fromStr(probe, { ...options, fontFamily: fam, fontdb: db }).nodeById('m');
+    return (node && nodeExtent(node)?.width) ?? 0;
   } catch {
     return 0;
   }

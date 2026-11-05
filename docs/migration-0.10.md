@@ -25,6 +25,7 @@ Tick a step off here when it is merged.
 | 5 | Option structs as plain objects with `Default`, plus field providers for fields with no JS form. Start with a spike on the `fontdb` field. | `fontdb` field |
 | 6 | Factories, free functions and `Result` errors. Owned and consuming classes. `resvg`, `tiny-skia` (allowlist: `Pixmap`, `Color`, `IntSize`, `Transform`, `Rect`, `Size`) and `svgtypes` (`Color`) become sources. `FromStr` gives `fromStr`, `Display` gives `toString`, and plain-data classes get `fromObject`/`toObject`. | allowlist creep |
 | 7 | Generic projections over borrowed values: `tree.root()`, `group.children()` returning `usvg.Node` unions, `resvg.renderNode`. | highest: stop and decide if the generic step path passes about 300 lines |
+| 7b | Old node surface removed early (Q37 option D): `SvgNode`, `Resvg.node()` / `children()` / `renderNodePng(Async)` / `nodeBbox` / `faceOf` and the definition tables on `Resvg`, the `Legacy*` classes, the flat data types only nodes reached, and the generator hooks that served them (`content_view`, `legacy_prefix`, the template's `Doc`). Labelled `breaking-api`. | tests lose what has no new-API form yet |
 | 8 | Generic `dispose()` / `disposed` / `using` for every class, with a generated `.d.ts` header. | low |
 | 9 | Async twins listed in config, with leases for `&mut` arguments. | the put-back path on abort |
 | 10 | The resvg-specific `guard` module (hand-written, outside the grep): `ImageHrefResolver`, `FontResolver`, `resourcesDir` fence, 256 MiB, 2^28 px, SVGZ refused. | one provider per parse |
@@ -138,6 +139,36 @@ out of `usvg.Filter`, which stays a handle like the gradients: none of them
 owns content). `layerBoundingBox()` and
 `filtersBoundingBox()` still give `BBox`: `NonZeroRect` has no class.
 
+Step 7b removed the flat node surface early (decision Q37, option D): the
+projections replace it, and keeping both meant porting every later step
+twice. `Resvg` keeps its parse, render, `toString`, `pendingImages` /
+`pendingFonts` / `takeLogs` and the root group's boxes until step 13. What
+went:
+
+- `SvgNode` and `NodeKind`; `Resvg.node()`, `children()`, `renderNodePng`,
+  `renderNodePngAsync`, `nodeBbox` and `faceOf`; `Resvg.linearGradients()`
+  and the other definition tables (`usvg.Tree` has them).
+- The 17 `Legacy*` classes, and the flat data types and enums nothing left on
+  the flat surface names (`Path`, `Fill`, the filter primitives...). The build
+  prunes them (`prune` in `build.rs`); their `usvg.*` copies stay.
+- In the generator: `Config::content_view`, `Config::legacy_prefix` (no flat
+  class collides any more), `Surface::Flat`, the passes' `prologue` and
+  `optional`, and the `Doc` every generated class carried for the flat nodes.
+  `wrap(inner)` takes the value alone. The data types a projection holds
+  (`Text`'s chunks and spans) are seeded from `Config::projections` instead of
+  from what the template returned.
+- `fit.mjs` measures on a `usvg.Tree` (`render: (svg) => usvg.Tree`) and
+  exports `nodeExtent(node)`, the old `extent()`: a group's layer box, a
+  shape's or a text's stroke box, an image's box. The demo measures with it.
+
+No new-API form yet, so dropped with the old surface: what an `feImage`
+draws (`Filter.imageChildren`), the document an `<image>` embeds
+(`svgChildren`), which face drew a glyph (`faceOf`, `PositionedGlyph.font`)
+and a span's font families (`Font.families`). The async node render waits for
+step 9's async twins (`renderNodePngAsync` has a `TODO(step 9)` in the
+tests); `renderNodePng`'s `background` and sizing come back with the helpers
+(step 11).
+
 ## Status
 
 - [x] 1
@@ -148,6 +179,7 @@ owns content). `layerBoundingBox()` and
 - [x] 5
 - [x] 6
 - [x] 7
+- [x] 7b
 - [ ] 8
 - [ ] 9
 - [ ] 10

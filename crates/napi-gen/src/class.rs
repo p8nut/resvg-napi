@@ -708,7 +708,7 @@ impl<'a> Classes<'a> {
             };
             return Ok(Ret {
                 ty: quote!(#id),
-                conv: quote!(#id::wrap(#arc, Doc::default())),
+                conv: quote!(#id::wrap(#arc)),
             });
         }
         if let Some(c) = self.class_of(ctx, this, inner) {
@@ -1173,14 +1173,12 @@ impl<'a> Classes<'a> {
                 quote!(pub struct #id { inner: #up }),
                 quote! {
                     fn __from(inner: #up) -> Self { Self { inner } }
-                    fn doc(&self) -> Doc { Doc::default() }
                 },
             ),
             Holding::Owned => (
                 quote!(pub struct #id { inner: Option<#up> }),
                 quote! {
                     fn __from(inner: #up) -> Self { Self { inner: Some(inner) } }
-                    fn doc(&self) -> Doc { Doc::default() }
                     fn __ref(&self) -> Result<&#up, String> {
                         self.inner.as_ref().ok_or_else(|| napi_support::consumed(#consumed))
                     }
@@ -1193,11 +1191,10 @@ impl<'a> Classes<'a> {
                 },
             ),
             Holding::Shared | Holding::SharedCow => (
-                quote!(pub struct #id { inner: std::sync::Arc<#up>, doc: Doc }),
+                quote!(pub struct #id { inner: std::sync::Arc<#up> }),
                 quote! {
-                    fn wrap(inner: std::sync::Arc<#up>, doc: Doc) -> Self { Self { inner, doc } }
-                    fn __from(inner: #up) -> Self { Self::wrap(std::sync::Arc::new(inner), Doc::default()) }
-                    fn doc(&self) -> Doc { self.doc.clone() }
+                    fn wrap(inner: std::sync::Arc<#up>) -> Self { Self { inner } }
+                    fn __from(inner: #up) -> Self { Self::wrap(std::sync::Arc::new(inner)) }
                 },
             ),
             Holding::Projected => self.projected_class(c, &up),

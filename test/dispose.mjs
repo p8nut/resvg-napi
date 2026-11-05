@@ -18,7 +18,7 @@ assert.equal(doc.disposed, false);
 assert.equal(doc.disposed, true);
 
 // 3. getters, methods and async twins throw, synchronously
-for (const call of [() => doc.width, () => doc.renderPng(), () => doc.node('r'), () => doc.renderPngAsync()]) {
+for (const call of [() => doc.width, () => doc.renderPng(), () => doc.absBoundingBox(), () => doc.renderPngAsync()]) {
   assert.throws(call, { message: 'this Resvg was disposed' });
 }
 
@@ -26,8 +26,4 @@ for (const call of [() => doc.width, () => doc.renderPng(), () => doc.node('r'),
 assert.equal(inspect(doc), 'Resvg { disposed: true }');
 doc.dispose();
 
-// 5. a node taken before keeps its own reference to the tree
-const live = new Resvg(svg);
-const node = live.node('r');
-live.dispose();
-assert.equal(node.kind, 'path');
+// A node keeps its own tree alive: test/api/nodes.mjs.

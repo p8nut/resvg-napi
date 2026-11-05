@@ -8,8 +8,8 @@ import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import binding from '../index.js';
-import { fontsOrSkip, testFontFile, skip } from './support.mjs';
-const { Resvg, FontDatabase } = binding;
+import { treeFontsOrSkip, testFontFile, skip } from './support.mjs';
+const { FontDatabase, usvg } = binding;
 
 // 1. which artifact is loaded: the native addon, or the WASI module when
 //    NAPI_RS_NATIVE_LIBRARY_PATH points at its loader (npm run test:wasi).
@@ -49,10 +49,11 @@ if (wasi) {
   }
 }
 
-// 3. the walk
-const fonts = fontsOrSkip(FontDatabase, 'generated getters');
+// 3. the walk, over the namespaced surface: the tree and every node,
+//    definition and value reachable from it
+const fonts = treeFontsOrSkip(binding, 'generated getters');
 const png = readFileSync(new URL('../demo/assets/roster.png', import.meta.url)).toString('base64');
-const doc = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="320" height="240">
+const tree = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="320" height="240">
   <defs>
     <radialGradient id="rg" cx="50%" cy="50%" r="50%" fx="30%" fy="30%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
     <linearGradient id="lg"><stop offset="0" stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient>
@@ -73,13 +74,20 @@ const doc = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http
   <text id="v" x="300" y="20" writing-mode="tb" font-size="12">vertical</text>
   <text font-size="14"><textPath xlink:href="#curve">along a path</textPath></text>
   <image id="im" x="160" y="10" width="60" height="40" xlink:href="data:image/png;base64,${png}"/>
-</svg>`, { fontFamily: fonts.family }, fonts.db);
+</svg>`, { fontdb: fonts.db, fontFamily: fonts.family });
 
-// Zero-argument methods are read off index.d.ts, so a method the codegen adds
-// is walked too; renders, serialisers, async twins and dispose are not reads.
+// Zero-argument methods are read off index.d.ts, class by class (the same
+// name takes an argument elsewhere: `Rect.transform(ts)`), so a method the
+// codegen adds is walked too; renders, serialisers, loaders, async twins and
+// dispose are not reads.
 const dts = readFileSync(new URL('../index.d.ts', import.meta.url), 'utf8');
-const zeroArg = new Set([...dts.matchAll(/^ {2}(\w+)\(\): /gm)].map((m) => m[1])
-  .filter((n) => !/^(render|to|take|dispose$)|Async$/.test(n)));
+const zeroArg = new Set();
+let inClass;
+for (const line of dts.split('\n')) {
+  inClass = line.match(/^\s*export (?:declare )?class (\w+)/)?.[1] ?? inClass;
+  const m = line.match(/^\s+(\w+)\(\): /);
+  if (m && !/^(render|to|take|load|encode|dispose$)|Async$/.test(m[1])) zeroArg.add(`${inClass}.${m[1]}`);
+}
 
 const read = new Set();
 const seen = new WeakSet();
@@ -92,7 +100,7 @@ function walk(value, depth) {
   if (!cls || cls === 'Object') return Object.values(value).forEach((v) => walk(v, depth + 1));
   for (let p = Object.getPrototypeOf(value); p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
     for (const [name, d] of Object.entries(Object.getOwnPropertyDescriptors(p))) {
-      const call = d.get ? () => d.get.call(value) : zeroArg.has(name) && typeof d.value === 'function' ? () => d.value.call(value) : null;
+      const call = d.get ? () => d.get.call(value) : zeroArg.has(`${cls}.${name}`) && typeof d.value === 'function' ? () => d.value.call(value) : null;
       if (!call) continue;
       let out;
       assert.doesNotThrow(() => { out = call(); }, `${cls}.${name}`);
@@ -101,17 +109,17 @@ function walk(value, depth) {
     }
   }
 }
-walk(doc, 0);
-for (const id of ['grp', 'r', 't', 'v', 'im']) walk(doc.node(id), 0);
+walk(tree, 0);
+for (const id of ['grp', 'r', 't', 'v', 'im']) walk(tree.nodeById(id), 0);
 
 // The members the review found untested anywhere, by class: each must have
 // been reached, or the document above stopped exercising it.
 const wanted = [
-  'LegacyTextSpan.letterSpacing', 'LegacyTextSpan.wordSpacing', 'LegacyTextSpan.smallCaps', 'LegacyTextSpan.applyKerning',
-  'LegacyTextSpan.dominantBaseline', 'LegacyTextSpan.alignmentBaseline', 'LegacyTextSpan.paintOrder', 'LegacyFont.variations',
-  'LegacyTextChunk.textFlow', 'LegacyText.dy', 'LegacyText.writingMode',
-  'LegacyPositionedGlyph.outlineTransform', 'LegacyPositionedGlyph.svgTransform', 'LegacyPositionedGlyph.colrTransform',
-  'LegacyRadialGradient.fx', 'LegacyRadialGradient.fy', 'LegacyImage.isVisible',
+  'TextSpan.letterSpacing', 'TextSpan.wordSpacing', 'TextSpan.smallCaps', 'TextSpan.applyKerning',
+  'TextSpan.dominantBaseline', 'TextSpan.alignmentBaseline', 'TextSpan.paintOrder', 'Font.variations',
+  'TextChunk.textFlow', 'Text.dy', 'Text.writingMode',
+  'PositionedGlyph.outlineTransform', 'PositionedGlyph.svgTransform', 'PositionedGlyph.colrTransform',
+  'RadialGradient.fx', 'RadialGradient.fy', 'Image.isVisible',
 ];
 const missed = wanted.filter((m) => !read.has(m));
 assert.deepEqual(missed, [], 'getters the walk should have reached');

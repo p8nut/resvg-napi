@@ -32,10 +32,6 @@ magenta. Everything both engines said — Liquid errors, unknown filters, and ev
 `log` message from usvg — accumulates in a diagnostics list, with a count in the
 slug line so a problem is visible without scrolling.
 
-Every render reports which faces actually drew the text, and warns when that is
-not the family the document asked for — `substituted Brand Sans → DejaVuSans` is
-the failure that otherwise reaches print unnoticed.
-
 The page parses the SVG first and **asks for what the document is missing**, then
 lets you supply it:
 
@@ -157,7 +153,7 @@ templated document can be previewed:
   in-memory `fs`. A `.liquid` file is always a fragment; a `.svg` is one only
   when the template renders it by that name, otherwise it is an image.
 - Four filters exist because a renderer is in the room, and all four ask resvg
-  how wide a string is (`node('m').extent()`):
+  how wide a string is (`nodeExtent(tree.nodeById('m'))`, on a `usvg.Tree`):
   `fit: width, size` cuts a string to an ellipsis that fits, by bisection;
   `wrap: width, size[, lineHeight] | raw` breaks text into `<tspan>` lines, which SVG
   1.1 will not do for you (place the block with a `transform` — a tspan's `x` is
@@ -193,11 +189,12 @@ flips `preserveText`, which is the difference between 23 KB of `<text>` and
 175 KB of outlines on the same document — a good look at what
 `shape-rendering` is actually asked to draw.
 
-The **Nodes** panel is the tree, indented by depth, one row per element with its
-canvas size. Clicking a row outlines it on the proof (`absLayerBoundingBox()`,
+The **Nodes** panel is the `usvg.Tree`, indented by depth, one row per element
+with its canvas size. Clicking a row outlines it on the proof (`nodeExtent()`,
 no checkbox needed); *png* saves that element alone, cropped to its own extent,
-because `SvgNode.renderPng()` needs no `id` — a QR group comes out as a 128×128
-transparent PNG.
+through `resvg.renderNode` — no `id` needed, and a QR group comes out as a
+128×128 transparent PNG. The tree is parsed with usvg's default image resolver,
+so images dropped on the page are drawn by `Resvg` but missing from it.
 
 The **stylesheet** field is usvg's `style_sheet` option: CSS injected at parse
 time, so a theme needs no edit to the document. One detail worth knowing, and

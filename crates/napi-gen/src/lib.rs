@@ -79,9 +79,6 @@ pub struct Config {
     /// upstream type, the class, and the class's method that resolves it
     /// against the receiver before the call).
     pub arg_standin: Option<(&'static str, &'static str, &'static str)>,
-    /// What a handle owning content adds to its class, when the template has
-    /// such a view.
-    pub content_view: Option<ContentView>,
     /// Option fields the template wires by hand; every other unmappable field
     /// is dropped.
     pub hand_wired_fields: &'static [&'static str],
@@ -104,11 +101,6 @@ pub struct Config {
     /// type goes in the namespace of the source that defines it; a source
     /// listed nowhere gets none. See [`emit::namespaced`] for the naming rule.
     pub namespaces: &'static [(&'static str, &'static str)],
-    /// What a flat class is renamed with when a namespaced copy has its JS
-    /// name (`Some("Legacy")`: `ClipPath` becomes `LegacyClipPath`). napi
-    /// keeps one constructor per class name, so the two cannot share it;
-    /// `None` leaves the copy out instead. See [`emit::namespaced`].
-    pub legacy_prefix: Option<&'static str>,
     /// Upstream types mirrored as classes of the namespaced surface by
     /// [`class::Classes`], by source root and name (`("toy", "Canvas")`):
     /// associated functions become the constructor (`new`) and statics,
@@ -188,14 +180,6 @@ pub struct Converter {
     pub ts: &'static str,
     /// The template function, by name.
     pub convert: &'static str,
-}
-
-/// A handle whose upstream type has `pub fn <accessor.0>(&self) -> <accessor.1>`
-/// owns content, and its class gets what `emit` writes, given the handle's
-/// upstream path and the class.
-pub struct ContentView {
-    pub accessor: (&'static str, &'static str),
-    pub emit: fn(&proc_macro2::TokenStream, &proc_macro2::Ident) -> proc_macro2::TokenStream,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();

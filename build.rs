@@ -217,16 +217,6 @@ fn main() {
     // Object candidates: a *collection* of values wants a value type, whereas a
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
     // make Stop/FaceInfo objects, while `&Group` stays a handle question.
-    // Everything asked of the template is written in its own body, so the
-    // fragments can be blank.
-    let nothing = TokenStream::new();
-    let probe = template(
-        &Fragments::default(),
-        &nothing,
-        &nothing,
-        &nothing,
-        &nothing,
-    );
     let object_seeds: BTreeSet<String> = referenced
         .iter()
         .filter(|t| {
@@ -251,22 +241,30 @@ fn main() {
                 .filter(|t| !GEN.node_types.contains(&bare(t)))
                 .filter(|t| struct_fields_opt(primary_files, bare(t)).is_some()),
         )
-        // Plus whatever the template hands out itself.
-        .chain(template_returns(&probe).into_iter().filter(|t| {
-            // A real upstream struct, and not one already claimed as a handle:
-            // `clipPath()` returns the *wrapper class* ClipPath, which shares
-            // its name with usvg::ClipPath. Seeding it would emit `wrap` twice.
-            let arc_held = referenced.iter().any(|r| {
-                peel_type(r)
-                    .strip_prefix("Arc<")
-                    .and_then(|i| i.strip_suffix('>'))
-                    == Some(t.as_str())
-            });
-            !arc_held
-                && sources
-                    .iter()
-                    .any(|s| struct_fields_opt(&s.files, t).is_some())
-        }))
+        // Plus the projected structs (`GEN.projections`): a node payload is
+        // not a collection, so nothing else nominates `Text`, and its chunks
+        // and spans are data of the projection class. The projection is
+        // `napi_gen::project`'s; its data type only reaches what it holds.
+        .chain(
+            GEN.projections
+                .iter()
+                .map(|(_, t)| t.to_string())
+                .filter(|t| {
+                    // Not one already claimed as a handle: an `Arc`-held
+                    // definition (`ClipPath`) would get `wrap` twice.
+                    let arc_held = referenced.iter().any(|r| {
+                        peel_type(r)
+                            .strip_prefix("Arc<")
+                            .and_then(|i| i.strip_suffix('>'))
+                            == Some(t.as_str())
+                    });
+                    !arc_held
+                        && !GEN.node_types.contains(&t.as_str())
+                        && sources
+                            .iter()
+                            .any(|s| struct_fields_opt(&s.files, t).is_some())
+                }),
+        )
         .collect();
 
     let mut vocab = Vocab::default();
@@ -574,93 +572,42 @@ fn main() {
     };
     let mut todo: Vec<String> = handles_of(&referenced).into_iter().collect();
     let mut done: BTreeSet<String> = BTreeSet::new();
-    let mut wrapper_code = TokenStream::new();
     while let Some(t) = todo.pop() {
         if !done.insert(t.clone()) {
             continue;
         }
-        // The second surface's class, before the first surface's exceptions:
-        // a reserved name is the template's, and a hand-wrapped type has a
-        // class of the template's, but neither is in a namespace. A key
-        // spelled through the crate that re-exports the type
+        // A key spelled through the crate that re-exports the type
         // (`<crate>::Type`) is taken relative to the defining one.
-        {
-            let src = defines(&t).unwrap_or(&sources[0]);
-            let key = src
-                .root_str
-                .rsplit("::")
-                .next()
-                .and_then(|last| t.strip_prefix(&format!("{last}::")))
-                .filter(|_| src.root_str.contains("::"))
-                .unwrap_or(&t);
-            // A class `GEN.classes` lists is `napi_gen::class`'s, below.
-            // So is a projection (`GEN.projections`), by its full key: a
-            // module's type of the same name is another one.
-            let listed = GEN
-                .classes
-                .iter()
-                .any(|(r, n)| *r == src.root_str && *n == bare(key))
-                || GEN
-                    .projections
-                    .iter()
-                    .any(|(r, n)| *r == src.root_str && *n == key);
-            let (code, skipped, _) = if listed {
-                Default::default()
-            } else {
-                wrapper_class(
-                    &src.files,
-                    key,
-                    &vocab,
-                    modules,
-                    &src.root,
-                    Surface::Namespaced,
-                )
-            };
-            for s in skipped {
-                report!(
-                    "{}::{key} method not in the namespaced class: {s}",
-                    src.root_str
-                );
-            }
-            mirrored.entry(src.root_str).or_default().extend(code);
-        }
-        let name = wrapper_ident(&t).to_string();
-        if RESERVED.contains(&name.as_str()) {
-            report!("handle {t} skipped: name {name} is taken");
-            continue;
-        }
-        // `fontdb::Database` maps onto the hand-written FontDatabase class.
-        if GEN.hand_wrapped.iter().any(|(h, _)| *h == t) {
-            continue;
-        }
         let src = defines(&t).unwrap_or(&sources[0]);
-        let (code, skipped, reached) =
-            wrapper_class(&src.files, &t, &vocab, modules, &src.root, Surface::Flat);
-        if code.is_empty() {
-            report!("handle {t} skipped: nothing mappable on it");
-        } else {
-            wrapper_code.extend(code);
+        let key = src
+            .root_str
+            .rsplit("::")
+            .next()
+            .and_then(|last| t.strip_prefix(&format!("{last}::")))
+            .filter(|_| src.root_str.contains("::"))
+            .unwrap_or(&t);
+        // A class `GEN.classes` lists is `napi_gen::class`'s, below.
+        // So is a projection (`GEN.projections`), by its full key: a
+        // module's type of the same name is another one.
+        let listed = GEN
+            .classes
+            .iter()
+            .any(|(r, n)| *r == src.root_str && *n == bare(key))
+            || GEN
+                .projections
+                .iter()
+                .any(|(r, n)| *r == src.root_str && *n == key);
+        if listed {
+            continue;
         }
+        let (code, skipped, reached) = wrapper_class(&src.files, key, &vocab, modules, &src.root);
         for s in skipped {
-            // `root()` is served by the generated `children()` view above.
-            if GEN
-                .content_view
-                .as_ref()
-                .is_some_and(|v| s.name == v.accessor.0)
-            {
-                report!(
-                    "{}::{t} method covered by the content view: {s}",
-                    src.root_str
-                );
-            } else {
-                unexposed.push((
-                    name.clone(),
-                    s.name.clone(),
-                    format!("{}::{t} method", src.root_str),
-                    s.to_string(),
-                ));
-            }
+            report!(
+                "{}::{key} method not in the namespaced class: {s}",
+                src.root_str
+            );
         }
+        mirrored.entry(src.root_str).or_default().extend(code);
         todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
     }
     report!(
@@ -784,9 +731,6 @@ fn main() {
             .receiver
             .parse()
             .expect("a config::PASSES receiver that parses");
-        let prologue: Option<TokenStream> = p
-            .prologue
-            .map(|t| t.parse().expect("a config::PASSES prologue that parses"));
         let (code, skipped) = map_methods(
             &MethodPass {
                 files: source_files(p.source),
@@ -794,9 +738,7 @@ fn main() {
                 receiver: &receiver,
                 receiver_mut: None,
                 skip: p.skip,
-                prologue: prologue.as_ref(),
                 readonly: false,
-                optional: p.optional,
                 standin: true,
             },
             &vocab,
@@ -804,9 +746,6 @@ fn main() {
         );
         skips.push((p.label, p.target, skipped));
         generated.insert(p.label, code);
-    }
-    for (pass, what, by) in COVERED_ELSEWHERE {
-        report!("{pass} method covered by {by}: {what}");
     }
     // Every settled data type, objects and read-only classes alike: the
     // registry only ever holds what a pass, the template or another data type
@@ -874,11 +813,6 @@ fn main() {
     let fontdb_methods = &generated["fontdb::Database"];
     let tree_methods = &generated["usvg::Tree"];
     let group_methods = &generated["usvg::Group"];
-    let node_methods = &{
-        let node = &generated["usvg::Node"];
-        let group = &generated["usvg::Group (on SvgNode)"];
-        quote!(#node #group)
-    };
 
     for s in skipped_fields {
         report!(
@@ -903,7 +837,6 @@ fn main() {
     let fragments = Fragments {
         enums,
         object_code,
-        wrapper_code,
         decls,
         assigns,
         write_decls,
@@ -912,7 +845,7 @@ fn main() {
     // What the template covers is derived from the template: build it once with
     // no generated methods, and read its own method names off it.
     let empty = TokenStream::new();
-    let hand = template_fns(&template(&fragments, &empty, &empty, &empty, &empty));
+    let hand = template_fns(&template(&fragments, &empty, &empty, &empty));
     let defined: BTreeSet<&String> = hand.values().flatten().collect();
     // Members the generator left out of a class, unless the template adds
     // them to that same class by hand.
@@ -949,13 +882,7 @@ fn main() {
         }
     }
 
-    let mut code = template(
-        &fragments,
-        fontdb_methods,
-        tree_methods,
-        group_methods,
-        node_methods,
-    );
+    let mut code = template(&fragments, fontdb_methods, tree_methods, group_methods);
     // The second surface, one namespace per source (`GEN.namespaces`).
     {
         let parts: Vec<(&str, TokenStream)> = mirrored
@@ -966,14 +893,17 @@ fn main() {
                 (ns, code)
             })
             .collect();
-        // napi keeps one constructor per JS class name: a flat class with
-        // the name of a namespaced one is renamed (`GEN.legacy_prefix`)
-        // until the flat surface goes.
-        let surfaces = namespaced(&parts, &code, &classes.shared_names());
+        // The flat surface keeps only the generated data types it names, or
+        // the namespaced copies do: the rest are reached through the
+        // namespaces. napi keeps one constructor per JS class name, so a
+        // copy with the name of a flat class is left out.
+        let generated = [&fragments.enums, &fragments.object_code];
+        let flat = prune(code.clone(), &generated, &[]);
+        let surfaces = namespaced(&parts, &flat, &classes.shared_names());
         for line in surfaces.report {
             report!("{line}");
         }
-        code = surfaces.flat;
+        code = prune(code, &generated, &[&surfaces.namespaced]);
         code.extend(surfaces.namespaced);
     }
 
@@ -1031,6 +961,92 @@ fn main() {
     if fs::read_to_string(&dest).ok().as_deref() != Some(formatted.as_str()) {
         fs::write(&dest, &formatted).unwrap();
     }
+}
+
+/// `code` without the items of `generated` that nothing else names: a
+/// generated data type, enum or conversion stays while an item outside
+/// `generated`, an item of `also`, or a kept one names it. Items are matched
+/// by the name they declare (an impl by its type). A name after `::` or `.`
+/// is a path or a member, and an enum's variant a variant: not references.
+fn prune(code: TokenStream, generated: &[&TokenStream], also: &[&TokenStream]) -> TokenStream {
+    fn name(item: &Item) -> Option<String> {
+        match item {
+            Item::Struct(s) => Some(s.ident.to_string()),
+            Item::Enum(e) => Some(e.ident.to_string()),
+            Item::Fn(f) => Some(f.sig.ident.to_string()),
+            Item::Type(t) => Some(t.ident.to_string()),
+            Item::Impl(i) => napi_gen::sources::self_ident(i).map(ToString::to_string),
+            _ => None,
+        }
+    }
+    fn names(ts: TokenStream, out: &mut BTreeSet<String>) {
+        use proc_macro2::{Delimiter, TokenTree};
+        let mut prev: Vec<char> = Vec::new();
+        let mut enum_head = false;
+        for t in ts {
+            match &t {
+                TokenTree::Ident(id) if id == "enum" => enum_head = true,
+                TokenTree::Ident(id)
+                    if !prev.ends_with(&[':', ':']) && prev.last() != Some(&'.') =>
+                {
+                    out.insert(id.to_string());
+                }
+                // A variant's own name is left out, what it carries is not.
+                TokenTree::Group(g) if enum_head && g.delimiter() == Delimiter::Brace => {
+                    enum_head = false;
+                    for v in g.stream() {
+                        if let TokenTree::Group(g) = v {
+                            names(g.stream(), out);
+                        }
+                    }
+                }
+                TokenTree::Group(g) => names(g.stream(), out),
+                _ => {}
+            }
+            match t {
+                TokenTree::Punct(p) => prev.push(p.as_char()),
+                _ => prev.clear(),
+            }
+        }
+    }
+    let parse = |ts: &TokenStream| -> syn::File {
+        syn::parse2(ts.clone()).expect("generated code that parses")
+    };
+    let candidates: BTreeSet<String> = generated
+        .iter()
+        .flat_map(|ts| parse(ts).items)
+        .filter_map(|i| name(&i))
+        .collect();
+    let file = parse(&code);
+    let pending = |i: &Item| name(i).is_some_and(|n| candidates.contains(&n));
+    let mut seen = BTreeSet::new();
+    let mut keep: Vec<bool> = file.items.iter().map(|i| !pending(i)).collect();
+    for (item, _) in file.items.iter().zip(&keep).filter(|(_, k)| **k) {
+        names(quote!(#item), &mut seen);
+    }
+    for ts in also {
+        names((*ts).clone(), &mut seen);
+    }
+    loop {
+        let more: Vec<usize> = (0..file.items.len())
+            .filter(|&i| !keep[i] && name(&file.items[i]).is_some_and(|n| seen.contains(&n)))
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        for i in more {
+            keep[i] = true;
+            let item = &file.items[i];
+            names(quote!(#item), &mut seen);
+        }
+    }
+    let kept = file
+        .items
+        .iter()
+        .zip(keep)
+        .filter(|(_, k)| *k)
+        .map(|(i, _)| i);
+    quote!(#(#kept)*)
 }
 
 fn rustfmt(path: &Path) {

@@ -8,8 +8,6 @@ import {
   TextRendering,
   type RenderOptions,
   type RawImage,
-  type Color,
-  type Path,
   type PathSegment,
   type ParseErrorCode,
   usvg,
@@ -79,16 +77,19 @@ console.log(`async: png=${pngAsync.length}B  raw=${rawAsync.width}x${rawAsync.he
 // 6. the derived shape of a path node. This section exists to be *compiled*,
 // not run: `type` is a string literal in the .d.ts, so narrowing is what proves
 // the union is real -- with `type: string` neither branch below would check.
-const shape: Path | null | undefined = parsed.node('anything')?.path();
-if (shape) {
-  const segs: PathSegment[] = shape.data;
+const found = usvg.Tree.fromStr(svg).nodeById('anything');
+// @ts-expect-error a node is a union: only a path's value has `data()`
+found?.value.data();
+if (found?.kind === 'path') {
+  const shape: usvg.Path = found.value;
+  const segs: PathSegment[] = shape.data();
   console.log(`${segs.length} segments, first is ${segs[0]?.type}`);
 
-  const paint = shape.fill?.paint;
+  const paint = shape.fill()?.paint;
   if (paint) {
     if (paint.type === 'color') {
       // only the colour branch has `color`
-      const { red, green, blue }: Color = paint.value;
+      const { red, green, blue }: usvg.Color = paint.value;
       console.log(`fill rgb(${red} ${green} ${blue})`);
     } else {
       // and only the server branch has `id`, with the kind narrowed too
@@ -99,7 +100,7 @@ if (shape) {
     paint.id?.toString();
   }
 
-  const dashes: number[] | undefined = shape.stroke?.dasharray;
+  const dashes: number[] | undefined = shape.stroke()?.dasharray;
   console.log(`dashes: ${dashes?.join(" ") ?? "none"}`);
 }
 

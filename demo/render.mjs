@@ -40,22 +40,34 @@ const out = outArg ? resolve(outArg) : template.replace(/\.svg$/, '.png');
 
 mod.setLogLevel('warn');
 
+// Two databases loaded alike: `Resvg` renders with a `FontDatabase`, and
+// `measureText` parses through `usvg.Tree`, which takes a `fontdb.Database`.
+// One, once the demo moves to the helpers (step 12 of the migration).
 const fonts = new mod.FontDatabase();
+const db = new mod.fontdb.Database();
 const fontFiles = [join(here, 'DejaVuSans.ttf'),
   ...(existsSync(join(here, 'fonts')) ? readdirSync(join(here, 'fonts'))
     .filter((f) => /\.(ttf|otf)$/i.test(f)).map((f) => join(here, 'fonts', f)) : [])]
   .filter(existsSync);
-for (const file of fontFiles) fonts.loadFontData(readFileSync(file));
+for (const file of fontFiles) {
+  const data = readFileSync(file);
+  fonts.loadFontData(data);
+  db.loadFontData(data);
+}
 // Local files first, so the generic families below point at a known face; then
 // the system, for the glyphs the local files do not have (emoji, scripts).
 fonts.loadSystemFonts();
+db.loadSystemFonts();
 // The examples ask for `sans-serif`; point every generic family at what we have.
 const family = fonts.faces()[0].families[0];
 for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
-                   'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
+                   'setCursiveFamily', 'setFantasyFamily']) {
+  fonts[set](family);
+  db[set](family);
+}
 const options = { fontFamily: family, languages };
 
-const measure = (text, opts) => measureText(mod.Resvg, fonts, text, opts, options);
+const measure = (text, opts) => measureText(mod, db, text, opts, options);
 
 // Output lands inside XML, so every `{{ }}` is escaped; a filter that returns
 // markup (`qr`, `wrap`) is piped through `raw` in the template.

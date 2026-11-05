@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { Resvg } from '../index.js';
+import { Resvg, usvg } from '../index.js';
 
 // a 20x20 red PNG, produced by our own renderer
 const red = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').renderPng();
@@ -74,72 +74,49 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
 // requires of every field of an object, and a getter has no such constraint.
 {
   const b64 = red.toString('base64');
-  const parsed = new Resvg(doc(`data:image/png;base64,${b64}`));
+  const parsed = usvg.Tree.fromStr(doc(`data:image/png;base64,${b64}`));
 
-  // usvg wraps the element in a group and puts the id there, so the image is
-  // the child -- the same shape as any other node with an id.
-  const node = parsed.children()[0].children()[0];
+  // usvg wraps the element in a group, so the image is the group's child --
+  // the same shape as any other node with an id.
+  const [group] = parsed.root().children();
+  assert.equal(group.kind, 'group', 'the wrapper is a group, not an image');
+  const [node] = group.value.children();
   assert.equal(node.kind, 'image', 'the child is the image itself');
+  const img = node.value;
+  assert.ok(img instanceof usvg.Image);
 
-  const img = node.image();
-  assert.ok(img, 'image() on an image node');
-  assert.equal(parsed.children()[0].image(), null, 'and null on the group above it');
-
-  assert.equal(img.kind.type, 'png', 'discriminant, lowercase despite usvg spelling it PNG');
-  assert.ok(Buffer.isBuffer(img.kind.bytes));
-  assert.equal(Buffer.compare(img.kind.bytes, red), 0, 'byte-for-byte what went in');
+  const kind = img.kind();
+  assert.equal(kind.type, 'png', 'discriminant, lowercase despite usvg spelling it PNG');
+  assert.ok(Buffer.isBuffer(kind.bytes));
+  assert.equal(Buffer.compare(kind.bytes, red), 0, 'byte-for-byte what went in');
 
   // and it is a real PNG on the way out, not a re-encode
-  assert.equal(img.kind.bytes.subarray(0, 4).toString('hex'), '89504e47');
+  assert.equal(kind.bytes.subarray(0, 4).toString('hex'), '89504e47');
 
   // the rest of the node reads back too
-  assert.equal(img.renderingMode, 'optimizeQuality');
+  assert.equal(img.renderingMode(), 'optimizeQuality');
 
   // `size` is the encoded image's own, not the element's width/height
   const wide = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20"/></svg>').renderPng({ width: 40 });
-  const shown = new Resvg(doc(`data:image/png;base64,${wide.toString('base64')}`));
-  assert.deepEqual({ ...shown.children()[0].children()[0].image().size }, { width: 40, height: 40 });
+  const shown = usvg.Tree.fromStr(doc(`data:image/png;base64,${wide.toString('base64')}`));
+  const size = shown.root().children()[0].value.children()[0].value.size();
+  assert.deepEqual([size.width(), size.height()], [40, 40]);
   assert.deepEqual(
-    [img.boundingBox.width, img.boundingBox.height],
+    [img.boundingBox().width(), img.boundingBox().height()],
     [20, 20],
     'the box is the image, in its own pixels',
   );
 }
 
-// 6b. an embedded SVG is a document of its own: its nodes are reachable, and
-//     resolve their clip path against its definitions, not the outer ones --
-//     one level down and two
+// 6b. an embedded SVG is a kind of its own. Its tree (`ImageKind::SVG`, a
+//     tree held by value inside a node) is left for later
+//     (docs/migration-0.10.md, step 7): only the kind reads back.
 {
-  const svgHref = (body) => `data:image/svg+xml;utf8,${encodeURIComponent(body)}`;
-  const level = (id, inside) => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">' +
-    `<clipPath id="${id}"><rect width="3" height="3"/></clipPath>` +
-    `<g clip-path="url(#${id})"><rect id="r-${id}" width="10" height="10" fill="blue"/>${inside}</g></svg>`;
-  const deepest = level('c2', '');
-  const middle = level('c1', `<image width="10" height="10" href="${svgHref(deepest)}"/>`);
-  const outer = new Resvg(doc(svgHref(middle)));
-
-  const imageNode = outer.children()[0].children()[0];
-  assert.equal(imageNode.image().kind.type, 'svg');
-  const [g1] = imageNode.svgChildren();
-  assert.equal(g1.clipPath().id(), 'c1');
-  assert.equal(g1.children()[0].id(), 'r-c1');
-  assert.ok(g1.renderPng().length > 0);
-  assert.equal(outer.node('r-c1'), null, 'the inner document stays separate');
-
-  // the clip path handle keeps the inner document too: its content nodes resolve
-  assert.equal(g1.clipPath().children()[0].kind, 'path');
-
-  const find = (nodes, kind) => nodes.flatMap(function all(n) {
-    return [n, ...n.children().flatMap(all)];
-  }).find((n) => n.kind === kind);
-  const [g2] = find([g1], 'image').svgChildren();
-  assert.equal(g2.clipPath().id(), 'c2', 'two levels down, its own definitions');
-  assert.equal(g2.children()[0].id(), 'r-c2');
-
-  const raster = new Resvg(doc(`data:image/png;base64,${red.toString('base64')}`));
-  const rasterNode = raster.children()[0].children()[0];
-  assert.equal(rasterNode.svgChildren(), null, 'a raster image');
-  assert.equal(raster.children()[0].svgChildren(), null, 'not an image');
+  const svgHref = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>')}`;
+  const outer = usvg.Tree.fromStr(doc(svgHref));
+  const image = outer.root().children()[0].value.children()[0];
+  assert.equal(image.kind, 'image');
+  assert.equal(image.value.kind().type, 'svg');
 }
 
 // 7. the disk is off limits outside resourcesDir: no absolute paths, no

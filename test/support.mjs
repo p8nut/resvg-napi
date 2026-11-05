@@ -7,6 +7,7 @@
 // Nothing here hardcodes a family name. `family` is whatever the database
 // actually holds, which is the only name `fontFamily` will resolve.
 import { existsSync, readFileSync } from 'node:fs';
+import { nodeExtent } from '../fit.mjs';
 
 const CANDIDATES = [
   process.env.RESVG_TEST_FONT,
@@ -60,6 +61,48 @@ export function fontsOrSkip(FontDatabase, what) {
     process.exit(0);
   }
   return fonts;
+}
+
+/**
+ * `fontsOrSkip` for the namespaced surface: a `fontdb.Database` loaded the
+ * way `testFonts` loads its `FontDatabase`, and the family to ask for.
+ * `fontdb.FaceInfo` has no family names, so the family is read off the flat
+ * database.
+ */
+export function treeFontsOrSkip({ FontDatabase, fontdb }, what) {
+  const { family } = fontsOrSkip(FontDatabase, what);
+  const db = new fontdb.Database();
+  db.loadSystemFonts();
+  if (!db.len()) db.loadFontData(readFileSync(testFontFile()));
+  for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
+                     'setCursiveFamily', 'setFantasyFamily']) db[set](family);
+  return { db, family };
+}
+
+/** The old `extent()`: where a `usvg.Node` will draw (`fit.mjs`). */
+export const extent = nodeExtent;
+
+/**
+ * One node alone, in a pixmap the size of its extent: `resvg.renderNode`
+ * draws the node's local geometry offset by its layer box, so both are
+ * undone. The layer box is a group's own, and a path's fill box. A group's
+ * own transform is applied by `renderNode`, so only its parent's is passed.
+ */
+export function renderNodePng({ resvg, tiny_skia }, node, { scale = 1 } = {}) {
+  const box = extent(node);
+  const group = node.kind === 'group';
+  const fill = node.value.absBoundingBox();
+  const inner = group ? box : { x: fill.x(), y: fill.y() };
+  const parent = group
+    ? node.value.absTransform().preConcat(node.value.transform().invert())
+    : node.value.absTransform();
+  const pixmap = new tiny_skia.Pixmap(Math.ceil(box.width * scale), Math.ceil(box.height * scale));
+  const transform = tiny_skia.Transform.fromScale(scale, scale)
+    .preTranslate(-box.x, -box.y)
+    .preConcat(parent)
+    .preTranslate(inner.x, inner.y);
+  if (!resvg.renderNode(node, transform, pixmap)) throw new Error('element is empty');
+  return pixmap.encodePng();
 }
 
 /**

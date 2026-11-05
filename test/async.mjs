@@ -18,7 +18,7 @@ if (process.env.UV_THREADPOOL_SIZE !== '1') {
 }
 
 // Imported after the re-exec, so the parent never loads the binding.
-const { Resvg, renderAsync } = await import('../index.js');
+const { Resvg, renderAsync, usvg } = await import('../index.js');
 
 const isPng = (b) => b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
@@ -83,7 +83,7 @@ const shots = await Promise.all([1, 2, 3, 4].map((n) => renderAsync(small, null,
 assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
 
 // --- derived twins ----------------------------------------------------------
-// The five below are generated from a marked core, not written: the point of
+// The three below are generated from a marked core, not written: the point of
 // the checks is that the rule produced something equivalent to its sync half,
 // that it really leaves the event loop, and that the signal reaches it.
 {
@@ -98,28 +98,19 @@ assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
 
   // 1. same bytes as the sync half, for every twin
   assert.deepEqual([...(await doc.renderPngAsync())], [...doc.renderPng()], 'renderPngAsync');
-  assert.deepEqual(
-    [...(await doc.renderNodePngAsync('r')).subarray(0, 64)],
-    [...doc.renderNodePng('r').subarray(0, 64)],
-    'renderNodePngAsync',
-  );
   assert.equal(await doc.toStringAsync(), doc.toString(), 'toStringAsync');
   const [ra, rs] = [await doc.renderRawAsync(), doc.renderRaw()];
   assert.deepEqual([ra.width, ra.height], [rs.width, rs.height]);
   assert.deepEqual([...ra.data], [...rs.data], 'renderRawAsync');
-  assert.deepEqual(
-    [...(await doc.node('r').renderPngAsync())],
-    [...doc.node('r').renderPng()],
-    'SvgNode.renderPngAsync',
-  );
+  // TODO(step 9): `resvg.renderNode`'s async twin, against its sync half.
 
   // 2. the work is off the event loop: a timer keeps firing during it
   let ticks = 0;
   const timer = setInterval(() => { ticks += 1; }, 1);
-  await doc.renderNodePngAsync('r', { scale: 6 });
+  await doc.renderPngAsync({ scale: 6 });
   clearInterval(timer);
   assert.ok(ticks > 0, `event loop kept running during a derived twin (${ticks} ticks)`);
-  console.log(`  timer ticks during renderNodePngAsync: ${ticks}`);
+  console.log(`  timer ticks during renderPngAsync: ${ticks}`);
 
   // 3. the signal reaches the generated task -- which means, precisely, that a
   // *queued* task is dropped. `Task::compute` is not interruptible, so a task
@@ -128,7 +119,7 @@ assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
   // With UV_THREADPOOL_SIZE=1 the blocker owns the only thread, so the twin is
   // still in the queue when the signal fires. (napi also ignores a signal that
   // is already aborted when the task is scheduled -- it listens for the event.)
-  const blocker = doc.renderNodePngAsync('r', { scale: 8 });
+  const blocker = doc.renderPngAsync({ scale: 8 });
   const ac = new AbortController();
   const queued = doc.toStringAsync(undefined, ac.signal);
   ac.abort();
@@ -143,16 +134,15 @@ assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
 // takes a signal, since each is its own conversion.
 {
   const doc = new Resvg(small);
-  const node = doc.children()[0];
+  const node = usvg.Tree.fromStr(small).root();
   const wrong = [doc, node, {}];
   const calls = {
     renderAsync: (s) => renderAsync(small, null, null, s),
     parseAsync: (s) => Resvg.parseAsync(small, null, null, null, s),
     renderPngAsync: (s) => doc.renderPngAsync(null, s),
-    renderNodePngAsync: (s) => doc.renderNodePngAsync('r', null, s),
     toStringAsync: (s) => doc.toStringAsync(null, s),
     renderRawAsync: (s) => doc.renderRawAsync(null, s),
-    'SvgNode.renderPngAsync': (s) => node.renderPngAsync(null, s),
+    // TODO(step 9): `resvg.renderNode`'s async twin.
   };
   for (const [name, call] of Object.entries(calls)) {
     for (const s of wrong) {

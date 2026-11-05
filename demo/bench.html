@@ -376,7 +376,7 @@
 </div>
 
 <script type="module">
-  const { Liquid, eachNode, measureText, fitTextWidths, registerSvgFilters, referencedPartials }
+  const { Liquid, eachNode, measureText, fitTextWidths, nodeExtent, registerSvgFilters, referencedPartials }
     = await import('./liquid.js');
 
   // Fragments the page holds, so `{% render "badge.svg" %}` resolves without a
@@ -385,8 +385,8 @@
   // actually renders. Names are as written: `./badge.svg` is another name.
   const partials = {};
 
-  // Measuring is a render: the filters that need a width ask the engine.
-  const measure = (text, opts) => (mod ? measureText(mod.Resvg, fonts, text, opts) : 0);
+  // Measuring is a parse: the filters that need a width ask the engine.
+  const measure = (text, opts) => (mod ? measureText(mod, db, text, opts, defaults()) : 0);
 
   // Rebuildable, because `strictVariables` is an instance option and the page
   // offers it as a switch.
@@ -1034,7 +1034,10 @@
   <text x="28" y="72" font-family="sans-serif" font-size="30" fill="#fff">resvg</text>
 </svg>`;
 
-  let mod, fonts;
+  // Two databases loaded alike: `Resvg` renders with the `FontDatabase`, and
+  // the `usvg.Tree` behind measuring, fitting and the Nodes panel takes the
+  // `fontdb.Database`. One, once the demo moves to the helpers.
+  let mod, fonts, db;
   try {
     if (!globalThis.crossOriginIsolated) {
       report('error', 'page', 'Not cross-origin isolated: SharedArrayBuffer is unavailable, so the '
@@ -1046,9 +1049,10 @@
     // they are collected nowhere and the page cannot show them.
     mod.setLogLevel('warn');
     fonts = new mod.FontDatabase();
+    db = new mod.fontdb.Database();
     $('render').disabled = false;
     // Handy for poking at the API from the devtools console.
-    globalThis.resvg = { mod, fonts };
+    globalThis.resvg = { mod, fonts, db };
     $('slugEngine').textContent = `resvg 0.48 · ${Object.keys(mod).length} exports`;
     log('idle');
     report('info', 'page',
@@ -1182,6 +1186,13 @@
     return Object.keys(opts).length ? opts : undefined;
   }
 
+  // The parsed tree of the namespaced surface, with the same options and
+  // fonts. Images dropped on the page are `Resvg`'s alone: usvg's default
+  // resolver reads data URLs only, here.
+  function parseTree(svg) {
+    return mod.usvg.Tree.fromStr(svg, { ...defaults(), fontdb: db });
+  }
+
   // Anything dropped or pasted lands here. A font goes into the database; an
   // image is matched to a pending href -- by file name when it matches, else to
   // the first one still waiting.
@@ -1202,12 +1213,17 @@
     }
 
     for (const file of fontFiles) {
-      fonts.loadFontData(new Uint8Array(await file.arrayBuffer()));
+      const data = new Uint8Array(await file.arrayBuffer());
+      fonts.loadFontData(data);
+      db.loadFontData(data);
     }
     if (fontFiles.length) {
       const family = fonts.faces()[0].families[0];
       for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
-                         'setCursiveFamily', 'setFantasyFamily']) fonts[set](family);
+                         'setCursiveFamily', 'setFantasyFamily']) {
+        fonts[set](family);
+        db[set](family);
+      }
     }
 
     // Targets for a dropped image: an unresolved href, or an image-href variable
@@ -1405,48 +1421,13 @@
     const raw = source();
     if (!$('fit').checked) return raw;
     const { svg, adjustments, problems } = fitTextWidths(
-      raw, (s) => new mod.Resvg(s, defaults(), fonts, Object.fromEntries(images)));
+      raw, parseTree);
     for (const p of problems) report('warn', 'fit', p);
     for (const a of adjustments) {
       report('info', 'fit',
         `#${a.id} compressed to ${a.measured} of ${a.to} user units (was ${a.from}, ×${a.factor}).`);
     }
     return svg;
-  }
-
-  // Which faces actually drew the text, and where that is not the family the
-  // document asked for. `pendingFonts()` reports families nobody had at all;
-  // a substitution inside a family that *is* loaded looks like success until
-  // someone compares the two, which is what `faceOf` makes possible.
-  const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy']);
-
-  function faceUse(doc) {
-    const used = new Set();
-    const swaps = new Set();
-    const walk = (node) => {
-      if (node.kind === 'text') {
-        const text = node.text();
-        const asked = text.chunks.flatMap((c) => c.spans.flatMap((s) => s.font.families));
-        // A generic family names no face: whatever the database points
-        // `sans-serif` at *is* the answer, and reporting it as a substitution
-        // would flag every correctly configured document. A CSS list ending in
-        // one -- `Brand Sans, sans-serif` -- says the same thing out loud.
-        const generic = asked.some((f) => GENERIC.has(f));
-        for (const span of text.layouted) {
-          for (const glyph of span.positionedGlyphs) {
-            const face = doc.faceOf(glyph);
-            if (!face) continue;
-            used.add(face.postScriptName);
-            if (!generic && asked.length && !asked.some((f) => face.families.includes(f))) {
-              swaps.add(`${asked[0]} → ${face.postScriptName}`);
-            }
-          }
-        }
-      }
-      for (const child of node.children()) walk(child);
-    };
-    for (const node of doc.children()) walk(node);
-    return { used: [...used], swaps: [...swaps] };
   }
 
   // The proof's current blob URL, revoked when the next render replaces it.
@@ -1482,8 +1463,7 @@
       $('plate').classList.add('fresh');
 
       const bbox = doc.absLayerBoundingBox();
-      const use = faceUse(doc);
-      for (const swap of use.swaps) report('warn', 'fonts', `substituted ${swap}`);
+      const tree = parseTree(rendered);
       const rows = [
         ['viewport', `${round(doc.width)} × ${round(doc.height)} user units`],
         ['content', bbox ? `${round(bbox.width)} × ${round(bbox.height)} at ${round(bbox.x)}, ${round(bbox.y)}` : 'empty'],
@@ -1491,10 +1471,9 @@
         ['elapsed', `${ms} ms`],
         ['text', doc.hasTextNodes() ? 'nodes kept' : 'flattened to paths'],
         ['fonts', [...new Set(fonts.faces().map((f) => f.families[0]))].join(', ') || 'none loaded'],
-        ['drawn with', use.used.join(' · ') || '—'],
-        ['gradients', doc.linearGradients().concat(doc.radialGradients()).map((g) => g.id()).join(' ') || '—'],
-        ['filters', doc.filters().map((f) => f.id()).join(' ') || '—'],
-        ['top level', doc.children().map((n) => `${n.kind}${n.id() ? '#' + n.id() : ''}`).join('  ')],
+        ['gradients', tree.linearGradients().concat(tree.radialGradients()).map((g) => g.id()).join(' ') || '—'],
+        ['filters', tree.filters().map((f) => f.id()).join(' ') || '—'],
+        ['top level', tree.root().children().map(({ kind, value }) => `${kind}${value.id() ? '#' + value.id() : ''}`).join('  ')],
       ];
       $('measure').replaceChildren(...rows.flatMap(([k, v]) => {
         const dt = document.createElement('dt');
@@ -1506,7 +1485,7 @@
       $('slugPlate').textContent = `${round(doc.width)}×${round(doc.height)}`;
       $('slugFonts').textContent = String(fonts.len());
       lastRender = { doc, params };
-      showTree(doc);
+      showTree(tree);
       // The resolved tree: CSS applied, `use` expanded, inheritance settled --
       // and text either kept or flattened to paths, which is the one thing a
       // rendered source cannot tell you.
@@ -1537,18 +1516,18 @@
   let picked = null;
 
   // One row per element, depth first. A node handle stays valid after a
-  // re-render (it holds an Arc), but the tree is rebuilt anyway so the rows
-  // always describe what is on the plate.
-  function showTree(doc) {
+  // re-render (it keeps its tree alive), but the tree is rebuilt anyway so
+  // the rows always describe what is on the plate.
+  function showTree(tree) {
     const rows = [];
     const walk = (nodes, depth) => {
       if (depth > 8) return;
       for (const node of nodes) {
         rows.push(nodeRow(node, depth));
-        walk(node.children(), depth + 1);
+        if (node.kind === 'group') walk(node.value.children(), depth + 1);
       }
     };
-    walk(doc.children(), 0);
+    walk(tree.root().children(), 0);
     $('nodes').hidden = rows.length === 0;
     $('nodesCount').textContent = rows.length ? `— ${rows.length} elements` : '';
     $('treeList').replaceChildren(...rows);
@@ -1557,8 +1536,8 @@
   function nodeRow(node, depth) {
     const li = document.createElement('li');
     li.style.paddingLeft = `${depth * 1.1}rem`;
-    const id = node.id();
-    const box = node.absLayerBoundingBox() ?? node.absBoundingBox();
+    const id = node.value.id();
+    const box = nodeExtent(node);
 
     const pick = document.createElement('button');
     pick.type = 'button';
@@ -1586,14 +1565,14 @@
       if (lastRender) placeBbox(lastRender.doc, lastRender.params);
     });
 
-    // Every node can render itself, cropped to its own extent -- no id needed.
+    // Every node renders alone, cropped to its own extent -- no id needed.
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'save';
     save.textContent = 'png';
     save.addEventListener('click', () => {
       try {
-        const png = node.renderPng({ scale: Number($('scale').value) || 1 });
+        const png = renderNodePng(node, Number($('scale').value) || 1);
         const url = URL.createObjectURL(new Blob([new Uint8Array(png)], { type: 'image/png' }));
         const link = document.createElement('a');
         link.href = url;
@@ -1602,12 +1581,34 @@
         URL.revokeObjectURL(url);
         log(`${id || node.kind}.png · ${png.length.toLocaleString()} bytes`);
       } catch (e) {
-        report('error', 'resvg', `renderPng on ${id || node.kind}: ${e.message}`);
+        report('error', 'resvg', `renderNode on ${id || node.kind}: ${e.message}`);
       }
     });
 
     li.append(pick, save);
     return li;
+  }
+
+  // One node alone, in a pixmap the size of its extent. `resvg.renderNode`
+  // draws the node's own geometry offset by its layer box (a group's own, a
+  // path's fill box), and applies a group's transform itself: both are undone
+  // so the node lands at its extent's origin.
+  function renderNodePng(node, scale) {
+    const box = nodeExtent(node);
+    if (!box) throw new Error('element has no visible size');
+    const group = node.kind === 'group';
+    const inner = group ? box : node.value.absBoundingBox();
+    const at = group ? { x: box.x, y: box.y } : { x: inner.x(), y: inner.y() };
+    const parent = group
+      ? node.value.absTransform().preConcat(node.value.transform().invert())
+      : node.value.absTransform();
+    const pixmap = new mod.tiny_skia.Pixmap(Math.ceil(box.width * scale), Math.ceil(box.height * scale));
+    const transform = mod.tiny_skia.Transform.fromScale(scale, scale)
+      .preTranslate(-box.x, -box.y)
+      .preConcat(parent)
+      .preTranslate(at.x, at.y);
+    if (!mod.resvg.renderNode(node, transform, pixmap)) throw new Error('element is empty');
+    return pixmap.encodePng();
   }
 
   // The bounding box, drawn over the proof in registration magenta. Positions
@@ -1616,9 +1617,7 @@
     const overlay = $('bboxOverlay');
     // A picked node overrides the document box, and shows without the checkbox:
     // clicking a row is the request.
-    const box = picked
-      ? (picked.node.absLayerBoundingBox() ?? picked.node.absBoundingBox())
-      : doc.absLayerBoundingBox();
+    const box = picked ? nodeExtent(picked.node) : doc.absLayerBoundingBox();
     if ((!picked && !$('showBbox').checked) || !box) {
       overlay.removeAttribute('data-on');
       return;

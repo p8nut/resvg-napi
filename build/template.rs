@@ -14,48 +14,15 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 /// The fragments the passes produce. Grouped so `template` keeps a short
-/// signature: these are the same on both of its calls, while the four method
+/// signature: these are the same on both of its calls, while the three method
 /// lists are not.
-///
-/// `Default` (every fragment empty) is for probing the template's own body.
-/// What the pruner needs from it -- which generated types it names -- is
-/// written in the template itself, never in what gets interpolated, so the
-/// fragments can be blank. Same double-build trick `template_fns` uses to read
-/// the method names off it.
-#[derive(Default)]
 pub struct Fragments<'a> {
     pub enums: TokenStream,
     pub object_code: TokenStream,
-    pub wrapper_code: TokenStream,
     pub decls: Vec<&'a TokenStream>,
     pub assigns: Vec<&'a TokenStream>,
     pub write_decls: Vec<&'a TokenStream>,
     pub write_assigns: Vec<&'a TokenStream>,
-}
-
-/// What a definition owning a content group (`root() -> &Group`, see
-/// `config::GEN.content_view`) adds to its generated class: it becomes a
-/// `HasRoot` the node view can walk, and gets `children()`.
-pub fn content_view(path: &TokenStream, name: &proc_macro2::Ident) -> TokenStream {
-    quote! {
-        impl HasRoot for #path {
-            fn group(&self) -> &usvg::Group {
-                self.root()
-            }
-        }
-
-        #[napi]
-        impl #name {
-            #[doc = " Children of this definition's content group."]
-            #[napi]
-            pub fn children(&self) -> Vec<SvgNode> {
-                let base = NodeBase::Def(self.inner.clone());
-                (0..self.inner.root().children().len())
-                    .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
-                    .collect()
-            }
-        }
-    }
 }
 
 /// The hand-written half of the binding: everything the passes cannot derive.
@@ -71,14 +38,12 @@ pub fn template(
     fontdb_methods: &TokenStream,
     tree_methods: &TokenStream,
     group_methods: &TokenStream,
-    node_methods: &TokenStream,
 ) -> TokenStream {
     // Destructured by name so the body below is unchanged from when it was a
     // closure capturing these from `main`.
     let Fragments {
         enums,
         object_code,
-        wrapper_code,
         decls,
         assigns,
         write_decls,
@@ -357,17 +322,8 @@ pub fn template(
 
         impl FontDatabase {
             #[doc = " Snapshot of a shared database, e.g. the one a parse resolved."]
-            #[doc = " Takes the `Doc` every generated handle is built with, and drops"]
-            #[doc = " it: the database is what a document points at, not part of one."]
-            fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>, _doc: Doc) -> Self {
+            fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
                 Self { inner: SharedDb(inner) }
-            }
-
-            #[doc = " Empty on purpose: a face handed out with this database's `Arc`"]
-            #[doc = " would hold a second reference, and the next `loadFont*` would"]
-            #[doc = " then deep-copy the whole database on write."]
-            fn doc(&self) -> Doc {
-                Doc::default()
             }
         }
 
@@ -403,7 +359,7 @@ pub fn template(
                     ..Default::default()
                 };
                 let id = self.inner.query(&query)?;
-                self.inner.face(id).cloned().map(|face| FontFace::wrap(face, self.doc()))
+                self.inner.face(id).cloned().map(FontFace::wrap)
             }
 
             #[doc = " Raw bytes of a face, by PostScript name (see `faces()`)."]
@@ -684,18 +640,6 @@ pub fn template(
 
         #object_code
 
-        #wrapper_code
-
-        #[doc = " Which flavour of node this is."]
-        #[napi(string_enum = "camelCase")]
-        #[derive(Copy, Clone)]
-        pub enum NodeKind {
-            Group,
-            Path,
-            Image,
-            Text,
-        }
-
         #[doc = " Starts collecting what usvg and resvg report."]
         #[doc = ""]
         #[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
@@ -715,15 +659,6 @@ pub fn template(
             napi_support::logs::take()
         }
 
-        #[doc = " Anything that owns a content group: the document, or a def such as a"]
-        #[doc = " pattern, a mask or a clip path. The generator implements it for every"]
-        #[doc = " wrapped type that has a `root() -> &Group`."]
-        #[doc = " Send + Sync: a node reached through a def keeps its owner alive, and"]
-        #[doc = " an async twin carries that owner to a worker thread."]
-        pub trait HasRoot: Send + Sync {
-            fn group(&self) -> &usvg::Group;
-        }
-
         #[doc = " The strict policy drops `FaceInfo::families` -- it is a"]
         #[doc = " `Vec<(String, Language)>`, and no rule maps a tuple with a language"]
         #[doc = " tag. But fontdb queries by *family*, not by PostScript name, so"]
@@ -735,112 +670,6 @@ pub fn template(
             #[napi(getter)]
             pub fn families(&self) -> Vec<String> {
                 self.inner.families.iter().map(|(name, _)| name.clone()).collect()
-            }
-        }
-
-        #[doc = " `Font::families` is `&[FontFamily]`, an enum svgtypes owns: five CSS"]
-        #[doc = " keywords plus `Named(String)`. No rule maps an enum from a third"]
-        #[doc = " crate, and without it `faceOf` answers half a question -- which face"]
-        #[doc = " drew the text, with nothing to compare it against."]
-        #[doc = " Decision: the strings usvg's own writer emits, keywords included."]
-        #[napi]
-        impl Font {
-            #[doc = " Families this span asked for, in order. Never empty: usvg appends"]
-            #[doc = " `RenderOptions.fontFamily` as the last resort."]
-            #[napi(getter)]
-            pub fn families(&self) -> Vec<String> {
-                self.inner
-                    .families()
-                    .iter()
-                    .map(|family| match family {
-                        // Display quotes a name; the generic keywords it prints bare.
-                        usvg::FontFamily::Named(name) => name.clone(),
-                        generic => generic.to_string(),
-                    })
-                    .collect()
-            }
-        }
-
-        #[doc = " The document a class was reached from: what a node, a def or a"]
-        #[doc = " glyph needs to resolve the references it carries -- the def tables"]
-        #[doc = " (`tree`), the font database its IDs belong to (`fonts`), and the"]
-        #[doc = " log its renders report to. Empty for what no document handed out."]
-        #[doc = " Cheap to clone, and cloned into every class the generator emits."]
-        #[derive(Clone, Default)]
-        struct Doc {
-            tree: Option<TreeRef>,
-            fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
-            logs: Logs,
-        }
-
-        #[doc = " The shared definition `target` refers to, by identity. An `id`"]
-        #[doc = " match missed defs without one and could pick a namesake."]
-        fn find_def<T>(defs: &[std::sync::Arc<T>], target: &T) -> Option<std::sync::Arc<T>> {
-            defs.iter()
-                .find(|d| std::ptr::eq(std::sync::Arc::as_ptr(d), target))
-                .cloned()
-        }
-
-        impl SvgNode {
-            fn doc(&self) -> Doc {
-                self.doc.clone()
-            }
-        }
-
-        #[napi]
-        impl ClipPath {
-            #[doc = " The clip path applied to this clip path's own content, if any."]
-            #[doc = " `null` too when the handle came from no document."]
-            #[napi]
-            pub fn clip_path(&self) -> Option<ClipPath> {
-                let target = self.inner.clip_path()?;
-                let tree = self.doc.tree.as_ref()?.get()?;
-                find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc()))
-            }
-        }
-
-        #[napi]
-        impl Filter {
-            #[doc = " Children of the `feImage` primitive at `index` in `primitives`:"]
-            #[doc = " usvg's `filter::Image::root()`. `null` for any other primitive."]
-            #[doc = ""]
-            #[doc = " A method here rather than a field on the `image` kind: a primitive"]
-            #[doc = " is a plain object, built without the filter its nodes resolve from."]
-            #[napi]
-            pub fn image_children(&self, index: u32) -> Option<Vec<SvgNode>> {
-                let index = usize::try_from(index).ok()?;
-                let base = NodeBase::FeImage(self.inner.clone(), index);
-                let count = base.group()?.children().len();
-                Some(
-                    (0..count)
-                        .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
-                        .collect(),
-                )
-            }
-        }
-
-        #[napi]
-        impl Mask {
-            #[doc = " The mask applied to this mask's own content, if any. `null` too"]
-            #[doc = " when the handle came from no document."]
-            #[napi]
-            pub fn mask(&self) -> Option<Mask> {
-                let target = self.inner.mask()?;
-                let tree = self.doc.tree.as_ref()?.get()?;
-                find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc()))
-            }
-        }
-
-        #[napi]
-        impl PositionedGlyph {
-            #[doc = " The face that drew this glyph, from the database its document"]
-            #[doc = " was parsed with. `null` for a glyph that came from no document."]
-            #[napi(getter)]
-            pub fn font(&self) -> Option<FontFace> {
-                let fonts = self.doc.fonts.as_ref()?;
-                fonts
-                    .face(self.inner.font)
-                    .map(|face| FontFace::wrap(face.clone(), self.doc()))
             }
         }
 
@@ -903,87 +732,6 @@ pub fn template(
             PromiseRaw::<Unknown>::reject(env, parse_error(env, e)?).map(|p| p.to_unknown())
         }
 
-        #[doc = " A document's tree: the parsed one, or the SVG an `<image>` node"]
-        #[doc = " embeds, re-resolved through that node on each use -- usvg owns it"]
-        #[doc = " by value inside the image, so there is no `Arc` to hold."]
-        #[derive(Clone)]
-        enum TreeRef {
-            Root(std::sync::Arc<usvg::Tree>),
-            Embedded(Box<NodeBase>, Vec<usize>),
-        }
-
-        impl TreeRef {
-            fn get(&self) -> Option<&usvg::Tree> {
-                match self {
-                    TreeRef::Root(t) => Some(t),
-                    TreeRef::Embedded(base, path) => match node_at(base.group()?, path)? {
-                        usvg::Node::Image(image) => match image.kind() {
-                            usvg::ImageKind::SVG(tree) => Some(tree),
-                            _ => None,
-                        },
-                        _ => None,
-                    },
-                }
-            }
-        }
-
-        #[doc = " Where a node path starts from."]
-        #[derive(Clone)]
-        enum NodeBase {
-            Tree(TreeRef),
-            Def(std::sync::Arc<dyn HasRoot>),
-            #[doc = " The `feImage` primitive at this index of the filter."]
-            FeImage(std::sync::Arc<usvg::filter::Filter>, usize),
-            #[doc = " The flattened outlines of the text node at this path."]
-            TextFlat(Box<NodeBase>, Vec<usize>),
-        }
-
-        impl NodeBase {
-            fn group(&self) -> Option<&usvg::Group> {
-                match self {
-                    NodeBase::Tree(t) => Some(t.get()?.root()),
-                    NodeBase::Def(d) => Some(d.group()),
-                    NodeBase::FeImage(f, i) => match f.primitives().get(*i)?.kind() {
-                        usvg::filter::Kind::Image(image) => Some(image.root()),
-                        _ => None,
-                    },
-                    NodeBase::TextFlat(base, path) => match node_at(base.group()?, path)? {
-                        usvg::Node::Text(text) => Some(text.flattened()),
-                        _ => None,
-                    },
-                }
-            }
-        }
-
-        fn node_at<'t>(root: &'t usvg::Group, path: &[usize]) -> Option<&'t usvg::Node> {
-            let (last, rest) = path.split_last()?;
-            let mut group = root;
-            for i in rest {
-                match group.children().get(*i)? {
-                    usvg::Node::Group(g) => group = g,
-                    _ => return None,
-                }
-            }
-            group.children().get(*last)
-        }
-
-        #[doc = " Depth-first search for an element id, returning its index path."]
-        fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<usize>) -> Option<Vec<usize>> {
-            for (i, child) in group.children().iter().enumerate() {
-                prefix.push(i);
-                if child.id() == id {
-                    return Some(prefix.clone());
-                }
-                if let usvg::Node::Group(g) = child
-                    && let Some(found) = path_of_id(g, id, prefix)
-                {
-                    return Some(found);
-                }
-                prefix.pop();
-            }
-            None
-        }
-
         #[doc = " One command of a path outline, in the document's own units."]
         #[doc = ""]
         #[doc = " `points` holds x,y pairs, and how many depends on `type`: one point"]
@@ -1017,210 +765,6 @@ pub fn template(
                     tiny_skia::PathSegment::Close => seg("close", &[]),
                 })
                 .collect()
-        }
-
-        #[doc = " A read-only handle on one element of the parsed tree."]
-        #[doc = ""]
-        #[doc = " usvg stores nodes as `Box`, not `Arc`, so a handle cannot own one. It"]
-        #[doc = " keeps the tree alive plus the child-index path instead, and re-resolves"]
-        #[doc = " on each call -- safe because a parsed tree is immutable."]
-        #[napi]
-        #[derive(Clone)]
-        pub struct SvgNode {
-            doc: Doc,
-            base: NodeBase,
-            path: Vec<usize>,
-        }
-
-        impl SvgNode {
-            fn node(&self) -> Result<&usvg::Node> {
-                self.base
-                    .group()
-                    .and_then(|root| node_at(root, &self.path))
-                    .ok_or_else(|| Error::from_reason("node path no longer resolves"))
-            }
-
-            fn child(&self, i: usize) -> Self {
-                let mut path = self.path.clone();
-                path.push(i);
-                Self { doc: self.doc.clone(), base: self.base.clone(), path }
-            }
-        }
-
-        #[napi]
-        impl SvgNode {
-            #[doc = " `group`, `path`, `image` or `text`."]
-            #[napi(getter)]
-            pub fn kind(&self) -> Result<NodeKind> {
-                Ok(match self.node()? {
-                    usvg::Node::Group(_) => NodeKind::Group,
-                    usvg::Node::Path(_) => NodeKind::Path,
-                    usvg::Node::Image(_) => NodeKind::Image,
-                    usvg::Node::Text(_) => NodeKind::Text,
-                })
-            }
-
-            #[doc = " The laid-out content of a text node: chunks, spans, resolved"]
-            #[doc = " fonts. Null for anything that is not text."]
-            #[doc = ""]
-            #[doc = " Its presence is what makes the text types map at all -- a node"]
-            #[doc = " payload is not a collection, so nothing else nominates them."]
-            #[napi]
-            pub fn text(&self) -> Result<Option<Text>> {
-                Ok(match self.node()? {
-                    usvg::Node::Text(t) => Some(Text::wrap((**t).clone(), self.doc())),
-                    _ => None,
-                })
-            }
-
-            #[doc = " A text node's glyphs as paths: the children of usvg's"]
-            #[doc = " `Text::flattened()`, the outlines `renderPng` draws. Null for"]
-            #[doc = " anything that is not text."]
-            #[napi]
-            pub fn flattened_children(&self) -> Result<Option<Vec<SvgNode>>> {
-                let usvg::Node::Text(text) = self.node()? else {
-                    return Ok(None);
-                };
-                let base = NodeBase::TextFlat(Box::new(self.base.clone()), self.path.clone());
-                Ok(Some(
-                    (0..text.flattened().children().len())
-                        .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
-                        .collect(),
-                ))
-            }
-
-            #[doc = " Children of the SVG document this image node embeds: usvg's"]
-            #[doc = " `ImageKind::SVG` tree. Null for a raster image or any other node."]
-            #[doc = ""]
-            #[doc = " The nodes belong to that inner document, so their `clipPath()` and"]
-            #[doc = " `mask()` resolve against its own definitions. Fonts and logs are the"]
-            #[doc = " outer document's, which the inner one was parsed with."]
-            #[napi]
-            pub fn svg_children(&self) -> Result<Option<Vec<SvgNode>>> {
-                let usvg::Node::Image(image) = self.node()? else {
-                    return Ok(None);
-                };
-                let usvg::ImageKind::SVG(tree) = image.kind() else {
-                    return Ok(None);
-                };
-                let inner = TreeRef::Embedded(Box::new(self.base.clone()), self.path.clone());
-                let doc = Doc { tree: Some(inner.clone()), ..self.doc() };
-                let base = NodeBase::Tree(inner);
-                Ok(Some(
-                    (0..tree.root().children().len())
-                        .map(|i| SvgNode { doc: doc.clone(), base: base.clone(), path: vec![i] })
-                        .collect(),
-                ))
-            }
-
-            #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
-            #[doc = " Null for a group, an image or a text node."]
-            #[doc = ""]
-            #[doc = " This is what makes `Fill`, `Stroke` and `Path` reachable at all: the"]
-            #[doc = " mapper prunes any generated type no exposed method hands out."]
-            // napi maps a Rust type *named* `Path` to `string` in the .d.ts --
-            // it is reading the name, not the type, and colliding with
-            // std::path::PathBuf. The runtime is right either way; this fixes
-            // only what gets written into the declarations.
-            #[napi(ts_return_type = "Path | null")]
-            pub fn path(&self) -> Result<Option<Path>> {
-                Ok(match self.node()? {
-                    usvg::Node::Path(p) => Some(Path::from(&**p)),
-                    _ => None,
-                })
-            }
-
-            #[doc = " The content of an image node: where it sits, how it is to"]
-            #[doc = " be scaled, and the bytes themselves. Null for anything else."]
-            #[doc = ""]
-            #[doc = " `kind` is a discriminated union. The four raster variants"]
-            #[doc = " carry the encoded bytes exactly as the document supplied"]
-            #[doc = " them -- usvg says they should be decoded by the caller, and"]
-            #[doc = " this is the caller -- while `svg` carries none, an embedded"]
-            #[doc = " SVG being a tree rather than a payload."]
-            #[napi]
-            pub fn image(&self) -> Result<Option<Image>> {
-                Ok(match self.node()? {
-                    usvg::Node::Image(i) => Some(Image::wrap((**i).clone(), self.doc())),
-                    _ => None,
-                })
-            }
-
-            #[doc = " Direct children. Empty for anything that is not a group."]
-            #[napi]
-            pub fn children(&self) -> Result<Vec<SvgNode>> {
-                let count = match self.node()? {
-                    usvg::Node::Group(g) => g.children().len(),
-                    _ => 0,
-                };
-                Ok((0..count).map(|i| self.child(i)).collect())
-            }
-
-            #[doc = " Extent of this element's own filters, if it is a filtered group."]
-            #[doc = " This is what the document-level `filtersBoundingBox()` cannot see:"]
-            #[doc = " usvg wraps every filtered element in an inner group."]
-            #[napi]
-            pub fn filters_bbox(&self) -> Result<Option<BBox>> {
-                Ok(match self.node()? {
-                    usvg::Node::Group(g) => g.filters_bounding_box().map(BBox::from),
-                    _ => None,
-                })
-            }
-
-            #[doc = " Extent this element will actually occupy once rendered, contours and"]
-            #[doc = " filters included."]
-            #[napi]
-            pub fn extent(&self) -> Result<Option<BBox>> {
-                Ok(node_extent(self.node()?).map(BBox::from))
-            }
-
-            #[doc = " Clip path applied to this element, if it is a clipped group."]
-            #[doc = ""]
-            #[doc = " usvg hands out a bare `&ClipPath` here, with no `Arc` to hold on to,"]
-            #[doc = " so it is found in the document's clip-path table by identity."]
-            #[napi]
-            pub fn clip_path(&self) -> Result<Option<ClipPath>> {
-                let usvg::Node::Group(g) = self.node()? else {
-                    return Ok(None);
-                };
-                let Some(target) = g.clip_path() else {
-                    return Ok(None);
-                };
-                let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
-                    return Ok(None);
-                };
-                Ok(find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc())))
-            }
-
-            #[doc = " Mask applied to this element, found like `clipPath`."]
-            #[napi]
-            pub fn mask(&self) -> Result<Option<Mask>> {
-                let usvg::Node::Group(g) = self.node()? else {
-                    return Ok(None);
-                };
-                let Some(target) = g.mask() else {
-                    return Ok(None);
-                };
-                let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
-                    return Ok(None);
-                };
-                Ok(find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc())))
-            }
-
-            #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
-            #[async_twin(render_png_async, Buffer)]
-            fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
-                let node = self.node()?;
-                self.doc.logs.scope(|| render_node_png(node, &params.unwrap_or_default()))
-            }
-
-            #[doc = " Renders this element alone, sized to its own extent."]
-            #[napi]
-            pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-                self.png_bytes(params).map(IntoJs::into_js)
-            }
-
-            #node_methods
         }
 
         #[doc = " A parsed SVG, ready to be rendered any number of times."]
@@ -1283,7 +827,7 @@ pub fn template(
             #[doc = " Frees the parsed tree, the source and the images now, not at garbage"]
             #[doc = " collection; every later call throws. Also `[Symbol.dispose]` where"]
             #[doc = " the runtime has it, so `using doc = new Resvg(svg)` frees it at the"]
-            #[doc = " end of the block. A node or async call holding the tree keeps it."]
+            #[doc = " end of the block. An async call holding the tree keeps it."]
             #[napi]
             pub fn dispose(&mut self) {
                 static EMPTY: std::sync::OnceLock<std::sync::Arc<usvg::Tree>> = std::sync::OnceLock::new();
@@ -1327,27 +871,6 @@ pub fn template(
             #[napi]
             pub fn pending_fonts(&self) -> Vec<String> {
                 self.pending_fonts.to_vec()
-            }
-
-            #[doc = " The face that actually drew a glyph, from the database this"]
-            #[doc = " document was parsed with."]
-            #[doc = ""]
-            #[doc = " `pendingFonts()` names the families that were missing; this names"]
-            #[doc = " what was used instead, glyph by glyph, which is the half a"]
-            #[doc = " document-wide list cannot answer. A fallback that renders is the"]
-            #[doc = " failure nobody sees."]
-            #[doc = ""]
-            #[doc = " Same answer as `glyph.font`, plus a provenance check: a glyph laid"]
-            #[doc = " out against another database comes back `null`. A `fontdb::ID` is"]
-            #[doc = " a slotmap key, meaningless outside the database that issued it,"]
-            #[doc = " and read against this one it could name an unrelated face."]
-            #[napi]
-            pub fn face_of(&self, glyph: &PositionedGlyph) -> Option<FontFace> {
-                let fonts = glyph.doc.fonts.as_ref()?;
-                if !std::sync::Arc::ptr_eq(fonts, &self.fonts) {
-                    return None;
-                }
-                glyph.font()
             }
 
             #[doc = " Supplies one image and re-parses the document."]
@@ -1431,64 +954,6 @@ pub fn template(
                 )
             }
 
-            #[doc = " Bounding box of one element, by `id`, as it will be rendered"]
-            #[doc = " (contours, filters and transforms included). `null` if there is no"]
-            #[doc = " such id or the element has no visible size."]
-            #[napi]
-            pub fn node_bbox(&self, id: String) -> Option<BBox> {
-                self.tree
-                    .node_by_id(&id)
-                    .and_then(node_extent)
-                    .map(BBox::from)
-            }
-
-            #[doc = " Renders a single element, by `id`, into its own PNG -- the output is"]
-            #[doc = " sized to that element, not to the document. Useful to slice an icon"]
-            #[doc = " out of a sprite sheet."]
-            #[napi]
-            pub fn render_node_png(
-                &self,
-                id: String,
-                params: Option<RenderParams>,
-            ) -> Result<Buffer> {
-                self.node_png_bytes(id, params).map(IntoJs::into_js)
-            }
-
-            #[doc = " The Send half of `renderNodePng`."]
-            #[async_twin(render_node_png_async, Buffer)]
-            fn node_png_bytes(
-                &self,
-                id: String,
-                params: Option<RenderParams>,
-            ) -> Result<Vec<u8>> {
-                let node = self
-                    .tree
-                    .node_by_id(&id)
-                    .ok_or_else(|| Error::from_reason(format!("no element with id {id:?}")))?;
-                self.logs.scope(|| render_node_png(node, &params.unwrap_or_default()))
-            }
-
-            #[doc = " Handle on one element, by `id`."]
-            #[napi]
-            pub fn node(&self, id: String) -> Option<SvgNode> {
-                path_of_id(self.tree.root(), &id, &mut Vec::new()).map(|path| SvgNode {
-                    doc: self.doc(),
-                    base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
-                    path,
-                })
-            }
-
-            #[doc = " Direct children of the root group."]
-            #[napi]
-            pub fn children(&self) -> Vec<SvgNode> {
-                (0..self.tree.root().children().len())
-                    .map(|i| SvgNode {
-                        doc: self.doc(),
-                        base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
-                        path: vec![i],
-                    })
-                    .collect()
-            }
             #tree_methods
 
             #group_methods
@@ -1534,14 +999,6 @@ pub fn template(
                     return Err(Error::from_reason("this Resvg was disposed"));
                 }
                 Ok(())
-            }
-
-            fn doc(&self) -> Doc {
-                Doc {
-                    tree: Some(TreeRef::Root(self.tree.clone())),
-                    fonts: Some(self.fonts.clone()),
-                    logs: self.logs.clone(),
-                }
             }
         }
 
@@ -1642,8 +1099,7 @@ pub fn template(
             to_f32(f64::from(px)) / base
         }
 
-        #[doc = " Size, scale and background of one render pass, shared by `draw`"]
-        #[doc = " and `render_node_png`."]
+        #[doc = " Size, scale and background of one render pass."]
         fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
                 // A requested dimension is honoured exactly, not recomputed.
                 // `(base * (w / base)).ceil()` looks like an identity and is not:
@@ -1705,49 +1161,6 @@ pub fn template(
                 }
                 Ok((scale, pixmap))
         }
-
-        #[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
-        fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
-                if p.crop.is_some() {
-                    // A node render is already cropped to the node's own extent.
-                    return Err(Error::new(Status::InvalidArg, "crop is not supported when rendering a single node"));
-                }
-                let bbox = node_extent(node)
-                    .ok_or_else(|| Error::from_reason("element has no visible size"))?;
-                // resvg::render_node renders the node's *local* geometry but
-                // offsets by its *absolute* bbox, so both have to be undone:
-                // cancel that pre_translate, then supply the ancestor transform.
-                let inner = node
-                    .abs_layer_bounding_box()
-                    .ok_or_else(|| Error::from_reason("element is empty"))?;
-                let (scale, mut pixmap) = canvas(bbox.width(), bbox.height(), p)?;
-                contained("resvg", || resvg::render_node(
-                    node,
-                    tiny_skia::Transform::from_scale(scale, scale)
-                        .pre_translate(-bbox.x(), -bbox.y())
-                        .pre_concat(node.abs_transform())
-                        .pre_translate(inner.x(), inner.y()),
-                    &mut pixmap.as_mut(),
-                ))?
-                .ok_or_else(|| Error::from_reason("element is empty"))?;
-                encode_png(&pixmap)
-        }
-
-        #[doc = " Rendered extent of a node."]
-        #[doc = ""]
-        #[doc = " `Node::abs_layer_bounding_box` gives a Group its full layer box but"]
-        #[doc = " hands back only the *geometric* box for a Path or Text, which would"]
-        #[doc = " clip the stroke, so widen those here."]
-        fn node_extent(node: &usvg::Node) -> Option<usvg::NonZeroRect> {
-            match node {
-                usvg::Node::Group(g) => Some(g.abs_layer_bounding_box()),
-                usvg::Node::Path(p) => p.abs_stroke_bounding_box().to_non_zero_rect(),
-                usvg::Node::Text(t) => t.abs_stroke_bounding_box().to_non_zero_rect(),
-                usvg::Node::Image(i) => i.abs_bounding_box().to_non_zero_rect(),
-            }
-        }
-
-
 
         #[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
         pub struct ParseTask {

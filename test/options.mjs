@@ -75,8 +75,8 @@ const differs = (a, b) => Buffer.compare(a, b) !== 0;
 // 4. fontSize — the default when the document sets none
 {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><text id="t" x="4" y="40">Wg</text></svg>';
-  const small = new Resvg(svg, { fontFamily: family, fontSize: 8 }, db).node('t').extent();
-  const large = new Resvg(svg, { fontFamily: family, fontSize: 32 }, db).node('t').extent();
+  const small = new Resvg(svg, { fontFamily: family, fontSize: 8 }, db).absStrokeBoundingBox();
+  const large = new Resvg(svg, { fontFamily: family, fontSize: 32 }, db).absStrokeBoundingBox();
   assert.ok(large.width > small.width * 2, `32pt is wider than 8pt: ${large.width} vs ${small.width}`);
 }
 

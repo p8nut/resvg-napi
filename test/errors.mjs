@@ -1,7 +1,7 @@
 // A parse failure carries usvg's own variant name as `error.code`, on every
 // path that parses: the constructor, parseAsync and the one-shot renderAsync.
 import assert from 'node:assert/strict';
-import { Resvg, renderAsync, FontDatabase } from '../index.js';
+import { Resvg, renderAsync, FontDatabase, usvg } from '../index.js';
 
 const cases = {
   NotAnUtf8Str: Buffer.from([0xff, 0xfe, 0x3c]),
@@ -20,10 +20,10 @@ for (const [code, svg] of Object.entries(cases)) {
 
 
 // An instance of another class where a class is expected is refused, not
-// reinterpreted: unchecked, a SvgNode read as a FontFace is memory corruption.
+// reinterpreted: unchecked, a usvg.Path read as a FontFace is memory corruption.
 // Native and WASI alike (npm run test:wasi).
 {
-  const node = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect id="r" width="1" height="1"/></svg>').node('r');
+  const node = usvg.Tree.fromStr('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect id="r" width="1" height="1"/></svg>').nodeById('r')?.value;
   assert.ok(node, 'the rect survives parsing');
   const db = new FontDatabase();
   const is = (e) => e instanceof Error && e.code === 'InvalidArg' && /not an instance of class `FontFace`/.test(e.message);

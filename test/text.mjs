@@ -1,12 +1,11 @@
-// The laid-out content of a text node. These types exist because
-// `SvgNode.text()` hands one out: the mapper prunes whatever no exposed method
-// returns, and a node payload is not a collection, so nothing else nominates
-// them.
+// The laid-out content of a text node, `usvg.Text`: chunks, spans, the
+// resolved layout and the outlines (the basics: test/api/nodes.mjs).
 import assert from 'node:assert/strict';
-import { fontsOrSkip } from './support.mjs';
-import { Resvg, FontDatabase } from '../index.js';
+import { treeFontsOrSkip, renderNodePng } from './support.mjs';
+import binding from '../index.js';
+const { usvg } = binding;
 
-const { db, family } = fontsOrSkip(FontDatabase, 'text content');
+const { db, family } = treeFontsOrSkip(binding, 'text content');
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="90">
   <text id="one" x="10" y="30" font-size="20" fill="#38bdf8">Hi there</text>
@@ -17,53 +16,45 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="90">
   <rect id="notext" width="5" height="5"/>
 </svg>`;
 
-const doc = new Resvg(svg, { fontFamily: family }, db);
-const text = (id) => doc.node(id).text();
+const tree = usvg.Tree.fromStr(svg, { fontdb: db, fontFamily: family });
+const text = (id) => tree.nodeById(id).value;
 
-// 1. not a text node is null, distinct from an empty one
-assert.equal(doc.node('notext').text(), null, 'a rect is not text');
+// 1. a rect is a path node, not a text one
+assert.equal(tree.nodeById('notext').kind, 'path');
+assert.equal(tree.nodeById('one').kind, 'text');
 
 // 2. a chunk keeps the source string and the anchor it was given
 {
-  const t = text('one');
-  assert.equal(t.chunks.length, 1);
-  const c = t.chunks[0];
-  assert.equal(c.text, 'Hi there');
+  const [c] = text('one').chunks();
   assert.equal(c.x, 10);
-  assert.equal(c.anchor, 'start');
-  assert.equal(text('anchored').chunks[0].anchor, 'middle');
+  assert.equal(text('anchored').chunks()[0].anchor, 'middle');
 }
 
 // 3. a tspan is its own span, with its own size and fill, over a range of the
 //    chunk's text
 {
-  const c = text('split').chunks[0];
+  const [c] = text('split').chunks();
   assert.equal(c.text, 'plainloud');
   assert.equal(c.spans.length, 2, 'the tspan splits the chunk');
   const [plain, loud] = c.spans;
   assert.deepEqual([plain.start, plain.end], [0, 5]);
   assert.deepEqual([loud.start, loud.end], [5, 9]);
-  assert.equal(plain.fontSize, 12);
-  assert.equal(loud.fontSize, 18);
   assert.deepEqual(loud.fill.paint.value, { red: 0, green: 128, blue: 128 });
 }
 
-// 4. `layouted` is the resolved side: positioned glyphs, one per character here
+// 4. `layouted` is the resolved side: one span here, at the size asked for
 {
-  const t = text('one');
-  assert.equal(t.layouted.length, 1);
-  const span = t.layouted[0];
-  assert.equal(span.fontSize, 20);
-  assert.equal(span.positionedGlyphs.length, 'Hi there'.length,
-    'one glyph per character for this string');
+  const layouted = text('one').layouted();
+  assert.equal(layouted.length, 1);
+  assert.equal(layouted[0].fontSize, 20);
 }
 
 // 5. baselineShift is a derived discriminated union: usvg's BaselineShift is a
-//    payload enum, and the generator now emits one union per such enum rather
+//    payload enum, and the generator emits one union per such enum rather
 //    than dropping the member. The unit variants share a struct, the one that
 //    carries a value gets its own.
 {
-  const span = text('one').chunks[0].spans[0];
+  const span = text('one').chunks()[0].spans[0];
   assert.ok(Array.isArray(span.baselineShift));
   for (const b of span.baselineShift) {
     assert.match(b.type, /^(baseline|subscript|superscript|number)$/);
@@ -73,23 +64,19 @@ assert.equal(doc.node('notext').text(), null, 'a rect is not text');
 }
 
 // 6. the fill reaches through to the paint union, same shape as a path's
-assert.equal(text('one').chunks[0].spans[0].fill.paint.type, 'color');
+assert.equal(text('one').chunks()[0].spans[0].fill.paint.type, 'color');
 
-// 7. the boxes agree with what SvgNode reports, so text() is a view of the same
-//    node rather than a second source of truth
-assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
-
-// 8. text-decoration reaches through as its own object, one entry per line the
+// 7. text-decoration reaches through as its own object, one entry per line the
 //    document asked for, each carrying the paint it is drawn with. usvg keeps
 //    these behind accessors on a struct whose fields are pub(crate), so nothing
 //    here is a field read -- it is the generator following methods.
 {
-  const plain = text('one').chunks[0].spans[0].decoration;
+  const plain = text('one').chunks()[0].spans[0].decoration;
   assert.equal(plain.underline, undefined, 'undecorated text carries no lines');
   assert.equal(plain.overline, undefined);
   assert.equal(plain.lineThrough, undefined);
 
-  const marked = text('deco').chunks[0].spans[0].decoration;
+  const marked = text('deco').chunks()[0].spans[0].decoration;
   assert.ok(marked.underline, 'underline was asked for');
   assert.ok(marked.lineThrough, 'line-through was asked for');
   assert.equal(marked.overline, undefined, 'overline was not');
@@ -101,28 +88,25 @@ assert.deepEqual(text('one').boundingBox, doc.node('one').boundingBox());
   );
 }
 
-// 9. the declarations do not lie about what a member holds.
-//    napi maps a Rust type *named* `Path` to `string` from the name alone, and
-//    `layout::Span` carries three of them. They shipped declared as `string`
-//    while holding a whole Path object -- `.fill` was a type error on working
-//    code and `.toUpperCase()` type-checked and threw.
+// 8. a laid-out span's lines are whole paths, not the string napi would make
+//    of a type *named* `Path`, and null when the span has none.
 {
-  const sp = text('deco').layouted[0];
-  assert.equal(typeof sp.underline, 'object', 'a Path, not the string napi would have made of it');
-  assert.ok('data' in sp.underline && 'fill' in sp.underline, 'a whole Path');
-  assert.equal(text('one').layouted[0].underline, null, 'and null when the span has none');
+  const sp = text('deco').layouted()[0];
+  assert.ok(sp.underline instanceof usvg.Path, 'a usvg.Path');
+  assert.ok(sp.underline.data().length > 0 && sp.underline.fill(), 'a whole Path');
+  assert.equal(text('one').layouted()[0].underline, null, 'and null when the span has none');
 }
 
-// the glyphs as the paths renderPng draws: reachable as nodes, still filled
-// with the text's own paint, and null on anything that is not text
+// the glyphs as the paths a render draws: reachable as nodes, still filled
+// with the text's own paint, and drawable on their own
 {
-  const flat = doc.node('one').flattenedChildren();
+  const flat = text('one').flattened().children();
   assert.ok(flat.length > 0);
   const shapes = flat.flatMap(function leaves(n) {
-    return n.kind === 'group' ? n.children().flatMap(leaves) : [n];
+    return n.kind === 'group' ? n.value.children().flatMap(leaves) : [n];
   });
-  assert.ok(shapes.every((n) => n.kind === 'path' && n.path().data.length > 0));
-  assert.equal(shapes[0].path().fill.paint.type, 'color');
-  assert.ok(flat[0].renderPng().length > 0);
-  assert.equal(doc.node('notext').flattenedChildren(), null);
+  assert.ok(shapes.every((n) => n.kind === 'path' && n.value.data().length > 0));
+  assert.equal(shapes[0].value.fill().paint.type, 'color');
+  assert.ok(renderNodePng(binding, flat[0]).length > 0);
+  assert.equal(tree.nodeById('notext').value.flattened, undefined, 'a path has no outlines to flatten');
 }

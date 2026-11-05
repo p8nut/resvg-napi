@@ -145,11 +145,11 @@ pub fn js_conv(
         // into its `wrap`.
         (Js::Value(t), Getter | Method) => {
             let c = data_ident(t);
-            reaching(quote!(#c), quote!(#c::wrap(#a.clone(), self.doc())), t)
+            reaching(quote!(#c), quote!(#c::wrap(#a.clone())), t)
         }
         (Js::ValueList(t), Getter) => {
             let c = data_ident(t);
-            let e = quote!(#a.iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
+            let e = quote!(#a.iter().map(|x| #c::wrap(x.clone())).collect());
             reaching(quote!(Vec<#c>), e, t)
         }
         // `iter` for a slice, `into_iter` for an iterator of references.
@@ -160,14 +160,14 @@ pub fn js_conv(
             } else {
                 quote!(into_iter)
             };
-            let e = quote!(#a.#iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
+            let e = quote!(#a.#iter().map(|x| #c::wrap(x.clone())).collect());
             reaching(quote!(Vec<#c>), e, t)
         }
         (Js::OptValue(t), Getter | Method) => {
             let c = data_ident(t);
             reaching(
                 quote!(Option<#c>),
-                quote!(#a.map(|x| #c::wrap(x.clone(), self.doc()))),
+                quote!(#a.map(|x| #c::wrap(x.clone()))),
                 t,
             )
         }
@@ -208,13 +208,13 @@ pub fn js_conv(
         }
         (Js::Handle(t), Method) => {
             let w = wrapper_ident(t);
-            plain(quote!(#w), quote!(#w::wrap(#a.clone(), self.doc())))
+            plain(quote!(#w), quote!(#w::wrap(#a.clone())))
         }
         (Js::HandleList(t), Method) => {
             let w = wrapper_ident(t);
             plain(
                 quote!(Vec<#w>),
-                quote!(#a.iter().map(|x| #w::wrap(x.clone(), self.doc())).collect()),
+                quote!(#a.iter().map(|x| #w::wrap(x.clone())).collect()),
             )
         }
         // An Arc-held definition is shared by every element referencing it, so
@@ -1148,16 +1148,11 @@ pub fn value_class(
         #[napi]
         pub struct #name {
             inner: #up,
-            doc: Doc,
         }
 
         impl #name {
-            fn wrap(inner: #up, doc: Doc) -> Self {
-                Self { inner, doc }
-            }
-
-            fn doc(&self) -> Doc {
-                self.doc.clone()
+            fn wrap(inner: #up) -> Self {
+                Self { inner }
             }
         }
 
@@ -1169,35 +1164,23 @@ pub fn value_class(
     (code, skipped, reached)
 }
 
-/// Which surface a handle class is emitted for. They differ in what a rule
-/// may add beside the upstream methods.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Surface {
-    /// The first surface: read-only, with `Config::content_view` and
-    /// `Config::arg_standin`.
-    Flat,
-    /// The mirrored one, later passed through [`namespaced`]: nothing the
-    /// template provides, and a handle whose upstream type derives `Clone`
-    /// gets its `&mut self` methods through `Arc::make_mut`, copy on write.
-    Namespaced,
-}
-
 /// Emits `#[napi] pub struct T { inner: Arc<...> }` plus its accessors, and
-/// reports the handle types those accessors reach in turn.
+/// reports the handle types those accessors reach in turn. A handle whose
+/// upstream type derives `Clone` gets its `&mut self` methods through
+/// `Arc::make_mut`, copy on write; the rest are read-only.
 pub fn wrapper_class(
     files: &[syn::File],
     ty: &str,
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
-    surface: Surface,
 ) -> (TokenStream, Vec<Skip>, BTreeSet<String>) {
     let name = wrapper_ident(ty);
     let path = wrapper_path(ty, modules, root);
     // An `Arc` hands out `&mut` only through `make_mut`, which clones a value
     // shared with anyone else first: the rule needs `Clone`, and takes it
     // from the derive.
-    let make_mut = surface == Surface::Namespaced && derives(files, bare(ty), "Clone");
+    let make_mut = derives(files, bare(ty), "Clone");
     let inner_mut = quote!(std::sync::Arc::make_mut(&mut self.inner));
     // Walk the type itself, then whatever it derefs to, sharing one name set so
     // an override on the outer type wins.
@@ -1221,10 +1204,8 @@ pub fn wrapper_class(
                 receiver: &inner,
                 receiver_mut: mutable.then_some(&inner_mut),
                 skip: &[],
-                prologue: None,
                 readonly: !mutable,
-                optional: false,
-                standin: surface == Surface::Flat,
+                standin: false,
             },
             vocab,
             &mut taken,
@@ -1246,26 +1227,6 @@ pub fn wrapper_class(
     if methods.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
-    // A handle that owns content gets the template's view over it, derived
-    // from the presence of the accessor `Config::content_view` names.
-    let content = match &config().content_view {
-        Some(view)
-            if surface == Surface::Flat
-                && inherent_impls(files, bare(ty)).any(|imp| {
-                imp.items.iter().any(|it| match it {
-                    ImplItem::Fn(f) => {
-                        is_pub(&f.vis)
-                            && f.sig.ident == view.accessor.0
-                            && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == view.accessor.1)
-                    }
-                    _ => false,
-                })
-            }) =>
-        {
-            (view.emit)(&path, &name)
-        }
-        _ => TokenStream::new(),
-    };
     // The crate path as the generated file spells it, not as quote! does.
     let crate_path = root.to_string().replace(' ', "");
     let doc = if make_mut {
@@ -1278,16 +1239,11 @@ pub fn wrapper_class(
         #[napi]
         pub struct #name {
             inner: std::sync::Arc<#path>,
-            doc: Doc,
         }
 
         impl #name {
-            fn wrap(inner: std::sync::Arc<#path>, doc: Doc) -> Self {
-                Self { inner, doc }
-            }
-
-            fn doc(&self) -> Doc {
-                self.doc.clone()
+            fn wrap(inner: std::sync::Arc<#path>) -> Self {
+                Self { inner }
             }
         }
 
@@ -1295,8 +1251,6 @@ pub fn wrapper_class(
         impl #name {
             #methods
         }
-
-        #content
     };
     (code, skipped, reached)
 }
@@ -1313,15 +1267,8 @@ pub struct MethodPass<'a> {
     /// copy-on-write `Arc` hands out `&mut` through `make_mut`.
     pub receiver_mut: Option<&'a TokenStream>,
     pub skip: &'a [&'a str],
-    /// Emitted before the call; when set, every wrapper returns `Result<_>` so a
-    /// receiver that has to be looked up first can fail cleanly.
-    pub prologue: Option<&'a TokenStream>,
     /// An `Arc` receiver cannot hand out `&mut`, so drop mutating methods.
     pub readonly: bool,
-    /// The receiver may not exist (a node that is not a group): every
-    /// wrapper returns `Result<Option<_>>`, and the prologue returns
-    /// `Ok(None)` itself.
-    pub optional: bool,
     /// Whether `Config::arg_standin` applies: its class is the template's,
     /// which a namespaced class must not take.
     pub standin: bool,
@@ -1329,8 +1276,7 @@ pub struct MethodPass<'a> {
 
 /// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
 /// `receiver` is the expression the call hangs off, so the same pass serves
-/// a handle's `self.inner`, a borrow such as `self.inner.root()`, or a value a
-/// prologue looked up.
+/// a handle's `self.inner` or a borrow such as `self.inner.root()`.
 pub fn map_methods(
     m: &MethodPass,
     vocab: &Vocab,
@@ -1346,9 +1292,7 @@ pub fn map_methods(
         receiver,
         receiver_mut,
         skip,
-        prologue,
         readonly,
-        optional,
         standin: with_standin,
     } = *m;
     let mut code = TokenStream::new();
@@ -1516,19 +1460,12 @@ pub fn map_methods(
 
             // The signature's return and the body's last expression. A gated
             // body has an `Err` twin, so it always returns `Result`.
-            let (arrow, last) = if optional {
-                let v = if already_result {
-                    quote!(#value.map(Some))
-                } else {
-                    quote!(Ok(Some(#value)))
-                };
-                (quote!(-> Result<Option<#ret_ty>>), v)
-            } else if unit && gate.is_some() {
+            let (arrow, last) = if unit && gate.is_some() {
                 (quote!(-> Result<#ret_ty>), quote! { #value; Ok(()) })
             } else if already_result {
                 // TryUnit's value is already the Result.
                 (quote!(-> Result<#ret_ty>), value)
-            } else if prologue.is_some() || gate.is_some() {
+            } else if gate.is_some() {
                 (quote!(-> Result<#ret_ty>), quote!(Ok(#value)))
             } else if unit {
                 (quote!(), value)
@@ -1536,7 +1473,6 @@ pub fn map_methods(
                 (quote!(-> #ret_ty), value)
             };
             let body = quote! {
-                #prologue
                 #(#lets)*
                 #last
             };
@@ -2016,12 +1952,8 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
 ///
 /// napi keeps one constructor per JS class name, namespace or not (see
 /// [`class_names`]), so a copied class may not share its JS name with a
-/// class of `flat` or of an earlier part. When it collides with one of
-/// `flat`'s and [`Config::legacy_prefix`](crate::Config::legacy_prefix) is
-/// set, the flat class gives way: it is renamed with the prefix, Rust ident
-/// and every reference to it in `flat` (`ClipPath` becomes `LegacyClipPath`),
-/// and the copy keeps the upstream name. Otherwise the copy is left out, and
-/// so is everything that names a left-out item.
+/// class of `flat` or of an earlier part: such a copy is left out, and so is
+/// everything that names a left-out item.
 ///
 /// napi resolves a reference to its TypeScript name when the referencing
 /// item expands, from what has expanded before it, and falls back to the
@@ -2033,17 +1965,8 @@ pub fn namespaced(
     flat: &TokenStream,
     shared: &BTreeSet<String>,
 ) -> Surfaces {
-    // The flat classes, by JS name, with their Rust ident.
-    let flat_file: syn::File = syn::parse2(flat.clone()).expect("a flat surface that parses");
-    let flat_classes: BTreeMap<String, String> = flat_file
-        .items
-        .iter()
-        .filter_map(class_of)
-        .map(|(id, js, _)| (js, id.to_string()))
-        .collect();
-    let prefix = config().legacy_prefix;
-    // flat Rust ident -> its legacy one
-    let mut legacy: BTreeMap<String, proc_macro2::Ident> = BTreeMap::new();
+    // The flat classes, by JS name.
+    let flat_classes = class_names(flat);
     let mut report: Vec<String> = Vec::new();
     let parsed: Vec<(&str, syn::File)> = parts
         .iter()
@@ -2092,33 +2015,17 @@ pub fn namespaced(
                 _ => continue,
             };
             let js = upstream(&id.to_string());
-            if class_of(item).is_some() {
-                match (flat_classes.get(&js), prefix) {
-                    (Some(old), Some(prefix)) if classes.insert(js.clone()) => {
-                        assert_eq!(
-                            old, &js,
-                            "flat class {old} has a js_name of its own ({js}): a legacy rename \
-                             would have to edit it"
-                        );
-                        let new = format_ident!("{prefix}{old}");
-                        report.push(format!(
-                            "legacy flat name: {new} (was {old}), beside {ns}.{js}"
-                        ));
-                        legacy.insert(old.clone(), new);
-                    }
-                    // A name `shared` lets two namespaces have: classes
-                    // only ever built by the class they are called on.
-                    (None, _) if shared.contains(&js) => {}
-                    // Taken on the flat surface with no prefix to move it
-                    // by, or by an earlier namespace.
-                    (flat, _) if flat.is_some() || !classes.insert(js.clone()) => {
-                        out_why.insert(
-                            key(&id.to_string(), ns),
-                            format!("not namespaced: {ns}.{js}: a class named {js} exists already"),
-                        );
-                    }
-                    _ => {}
-                }
+            // Taken on the flat surface, or by an earlier namespace -- unless
+            // `shared` lets two namespaces have the name: classes only ever
+            // built by the class they are called on.
+            if class_of(item).is_some()
+                && (flat_classes.contains(&js)
+                    || (!shared.contains(&js) && !classes.insert(js.clone())))
+            {
+                out_why.insert(
+                    key(&id.to_string(), ns),
+                    format!("not namespaced: {ns}.{js}: a class named {js} exists already"),
+                );
             }
             let prior = names.insert(key(&id.to_string(), ns), (new, js, ns));
             assert!(prior.is_none(), "{id} is defined twice in namespace {ns}");
@@ -2241,29 +2148,18 @@ pub fn namespaced(
         visit(i, &defs, &index, &mut state, &mut out);
     }
     out.extend(rest.into_iter().map(|(_, _, code, _)| code));
-    for (old, new) in &legacy {
-        assert!(
-            !flat_classes.contains_key(&new.to_string()),
-            "legacy name {new} for {old} is a flat class already"
-        );
-    }
     report.extend(out_why.into_values());
     Surfaces {
-        flat: rename_idents(flat.clone(), &legacy, &mut BTreeSet::new()),
         namespaced: out,
         report,
     }
 }
 
-/// What [`namespaced`] makes of the two surfaces.
+/// What [`namespaced`] makes of the parts.
 pub struct Surfaces {
-    /// The flat surface, its colliding classes renamed with
-    /// [`Config::legacy_prefix`](crate::Config::legacy_prefix).
-    pub flat: TokenStream,
     /// The copies, under their namespaces.
     pub namespaced: TokenStream,
-    /// One line per class renamed on the flat surface (`legacy flat name`)
-    /// and per item left out of the namespaced one (`not namespaced`).
+    /// One line per item left out (`not namespaced`).
     pub report: Vec<String>,
 }
 

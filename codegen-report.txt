@@ -2,22 +2,20 @@ FaceInfo member covered by the template: families: Vec<(String,Language)>
 FaceInfo member not exposed: id: ID
 FaceInfo member not exposed: source: Source
 FaceInfo: partial mapping, emitted as read-only class FontFace
-Font member covered by the template: families: &[FontFamily]
+Font member not exposed: families: &[FontFamily]
 Font: partial mapping, emitted as read-only class Font
 Image: partial mapping, emitted as read-only class Image
 ImageKind::SVG carries Tree, which has no mappable data: emitted without a value
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
-PositionedGlyph member covered by the template: font: ID
+PositionedGlyph member not exposed: font: ID
 PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
 Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
 TextSpan: partial mapping, emitted as read-only class TextSpan
-async twin generated: Resvg::node_png_bytes -> render_node_png_async (Promise<Buffer>)
 async twin generated: Resvg::png_bytes -> render_png_async (Promise<Buffer>)
 async twin generated: Resvg::raw_pixels -> render_raw_async (Promise<RawImage>)
 async twin generated: Resvg::svg_text -> to_string_async (Promise<String>)
-async twin generated: SvgNode::png_bytes -> render_png_async (Promise<Buffer>)
 data type ID skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
@@ -29,23 +27,6 @@ fontdb::Database method covered by the template, not generated: query (arg: &Que
 fontdb::Database method not exposed: load_font_source (arg: Source)
 fontdb::Database method not exposed: make_shared_face_data (returns Option<(std::sync::Arc<dynAsRef<[u8]>+Send+Sync>,u32)>)
 fontdb::Database method not exposed: push_face_info (arg: FaceInfo)
-legacy flat name: LegacyClipPath (was ClipPath), beside usvg.ClipPath
-legacy flat name: LegacyFilter (was Filter), beside usvg.Filter
-legacy flat name: LegacyFont (was Font), beside usvg.Font
-legacy flat name: LegacyImage (was Image), beside usvg.Image
-legacy flat name: LegacyImageKindGif (was ImageKindGif), beside usvg.ImageKindGif
-legacy flat name: LegacyImageKindJpeg (was ImageKindJpeg), beside usvg.ImageKindJpeg
-legacy flat name: LegacyImageKindPng (was ImageKindPng), beside usvg.ImageKindPng
-legacy flat name: LegacyImageKindWebp (was ImageKindWebp), beside usvg.ImageKindWebp
-legacy flat name: LegacyLinearGradient (was LinearGradient), beside usvg.LinearGradient
-legacy flat name: LegacyMask (was Mask), beside usvg.Mask
-legacy flat name: LegacyPattern (was Pattern), beside usvg.Pattern
-legacy flat name: LegacyPositionedGlyph (was PositionedGlyph), beside usvg.PositionedGlyph
-legacy flat name: LegacyRadialGradient (was RadialGradient), beside usvg.RadialGradient
-legacy flat name: LegacySpan (was Span), beside usvg.Span
-legacy flat name: LegacyText (was Text), beside usvg.Text
-legacy flat name: LegacyTextChunk (was TextChunk), beside usvg.TextChunk
-legacy flat name: LegacyTextSpan (was TextSpan), beside usvg.TextSpan
 names defined more than once across the sources, keyed by module: Image
 object (String,Language) skipped: not a public struct
 object Arc<ClipPath> skipped: not a public struct
@@ -102,22 +83,14 @@ tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])
 usvg index bound for `*_precision` derived from POW_VEC: 12
 usvg sources: usvg-0.49.0
 usvg::ClipPath is a class: Projected
-usvg::ClipPath method covered by the content view: root (returns &Group)
-usvg::ClipPath method covered by the template: clip_path (returns Option<&ClipPath>)
-usvg::Group (on SvgNode) method covered by the template, not generated: children (returns &[Node])
-usvg::Group (on SvgNode) method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
-usvg::Group (on SvgNode) method covered by the template, not generated: mask (returns Option<&Mask>)
 usvg::Group is a class: Projected
-usvg::Group method covered by the template, not generated: children (returns &[Node])
-usvg::Group method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
-usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)
+usvg::Group method not exposed: children (returns &[Node])
+usvg::Group method not exposed: clip_path (returns Option<&ClipPath>)
+usvg::Group method not exposed: mask (returns Option<&Mask>)
 usvg::Image is a class: Projected
 usvg::Image is a projection, not a copy of the flat data type
 usvg::Mask is a class: Projected
-usvg::Mask method covered by the content view: root (returns &Group)
-usvg::Mask method covered by the template: mask (returns Option<&Mask>)
 usvg::Node is a union of projections
-usvg::Node method covered by clipPath / mask / filters / imageChildren / paint ids: subroots (arg: F)
 usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
 usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
 usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)
@@ -126,18 +99,17 @@ usvg::Options field not in the option object: image_href_resolver: ImageHrefReso
 usvg::Path is a class: Projected
 usvg::Path is a projection, not a copy of the flat data type
 usvg::Pattern is a class: Projected
-usvg::Pattern method covered by the content view: root (returns &Group)
 usvg::Text is a class: Projected
 usvg::Text is a projection, not a copy of the flat data type
 usvg::Tree is a class: Shared
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
-usvg::Tree method covered by the template as `children`: root (returns &Group)
 usvg::Tree method covered by the template as `new`: from_data (no receiver)
 usvg::Tree method covered by the template as `new`: from_data_nested (no receiver)
 usvg::Tree method covered by the template as `new`: from_str (no receiver)
 usvg::Tree method covered by the template as `new`: from_xmltree (no receiver)
-usvg::Tree method covered by the template as `node`: node_by_id (returns Option<&Node>)
 usvg::Tree method covered by the template as `to_svg_string`: to_string (arg: &WriteOptions)
+usvg::Tree method not exposed: node_by_id (returns Option<&Node>)
+usvg::Tree method not exposed: root (returns &Group)
 usvg::WriteOptions field not exposed: attributes_indent: Indent (handled manually by the template)
 usvg::WriteOptions field not exposed: indent: Indent (handled manually by the template)
 usvg::fontdb::Database is a class: SharedCow

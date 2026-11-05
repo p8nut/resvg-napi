@@ -52,9 +52,8 @@ code or in comments ([ADR 0002, Q35](docs/adr/0002-api-details.md)). CI greps
 for them and fails on a match. Whatever the generator has to know about
 resvg is a `napi_gen::Config` field that `build/config.rs` fills: the
 template's names for the domain shapes (`shapes`), the size constructor
-(`size_new`), the argument stand-in and its resolver (`arg_standin`), and the
-node view a definition owning a content group gets (`content_view`, whose code
-is in `template.rs`), the option-object hooks (`index_bounded`,
+(`size_new`), the argument stand-in and its resolver (`arg_standin`), the
+option-object hooks (`index_bounded`,
 `option_objects`, `providers`, `converters`, below), and the class and
 function allowlists (`classes`, `functions`, `views`, below), and the types
 borrowed from an owner (`projections`, below). A comment that
@@ -115,39 +114,32 @@ of the migration removes the flat one. Three rules make it, all generic:
   TypeScript name when the item expands, and falls back to the Rust name for
   anything not seen yet. So the definitions are emitted in dependency order,
   and impls and functions after all of them.
-- **`make_mut` for `Clone` handles.** A handle class on the namespaced surface
-  (`Surface::Namespaced`) whose upstream type derives `Clone` gets its
-  `&mut self` methods too: they go through `Arc::make_mut`, which copies a
-  value shared with another handle on the first write. That is how
-  `fontdb.Database` gets `loadFontData` and the other loaders. A type that
-  does not derive `Clone` stays read-only. The template's additions, the
-  content view and the argument stand-in, belong to the flat surface only.
+- **`make_mut` for `Clone` handles.** A handle class (`emit::wrapper_class`)
+  whose upstream type derives `Clone` gets its `&mut self` methods too: they
+  go through `Arc::make_mut`, which copies a value shared with another handle
+  on the first write. A type that does not derive `Clone` stays read-only.
+  The argument stand-in belongs to the flat surface only.
 
 napi keeps **one constructor per JS class name**, whatever the namespace
 (`REGISTERED_CLASSES` in napi 3.16). It builds every instance of a class from
 the constructor registered under that name. If a namespaced class has the same
 name as a flat one, one of the two hands out instances of the other, and
 every method call on them throws. So `namespaced` reads the class names off
-the flat surface, and when a copy would take one of them:
+the flat surface, and a copy that would take one of them is left out, with
+anything that refers to it; the report lists it as `not namespaced`. Two
+namespaces offering one class name always leave the second out. Objects and
+string enums have no constructor and are not affected.
 
-- with `Config::legacy_prefix` set, the **flat class gives way**: its Rust
-  ident, and every reference to it in the flat code (hand-written template
-  included), get the prefix, so its JS name, `.d.ts` type, inspect label and
-  `toStringTag` follow. The root sets `Some("Legacy")`: `ClipPath` becomes
-  `LegacyClipPath` and `usvg.ClipPath` keeps the upstream name (decision Q36).
-  That is the 17 usvg classes (`ClipPath`, `Text`, `Span`...), and they go
-  with the flat surface in step 13. The codegen report lists each one as
-  `legacy flat name`. A flat class with a `js_name` of its own fails the
-  build: the rename would have to edit it.
-- with `None`, the copy is left out, with anything that refers to it, and the
-  report lists it as `not namespaced`.
+None collides today. Step 4b renamed the 17 flat usvg classes `Legacy*`
+(`Config::legacy_prefix`, decision Q36) so `usvg.ClipPath` and its siblings
+could keep their names; step 7b removed the flat node surface, those classes
+with it, and the prefix mechanism. The flat surface also keeps only the
+generated data types and enums something on it names (`prune` in `build.rs`):
+the rest are reached through the namespaces.
 
-Two namespaces offering one class name always leave the second out. Objects
-and string enums have no constructor and are not affected.
-
-The toy shows both rules. `toy.Tally` derives `Clone` and is tested for
-copy-on-write. `toy.Counter` is namespaced beside a flat `LegacyCounter`, and
-the test checks that instances of the flat one still work.
+The toy shows the rules. `toy.Tally` derives `Clone` and is tested for
+copy-on-write. The flat `counter()` hands out a `toy.Counter`, the namespaced
+class, and the test checks it is one.
 `test/api/namespaces.mjs` checks the root's namespaces against `index.d.ts`:
 every class and enum it declares exists at runtime under its Rust name.
 
@@ -330,7 +322,8 @@ and the generator writes the rest from the signature: the `Task` type, the
 found by looking for the method that calls the core. Five twins come out of five
 marks — `renderPngAsync`, `renderRawAsync`, `renderNodePngAsync`,
 `toStringAsync`, and `SvgNode.renderPngAsync` — where two of them used to be
-~25 lines of ceremony each and the other three did not exist.
+~25 lines of ceremony each and the other three did not exist. (The two node
+twins went with the flat node surface in step 7b; three marks remain.)
 
 The mark carries the two things a rule cannot know: *whether* the thread hop is
 worth it, and what the result looks like in JS. Everything else is read off the

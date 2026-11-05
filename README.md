@@ -90,48 +90,62 @@ doc.toString({ indent: 'none' })      // one line; also a number of spaces, or '
 ```
 
 The outlines come from the same layout `renderPng` draws, so a glyph sits where
-the raster puts it — and `extent()` measured it before either.
+the raster puts it — and its stroke box measured it before either.
 
 ## Inspect the usvg tree
 
-`node(id)` and `children()` hand back `SvgNode`s, and each one knows what it is:
+The tree is `usvg`'s, through the namespaced surface: `usvg.Tree.fromStr`
+parses, `tree.root()` is the root `usvg.Group`, and `group.children()` and
+`tree.nodeById(id)` hand back `usvg.Node`s, `{ kind, value }` objects that
+TypeScript narrows on `kind`:
 
 ```js
-const n = doc.node('surname')
-n.kind           // 'group' | 'path' | 'image' | 'text'
-n.path()         // geometry, fill, stroke — null unless it is a shape
-n.text()         // chunks, layouted spans, positioned glyphs, decoration
-n.flattenedChildren() // that text's glyphs, as the path nodes renderPng draws
-n.renderPng()    // that element alone, cropped to its own extent
-n.opacity()      // a group's own: transform, blendMode, isolate, filters… — null otherwise
+import { usvg, fontdb, tiny_skia, resvg } from 'resvg-napi'
+
+const db = new fontdb.Database()
+db.loadSystemFonts()                      // usvg's default database is empty
+const tree = usvg.Tree.fromStr(svg, { fontdb: db })
+const n = tree.nodeById('surname')        // { kind: 'group' | 'path' | 'image' | 'text', value }
+if (n?.kind === 'path') n.value.fill()    // geometry, fill, stroke
+if (n?.kind === 'text') n.value.chunks()  // chunks, layouted spans, positioned glyphs, decoration
+if (n?.kind === 'group') n.value.opacity() // transform, blendMode, isolate, filters…
 ```
 
-A span carries what it is drawn with, down to the lines through it:
+Each value keeps its tree alive and finds its node again on each call, so it
+outlives the `tree` variable. `text.flattened()` is that text's glyphs as a
+group of paths, the outlines `renderPng` draws. A span carries what it is drawn
+with, down to the lines through it:
 
 ```js
-const span = n.text().chunks[0].spans[0]
+const span = n.value.chunks()[0].spans[0]
 span.decoration.underline?.fill?.paint  // …and .overline, .lineThrough
 ```
 
-Definitions hold nodes too: `patterns()`, `masks()` and `clipPaths()` each
-have `children()`, and `filters()[i].imageChildren(index)` reaches what an
-`feImage` primitive draws. An `<image>` that embeds an SVG hands its own
-document's nodes back through `node.svgChildren()`.
+Definitions hold nodes too: `tree.patterns()`, `tree.masks()` and
+`tree.clipPaths()` (or `group.clipPath()`, `group.mask()`) each have `root()`,
+the group of their content. What an `feImage` primitive draws, and the
+document an `<image>` embeds, are not reachable yet.
+
+`resvg.renderNode(node, transform, pixmap)` draws one node on a
+`tiny_skia.Pixmap`, as Rust's `resvg::render_node` does: in the node's own
+coordinates, offset by its layer box.
 
 Paint is a discriminated union, so TypeScript narrows it:
 
 ```ts
-const paint = n.path()?.fill?.paint
+const paint = n.value.fill()?.paint
 if (paint?.type === 'color') paint.value   // { red, green, blue }
 else paint?.id                             // the gradient or pattern it names
 ```
 
 ## Measure text and geometry
 
-Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`,
-`absLayerBoundingBox()` and `extent()` — in the document's own units, which is
-not the canvas. See [Fitting text to a width](#fitting-text-to-a-width) for why
-that distinction bites.
+Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`
+and `absStrokeBoundingBox()`, and a group `layerBoundingBox()` and
+`absLayerBoundingBox()` — in the document's own units, which is not the
+canvas. `nodeExtent(node)` from `resvg-napi/fit` is where a node will draw:
+a group's layer box, a shape's or a text's stroke box. See
+[Fitting text to a width](#fitting-text-to-a-width) for why the units bite.
 
 ## Fonts
 
@@ -143,25 +157,14 @@ face reports its `families`, `weight`, `style` (`'normal' | 'italic' |
 names the families it wanted and did not get; `pendingImages()` does the same for
 hrefs.
 
-`pendingFonts()` names the families nobody had. `faceOf(glyph)` names the face
-that drew the text instead — the substitution a document-wide list cannot show,
-and the one that survives to print:
-
-```js
-const text = doc.node('title').text()
-text.chunks[0].spans[0].font.families    // ['Brand Sans', 'DejaVu Sans'] — asked for
-for (const glyph of text.layouted[0].positionedGlyphs) {
-  doc.faceOf(glyph)?.postScriptName       // 'DejaVuSans' — what actually drew it
-}
-```
-
-`faceOf` returns `null` only for a glyph from another document: the id a glyph
-carries is a key into the font database its own document was parsed with.
+`pendingFonts()` names the families nobody had. Which face drew each glyph
+is not reachable for now: a glyph's face is a `fontdb` id, which has no JS
+form yet.
 
 ## Paint servers
 
-`linearGradients()`, `radialGradients()`, `patterns()`, `clipPaths()`, `masks()`,
-`filters()` — the paint servers an element's `id` refers to.
+`tree.linearGradients()`, `radialGradients()`, `patterns()`, `clipPaths()`,
+`masks()`, `filters()` — the paint servers an element's `id` refers to.
 
 ## Examples
 
@@ -253,8 +256,8 @@ on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
 
 An Illustrator template says how wide a field may be on the element itself
 (`data-maxwidth="85"`), which is not SVG — resvg drops it. `fit.mjs` reads the
-constraint from the source, measures the rendered text with
-`node(id).extent()`, and compresses the element horizontally, composing a
+constraint from the source, measures the text with `nodeExtent` on the
+`usvg.Tree` you parse it with, and compresses the element horizontally, composing a
 `scale(k 1)` onto whatever transform it already has (the same device those
 templates use by hand):
 
@@ -262,13 +265,13 @@ templates use by hand):
 import { fitTextWidths } from 'resvg-napi/fit.mjs'
 
 const { svg, adjustments, problems } = fitTextWidths(source,
-  (s) => new Resvg(s, { fontFamily }, fonts))
+  (s) => usvg.Tree.fromStr(s, { fontFamily, fontdb: db }))
 // adjustments: [{ id: 'surname', from: 200.23, to: 90, factor: 0.4495, measured: 90.0031 }]
 ```
 
 The limit is read in **the document's own units**, the ones the attribute is
 written in. That matters: `width="85.6mm"` with a `viewBox` 240.94 wide makes usvg
-normalise the tree to 323.53 units, so `extent()` comes back 1.343× larger than
+normalise the tree to 323.53 units, so an extent comes back 1.343× larger than
 anything the file says. Comparing raw canvas widths compresses text that actually
 fits — everything past `limit / 1.343`.
 
@@ -314,8 +317,7 @@ doc.takeLogs()                 // this document's messages, nobody else's
 ## Troubleshooting
 
 **A font family did not apply.** `pendingFonts()` on the parsed document names
-the families it asked for and did not get, and `faceOf(glyph)` names the face
-that was used in their place. Supply them with
+the families it asked for and did not get. Supply them with
 `loadFontFile(path)` or `loadFontData(buffer)` before rendering. Under WASI,
 `loadSystemFonts()` finds nothing inside the sandbox, so every face has to be
 loaded by hand.

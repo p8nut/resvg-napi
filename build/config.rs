@@ -9,7 +9,7 @@
 //! wrapped impl blocks (`PASSES`), the index bounds, and the upstream spellings of
 //! the template's domain shapes.
 
-use napi_gen::{Config, ContentView, Converter, Provider, Shapes, View};
+use napi_gen::{Config, Converter, Provider, Shapes, View};
 
 /// One crate the binding wraps.
 pub struct Upstream {
@@ -44,7 +44,7 @@ pub const GENERATED_FROM: &str = "the resvg/usvg/fontdb sources";
 pub const VOCAB_ROOT: &str = "usvg";
 
 /// One wrapped `impl` block: which upstream type's methods land on which
-/// class, called on what. `receiver` and `prologue` are Rust source.
+/// class, called on what. `receiver` is Rust source.
 pub struct PassSpec {
     pub label: &'static str,
     pub target: &'static str,
@@ -53,14 +53,11 @@ pub struct PassSpec {
     pub ty: &'static str,
     pub receiver: &'static str,
     pub skip: &'static [&'static str],
-    pub prologue: Option<&'static str>,
-    /// The receiver may not exist: every wrapper returns `Result<Option<_>>`.
-    pub optional: bool,
 }
 
-/// The wrapped impl blocks, in emission order. Group runs on SvgNode after
-/// Node: what both define (`id`, the boxes) is taken by Node, and stays
-/// non-null on every node.
+/// The wrapped impl blocks, in emission order. The tree's nodes and
+/// definitions are `usvg.*` projections (`GEN.projections`): the document's
+/// own passes leave out what would hand one out.
 pub const PASSES: &[PassSpec] = &[
     PassSpec {
         label: "fontdb::Database",
@@ -69,8 +66,6 @@ pub const PASSES: &[PassSpec] = &[
         ty: "Database",
         receiver: "self.inner",
         skip: &[],
-        prologue: None,
-        optional: false,
     },
     PassSpec {
         label: "usvg::Tree",
@@ -78,9 +73,15 @@ pub const PASSES: &[PassSpec] = &[
         source: "usvg",
         ty: "Tree",
         receiver: "self.tree",
-        skip: &[],
-        prologue: None,
-        optional: false,
+        // The definition tables: `usvg.Tree`'s, as projections.
+        skip: &[
+            "linear_gradients",
+            "radial_gradients",
+            "patterns",
+            "clip_paths",
+            "masks",
+            "filters",
+        ],
     },
     PassSpec {
         label: "usvg::Group",
@@ -88,41 +89,10 @@ pub const PASSES: &[PassSpec] = &[
         source: "usvg",
         ty: "Group",
         receiver: "self.tree.root()",
-        skip: &["isolate", "should_isolate", "id"],
-        prologue: None,
-        optional: false,
-    },
-    PassSpec {
-        label: "usvg::Node",
-        target: "SvgNode",
-        source: "usvg",
-        ty: "Node",
-        receiver: "__n",
-        skip: &["subroots"],
-        prologue: Some("let __n = self.node()?;"),
-        optional: false,
-    },
-    PassSpec {
-        label: "usvg::Group (on SvgNode)",
-        target: "SvgNode",
-        source: "usvg",
-        ty: "Group",
-        receiver: "__g",
-        skip: &["filters_bounding_box"],
-        prologue: Some("let usvg::Node::Group(__g) = self.node()? else { return Ok(None); };"),
-        optional: true,
+        // `filters` hands out definitions, which are `usvg.Tree`'s.
+        skip: &["isolate", "should_isolate", "id", "filters"],
     },
 ];
-
-/// Methods a pass skips because the API serves them another way: (pass, the
-/// skip as reported, by what).
-pub const COVERED_ELSEWHERE: &[(&str, &str, &str)] = &[(
-    "usvg::Node",
-    "subroots (arg: F)",
-    // A visitor over the groups a node refers to. Each one is already a
-    // handle of its own, so a callback API would add nothing.
-    "clipPath / mask / filters / imageChildren / paint ids",
-)];
 
 /// Crates parsed for vocabulary only (newtypes, aliases), never wrapped.
 pub const VOCAB_CRATES: &[&str] = &["tiny-skia-path", "strict-num"];
@@ -140,24 +110,9 @@ pub const RENAMED: &[(&str, &str)] = &[
     ("from_str", "new"),
     ("from_xmltree", "new"),
     ("from_data_nested", "new"),
-    ("node_by_id", "node"),
     // `to_string` in Rust would collide with `Display::to_string`
     ("to_string", "to_svg_string"),
-    ("root", "children"),
     ("with_face_data", "face_data"),
-];
-
-/// Class names the template defines itself; a generated handle class must not
-/// take one.
-pub const RESERVED: &[&str] = &[
-    "Resvg",
-    "SvgNode",
-    "BBox",
-    "Matrix",
-    "Dimensions",
-    "RawImage",
-    "RenderOptions",
-    "RenderParams",
 ];
 
 /// What the generic phases (`napi-gen`) read: resvg's answers to its questions.
@@ -218,12 +173,6 @@ pub const GEN: Config = Config {
     // slotmap keys, so another database's face could name a slot here, and
     // `removeFace` would delete it.
     arg_standin: Some(("ID", "FontFace", "id_in")),
-    // A definition owning a content group (`root() -> &Group`: a pattern, a
-    // mask, a clip path) gets the node view over it.
-    content_view: Some(ContentView {
-        accessor: ("root", "&Group"),
-        emit: crate::template::content_view,
-    }),
     // Option fields the template wires by hand (opaque class, resolver hooks,
     // xmlwriter's `Indent`); every other unmappable field is dropped.
     hand_wired_fields: &[
@@ -281,10 +230,6 @@ pub const GEN: Config = Config {
         ("svgtypes", "svgtypes"),
         ("resvg", "resvg"),
     ],
-    // A flat class named like a namespaced one (`ClipPath`, `Text`...) is
-    // renamed `LegacyClipPath`, `LegacyText`: napi keeps one constructor per
-    // class name. Both go with the flat surface in step 13 (decision Q36).
-    legacy_prefix: Some("Legacy"),
     // The classes with their constructors, statics, errors and conversions
     // (step 6 of the migration). An allowlist on purpose: tiny-skia alone has
     // forty public types, and these are the ones parsing, rendering and the

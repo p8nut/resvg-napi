@@ -1,8 +1,8 @@
-// The shape of a path node: geometry, fill, stroke. All of it derived -- these
-// types are emitted because `SvgNode.path()` hands one out, and the mapper
-// prunes whatever no exposed method returns.
+// The shape of a path node, `usvg.Path`: geometry, fill, stroke. All of it
+// derived -- the classes are generated from usvg's own types.
 import assert from 'node:assert/strict';
-import { Resvg } from '../index.js';
+import binding from '../index.js';
+const { usvg } = binding;
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80">
   <defs>
@@ -19,12 +19,12 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80">
   <g id="grp"><rect x="0" y="0" width="5" height="5"/></g>
 </svg>`;
 
-const doc = new Resvg(svg);
-const shape = (id) => doc.node(id).path();
+const tree = usvg.Tree.fromStr(svg);
+const shape = (id) => tree.nodeById(id).value;
 
 // 1. geometry, in the document's own units, with the arity `points` promises
 {
-  const { data } = shape('tri');
+  const data = shape('tri').data();
   assert.deepEqual(
     data.map((s) => s.type),
     ['moveTo', 'lineTo', 'quadTo', 'close'],
@@ -37,7 +37,7 @@ const shape = (id) => doc.node(id).path();
 
 // 2. fill: a colour arrives resolved and tagged
 {
-  const { fill } = shape('tri');
+  const fill = shape('tri').fill();
   assert.equal(fill.paint.type, 'color');
   assert.deepEqual(fill.paint.value, { red: 56, green: 189, blue: 248 });
   assert.equal(fill.opacity, 1);
@@ -46,7 +46,7 @@ const shape = (id) => doc.node(id).path();
 
 // 3. stroke carries its own paint plus the dash pattern
 {
-  const { stroke } = shape('tri');
+  const stroke = shape('tri').stroke();
   assert.equal(stroke.paint.type, 'color');
   assert.deepEqual(stroke.paint.value, { red: 0, green: 128, blue: 128 });
   assert.equal(stroke.width, 3);
@@ -56,51 +56,43 @@ const shape = (id) => doc.node(id).path();
 
 // 4. a paint server arrives as an id, not a copy: the document shares one
 //    gradient between every element referencing it. `id` is a field here and a
-//    method on the wrapper classes -- objects get fields, classes get accessors.
+//    method on the classes -- objects get fields, classes get accessors.
 {
-  const g = shape('grad-filled').fill.paint;
+  const g = shape('grad-filled').fill().paint;
   assert.equal(g.type, 'linearGradient');
   assert.equal(g.id, 'grad');
   assert.equal(g.value, undefined, 'a server carries no value, only an id');
-  assert.ok(doc.linearGradients().some((x) => x.id() === g.id), 'id resolves in defs');
+  assert.ok(tree.linearGradients().some((x) => x.id() === g.id), 'id resolves in defs');
 
-  const p = shape('pat-filled').fill.paint;
+  const p = shape('pat-filled').fill().paint;
   assert.equal(p.type, 'pattern');
-  assert.ok(doc.patterns().some((x) => x.id() === p.id));
+  assert.ok(tree.patterns().some((x) => x.id() === p.id));
 }
 
 // 5. usvg normalises a single-stop gradient into the plain colour it is
 //    equivalent to, per the spec. The reference is gone before it reaches us --
 //    worth pinning, it looks like a bug otherwise.
 {
-  const { paint } = shape('one-stop-filled').fill;
+  const { paint } = shape('one-stop-filled').fill();
   assert.equal(paint.type, 'color', 'one stop collapses to a colour');
   assert.deepEqual(paint.value, { red: 0, green: 255, blue: 0 });
 }
 
 // 6. absent is absent: no fill, no stroke, and not a shape at all
-assert.equal(shape('unfilled').fill, undefined, 'fill="none" has no fill');
-assert.equal(shape('tri').stroke !== undefined, true);
-assert.equal(shape('grad-filled').stroke, undefined, 'filled but not stroked');
-assert.equal(doc.node('grp').path(), null, 'a group is not a shape');
+assert.equal(shape('unfilled').fill(), null, 'fill="none" has no fill');
+assert.notEqual(shape('tri').stroke(), null);
+assert.equal(shape('grad-filled').stroke(), null, 'filled but not stroked');
+assert.equal(tree.nodeById('grp').kind, 'group', 'a group is not a shape');
 
-// 7. the boxes agree with what SvgNode already reported, so `path()` is a view
-//    of the same node rather than a second source of truth
+// A group's own properties, read off the group: a path has none of them.
 {
-  const n = doc.node('tri');
-  assert.deepEqual(n.path().boundingBox, n.boundingBox());
-}
-
-// A group's own properties, read off the node. `null` on anything that is
-// not a group, the way `path()` is null on anything that is not a shape.
-{
-  const r = new Resvg(
+  const t = usvg.Tree.fromStr(
     '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">' +
     '<filter id="f"><feOffset dx="1"/></filter>' +
     '<g id="g" transform="translate(3 4)" opacity="0.5" filter="url(#f)"' +
     ' style="mix-blend-mode:multiply;isolation:isolate"><rect id="r" width="5" height="5"/></g></svg>',
   );
-  const g = r.node('g');
+  const g = t.nodeById('g').value;
   assert.deepEqual([g.transform().tx, g.transform().ty], [3, 4]);
   assert.equal(g.opacity(), 0.5);
   assert.equal(g.blendMode(), 'multiply');
@@ -110,8 +102,8 @@ assert.equal(doc.node('grp').path(), null, 'a group is not a shape');
   assert.equal(g.hasChildren(), true);
   assert.ok(g.layerBoundingBox().width > 0);
 
-  const rect = r.node('r');
+  const rect = t.nodeById('r').value;
   for (const m of ['transform', 'opacity', 'blendMode', 'isolate', 'filters', 'layerBoundingBox', 'hasChildren']) {
-    assert.equal(rect[m](), null, `${m} on a path`);
+    assert.equal(rect[m], undefined, `${m} on a path`);
   }
 }

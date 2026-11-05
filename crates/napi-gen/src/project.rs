@@ -258,8 +258,7 @@ impl Classes<'_> {
         let helpers = quote! {
             fn __proj(inner: napi_support::Projection<#up>) -> Self { Self { inner #of_none } }
             fn __from(inner: #up) -> Self { Self::__proj(napi_support::Projection::owned(inner)) }
-            fn wrap(inner: #up, _doc: Doc) -> Self { Self::__from(inner) }
-            fn doc(&self) -> Doc { Doc::default() }
+            fn wrap(inner: #up) -> Self { Self::__from(inner) }
         };
         (def, helpers)
     }

@@ -2,7 +2,7 @@
 // `tree.root()` is a `usvg.Group`, `group.children()` and `tree.nodeById()`
 // hand out `usvg.Node`, a `{ kind, value }` union, and every value is a
 // projection: it keeps the tree alive and finds its node again on each call.
-// `resvg.renderNode` draws one, the same pixels as the flat `renderNodePng`.
+// `resvg.renderNode` draws one, the same pixels as the document cropped to it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -69,6 +69,7 @@ test('bounding boxes, transforms and the inner group\'s filter extent', () => {
   const blurred = usvg.Tree.fromStr(SVG);
   const wrap = blurred.nodeById('wrap').value;
   assert.deepEqual(bbox(wrap.filtersBoundingBox()), [46, 46, 48, 48], 'blur spill');
+  assert.deepEqual(bbox(wrap.absLayerBoundingBox()), [46, 46, 48, 48], 'the filter widens the layer box');
   assert.deepEqual(wrap.filters().map((f) => f.id()), ['f']);
   assert.equal(blurred.nodeById('wrap').value.filtersBoundingBox().width, 48);
 });
@@ -186,7 +187,7 @@ test('a node keeps its tree alive, and finds its node again on each call', async
 });
 
 /**
- * A node's PNG, placed as the flat `renderNodePng` places it: `extent` is the
+ * A node's PNG, sized to its extent: `extent` is the
  * pixmap, and `inner` the box `resvg::render_node` offsets the node by (its
  * `Node::abs_layer_bounding_box`), both `[x, y, width, height]`.
  */
@@ -199,23 +200,35 @@ function nodePng(node, [x, y, w, h], [ix, iy]) {
   return pixmap.encodePng();
 }
 
-test('renderNode draws a node: the flat renderNodePng\'s pixels', () => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
-    <g id="g" transform="translate(10 5)" opacity="0.8">
-      <rect id="box" x="10" y="10" width="40" height="30" fill="tomato" stroke="black" stroke-width="4"/>
-      <circle cx="70" cy="40" r="15" fill="teal"/>
-    </g>
-  </svg>`;
-  const flat = new binding.Resvg(svg);
-  const tree = usvg.Tree.fromStr(svg);
+/** The whole document, cropped to `[x, y, width, height]`. */
+function cropPng(tree, [x, y, w, h]) {
+  const pixmap = new tiny_skia.Pixmap(Math.ceil(w), Math.ceil(h));
+  resvg.render(tree, tiny_skia.Transform.fromTranslate(-x, -y), pixmap);
+  return pixmap.encodePng();
+}
+
+test('renderNode draws a node: the document\'s pixels, cropped to it', () => {
   // A path's extent is its stroke box, and it is offset by its fill box.
-  const box = tree.nodeById('box');
-  const boxPng = nodePng(box, rect(box.value.absStrokeBoundingBox()), rect(box.value.absBoundingBox()));
-  assert.ok(Buffer.compare(boxPng, flat.renderNodePng('box')) === 0);
-  // A group's are both its layer box.
+  const one = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
+    <g transform="translate(10 5)">
+      <rect id="box" x="10" y="10" width="40" height="30" fill="tomato" stroke="black" stroke-width="4"/>
+    </g>
+  </svg>`);
+  const box = one.nodeById('box');
+  const stroke = rect(box.value.absStrokeBoundingBox());
+  assert.ok(Buffer.compare(nodePng(box, stroke, rect(box.value.absBoundingBox())), cropPng(one, stroke)) === 0);
+  // A group's are both its layer box, opacity and all. `renderNode` applies
+  // the group's own transform itself, on top of the one passed in: `g` has
+  // none, so its `absTransform()` is its parent's.
+  const tree = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
+    <g transform="translate(10 5)"><g id="g" opacity="0.8">
+      <rect x="10" y="10" width="40" height="30" fill="tomato" stroke="black" stroke-width="4"/>
+      <circle cx="70" cy="40" r="15" fill="teal"/>
+    </g></g>
+  </svg>`);
   const g = tree.nodeById('g');
   const layer = bbox(g.value.absLayerBoundingBox());
-  assert.ok(Buffer.compare(nodePng(g, layer, layer), flat.renderNodePng('g')) === 0);
+  assert.ok(Buffer.compare(nodePng(g, layer, layer), cropPng(tree, layer)) === 0);
 });
 
 test('renderNode takes only a node reached as one', () => {

@@ -2,9 +2,9 @@
 // Illustrator template expresses it: `data-maxwidth` on the element itself.
 //
 // resvg drops attributes it does not know, so the constraint can only be read
-// from the source. The measurement, on the other hand, comes from the render:
-// `node(id).extent()` is the width the text actually occupies with the fonts in
-// hand -- which is the only number that matters.
+// from the source. The measurement, on the other hand, comes from the parse:
+// the extent of `tree.nodeById(id)` is the width the text actually occupies
+// with the fonts in hand -- which is the only number that matters.
 //
 // The correction is a horizontal scale appended to the element's own transform,
 // matching what these templates already do (`scale(1.11 1)`). A pure geometric
@@ -13,11 +13,28 @@
 
 const ATTR = 'data-maxwidth';
 
+/** A `tiny_skia.Rect` as `{ x, y, width, height }`, null when it has no area. */
+const nonZero = (r) => (r.width() > 0 && r.height() > 0
+  ? { x: r.x(), y: r.y(), width: r.width(), height: r.height() } : null);
+
+/**
+ * Where a `usvg.Node` will draw, contours and filters included: a group's
+ * layer box, a path's or a text's stroke box (its geometric box would clip the
+ * stroke), an image's box. `null` when it has no visible size.
+ */
+export function nodeExtent({ kind, value }) {
+  switch (kind) {
+    case 'group': return value.absLayerBoundingBox();
+    case 'image': return nonZero(value.absBoundingBox());
+    default: return nonZero(value.absStrokeBoundingBox());
+  }
+}
+
 /**
  * Ratio between the tree's canvas units and the document's own coordinates.
  *
  * `width="85.6mm" viewBox="0 0 240.94 …"` makes usvg normalise the tree to the
- * physical size (323.53 units at 96 dpi), so `extent()` comes back 1.343× larger
+ * physical size (323.53 units at 96 dpi), so an extent comes back 1.343× larger
  * than the numbers written in the file. A limit expressed in the document's own
  * units has to be compared in those units, or everything wider than
  * `limit / ratio` gets compressed while it actually fits.
@@ -81,7 +98,7 @@ function withHorizontalScale(tag, attrs, factor) {
 const round = (n) => Math.round(n * 10000) / 10000;
 
 /**
- * Measuring goes through `node(id)`, but a template has no reason to carry ids
+ * Measuring goes through `nodeById(id)`, but a template has no reason to carry ids
  * just to be measurable. Elements that lack one get a generated id, checked
  * against the source so it cannot collide.
  *
@@ -116,7 +133,7 @@ function ensureIds(svg) {
  * Fits every `data-maxwidth` element by compressing it horizontally.
  *
  * @param svg     source, after any templating
- * @param render  (svg) => Resvg instance; supply fonts and options here
+ * @param render  (svg) => usvg.Tree; supply fonts and options here
  * @returns { svg, adjustments, problems }
  */
 export function fitTextWidths(svg, render) {
@@ -128,15 +145,15 @@ export function fitTextWidths(svg, render) {
   svg = ensureIds(svg);
   const constraints = findWidthConstraints(svg);
 
-  let doc;
+  let tree;
   try {
-    doc = render(svg);
+    tree = render(svg);
   } catch (e) {
     return { svg, adjustments: [], problems: [`could not measure: ${e.message}`] };
   }
 
   // Every width below is in the document's own units, like the attribute.
-  const scale = unitScale(svg, doc.width);
+  const scale = unitScale(svg, tree.size().width());
   let out = svg;
   const adjustments = [];
   const splices = [];
@@ -145,7 +162,8 @@ export function fitTextWidths(svg, render) {
       problems.push(`#${c.id}: ${ATTR}="${c.max}" is not a usable width`);
       continue;
     }
-    const extent = doc.node(c.id)?.extent();
+    const node = tree.nodeById(c.id);
+    const extent = node && nodeExtent(node);
     if (!extent) {
       problems.push(`#${c.id} has no visible extent: nothing to fit`);
       continue;
@@ -169,9 +187,10 @@ export function fitTextWidths(svg, render) {
   // Verify rather than trust: report what the widths actually became.
   try {
     const after = render(out);
-    const afterScale = unitScale(out, after.width);
+    const afterScale = unitScale(out, after.size().width());
     for (const a of adjustments) {
-      const got = after.node(a.id)?.extent()?.width;
+      const node = after.nodeById(a.id);
+      const got = node ? nodeExtent(node)?.width : undefined;
       a.measured = got === undefined ? NaN : round(got / afterScale);
     }
   } catch (e) {

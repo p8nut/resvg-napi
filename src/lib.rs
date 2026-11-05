@@ -13,132 +13,6 @@ use napi_support::fs::read_regular;
 use napi_support::logs::Logs;
 use napi_support::{Signal, contained};
 use resvg::{tiny_skia, usvg};
-#[doc = " A color interpolation mode."]
-#[doc = ""]
-#[doc = " The default is `ColorInterpolation::LinearRGB`."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum ColorInterpolation {
-    SRGB,
-    LinearRGB,
-}
-impl From<ColorInterpolation> for usvg::filter::ColorInterpolation {
-    fn from(v: ColorInterpolation) -> Self {
-        match v {
-            ColorInterpolation::SRGB => <usvg::filter::ColorInterpolation>::SRGB,
-            ColorInterpolation::LinearRGB => <usvg::filter::ColorInterpolation>::LinearRGB,
-        }
-    }
-}
-impl From<usvg::filter::ColorInterpolation> for ColorInterpolation {
-    fn from(v: usvg::filter::ColorInterpolation) -> Self {
-        match v {
-            <usvg::filter::ColorInterpolation>::SRGB => ColorInterpolation::SRGB,
-            <usvg::filter::ColorInterpolation>::LinearRGB => ColorInterpolation::LinearRGB,
-        }
-    }
-}
-#[doc = " An edges processing mode."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum EdgeMode {
-    None,
-    Duplicate,
-    Wrap,
-}
-impl From<EdgeMode> for usvg::filter::EdgeMode {
-    fn from(v: EdgeMode) -> Self {
-        match v {
-            EdgeMode::None => <usvg::filter::EdgeMode>::None,
-            EdgeMode::Duplicate => <usvg::filter::EdgeMode>::Duplicate,
-            EdgeMode::Wrap => <usvg::filter::EdgeMode>::Wrap,
-        }
-    }
-}
-impl From<usvg::filter::EdgeMode> for EdgeMode {
-    fn from(v: usvg::filter::EdgeMode) -> Self {
-        match v {
-            <usvg::filter::EdgeMode>::None => EdgeMode::None,
-            <usvg::filter::EdgeMode>::Duplicate => EdgeMode::Duplicate,
-            <usvg::filter::EdgeMode>::Wrap => EdgeMode::Wrap,
-        }
-    }
-}
-#[doc = " A color channel."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum ColorChannel {
-    R,
-    G,
-    B,
-    A,
-}
-impl From<ColorChannel> for usvg::filter::ColorChannel {
-    fn from(v: ColorChannel) -> Self {
-        match v {
-            ColorChannel::R => <usvg::filter::ColorChannel>::R,
-            ColorChannel::G => <usvg::filter::ColorChannel>::G,
-            ColorChannel::B => <usvg::filter::ColorChannel>::B,
-            ColorChannel::A => <usvg::filter::ColorChannel>::A,
-        }
-    }
-}
-impl From<usvg::filter::ColorChannel> for ColorChannel {
-    fn from(v: usvg::filter::ColorChannel) -> Self {
-        match v {
-            <usvg::filter::ColorChannel>::R => ColorChannel::R,
-            <usvg::filter::ColorChannel>::G => ColorChannel::G,
-            <usvg::filter::ColorChannel>::B => ColorChannel::B,
-            <usvg::filter::ColorChannel>::A => ColorChannel::A,
-        }
-    }
-}
-#[doc = " A morphology operation."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum MorphologyOperator {
-    Erode,
-    Dilate,
-}
-impl From<MorphologyOperator> for usvg::filter::MorphologyOperator {
-    fn from(v: MorphologyOperator) -> Self {
-        match v {
-            MorphologyOperator::Erode => <usvg::filter::MorphologyOperator>::Erode,
-            MorphologyOperator::Dilate => <usvg::filter::MorphologyOperator>::Dilate,
-        }
-    }
-}
-impl From<usvg::filter::MorphologyOperator> for MorphologyOperator {
-    fn from(v: usvg::filter::MorphologyOperator) -> Self {
-        match v {
-            <usvg::filter::MorphologyOperator>::Erode => MorphologyOperator::Erode,
-            <usvg::filter::MorphologyOperator>::Dilate => MorphologyOperator::Dilate,
-        }
-    }
-}
-#[doc = " A turbulence kind for the `feTurbulence` filter."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum TurbulenceKind {
-    FractalNoise,
-    Turbulence,
-}
-impl From<TurbulenceKind> for usvg::filter::TurbulenceKind {
-    fn from(v: TurbulenceKind) -> Self {
-        match v {
-            TurbulenceKind::FractalNoise => <usvg::filter::TurbulenceKind>::FractalNoise,
-            TurbulenceKind::Turbulence => <usvg::filter::TurbulenceKind>::Turbulence,
-        }
-    }
-}
-impl From<usvg::filter::TurbulenceKind> for TurbulenceKind {
-    fn from(v: usvg::filter::TurbulenceKind) -> Self {
-        match v {
-            <usvg::filter::TurbulenceKind>::FractalNoise => TurbulenceKind::FractalNoise,
-            <usvg::filter::TurbulenceKind>::Turbulence => TurbulenceKind::Turbulence,
-        }
-    }
-}
 #[doc = " A shape rendering method."]
 #[doc = ""]
 #[doc = " `shape-rendering` attribute in the SVG."]
@@ -302,443 +176,6 @@ impl From<usvg::BlendMode> for BlendMode {
         }
     }
 }
-#[doc = " A spread method."]
-#[doc = ""]
-#[doc = " `spreadMethod` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum SpreadMethod {
-    Pad,
-    Reflect,
-    Repeat,
-}
-impl From<SpreadMethod> for usvg::SpreadMethod {
-    fn from(v: SpreadMethod) -> Self {
-        match v {
-            SpreadMethod::Pad => <usvg::SpreadMethod>::Pad,
-            SpreadMethod::Reflect => <usvg::SpreadMethod>::Reflect,
-            SpreadMethod::Repeat => <usvg::SpreadMethod>::Repeat,
-        }
-    }
-}
-impl From<usvg::SpreadMethod> for SpreadMethod {
-    fn from(v: usvg::SpreadMethod) -> Self {
-        match v {
-            <usvg::SpreadMethod>::Pad => SpreadMethod::Pad,
-            <usvg::SpreadMethod>::Reflect => SpreadMethod::Reflect,
-            <usvg::SpreadMethod>::Repeat => SpreadMethod::Repeat,
-        }
-    }
-}
-#[doc = " A line cap."]
-#[doc = ""]
-#[doc = " `stroke-linecap` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum LineCap {
-    Butt,
-    Round,
-    Square,
-}
-impl From<LineCap> for usvg::LineCap {
-    fn from(v: LineCap) -> Self {
-        match v {
-            LineCap::Butt => <usvg::LineCap>::Butt,
-            LineCap::Round => <usvg::LineCap>::Round,
-            LineCap::Square => <usvg::LineCap>::Square,
-        }
-    }
-}
-impl From<usvg::LineCap> for LineCap {
-    fn from(v: usvg::LineCap) -> Self {
-        match v {
-            <usvg::LineCap>::Butt => LineCap::Butt,
-            <usvg::LineCap>::Round => LineCap::Round,
-            <usvg::LineCap>::Square => LineCap::Square,
-        }
-    }
-}
-#[doc = " A line join."]
-#[doc = ""]
-#[doc = " `stroke-linejoin` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum LineJoin {
-    Miter,
-    MiterClip,
-    Round,
-    Bevel,
-}
-impl From<LineJoin> for usvg::LineJoin {
-    fn from(v: LineJoin) -> Self {
-        match v {
-            LineJoin::Miter => <usvg::LineJoin>::Miter,
-            LineJoin::MiterClip => <usvg::LineJoin>::MiterClip,
-            LineJoin::Round => <usvg::LineJoin>::Round,
-            LineJoin::Bevel => <usvg::LineJoin>::Bevel,
-        }
-    }
-}
-impl From<usvg::LineJoin> for LineJoin {
-    fn from(v: usvg::LineJoin) -> Self {
-        match v {
-            <usvg::LineJoin>::Miter => LineJoin::Miter,
-            <usvg::LineJoin>::MiterClip => LineJoin::MiterClip,
-            <usvg::LineJoin>::Round => LineJoin::Round,
-            <usvg::LineJoin>::Bevel => LineJoin::Bevel,
-        }
-    }
-}
-#[doc = " A fill rule."]
-#[doc = ""]
-#[doc = " `fill-rule` attribute in the SVG."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum FillRule {
-    NonZero,
-    EvenOdd,
-}
-impl From<FillRule> for usvg::FillRule {
-    fn from(v: FillRule) -> Self {
-        match v {
-            FillRule::NonZero => <usvg::FillRule>::NonZero,
-            FillRule::EvenOdd => <usvg::FillRule>::EvenOdd,
-        }
-    }
-}
-impl From<usvg::FillRule> for FillRule {
-    fn from(v: usvg::FillRule) -> Self {
-        match v {
-            <usvg::FillRule>::NonZero => FillRule::NonZero,
-            <usvg::FillRule>::EvenOdd => FillRule::EvenOdd,
-        }
-    }
-}
-#[doc = " A mask type."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum MaskType {
-    Luminance,
-    Alpha,
-}
-impl From<MaskType> for usvg::MaskType {
-    fn from(v: MaskType) -> Self {
-        match v {
-            MaskType::Luminance => <usvg::MaskType>::Luminance,
-            MaskType::Alpha => <usvg::MaskType>::Alpha,
-        }
-    }
-}
-impl From<usvg::MaskType> for MaskType {
-    fn from(v: usvg::MaskType) -> Self {
-        match v {
-            <usvg::MaskType>::Luminance => MaskType::Luminance,
-            <usvg::MaskType>::Alpha => MaskType::Alpha,
-        }
-    }
-}
-#[doc = " Representation of the [`paint-order`] property."]
-#[doc = ""]
-#[doc = " `usvg` will handle `markers` automatically,"]
-#[doc = " therefore we provide only `fill` and `stroke` variants."]
-#[doc = ""]
-#[doc = " [`paint-order`]: https://www.w3.org/TR/SVG2/painting.html#PaintOrder"]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum PaintOrder {
-    FillAndStroke,
-    StrokeAndFill,
-}
-impl From<PaintOrder> for usvg::PaintOrder {
-    fn from(v: PaintOrder) -> Self {
-        match v {
-            PaintOrder::FillAndStroke => <usvg::PaintOrder>::FillAndStroke,
-            PaintOrder::StrokeAndFill => <usvg::PaintOrder>::StrokeAndFill,
-        }
-    }
-}
-impl From<usvg::PaintOrder> for PaintOrder {
-    fn from(v: usvg::PaintOrder) -> Self {
-        match v {
-            <usvg::PaintOrder>::FillAndStroke => PaintOrder::FillAndStroke,
-            <usvg::PaintOrder>::StrokeAndFill => PaintOrder::StrokeAndFill,
-        }
-    }
-}
-#[doc = " A font stretch property."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum FontStretch {
-    UltraCondensed,
-    ExtraCondensed,
-    Condensed,
-    SemiCondensed,
-    Normal,
-    SemiExpanded,
-    Expanded,
-    ExtraExpanded,
-    UltraExpanded,
-}
-impl From<FontStretch> for usvg::FontStretch {
-    fn from(v: FontStretch) -> Self {
-        match v {
-            FontStretch::UltraCondensed => <usvg::FontStretch>::UltraCondensed,
-            FontStretch::ExtraCondensed => <usvg::FontStretch>::ExtraCondensed,
-            FontStretch::Condensed => <usvg::FontStretch>::Condensed,
-            FontStretch::SemiCondensed => <usvg::FontStretch>::SemiCondensed,
-            FontStretch::Normal => <usvg::FontStretch>::Normal,
-            FontStretch::SemiExpanded => <usvg::FontStretch>::SemiExpanded,
-            FontStretch::Expanded => <usvg::FontStretch>::Expanded,
-            FontStretch::ExtraExpanded => <usvg::FontStretch>::ExtraExpanded,
-            FontStretch::UltraExpanded => <usvg::FontStretch>::UltraExpanded,
-        }
-    }
-}
-impl From<usvg::FontStretch> for FontStretch {
-    fn from(v: usvg::FontStretch) -> Self {
-        match v {
-            <usvg::FontStretch>::UltraCondensed => FontStretch::UltraCondensed,
-            <usvg::FontStretch>::ExtraCondensed => FontStretch::ExtraCondensed,
-            <usvg::FontStretch>::Condensed => FontStretch::Condensed,
-            <usvg::FontStretch>::SemiCondensed => FontStretch::SemiCondensed,
-            <usvg::FontStretch>::Normal => FontStretch::Normal,
-            <usvg::FontStretch>::SemiExpanded => FontStretch::SemiExpanded,
-            <usvg::FontStretch>::Expanded => FontStretch::Expanded,
-            <usvg::FontStretch>::ExtraExpanded => FontStretch::ExtraExpanded,
-            <usvg::FontStretch>::UltraExpanded => FontStretch::UltraExpanded,
-        }
-    }
-}
-#[doc = " A font style property."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum FontStyle {
-    Normal,
-    Italic,
-    Oblique,
-}
-impl From<FontStyle> for usvg::FontStyle {
-    fn from(v: FontStyle) -> Self {
-        match v {
-            FontStyle::Normal => <usvg::FontStyle>::Normal,
-            FontStyle::Italic => <usvg::FontStyle>::Italic,
-            FontStyle::Oblique => <usvg::FontStyle>::Oblique,
-        }
-    }
-}
-impl From<usvg::FontStyle> for FontStyle {
-    fn from(v: usvg::FontStyle) -> Self {
-        match v {
-            <usvg::FontStyle>::Normal => FontStyle::Normal,
-            <usvg::FontStyle>::Italic => FontStyle::Italic,
-            <usvg::FontStyle>::Oblique => FontStyle::Oblique,
-        }
-    }
-}
-#[doc = " A dominant baseline property."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum DominantBaseline {
-    Auto,
-    UseScript,
-    NoChange,
-    ResetSize,
-    Ideographic,
-    Alphabetic,
-    Hanging,
-    Mathematical,
-    Central,
-    Middle,
-    TextAfterEdge,
-    TextBeforeEdge,
-}
-impl From<DominantBaseline> for usvg::DominantBaseline {
-    fn from(v: DominantBaseline) -> Self {
-        match v {
-            DominantBaseline::Auto => <usvg::DominantBaseline>::Auto,
-            DominantBaseline::UseScript => <usvg::DominantBaseline>::UseScript,
-            DominantBaseline::NoChange => <usvg::DominantBaseline>::NoChange,
-            DominantBaseline::ResetSize => <usvg::DominantBaseline>::ResetSize,
-            DominantBaseline::Ideographic => <usvg::DominantBaseline>::Ideographic,
-            DominantBaseline::Alphabetic => <usvg::DominantBaseline>::Alphabetic,
-            DominantBaseline::Hanging => <usvg::DominantBaseline>::Hanging,
-            DominantBaseline::Mathematical => <usvg::DominantBaseline>::Mathematical,
-            DominantBaseline::Central => <usvg::DominantBaseline>::Central,
-            DominantBaseline::Middle => <usvg::DominantBaseline>::Middle,
-            DominantBaseline::TextAfterEdge => <usvg::DominantBaseline>::TextAfterEdge,
-            DominantBaseline::TextBeforeEdge => <usvg::DominantBaseline>::TextBeforeEdge,
-        }
-    }
-}
-impl From<usvg::DominantBaseline> for DominantBaseline {
-    fn from(v: usvg::DominantBaseline) -> Self {
-        match v {
-            <usvg::DominantBaseline>::Auto => DominantBaseline::Auto,
-            <usvg::DominantBaseline>::UseScript => DominantBaseline::UseScript,
-            <usvg::DominantBaseline>::NoChange => DominantBaseline::NoChange,
-            <usvg::DominantBaseline>::ResetSize => DominantBaseline::ResetSize,
-            <usvg::DominantBaseline>::Ideographic => DominantBaseline::Ideographic,
-            <usvg::DominantBaseline>::Alphabetic => DominantBaseline::Alphabetic,
-            <usvg::DominantBaseline>::Hanging => DominantBaseline::Hanging,
-            <usvg::DominantBaseline>::Mathematical => DominantBaseline::Mathematical,
-            <usvg::DominantBaseline>::Central => DominantBaseline::Central,
-            <usvg::DominantBaseline>::Middle => DominantBaseline::Middle,
-            <usvg::DominantBaseline>::TextAfterEdge => DominantBaseline::TextAfterEdge,
-            <usvg::DominantBaseline>::TextBeforeEdge => DominantBaseline::TextBeforeEdge,
-        }
-    }
-}
-#[doc = " An alignment baseline property."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum AlignmentBaseline {
-    Auto,
-    Baseline,
-    BeforeEdge,
-    TextBeforeEdge,
-    Middle,
-    Central,
-    AfterEdge,
-    TextAfterEdge,
-    Ideographic,
-    Alphabetic,
-    Hanging,
-    Mathematical,
-}
-impl From<AlignmentBaseline> for usvg::AlignmentBaseline {
-    fn from(v: AlignmentBaseline) -> Self {
-        match v {
-            AlignmentBaseline::Auto => <usvg::AlignmentBaseline>::Auto,
-            AlignmentBaseline::Baseline => <usvg::AlignmentBaseline>::Baseline,
-            AlignmentBaseline::BeforeEdge => <usvg::AlignmentBaseline>::BeforeEdge,
-            AlignmentBaseline::TextBeforeEdge => <usvg::AlignmentBaseline>::TextBeforeEdge,
-            AlignmentBaseline::Middle => <usvg::AlignmentBaseline>::Middle,
-            AlignmentBaseline::Central => <usvg::AlignmentBaseline>::Central,
-            AlignmentBaseline::AfterEdge => <usvg::AlignmentBaseline>::AfterEdge,
-            AlignmentBaseline::TextAfterEdge => <usvg::AlignmentBaseline>::TextAfterEdge,
-            AlignmentBaseline::Ideographic => <usvg::AlignmentBaseline>::Ideographic,
-            AlignmentBaseline::Alphabetic => <usvg::AlignmentBaseline>::Alphabetic,
-            AlignmentBaseline::Hanging => <usvg::AlignmentBaseline>::Hanging,
-            AlignmentBaseline::Mathematical => <usvg::AlignmentBaseline>::Mathematical,
-        }
-    }
-}
-impl From<usvg::AlignmentBaseline> for AlignmentBaseline {
-    fn from(v: usvg::AlignmentBaseline) -> Self {
-        match v {
-            <usvg::AlignmentBaseline>::Auto => AlignmentBaseline::Auto,
-            <usvg::AlignmentBaseline>::Baseline => AlignmentBaseline::Baseline,
-            <usvg::AlignmentBaseline>::BeforeEdge => AlignmentBaseline::BeforeEdge,
-            <usvg::AlignmentBaseline>::TextBeforeEdge => AlignmentBaseline::TextBeforeEdge,
-            <usvg::AlignmentBaseline>::Middle => AlignmentBaseline::Middle,
-            <usvg::AlignmentBaseline>::Central => AlignmentBaseline::Central,
-            <usvg::AlignmentBaseline>::AfterEdge => AlignmentBaseline::AfterEdge,
-            <usvg::AlignmentBaseline>::TextAfterEdge => AlignmentBaseline::TextAfterEdge,
-            <usvg::AlignmentBaseline>::Ideographic => AlignmentBaseline::Ideographic,
-            <usvg::AlignmentBaseline>::Alphabetic => AlignmentBaseline::Alphabetic,
-            <usvg::AlignmentBaseline>::Hanging => AlignmentBaseline::Hanging,
-            <usvg::AlignmentBaseline>::Mathematical => AlignmentBaseline::Mathematical,
-        }
-    }
-}
-#[doc = " A length adjust property."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum LengthAdjust {
-    Spacing,
-    SpacingAndGlyphs,
-}
-impl From<LengthAdjust> for usvg::LengthAdjust {
-    fn from(v: LengthAdjust) -> Self {
-        match v {
-            LengthAdjust::Spacing => <usvg::LengthAdjust>::Spacing,
-            LengthAdjust::SpacingAndGlyphs => <usvg::LengthAdjust>::SpacingAndGlyphs,
-        }
-    }
-}
-impl From<usvg::LengthAdjust> for LengthAdjust {
-    fn from(v: usvg::LengthAdjust) -> Self {
-        match v {
-            <usvg::LengthAdjust>::Spacing => LengthAdjust::Spacing,
-            <usvg::LengthAdjust>::SpacingAndGlyphs => LengthAdjust::SpacingAndGlyphs,
-        }
-    }
-}
-#[doc = " A font optical sizing property."]
-#[doc = ""]
-#[doc = " Controls automatic adjustment of the `opsz` axis in variable fonts"]
-#[doc = " based on font size. Matches CSS `font-optical-sizing`."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum FontOpticalSizing {
-    Auto,
-    None,
-}
-impl From<FontOpticalSizing> for usvg::FontOpticalSizing {
-    fn from(v: FontOpticalSizing) -> Self {
-        match v {
-            FontOpticalSizing::Auto => <usvg::FontOpticalSizing>::Auto,
-            FontOpticalSizing::None => <usvg::FontOpticalSizing>::None,
-        }
-    }
-}
-impl From<usvg::FontOpticalSizing> for FontOpticalSizing {
-    fn from(v: usvg::FontOpticalSizing) -> Self {
-        match v {
-            <usvg::FontOpticalSizing>::Auto => FontOpticalSizing::Auto,
-            <usvg::FontOpticalSizing>::None => FontOpticalSizing::None,
-        }
-    }
-}
-#[doc = " A text chunk anchor property."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum TextAnchor {
-    Start,
-    Middle,
-    End,
-}
-impl From<TextAnchor> for usvg::TextAnchor {
-    fn from(v: TextAnchor) -> Self {
-        match v {
-            TextAnchor::Start => <usvg::TextAnchor>::Start,
-            TextAnchor::Middle => <usvg::TextAnchor>::Middle,
-            TextAnchor::End => <usvg::TextAnchor>::End,
-        }
-    }
-}
-impl From<usvg::TextAnchor> for TextAnchor {
-    fn from(v: usvg::TextAnchor) -> Self {
-        match v {
-            <usvg::TextAnchor>::Start => TextAnchor::Start,
-            <usvg::TextAnchor>::Middle => TextAnchor::Middle,
-            <usvg::TextAnchor>::End => TextAnchor::End,
-        }
-    }
-}
-#[doc = " A writing mode."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum WritingMode {
-    LeftToRight,
-    TopToBottom,
-}
-impl From<WritingMode> for usvg::WritingMode {
-    fn from(v: WritingMode) -> Self {
-        match v {
-            WritingMode::LeftToRight => <usvg::WritingMode>::LeftToRight,
-            WritingMode::TopToBottom => <usvg::WritingMode>::TopToBottom,
-        }
-    }
-}
-impl From<usvg::WritingMode> for WritingMode {
-    fn from(v: usvg::WritingMode) -> Self {
-        match v {
-            <usvg::WritingMode>::LeftToRight => WritingMode::LeftToRight,
-            <usvg::WritingMode>::TopToBottom => WritingMode::TopToBottom,
-        }
-    }
-}
 #[doc = " Allows italic or oblique faces to be selected."]
 #[napi(string_enum = "camelCase")]
 #[derive(Copy, Clone)]
@@ -746,15 +183,6 @@ pub enum FontFaceStyle {
     Normal,
     Italic,
     Oblique,
-}
-impl From<FontFaceStyle> for usvg::fontdb::Style {
-    fn from(v: FontFaceStyle) -> Self {
-        match v {
-            FontFaceStyle::Normal => <usvg::fontdb::Style>::Normal,
-            FontFaceStyle::Italic => <usvg::fontdb::Style>::Italic,
-            FontFaceStyle::Oblique => <usvg::fontdb::Style>::Oblique,
-        }
-    }
 }
 impl From<usvg::fontdb::Style> for FontFaceStyle {
     fn from(v: usvg::fontdb::Style) -> Self {
@@ -1138,18 +566,10 @@ impl std::ops::DerefMut for SharedDb {
 }
 impl FontDatabase {
     #[doc = " Snapshot of a shared database, e.g. the one a parse resolved."]
-    #[doc = " Takes the `Doc` every generated handle is built with, and drops"]
-    #[doc = " it: the database is what a document points at, not part of one."]
-    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>, _doc: Doc) -> Self {
+    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
         Self {
             inner: SharedDb(inner),
         }
-    }
-    #[doc = " Empty on purpose: a face handed out with this database's `Arc`"]
-    #[doc = " would hold a second reference, and the next `loadFont*` would"]
-    #[doc = " then deep-copy the whole database on write."]
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi]
@@ -1182,10 +602,7 @@ impl FontDatabase {
             ..Default::default()
         };
         let id = self.inner.query(&query)?;
-        self.inner
-            .face(id)
-            .cloned()
-            .map(|face| FontFace::wrap(face, self.doc()))
+        self.inner.face(id).cloned().map(FontFace::wrap)
     }
     #[doc = " Raw bytes of a face, by PostScript name (see `faces()`)."]
     #[doc = ""]
@@ -1334,7 +751,7 @@ impl FontDatabase {
         self.inner
             .faces()
             .into_iter()
-            .map(|x| FontFace::wrap(x.clone(), self.doc()))
+            .map(|x| FontFace::wrap(x.clone()))
             .collect()
     }
     #[doc = " Selects a `FaceInfo` by `id`."]
@@ -1344,9 +761,7 @@ impl FontDatabase {
     #[napi]
     pub fn face(&self, id: &FontFace) -> Option<FontFace> {
         let id = id.id_in(&self.inner);
-        self.inner
-            .face(id)
-            .map(|x| FontFace::wrap(x.clone(), self.doc()))
+        self.inner.face(id).map(|x| FontFace::wrap(x.clone()))
     }
     #[doc = " Transfers ownership of shared font data back to the font database. This is the reverse operation"]
     #[doc = " of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped"]
@@ -1631,260 +1046,14 @@ fn font_resolver(misses: Misses) -> usvg::FontResolver<'static> {
         select_fallback: usvg::FontResolver::default_fallback_selector(),
     }
 }
-#[doc = " Plain view of a `Blend`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Blend {
-    pub input1: Either<InputPlain, InputReference>,
-    pub input2: Either<InputPlain, InputReference>,
-    pub mode: BlendMode,
-}
-impl From<&usvg::filter::Blend> for Blend {
-    fn from(v: &usvg::filter::Blend) -> Self {
-        Self {
-            input1: input_to_js(v.input1()),
-            input2: input_to_js(v.input2()),
-            mode: BlendMode::from(v.mode()),
-        }
-    }
-}
-#[doc = " Plain view of a `Color`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Color {
-    pub red: u32,
-    pub green: u32,
-    pub blue: u32,
-}
-impl From<&usvg::Color> for Color {
-    fn from(v: &usvg::Color) -> Self {
-        Self {
-            red: u32::from(v.red),
-            green: u32::from(v.green),
-            blue: u32::from(v.blue),
-        }
-    }
-}
-#[doc = " Plain view of a `ColorMatrix`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ColorMatrix {
-    pub input: Either<InputPlain, InputReference>,
-    pub kind: Either4<
-        ColorMatrixKindPlain,
-        ColorMatrixKindMatrix,
-        ColorMatrixKindSaturate,
-        ColorMatrixKindHueRotate,
-    >,
-}
-impl From<&usvg::filter::ColorMatrix> for ColorMatrix {
-    fn from(v: &usvg::filter::ColorMatrix) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            kind: color_matrix_kind_to_js(v.kind()),
-        }
-    }
-}
-#[doc = " Plain view of a `ComponentTransfer`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ComponentTransfer {
-    pub input: Either<InputPlain, InputReference>,
-    pub func_r: Either5<
-        TransferFunctionPlain,
-        TransferFunctionTable,
-        TransferFunctionDiscrete,
-        TransferFunctionLinear,
-        TransferFunctionGamma,
-    >,
-    pub func_g: Either5<
-        TransferFunctionPlain,
-        TransferFunctionTable,
-        TransferFunctionDiscrete,
-        TransferFunctionLinear,
-        TransferFunctionGamma,
-    >,
-    pub func_b: Either5<
-        TransferFunctionPlain,
-        TransferFunctionTable,
-        TransferFunctionDiscrete,
-        TransferFunctionLinear,
-        TransferFunctionGamma,
-    >,
-    pub func_a: Either5<
-        TransferFunctionPlain,
-        TransferFunctionTable,
-        TransferFunctionDiscrete,
-        TransferFunctionLinear,
-        TransferFunctionGamma,
-    >,
-}
-impl From<&usvg::filter::ComponentTransfer> for ComponentTransfer {
-    fn from(v: &usvg::filter::ComponentTransfer) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            func_r: transfer_function_to_js(v.func_r()),
-            func_g: transfer_function_to_js(v.func_g()),
-            func_b: transfer_function_to_js(v.func_b()),
-            func_a: transfer_function_to_js(v.func_a()),
-        }
-    }
-}
-#[doc = " Plain view of a `Composite`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Composite {
-    pub input1: Either<InputPlain, InputReference>,
-    pub input2: Either<InputPlain, InputReference>,
-    pub operator: Either<CompositeOperatorPlain, CompositeOperatorArithmetic>,
-}
-impl From<&usvg::filter::Composite> for Composite {
-    fn from(v: &usvg::filter::Composite) -> Self {
-        Self {
-            input1: input_to_js(v.input1()),
-            input2: input_to_js(v.input2()),
-            operator: composite_operator_to_js(&v.operator()),
-        }
-    }
-}
-#[doc = " Plain view of a `ConvolveMatrix`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ConvolveMatrix {
-    pub input: Either<InputPlain, InputReference>,
-    pub matrix: ConvolveMatrixData,
-    pub divisor: f64,
-    pub bias: f64,
-    pub edge_mode: EdgeMode,
-    pub preserve_alpha: bool,
-}
-impl From<&usvg::filter::ConvolveMatrix> for ConvolveMatrix {
-    fn from(v: &usvg::filter::ConvolveMatrix) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            matrix: ConvolveMatrixData::from(v.matrix()),
-            divisor: f64::from(v.divisor().get()),
-            bias: f64::from(v.bias()),
-            edge_mode: EdgeMode::from(v.edge_mode()),
-            preserve_alpha: v.preserve_alpha(),
-        }
-    }
-}
-#[doc = " Plain view of a `ConvolveMatrixData`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ConvolveMatrixData {
-    pub target_x: u32,
-    pub target_y: u32,
-    pub columns: u32,
-    pub rows: u32,
-    pub data: Vec<f64>,
-}
-impl From<&usvg::filter::ConvolveMatrixData> for ConvolveMatrixData {
-    fn from(v: &usvg::filter::ConvolveMatrixData) -> Self {
-        Self {
-            target_x: v.target_x(),
-            target_y: v.target_y(),
-            columns: v.columns(),
-            rows: v.rows(),
-            data: v.data().iter().map(|v| f64::from(*v)).collect(),
-        }
-    }
-}
-#[doc = " Plain view of a `DiffuseLighting`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct DiffuseLighting {
-    pub input: Either<InputPlain, InputReference>,
-    pub surface_scale: f64,
-    pub diffuse_constant: f64,
-    pub lighting_color: Color,
-    pub light_source: Either3<LightSourceDistantLight, LightSourcePointLight, LightSourceSpotLight>,
-}
-impl From<&usvg::filter::DiffuseLighting> for DiffuseLighting {
-    fn from(v: &usvg::filter::DiffuseLighting) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            surface_scale: f64::from(v.surface_scale()),
-            diffuse_constant: f64::from(v.diffuse_constant()),
-            lighting_color: Color::from(&v.lighting_color()),
-            light_source: light_source_to_js(&v.light_source()),
-        }
-    }
-}
-#[doc = " Plain view of a `DisplacementMap`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct DisplacementMap {
-    pub input1: Either<InputPlain, InputReference>,
-    pub input2: Either<InputPlain, InputReference>,
-    pub scale: f64,
-    pub x_channel_selector: ColorChannel,
-    pub y_channel_selector: ColorChannel,
-}
-impl From<&usvg::filter::DisplacementMap> for DisplacementMap {
-    fn from(v: &usvg::filter::DisplacementMap) -> Self {
-        Self {
-            input1: input_to_js(v.input1()),
-            input2: input_to_js(v.input2()),
-            scale: f64::from(v.scale()),
-            x_channel_selector: ColorChannel::from(v.x_channel_selector()),
-            y_channel_selector: ColorChannel::from(v.y_channel_selector()),
-        }
-    }
-}
-#[doc = " Plain view of a `DistantLight`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct DistantLight {
-    pub azimuth: f64,
-    pub elevation: f64,
-}
-impl From<&usvg::filter::DistantLight> for DistantLight {
-    fn from(v: &usvg::filter::DistantLight) -> Self {
-        Self {
-            azimuth: f64::from(v.azimuth),
-            elevation: f64::from(v.elevation),
-        }
-    }
-}
-#[doc = " Plain view of a `DropShadow`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct DropShadow {
-    pub input: Either<InputPlain, InputReference>,
-    pub dx: f64,
-    pub dy: f64,
-    pub std_dev_x: f64,
-    pub std_dev_y: f64,
-    pub color: Color,
-    pub opacity: f64,
-}
-impl From<&usvg::filter::DropShadow> for DropShadow {
-    fn from(v: &usvg::filter::DropShadow) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            dx: f64::from(v.dx()),
-            dy: f64::from(v.dy()),
-            std_dev_x: f64::from(v.std_dev_x().get()),
-            std_dev_y: f64::from(v.std_dev_y().get()),
-            color: Color::from(&v.color()),
-            opacity: f64::from(v.opacity().get()),
-        }
-    }
-}
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi]
 pub struct FontFace {
     inner: usvg::fontdb::FaceInfo,
-    doc: Doc,
 }
 impl FontFace {
-    fn wrap(inner: usvg::fontdb::FaceInfo, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
+        Self { inner }
     }
 }
 #[napi]
@@ -1920,1958 +1089,6 @@ impl FontFace {
         v.monospaced
     }
 }
-#[doc = " Plain view of a `Fill`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Fill {
-    pub paint: Either4<PaintColor, PaintLinearGradient, PaintRadialGradient, PaintPattern>,
-    pub opacity: f64,
-    pub rule: FillRule,
-}
-impl From<&usvg::Fill> for Fill {
-    fn from(v: &usvg::Fill) -> Self {
-        Self {
-            paint: paint_to_js(v.paint()),
-            opacity: f64::from(v.opacity().get()),
-            rule: FillRule::from(v.rule()),
-        }
-    }
-}
-#[doc = " Plain view of a `Flood`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Flood {
-    pub color: Color,
-    pub opacity: f64,
-}
-impl From<&usvg::filter::Flood> for Flood {
-    fn from(v: &usvg::filter::Flood) -> Self {
-        Self {
-            color: Color::from(&v.color()),
-            opacity: f64::from(v.opacity().get()),
-        }
-    }
-}
-#[doc = " Read-only view of a `Font`."]
-#[napi]
-pub struct LegacyFont {
-    inner: usvg::Font,
-    doc: Doc,
-}
-impl LegacyFont {
-    fn wrap(inner: usvg::Font, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyFont {
-    #[napi(getter)]
-    pub fn style(&self) -> FontStyle {
-        let v = &self.inner;
-        FontStyle::from(v.style())
-    }
-    #[napi(getter)]
-    pub fn stretch(&self) -> FontStretch {
-        let v = &self.inner;
-        FontStretch::from(v.stretch())
-    }
-    #[napi(getter)]
-    pub fn weight(&self) -> u32 {
-        let v = &self.inner;
-        u32::from(v.weight())
-    }
-    #[napi(getter)]
-    pub fn variations(&self) -> Vec<FontVariation> {
-        let v = &self.inner;
-        v.variations().iter().map(FontVariation::from).collect()
-    }
-}
-#[doc = " Plain view of a `FontVariation`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct FontVariation {
-    pub tag: String,
-    pub value: f64,
-}
-impl From<&usvg::FontVariation> for FontVariation {
-    fn from(v: &usvg::FontVariation) -> Self {
-        Self {
-            tag: String::from_utf8_lossy(&v.tag.clone()).into_owned(),
-            value: f64::from(v.value),
-        }
-    }
-}
-#[doc = " Plain view of a `GaussianBlur`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct GaussianBlur {
-    pub input: Either<InputPlain, InputReference>,
-    pub std_dev_x: f64,
-    pub std_dev_y: f64,
-}
-impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
-    fn from(v: &usvg::filter::GaussianBlur) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            std_dev_x: f64::from(v.std_dev_x().get()),
-            std_dev_y: f64::from(v.std_dev_y().get()),
-        }
-    }
-}
-#[doc = " Read-only view of an `Image`."]
-#[napi]
-pub struct LegacyImage {
-    inner: usvg::Image,
-    doc: Doc,
-}
-impl LegacyImage {
-    fn wrap(inner: usvg::Image, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyImage {
-    #[napi(getter)]
-    pub fn id(&self) -> String {
-        let v = &self.inner;
-        v.id().to_string()
-    }
-    #[napi(getter)]
-    pub fn is_visible(&self) -> bool {
-        let v = &self.inner;
-        v.is_visible()
-    }
-    #[napi(getter)]
-    pub fn size(&self) -> Dimensions {
-        let v = &self.inner;
-        Dimensions::from(v.size())
-    }
-    #[napi(getter)]
-    pub fn rendering_mode(&self) -> ImageRendering {
-        let v = &self.inner;
-        ImageRendering::from(v.rendering_mode())
-    }
-    #[napi(getter)]
-    pub fn kind(
-        &self,
-    ) -> Either5<
-        LegacyImageKindJpeg,
-        LegacyImageKindPng,
-        LegacyImageKindGif,
-        LegacyImageKindWebp,
-        ImageKindSvg,
-    > {
-        let v = &self.inner;
-        image_kind_to_js(v.kind())
-    }
-    #[napi(getter)]
-    pub fn abs_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.abs_transform())
-    }
-    #[napi(getter)]
-    pub fn bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.bounding_box())
-    }
-    #[napi(getter)]
-    pub fn abs_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.abs_bounding_box())
-    }
-}
-#[doc = " Plain view of a `Merge`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Merge {
-    pub inputs: Vec<Either<InputPlain, InputReference>>,
-}
-impl From<&usvg::filter::Merge> for Merge {
-    fn from(v: &usvg::filter::Merge) -> Self {
-        Self {
-            inputs: v.inputs().iter().map(input_to_js).collect(),
-        }
-    }
-}
-#[doc = " Plain view of a `Morphology`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Morphology {
-    pub input: Either<InputPlain, InputReference>,
-    pub operator: MorphologyOperator,
-    pub radius_x: f64,
-    pub radius_y: f64,
-}
-impl From<&usvg::filter::Morphology> for Morphology {
-    fn from(v: &usvg::filter::Morphology) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            operator: MorphologyOperator::from(v.operator()),
-            radius_x: f64::from(v.radius_x().get()),
-            radius_y: f64::from(v.radius_y().get()),
-        }
-    }
-}
-#[doc = " Plain view of a `Offset`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Offset {
-    pub input: Either<InputPlain, InputReference>,
-    pub dx: f64,
-    pub dy: f64,
-}
-impl From<&usvg::filter::Offset> for Offset {
-    fn from(v: &usvg::filter::Offset) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            dx: f64::from(v.dx()),
-            dy: f64::from(v.dy()),
-        }
-    }
-}
-#[doc = " Plain view of a `Path`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Path {
-    pub id: String,
-    pub is_visible: bool,
-    pub fill: Option<Fill>,
-    pub stroke: Option<Stroke>,
-    pub paint_order: PaintOrder,
-    pub rendering_mode: ShapeRendering,
-    pub data: Vec<PathSegment>,
-    pub abs_transform: Matrix,
-    pub bounding_box: BBox,
-    pub abs_bounding_box: BBox,
-    pub stroke_bounding_box: BBox,
-    pub abs_stroke_bounding_box: BBox,
-}
-impl From<&usvg::Path> for Path {
-    fn from(v: &usvg::Path) -> Self {
-        Self {
-            id: v.id().to_string(),
-            is_visible: v.is_visible(),
-            fill: v.fill().map(Fill::from),
-            stroke: v.stroke().map(Stroke::from),
-            paint_order: PaintOrder::from(v.paint_order()),
-            rendering_mode: ShapeRendering::from(v.rendering_mode()),
-            data: path_segments(v.data()),
-            abs_transform: Matrix::from(v.abs_transform()),
-            bounding_box: BBox::from(v.bounding_box()),
-            abs_bounding_box: BBox::from(v.abs_bounding_box()),
-            stroke_bounding_box: BBox::from(v.stroke_bounding_box()),
-            abs_stroke_bounding_box: BBox::from(v.abs_stroke_bounding_box()),
-        }
-    }
-}
-#[doc = " Plain view of a `PointLight`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct PointLight {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-impl From<&usvg::filter::PointLight> for PointLight {
-    fn from(v: &usvg::filter::PointLight) -> Self {
-        Self {
-            x: f64::from(v.x),
-            y: f64::from(v.y),
-            z: f64::from(v.z),
-        }
-    }
-}
-#[doc = " Read-only view of a `PositionedGlyph`."]
-#[napi]
-pub struct LegacyPositionedGlyph {
-    inner: usvg::layout::PositionedGlyph,
-    doc: Doc,
-}
-impl LegacyPositionedGlyph {
-    fn wrap(inner: usvg::layout::PositionedGlyph, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyPositionedGlyph {
-    #[napi(getter)]
-    pub fn font_size(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.font_size())
-    }
-    #[napi(getter)]
-    pub fn transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.transform())
-    }
-    #[napi(getter)]
-    pub fn outline_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.outline_transform())
-    }
-    #[napi(getter)]
-    pub fn svg_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.svg_transform())
-    }
-    #[napi(getter)]
-    pub fn colr_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.colr_transform())
-    }
-    #[napi(getter)]
-    pub fn id(&self) -> u32 {
-        let v = &self.inner;
-        u32::from(v.id.0)
-    }
-    #[napi(getter)]
-    pub fn text(&self) -> String {
-        let v = &self.inner;
-        v.text.clone().to_string()
-    }
-}
-#[doc = " Plain view of a `Primitive`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Primitive {
-    pub rect: BBox,
-    pub color_interpolation: ColorInterpolation,
-    pub result: String,
-    pub kind: Either17<
-        KindBlend,
-        KindColorMatrix,
-        KindComponentTransfer,
-        KindComposite,
-        KindConvolveMatrix,
-        KindDiffuseLighting,
-        KindDisplacementMap,
-        KindDropShadow,
-        KindFlood,
-        KindGaussianBlur,
-        KindImage,
-        KindMerge,
-        KindMorphology,
-        KindOffset,
-        KindSpecularLighting,
-        KindTile,
-        KindTurbulence,
-    >,
-}
-impl From<&usvg::filter::Primitive> for Primitive {
-    fn from(v: &usvg::filter::Primitive) -> Self {
-        Self {
-            rect: BBox::from(v.rect()),
-            color_interpolation: ColorInterpolation::from(v.color_interpolation()),
-            result: v.result().to_string(),
-            kind: kind_to_js(v.kind()),
-        }
-    }
-}
-#[doc = " Read-only view of a `Span`."]
-#[napi]
-pub struct LegacySpan {
-    inner: usvg::layout::Span,
-    doc: Doc,
-}
-impl LegacySpan {
-    fn wrap(inner: usvg::layout::Span, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacySpan {
-    #[napi(getter)]
-    pub fn fill(&self) -> Option<Fill> {
-        let v = &self.inner;
-        v.fill.clone().map(|x| Fill::from(&x))
-    }
-    #[napi(getter)]
-    pub fn stroke(&self) -> Option<Stroke> {
-        let v = &self.inner;
-        v.stroke.clone().map(|x| Stroke::from(&x))
-    }
-    #[napi(getter)]
-    pub fn paint_order(&self) -> PaintOrder {
-        let v = &self.inner;
-        PaintOrder::from(v.paint_order)
-    }
-    #[napi(getter)]
-    pub fn font_size(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.font_size.get())
-    }
-    #[napi(getter)]
-    pub fn variations(&self) -> Vec<FontVariation> {
-        let v = &self.inner;
-        v.variations
-            .clone()
-            .iter()
-            .map(FontVariation::from)
-            .collect()
-    }
-    #[napi(getter)]
-    pub fn font_optical_sizing(&self) -> FontOpticalSizing {
-        let v = &self.inner;
-        FontOpticalSizing::from(v.font_optical_sizing)
-    }
-    #[napi(getter)]
-    pub fn visible(&self) -> bool {
-        let v = &self.inner;
-        v.visible
-    }
-    #[napi(getter)]
-    pub fn positioned_glyphs(&self) -> Vec<LegacyPositionedGlyph> {
-        let v = &self.inner;
-        v.positioned_glyphs
-            .clone()
-            .iter()
-            .map(|x| LegacyPositionedGlyph::wrap(x.clone(), self.doc()))
-            .collect()
-    }
-    #[napi(getter, ts_return_type = "Path | null")]
-    pub fn underline(&self) -> Option<Path> {
-        let v = &self.inner;
-        v.underline.clone().map(|x| Path::from(&x))
-    }
-    #[napi(getter, ts_return_type = "Path | null")]
-    pub fn overline(&self) -> Option<Path> {
-        let v = &self.inner;
-        v.overline.clone().map(|x| Path::from(&x))
-    }
-    #[napi(getter, ts_return_type = "Path | null")]
-    pub fn line_through(&self) -> Option<Path> {
-        let v = &self.inner;
-        v.line_through.clone().map(|x| Path::from(&x))
-    }
-}
-#[doc = " Plain view of a `SpecularLighting`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct SpecularLighting {
-    pub input: Either<InputPlain, InputReference>,
-    pub surface_scale: f64,
-    pub specular_constant: f64,
-    pub specular_exponent: f64,
-    pub lighting_color: Color,
-    pub light_source: Either3<LightSourceDistantLight, LightSourcePointLight, LightSourceSpotLight>,
-}
-impl From<&usvg::filter::SpecularLighting> for SpecularLighting {
-    fn from(v: &usvg::filter::SpecularLighting) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-            surface_scale: f64::from(v.surface_scale()),
-            specular_constant: f64::from(v.specular_constant()),
-            specular_exponent: f64::from(v.specular_exponent()),
-            lighting_color: Color::from(&v.lighting_color()),
-            light_source: light_source_to_js(&v.light_source()),
-        }
-    }
-}
-#[doc = " Plain view of a `SpotLight`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct SpotLight {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-    pub points_at_x: f64,
-    pub points_at_y: f64,
-    pub points_at_z: f64,
-    pub specular_exponent: f64,
-    pub limiting_cone_angle: Option<f64>,
-}
-impl From<&usvg::filter::SpotLight> for SpotLight {
-    fn from(v: &usvg::filter::SpotLight) -> Self {
-        Self {
-            x: f64::from(v.x),
-            y: f64::from(v.y),
-            z: f64::from(v.z),
-            points_at_x: f64::from(v.points_at_x),
-            points_at_y: f64::from(v.points_at_y),
-            points_at_z: f64::from(v.points_at_z),
-            specular_exponent: f64::from(v.specular_exponent.get()),
-            limiting_cone_angle: v.limiting_cone_angle.map(f64::from),
-        }
-    }
-}
-#[doc = " Plain view of a `Stop`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Stop {
-    pub offset: f64,
-    pub color: Color,
-    pub opacity: f64,
-}
-impl From<&usvg::Stop> for Stop {
-    fn from(v: &usvg::Stop) -> Self {
-        Self {
-            offset: f64::from(v.offset().get()),
-            color: Color::from(&v.color()),
-            opacity: f64::from(v.opacity().get()),
-        }
-    }
-}
-#[doc = " Plain view of a `Stroke`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Stroke {
-    pub paint: Either4<PaintColor, PaintLinearGradient, PaintRadialGradient, PaintPattern>,
-    pub dasharray: Option<Vec<f64>>,
-    pub dashoffset: f64,
-    pub miterlimit: f64,
-    pub opacity: f64,
-    pub width: f64,
-    pub linecap: LineCap,
-    pub linejoin: LineJoin,
-}
-impl From<&usvg::Stroke> for Stroke {
-    fn from(v: &usvg::Stroke) -> Self {
-        Self {
-            paint: paint_to_js(v.paint()),
-            dasharray: v
-                .dasharray()
-                .map(|v| v.iter().map(|x| f64::from(*x)).collect()),
-            dashoffset: f64::from(v.dashoffset()),
-            miterlimit: f64::from(v.miterlimit().get()),
-            opacity: f64::from(v.opacity().get()),
-            width: f64::from(v.width().get()),
-            linecap: LineCap::from(v.linecap()),
-            linejoin: LineJoin::from(v.linejoin()),
-        }
-    }
-}
-#[doc = " Read-only view of a `Text`."]
-#[napi]
-pub struct LegacyText {
-    inner: usvg::Text,
-    doc: Doc,
-}
-impl LegacyText {
-    fn wrap(inner: usvg::Text, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyText {
-    #[napi(getter)]
-    pub fn id(&self) -> String {
-        let v = &self.inner;
-        v.id().to_string()
-    }
-    #[napi(getter)]
-    pub fn rendering_mode(&self) -> TextRendering {
-        let v = &self.inner;
-        TextRendering::from(v.rendering_mode())
-    }
-    #[napi(getter)]
-    pub fn dx(&self) -> Vec<f64> {
-        let v = &self.inner;
-        v.dx().iter().map(|v| f64::from(*v)).collect()
-    }
-    #[napi(getter)]
-    pub fn dy(&self) -> Vec<f64> {
-        let v = &self.inner;
-        v.dy().iter().map(|v| f64::from(*v)).collect()
-    }
-    #[napi(getter)]
-    pub fn rotate(&self) -> Vec<f64> {
-        let v = &self.inner;
-        v.rotate().iter().map(|v| f64::from(*v)).collect()
-    }
-    #[napi(getter)]
-    pub fn writing_mode(&self) -> WritingMode {
-        let v = &self.inner;
-        WritingMode::from(v.writing_mode())
-    }
-    #[napi(getter)]
-    pub fn chunks(&self) -> Vec<LegacyTextChunk> {
-        let v = &self.inner;
-        v.chunks()
-            .iter()
-            .map(|x| LegacyTextChunk::wrap(x.clone(), self.doc()))
-            .collect()
-    }
-    #[napi(getter)]
-    pub fn abs_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.abs_transform())
-    }
-    #[napi(getter)]
-    pub fn bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.bounding_box())
-    }
-    #[napi(getter)]
-    pub fn abs_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.abs_bounding_box())
-    }
-    #[napi(getter)]
-    pub fn stroke_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.stroke_bounding_box())
-    }
-    #[napi(getter)]
-    pub fn abs_stroke_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.abs_stroke_bounding_box())
-    }
-    #[napi(getter)]
-    pub fn layouted(&self) -> Vec<LegacySpan> {
-        let v = &self.inner;
-        v.layouted()
-            .iter()
-            .map(|x| LegacySpan::wrap(x.clone(), self.doc()))
-            .collect()
-    }
-}
-#[doc = " Read-only view of a `TextChunk`."]
-#[napi]
-pub struct LegacyTextChunk {
-    inner: usvg::TextChunk,
-    doc: Doc,
-}
-impl LegacyTextChunk {
-    fn wrap(inner: usvg::TextChunk, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyTextChunk {
-    #[napi(getter)]
-    pub fn x(&self) -> Option<f64> {
-        let v = &self.inner;
-        v.x().map(f64::from)
-    }
-    #[napi(getter)]
-    pub fn y(&self) -> Option<f64> {
-        let v = &self.inner;
-        v.y().map(f64::from)
-    }
-    #[napi(getter)]
-    pub fn anchor(&self) -> TextAnchor {
-        let v = &self.inner;
-        TextAnchor::from(v.anchor())
-    }
-    #[napi(getter)]
-    pub fn spans(&self) -> Vec<LegacyTextSpan> {
-        let v = &self.inner;
-        v.spans()
-            .iter()
-            .map(|x| LegacyTextSpan::wrap(x.clone(), self.doc()))
-            .collect()
-    }
-    #[napi(getter)]
-    pub fn text_flow(&self) -> Either<TextFlowPlain, TextFlowPath> {
-        let v = &self.inner;
-        text_flow_to_js(&v.text_flow())
-    }
-    #[napi(getter)]
-    pub fn text(&self) -> String {
-        let v = &self.inner;
-        v.text().to_string()
-    }
-}
-#[doc = " Plain view of a `TextDecoration`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TextDecoration {
-    pub underline: Option<TextDecorationStyle>,
-    pub overline: Option<TextDecorationStyle>,
-    pub line_through: Option<TextDecorationStyle>,
-}
-impl From<&usvg::TextDecoration> for TextDecoration {
-    fn from(v: &usvg::TextDecoration) -> Self {
-        Self {
-            underline: v.underline().map(TextDecorationStyle::from),
-            overline: v.overline().map(TextDecorationStyle::from),
-            line_through: v.line_through().map(TextDecorationStyle::from),
-        }
-    }
-}
-#[doc = " Plain view of a `TextDecorationStyle`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TextDecorationStyle {
-    pub fill: Option<Fill>,
-    pub stroke: Option<Stroke>,
-}
-impl From<&usvg::TextDecorationStyle> for TextDecorationStyle {
-    fn from(v: &usvg::TextDecorationStyle) -> Self {
-        Self {
-            fill: v.fill().map(Fill::from),
-            stroke: v.stroke().map(Stroke::from),
-        }
-    }
-}
-#[doc = " Read-only view of a `TextSpan`."]
-#[napi]
-pub struct LegacyTextSpan {
-    inner: usvg::TextSpan,
-    doc: Doc,
-}
-impl LegacyTextSpan {
-    fn wrap(inner: usvg::TextSpan, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyTextSpan {
-    #[napi(getter)]
-    pub fn start(&self) -> u32 {
-        let v = &self.inner;
-        u32::try_from(v.start()).unwrap_or(u32::MAX)
-    }
-    #[napi(getter)]
-    pub fn end(&self) -> u32 {
-        let v = &self.inner;
-        u32::try_from(v.end()).unwrap_or(u32::MAX)
-    }
-    #[napi(getter)]
-    pub fn fill(&self) -> Option<Fill> {
-        let v = &self.inner;
-        v.fill().map(Fill::from)
-    }
-    #[napi(getter)]
-    pub fn stroke(&self) -> Option<Stroke> {
-        let v = &self.inner;
-        v.stroke().map(Stroke::from)
-    }
-    #[napi(getter)]
-    pub fn paint_order(&self) -> PaintOrder {
-        let v = &self.inner;
-        PaintOrder::from(v.paint_order())
-    }
-    #[napi(getter)]
-    pub fn font(&self) -> LegacyFont {
-        let v = &self.inner;
-        LegacyFont::wrap(v.font().clone(), self.doc())
-    }
-    #[napi(getter)]
-    pub fn font_size(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.font_size().get())
-    }
-    #[napi(getter)]
-    pub fn small_caps(&self) -> bool {
-        let v = &self.inner;
-        v.small_caps()
-    }
-    #[napi(getter)]
-    pub fn apply_kerning(&self) -> bool {
-        let v = &self.inner;
-        v.apply_kerning()
-    }
-    #[napi(getter)]
-    pub fn font_optical_sizing(&self) -> FontOpticalSizing {
-        let v = &self.inner;
-        FontOpticalSizing::from(v.font_optical_sizing())
-    }
-    #[napi(getter)]
-    pub fn decoration(&self) -> TextDecoration {
-        let v = &self.inner;
-        TextDecoration::from(v.decoration())
-    }
-    #[napi(getter)]
-    pub fn dominant_baseline(&self) -> DominantBaseline {
-        let v = &self.inner;
-        DominantBaseline::from(v.dominant_baseline())
-    }
-    #[napi(getter)]
-    pub fn alignment_baseline(&self) -> AlignmentBaseline {
-        let v = &self.inner;
-        AlignmentBaseline::from(v.alignment_baseline())
-    }
-    #[napi(getter)]
-    pub fn baseline_shift(&self) -> Vec<Either<BaselineShiftPlain, BaselineShiftNumber>> {
-        let v = &self.inner;
-        v.baseline_shift()
-            .iter()
-            .map(baseline_shift_to_js)
-            .collect()
-    }
-    #[napi(getter)]
-    pub fn is_visible(&self) -> bool {
-        let v = &self.inner;
-        v.is_visible()
-    }
-    #[napi(getter)]
-    pub fn letter_spacing(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.letter_spacing())
-    }
-    #[napi(getter)]
-    pub fn word_spacing(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.word_spacing())
-    }
-    #[napi(getter)]
-    pub fn text_length(&self) -> Option<f64> {
-        let v = &self.inner;
-        v.text_length().map(f64::from)
-    }
-    #[napi(getter)]
-    pub fn length_adjust(&self) -> LengthAdjust {
-        let v = &self.inner;
-        LengthAdjust::from(v.length_adjust())
-    }
-}
-#[doc = " Plain view of a `Tile`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Tile {
-    pub input: Either<InputPlain, InputReference>,
-}
-impl From<&usvg::filter::Tile> for Tile {
-    fn from(v: &usvg::filter::Tile) -> Self {
-        Self {
-            input: input_to_js(v.input()),
-        }
-    }
-}
-#[doc = " Plain view of a `Turbulence`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct Turbulence {
-    pub base_frequency_x: f64,
-    pub base_frequency_y: f64,
-    pub num_octaves: u32,
-    pub seed: i32,
-    pub stitch_tiles: bool,
-    pub kind: TurbulenceKind,
-}
-impl From<&usvg::filter::Turbulence> for Turbulence {
-    fn from(v: &usvg::filter::Turbulence) -> Self {
-        Self {
-            base_frequency_x: f64::from(v.base_frequency_x().get()),
-            base_frequency_y: f64::from(v.base_frequency_y().get()),
-            num_octaves: v.num_octaves(),
-            seed: v.seed(),
-            stitch_tiles: v.stitch_tiles(),
-            kind: TurbulenceKind::from(v.kind()),
-        }
-    }
-}
-#[doc = " The payload-free variants of `BaselineShift`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct BaselineShiftPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
-    pub r#type: String,
-}
-#[doc = " `BaselineShift::Number`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct BaselineShiftNumber {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'number'")]
-    pub r#type: String,
-    pub value: f64,
-}
-fn baseline_shift_to_js(
-    v: &usvg::BaselineShift,
-) -> Either<BaselineShiftPlain, BaselineShiftNumber> {
-    match v {
-        usvg::BaselineShift::Baseline => Either::A(BaselineShiftPlain {
-            r#type: "baseline".to_string(),
-        }),
-        usvg::BaselineShift::Subscript => Either::A(BaselineShiftPlain {
-            r#type: "subscript".to_string(),
-        }),
-        usvg::BaselineShift::Superscript => Either::A(BaselineShiftPlain {
-            r#type: "superscript".to_string(),
-        }),
-        usvg::BaselineShift::Number(v) => Either::B(BaselineShiftNumber {
-            r#type: "number".to_string(),
-            value: f64::from(*v),
-        }),
-    }
-}
-#[doc = " The payload-free variants of `ColorMatrixKind`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ColorMatrixKindPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'luminanceToAlpha'")]
-    pub r#type: String,
-}
-#[doc = " `ColorMatrixKind::Matrix`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ColorMatrixKindMatrix {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'matrix'")]
-    pub r#type: String,
-    pub value: Vec<f64>,
-}
-#[doc = " `ColorMatrixKind::Saturate`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ColorMatrixKindSaturate {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'saturate'")]
-    pub r#type: String,
-    pub value: f64,
-}
-#[doc = " `ColorMatrixKind::HueRotate`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ColorMatrixKindHueRotate {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'hueRotate'")]
-    pub r#type: String,
-    pub value: f64,
-}
-fn color_matrix_kind_to_js(
-    v: &usvg::filter::ColorMatrixKind,
-) -> Either4<
-    ColorMatrixKindPlain,
-    ColorMatrixKindMatrix,
-    ColorMatrixKindSaturate,
-    ColorMatrixKindHueRotate,
-> {
-    match v {
-        usvg::filter::ColorMatrixKind::LuminanceToAlpha => Either4::A(ColorMatrixKindPlain {
-            r#type: "luminanceToAlpha".to_string(),
-        }),
-        usvg::filter::ColorMatrixKind::Matrix(v) => Either4::B(ColorMatrixKindMatrix {
-            r#type: "matrix".to_string(),
-            value: v.iter().map(|x| f64::from(*x)).collect(),
-        }),
-        usvg::filter::ColorMatrixKind::Saturate(v) => Either4::C(ColorMatrixKindSaturate {
-            r#type: "saturate".to_string(),
-            value: f64::from(v.get()),
-        }),
-        usvg::filter::ColorMatrixKind::HueRotate(v) => Either4::D(ColorMatrixKindHueRotate {
-            r#type: "hueRotate".to_string(),
-            value: f64::from(*v),
-        }),
-    }
-}
-#[doc = " The payload-free variants of `CompositeOperator`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct CompositeOperatorPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'over' | 'in' | 'out' | 'atop' | 'xor' | 'lighter'")]
-    pub r#type: String,
-}
-#[doc = " `CompositeOperator::Arithmetic`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct CompositeOperatorArithmetic {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'arithmetic'")]
-    pub r#type: String,
-    pub k1: f64,
-    pub k2: f64,
-    pub k3: f64,
-    pub k4: f64,
-}
-fn composite_operator_to_js(
-    v: &usvg::filter::CompositeOperator,
-) -> Either<CompositeOperatorPlain, CompositeOperatorArithmetic> {
-    match v {
-        usvg::filter::CompositeOperator::Over => Either::A(CompositeOperatorPlain {
-            r#type: "over".to_string(),
-        }),
-        usvg::filter::CompositeOperator::In => Either::A(CompositeOperatorPlain {
-            r#type: "in".to_string(),
-        }),
-        usvg::filter::CompositeOperator::Out => Either::A(CompositeOperatorPlain {
-            r#type: "out".to_string(),
-        }),
-        usvg::filter::CompositeOperator::Atop => Either::A(CompositeOperatorPlain {
-            r#type: "atop".to_string(),
-        }),
-        usvg::filter::CompositeOperator::Xor => Either::A(CompositeOperatorPlain {
-            r#type: "xor".to_string(),
-        }),
-        usvg::filter::CompositeOperator::Lighter => Either::A(CompositeOperatorPlain {
-            r#type: "lighter".to_string(),
-        }),
-        usvg::filter::CompositeOperator::Arithmetic { k1, k2, k3, k4 } => {
-            Either::B(CompositeOperatorArithmetic {
-                r#type: "arithmetic".to_string(),
-                k1: f64::from(*k1),
-                k2: f64::from(*k2),
-                k3: f64::from(*k3),
-                k4: f64::from(*k4),
-            })
-        }
-    }
-}
-#[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
-#[napi]
-pub struct LegacyImageKindJpeg {
-    raw: std::sync::Arc<Vec<u8>>,
-}
-#[napi]
-impl LegacyImageKindJpeg {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(getter, js_name = "type", ts_return_type = "'jpeg'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "jpeg"
-    }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
-    #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
-    }
-}
-#[doc = " `ImageKind::PNG`. The bytes are the document's own."]
-#[napi]
-pub struct LegacyImageKindPng {
-    raw: std::sync::Arc<Vec<u8>>,
-}
-#[napi]
-impl LegacyImageKindPng {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(getter, js_name = "type", ts_return_type = "'png'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "png"
-    }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
-    #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
-    }
-}
-#[doc = " `ImageKind::GIF`. The bytes are the document's own."]
-#[napi]
-pub struct LegacyImageKindGif {
-    raw: std::sync::Arc<Vec<u8>>,
-}
-#[napi]
-impl LegacyImageKindGif {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(getter, js_name = "type", ts_return_type = "'gif'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "gif"
-    }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
-    #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
-    }
-}
-#[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
-#[napi]
-pub struct LegacyImageKindWebp {
-    raw: std::sync::Arc<Vec<u8>>,
-}
-#[napi]
-impl LegacyImageKindWebp {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(getter, js_name = "type", ts_return_type = "'webp'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "webp"
-    }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
-    #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
-    }
-}
-#[doc = " `ImageKind::SVG`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct ImageKindSvg {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'svg'")]
-    pub r#type: String,
-}
-fn image_kind_to_js(
-    v: &usvg::ImageKind,
-) -> Either5<
-    LegacyImageKindJpeg,
-    LegacyImageKindPng,
-    LegacyImageKindGif,
-    LegacyImageKindWebp,
-    ImageKindSvg,
-> {
-    match v {
-        usvg::ImageKind::JPEG(v) => Either5::A(LegacyImageKindJpeg { raw: v.clone() }),
-        usvg::ImageKind::PNG(v) => Either5::B(LegacyImageKindPng { raw: v.clone() }),
-        usvg::ImageKind::GIF(v) => Either5::C(LegacyImageKindGif { raw: v.clone() }),
-        usvg::ImageKind::WEBP(v) => Either5::D(LegacyImageKindWebp { raw: v.clone() }),
-        usvg::ImageKind::SVG(_) => Either5::E(ImageKindSvg {
-            r#type: "svg".to_string(),
-        }),
-    }
-}
-#[doc = " The payload-free variants of `Input`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct InputPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'sourceGraphic' | 'sourceAlpha'")]
-    pub r#type: String,
-}
-#[doc = " `Input::Reference`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct InputReference {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'reference'")]
-    pub r#type: String,
-    pub value: String,
-}
-fn input_to_js(v: &usvg::filter::Input) -> Either<InputPlain, InputReference> {
-    match v {
-        usvg::filter::Input::SourceGraphic => Either::A(InputPlain {
-            r#type: "sourceGraphic".to_string(),
-        }),
-        usvg::filter::Input::SourceAlpha => Either::A(InputPlain {
-            r#type: "sourceAlpha".to_string(),
-        }),
-        usvg::filter::Input::Reference(v) => Either::B(InputReference {
-            r#type: "reference".to_string(),
-            value: v.to_string(),
-        }),
-    }
-}
-#[doc = " `Kind::Blend`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindBlend {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'blend'")]
-    pub r#type: String,
-    pub value: Blend,
-}
-#[doc = " `Kind::ColorMatrix`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindColorMatrix {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'colorMatrix'")]
-    pub r#type: String,
-    pub value: ColorMatrix,
-}
-#[doc = " `Kind::ComponentTransfer`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindComponentTransfer {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'componentTransfer'")]
-    pub r#type: String,
-    pub value: ComponentTransfer,
-}
-#[doc = " `Kind::Composite`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindComposite {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'composite'")]
-    pub r#type: String,
-    pub value: Composite,
-}
-#[doc = " `Kind::ConvolveMatrix`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindConvolveMatrix {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'convolveMatrix'")]
-    pub r#type: String,
-    pub value: ConvolveMatrix,
-}
-#[doc = " `Kind::DiffuseLighting`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindDiffuseLighting {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'diffuseLighting'")]
-    pub r#type: String,
-    pub value: DiffuseLighting,
-}
-#[doc = " `Kind::DisplacementMap`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindDisplacementMap {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'displacementMap'")]
-    pub r#type: String,
-    pub value: DisplacementMap,
-}
-#[doc = " `Kind::DropShadow`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindDropShadow {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'dropShadow'")]
-    pub r#type: String,
-    pub value: DropShadow,
-}
-#[doc = " `Kind::Flood`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindFlood {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'flood'")]
-    pub r#type: String,
-    pub value: Flood,
-}
-#[doc = " `Kind::GaussianBlur`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindGaussianBlur {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'gaussianBlur'")]
-    pub r#type: String,
-    pub value: GaussianBlur,
-}
-#[doc = " `Kind::Image`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindImage {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'image'")]
-    pub r#type: String,
-}
-#[doc = " `Kind::Merge`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindMerge {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'merge'")]
-    pub r#type: String,
-    pub value: Merge,
-}
-#[doc = " `Kind::Morphology`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindMorphology {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'morphology'")]
-    pub r#type: String,
-    pub value: Morphology,
-}
-#[doc = " `Kind::Offset`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindOffset {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'offset'")]
-    pub r#type: String,
-    pub value: Offset,
-}
-#[doc = " `Kind::SpecularLighting`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindSpecularLighting {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'specularLighting'")]
-    pub r#type: String,
-    pub value: SpecularLighting,
-}
-#[doc = " `Kind::Tile`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindTile {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'tile'")]
-    pub r#type: String,
-    pub value: Tile,
-}
-#[doc = " `Kind::Turbulence`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct KindTurbulence {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'turbulence'")]
-    pub r#type: String,
-    pub value: Turbulence,
-}
-fn kind_to_js(
-    v: &usvg::filter::Kind,
-) -> Either17<
-    KindBlend,
-    KindColorMatrix,
-    KindComponentTransfer,
-    KindComposite,
-    KindConvolveMatrix,
-    KindDiffuseLighting,
-    KindDisplacementMap,
-    KindDropShadow,
-    KindFlood,
-    KindGaussianBlur,
-    KindImage,
-    KindMerge,
-    KindMorphology,
-    KindOffset,
-    KindSpecularLighting,
-    KindTile,
-    KindTurbulence,
-> {
-    match v {
-        usvg::filter::Kind::Blend(v) => Either17::A(KindBlend {
-            r#type: "blend".to_string(),
-            value: Blend::from(v),
-        }),
-        usvg::filter::Kind::ColorMatrix(v) => Either17::B(KindColorMatrix {
-            r#type: "colorMatrix".to_string(),
-            value: ColorMatrix::from(v),
-        }),
-        usvg::filter::Kind::ComponentTransfer(v) => Either17::C(KindComponentTransfer {
-            r#type: "componentTransfer".to_string(),
-            value: ComponentTransfer::from(v),
-        }),
-        usvg::filter::Kind::Composite(v) => Either17::D(KindComposite {
-            r#type: "composite".to_string(),
-            value: Composite::from(v),
-        }),
-        usvg::filter::Kind::ConvolveMatrix(v) => Either17::E(KindConvolveMatrix {
-            r#type: "convolveMatrix".to_string(),
-            value: ConvolveMatrix::from(v),
-        }),
-        usvg::filter::Kind::DiffuseLighting(v) => Either17::F(KindDiffuseLighting {
-            r#type: "diffuseLighting".to_string(),
-            value: DiffuseLighting::from(v),
-        }),
-        usvg::filter::Kind::DisplacementMap(v) => Either17::G(KindDisplacementMap {
-            r#type: "displacementMap".to_string(),
-            value: DisplacementMap::from(v),
-        }),
-        usvg::filter::Kind::DropShadow(v) => Either17::H(KindDropShadow {
-            r#type: "dropShadow".to_string(),
-            value: DropShadow::from(v),
-        }),
-        usvg::filter::Kind::Flood(v) => Either17::I(KindFlood {
-            r#type: "flood".to_string(),
-            value: Flood::from(v),
-        }),
-        usvg::filter::Kind::GaussianBlur(v) => Either17::J(KindGaussianBlur {
-            r#type: "gaussianBlur".to_string(),
-            value: GaussianBlur::from(v),
-        }),
-        usvg::filter::Kind::Image(_) => Either17::K(KindImage {
-            r#type: "image".to_string(),
-        }),
-        usvg::filter::Kind::Merge(v) => Either17::L(KindMerge {
-            r#type: "merge".to_string(),
-            value: Merge::from(v),
-        }),
-        usvg::filter::Kind::Morphology(v) => Either17::M(KindMorphology {
-            r#type: "morphology".to_string(),
-            value: Morphology::from(v),
-        }),
-        usvg::filter::Kind::Offset(v) => Either17::N(KindOffset {
-            r#type: "offset".to_string(),
-            value: Offset::from(v),
-        }),
-        usvg::filter::Kind::SpecularLighting(v) => Either17::O(KindSpecularLighting {
-            r#type: "specularLighting".to_string(),
-            value: SpecularLighting::from(v),
-        }),
-        usvg::filter::Kind::Tile(v) => Either17::P(KindTile {
-            r#type: "tile".to_string(),
-            value: Tile::from(v),
-        }),
-        usvg::filter::Kind::Turbulence(v) => Either17::Q(KindTurbulence {
-            r#type: "turbulence".to_string(),
-            value: Turbulence::from(v),
-        }),
-    }
-}
-#[doc = " `LightSource::DistantLight`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct LightSourceDistantLight {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'distantLight'")]
-    pub r#type: String,
-    pub value: DistantLight,
-}
-#[doc = " `LightSource::PointLight`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct LightSourcePointLight {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'pointLight'")]
-    pub r#type: String,
-    pub value: PointLight,
-}
-#[doc = " `LightSource::SpotLight`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct LightSourceSpotLight {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'spotLight'")]
-    pub r#type: String,
-    pub value: SpotLight,
-}
-fn light_source_to_js(
-    v: &usvg::filter::LightSource,
-) -> Either3<LightSourceDistantLight, LightSourcePointLight, LightSourceSpotLight> {
-    match v {
-        usvg::filter::LightSource::DistantLight(v) => Either3::A(LightSourceDistantLight {
-            r#type: "distantLight".to_string(),
-            value: DistantLight::from(v),
-        }),
-        usvg::filter::LightSource::PointLight(v) => Either3::B(LightSourcePointLight {
-            r#type: "pointLight".to_string(),
-            value: PointLight::from(v),
-        }),
-        usvg::filter::LightSource::SpotLight(v) => Either3::C(LightSourceSpotLight {
-            r#type: "spotLight".to_string(),
-            value: SpotLight::from(v),
-        }),
-    }
-}
-#[doc = " `Paint::Color`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct PaintColor {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'color'")]
-    pub r#type: String,
-    pub value: Color,
-}
-#[doc = " `Paint::LinearGradient`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct PaintLinearGradient {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'linearGradient'")]
-    pub r#type: String,
-    pub id: String,
-}
-#[doc = " `Paint::RadialGradient`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct PaintRadialGradient {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'radialGradient'")]
-    pub r#type: String,
-    pub id: String,
-}
-#[doc = " `Paint::Pattern`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct PaintPattern {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'pattern'")]
-    pub r#type: String,
-    pub id: String,
-}
-fn paint_to_js(
-    v: &usvg::Paint,
-) -> Either4<PaintColor, PaintLinearGradient, PaintRadialGradient, PaintPattern> {
-    match v {
-        usvg::Paint::Color(v) => Either4::A(PaintColor {
-            r#type: "color".to_string(),
-            value: Color::from(v),
-        }),
-        usvg::Paint::LinearGradient(v) => Either4::B(PaintLinearGradient {
-            r#type: "linearGradient".to_string(),
-            id: v.id().to_string(),
-        }),
-        usvg::Paint::RadialGradient(v) => Either4::C(PaintRadialGradient {
-            r#type: "radialGradient".to_string(),
-            id: v.id().to_string(),
-        }),
-        usvg::Paint::Pattern(v) => Either4::D(PaintPattern {
-            r#type: "pattern".to_string(),
-            id: v.id().to_string(),
-        }),
-    }
-}
-#[doc = " The payload-free variants of `TextFlow`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TextFlowPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'linear'")]
-    pub r#type: String,
-}
-#[doc = " `TextFlow::Path`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TextFlowPath {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'path'")]
-    pub r#type: String,
-    pub id: String,
-}
-fn text_flow_to_js(v: &usvg::TextFlow) -> Either<TextFlowPlain, TextFlowPath> {
-    match v {
-        usvg::TextFlow::Linear => Either::A(TextFlowPlain {
-            r#type: "linear".to_string(),
-        }),
-        usvg::TextFlow::Path(v) => Either::B(TextFlowPath {
-            r#type: "path".to_string(),
-            id: v.id().to_string(),
-        }),
-    }
-}
-#[doc = " The payload-free variants of `TransferFunction`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TransferFunctionPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'identity'")]
-    pub r#type: String,
-}
-#[doc = " `TransferFunction::Table`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TransferFunctionTable {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'table'")]
-    pub r#type: String,
-    pub value: Vec<f64>,
-}
-#[doc = " `TransferFunction::Discrete`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TransferFunctionDiscrete {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'discrete'")]
-    pub r#type: String,
-    pub value: Vec<f64>,
-}
-#[doc = " `TransferFunction::Linear`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TransferFunctionLinear {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'linear'")]
-    pub r#type: String,
-    pub slope: f64,
-    pub intercept: f64,
-}
-#[doc = " `TransferFunction::Gamma`."]
-#[napi(object)]
-#[derive(Clone)]
-pub struct TransferFunctionGamma {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'gamma'")]
-    pub r#type: String,
-    pub amplitude: f64,
-    pub exponent: f64,
-    pub offset: f64,
-}
-fn transfer_function_to_js(
-    v: &usvg::filter::TransferFunction,
-) -> Either5<
-    TransferFunctionPlain,
-    TransferFunctionTable,
-    TransferFunctionDiscrete,
-    TransferFunctionLinear,
-    TransferFunctionGamma,
-> {
-    match v {
-        usvg::filter::TransferFunction::Identity => Either5::A(TransferFunctionPlain {
-            r#type: "identity".to_string(),
-        }),
-        usvg::filter::TransferFunction::Table(v) => Either5::B(TransferFunctionTable {
-            r#type: "table".to_string(),
-            value: v.iter().map(|x| f64::from(*x)).collect(),
-        }),
-        usvg::filter::TransferFunction::Discrete(v) => Either5::C(TransferFunctionDiscrete {
-            r#type: "discrete".to_string(),
-            value: v.iter().map(|x| f64::from(*x)).collect(),
-        }),
-        usvg::filter::TransferFunction::Linear { slope, intercept } => {
-            Either5::D(TransferFunctionLinear {
-                r#type: "linear".to_string(),
-                slope: f64::from(*slope),
-                intercept: f64::from(*intercept),
-            })
-        }
-        usvg::filter::TransferFunction::Gamma {
-            amplitude,
-            exponent,
-            offset,
-        } => Either5::E(TransferFunctionGamma {
-            r#type: "gamma".to_string(),
-            amplitude: f64::from(*amplitude),
-            exponent: f64::from(*exponent),
-            offset: f64::from(*offset),
-        }),
-    }
-}
-#[doc = " Read-only handle on a `usvg::filter::Filter`."]
-#[napi]
-pub struct LegacyFilter {
-    inner: std::sync::Arc<usvg::filter::Filter>,
-    doc: Doc,
-}
-impl LegacyFilter {
-    fn wrap(inner: std::sync::Arc<usvg::filter::Filter>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyFilter {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Filter region."]
-    #[doc = ""]
-    #[doc = " `x`, `y`, `width` and `height` in the SVG."]
-    #[napi]
-    pub fn rect(&self) -> BBox {
-        BBox::from(self.inner.rect())
-    }
-    #[doc = " A list of filter primitives."]
-    #[napi]
-    pub fn primitives(&self) -> Vec<Primitive> {
-        self.inner
-            .primitives()
-            .iter()
-            .map(Primitive::from)
-            .collect()
-    }
-}
-#[doc = " Read-only handle on a `usvg::RadialGradient`."]
-#[napi]
-pub struct LegacyRadialGradient {
-    inner: std::sync::Arc<usvg::RadialGradient>,
-    doc: Doc,
-}
-impl LegacyRadialGradient {
-    fn wrap(inner: std::sync::Arc<usvg::RadialGradient>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyRadialGradient {
-    #[doc = " `cx` coordinate."]
-    #[napi]
-    pub fn cx(&self) -> f64 {
-        f64::from(self.inner.cx())
-    }
-    #[doc = " `cy` coordinate."]
-    #[napi]
-    pub fn cy(&self) -> f64 {
-        f64::from(self.inner.cy())
-    }
-    #[doc = " Gradient radius."]
-    #[napi]
-    pub fn r(&self) -> f64 {
-        f64::from(self.inner.r().get())
-    }
-    #[doc = " `fx` coordinate."]
-    #[napi]
-    pub fn fx(&self) -> f64 {
-        f64::from(self.inner.fx())
-    }
-    #[doc = " `fy` coordinate."]
-    #[napi]
-    pub fn fy(&self) -> f64 {
-        f64::from(self.inner.fy())
-    }
-    #[doc = " Focal radius."]
-    #[napi]
-    pub fn fr(&self) -> f64 {
-        f64::from(self.inner.fr().get())
-    }
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Gradient transform."]
-    #[doc = ""]
-    #[doc = " `gradientTransform` in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
-    }
-    #[doc = " Gradient spreading method."]
-    #[doc = ""]
-    #[doc = " `spreadMethod` in SVG."]
-    #[napi]
-    pub fn spread_method(&self) -> SpreadMethod {
-        SpreadMethod::from(self.inner.spread_method())
-    }
-    #[doc = " A list of `stop` elements."]
-    #[napi]
-    pub fn stops(&self) -> Vec<Stop> {
-        self.inner.stops().iter().map(Stop::from).collect()
-    }
-}
-#[doc = " Read-only handle on a `usvg::Pattern`."]
-#[napi]
-pub struct LegacyPattern {
-    inner: std::sync::Arc<usvg::Pattern>,
-    doc: Doc,
-}
-impl LegacyPattern {
-    fn wrap(inner: std::sync::Arc<usvg::Pattern>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyPattern {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Pattern transform."]
-    #[doc = ""]
-    #[doc = " `patternTransform` in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
-    }
-    #[doc = " Pattern rectangle."]
-    #[doc = ""]
-    #[doc = " `x`, `y`, `width` and `height` in SVG."]
-    #[napi]
-    pub fn rect(&self) -> BBox {
-        BBox::from(self.inner.rect())
-    }
-}
-impl HasRoot for usvg::Pattern {
-    fn group(&self) -> &usvg::Group {
-        self.root()
-    }
-}
-#[napi]
-impl LegacyPattern {
-    #[doc = " Children of this definition's content group."]
-    #[napi]
-    pub fn children(&self) -> Vec<SvgNode> {
-        let base = NodeBase::Def(self.inner.clone());
-        (0..self.inner.root().children().len())
-            .map(|i| SvgNode {
-                doc: self.doc(),
-                base: base.clone(),
-                path: vec![i],
-            })
-            .collect()
-    }
-}
-#[doc = " Read-only handle on a `usvg::Mask`."]
-#[napi]
-pub struct LegacyMask {
-    inner: std::sync::Arc<usvg::Mask>,
-    doc: Doc,
-}
-impl LegacyMask {
-    fn wrap(inner: std::sync::Arc<usvg::Mask>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyMask {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Mask rectangle."]
-    #[doc = ""]
-    #[doc = " `x`, `y`, `width` and `height` in SVG."]
-    #[napi]
-    pub fn rect(&self) -> BBox {
-        BBox::from(self.inner.rect())
-    }
-    #[doc = " Mask type."]
-    #[doc = ""]
-    #[doc = " `mask-type` in SVG."]
-    #[napi]
-    pub fn kind(&self) -> MaskType {
-        MaskType::from(self.inner.kind())
-    }
-}
-impl HasRoot for usvg::Mask {
-    fn group(&self) -> &usvg::Group {
-        self.root()
-    }
-}
-#[napi]
-impl LegacyMask {
-    #[doc = " Children of this definition's content group."]
-    #[napi]
-    pub fn children(&self) -> Vec<SvgNode> {
-        let base = NodeBase::Def(self.inner.clone());
-        (0..self.inner.root().children().len())
-            .map(|i| SvgNode {
-                doc: self.doc(),
-                base: base.clone(),
-                path: vec![i],
-            })
-            .collect()
-    }
-}
-#[doc = " Read-only handle on a `usvg::LinearGradient`."]
-#[napi]
-pub struct LegacyLinearGradient {
-    inner: std::sync::Arc<usvg::LinearGradient>,
-    doc: Doc,
-}
-impl LegacyLinearGradient {
-    fn wrap(inner: std::sync::Arc<usvg::LinearGradient>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyLinearGradient {
-    #[doc = " `x1` coordinate."]
-    #[napi]
-    pub fn x1(&self) -> f64 {
-        f64::from(self.inner.x1())
-    }
-    #[doc = " `y1` coordinate."]
-    #[napi]
-    pub fn y1(&self) -> f64 {
-        f64::from(self.inner.y1())
-    }
-    #[doc = " `x2` coordinate."]
-    #[napi]
-    pub fn x2(&self) -> f64 {
-        f64::from(self.inner.x2())
-    }
-    #[doc = " `y2` coordinate."]
-    #[napi]
-    pub fn y2(&self) -> f64 {
-        f64::from(self.inner.y2())
-    }
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Gradient transform."]
-    #[doc = ""]
-    #[doc = " `gradientTransform` in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
-    }
-    #[doc = " Gradient spreading method."]
-    #[doc = ""]
-    #[doc = " `spreadMethod` in SVG."]
-    #[napi]
-    pub fn spread_method(&self) -> SpreadMethod {
-        SpreadMethod::from(self.inner.spread_method())
-    }
-    #[doc = " A list of `stop` elements."]
-    #[napi]
-    pub fn stops(&self) -> Vec<Stop> {
-        self.inner.stops().iter().map(Stop::from).collect()
-    }
-}
-#[doc = " Read-only handle on a `usvg::ClipPath`."]
-#[napi]
-pub struct LegacyClipPath {
-    inner: std::sync::Arc<usvg::ClipPath>,
-    doc: Doc,
-}
-impl LegacyClipPath {
-    fn wrap(inner: std::sync::Arc<usvg::ClipPath>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyClipPath {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Clip path transform."]
-    #[doc = ""]
-    #[doc = " `transform` in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
-    }
-}
-impl HasRoot for usvg::ClipPath {
-    fn group(&self) -> &usvg::Group {
-        self.root()
-    }
-}
-#[napi]
-impl LegacyClipPath {
-    #[doc = " Children of this definition's content group."]
-    #[napi]
-    pub fn children(&self) -> Vec<SvgNode> {
-        let base = NodeBase::Def(self.inner.clone());
-        (0..self.inner.root().children().len())
-            .map(|i| SvgNode {
-                doc: self.doc(),
-                base: base.clone(),
-                path: vec![i],
-            })
-            .collect()
-    }
-}
-#[doc = " Which flavour of node this is."]
-#[napi(string_enum = "camelCase")]
-#[derive(Copy, Clone)]
-pub enum NodeKind {
-    Group,
-    Path,
-    Image,
-    Text,
-}
 #[doc = " Starts collecting what usvg and resvg report."]
 #[doc = ""]
 #[doc = " `level` is `off`, `error`, `warn`, `info`, `debug` or `trace`. Safe to"]
@@ -3886,14 +1103,6 @@ pub fn set_log_level(level: String) -> Result<()> {
 #[napi]
 pub fn take_logs() -> Vec<String> {
     napi_support::logs::take()
-}
-#[doc = " Anything that owns a content group: the document, or a def such as a"]
-#[doc = " pattern, a mask or a clip path. The generator implements it for every"]
-#[doc = " wrapped type that has a `root() -> &Group`."]
-#[doc = " Send + Sync: a node reached through a def keeps its owner alive, and"]
-#[doc = " an async twin carries that owner to a worker thread."]
-pub trait HasRoot: Send + Sync {
-    fn group(&self) -> &usvg::Group;
 }
 #[doc = " The strict policy drops `FaceInfo::families` -- it is a"]
 #[doc = " `Vec<(String, Language)>`, and no rule maps a tuple with a language"]
@@ -3910,107 +1119,6 @@ impl FontFace {
             .iter()
             .map(|(name, _)| name.clone())
             .collect()
-    }
-}
-#[doc = " `Font::families` is `&[FontFamily]`, an enum svgtypes owns: five CSS"]
-#[doc = " keywords plus `Named(String)`. No rule maps an enum from a third"]
-#[doc = " crate, and without it `faceOf` answers half a question -- which face"]
-#[doc = " drew the text, with nothing to compare it against."]
-#[doc = " Decision: the strings usvg's own writer emits, keywords included."]
-#[napi]
-impl LegacyFont {
-    #[doc = " Families this span asked for, in order. Never empty: usvg appends"]
-    #[doc = " `RenderOptions.fontFamily` as the last resort."]
-    #[napi(getter)]
-    pub fn families(&self) -> Vec<String> {
-        self.inner
-            .families()
-            .iter()
-            .map(|family| match family {
-                usvg::FontFamily::Named(name) => name.clone(),
-                generic => generic.to_string(),
-            })
-            .collect()
-    }
-}
-#[doc = " The document a class was reached from: what a node, a def or a"]
-#[doc = " glyph needs to resolve the references it carries -- the def tables"]
-#[doc = " (`tree`), the font database its IDs belong to (`fonts`), and the"]
-#[doc = " log its renders report to. Empty for what no document handed out."]
-#[doc = " Cheap to clone, and cloned into every class the generator emits."]
-#[derive(Clone, Default)]
-struct Doc {
-    tree: Option<TreeRef>,
-    fonts: Option<std::sync::Arc<usvg::fontdb::Database>>,
-    logs: Logs,
-}
-#[doc = " The shared definition `target` refers to, by identity. An `id`"]
-#[doc = " match missed defs without one and could pick a namesake."]
-fn find_def<T>(defs: &[std::sync::Arc<T>], target: &T) -> Option<std::sync::Arc<T>> {
-    defs.iter()
-        .find(|d| std::ptr::eq(std::sync::Arc::as_ptr(d), target))
-        .cloned()
-}
-impl SvgNode {
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi]
-impl LegacyClipPath {
-    #[doc = " The clip path applied to this clip path's own content, if any."]
-    #[doc = " `null` too when the handle came from no document."]
-    #[napi]
-    pub fn clip_path(&self) -> Option<LegacyClipPath> {
-        let target = self.inner.clip_path()?;
-        let tree = self.doc.tree.as_ref()?.get()?;
-        find_def(tree.clip_paths(), target).map(|c| LegacyClipPath::wrap(c, self.doc()))
-    }
-}
-#[napi]
-impl LegacyFilter {
-    #[doc = " Children of the `feImage` primitive at `index` in `primitives`:"]
-    #[doc = " usvg's `filter::Image::root()`. `null` for any other primitive."]
-    #[doc = ""]
-    #[doc = " A method here rather than a field on the `image` kind: a primitive"]
-    #[doc = " is a plain object, built without the filter its nodes resolve from."]
-    #[napi]
-    pub fn image_children(&self, index: u32) -> Option<Vec<SvgNode>> {
-        let index = usize::try_from(index).ok()?;
-        let base = NodeBase::FeImage(self.inner.clone(), index);
-        let count = base.group()?.children().len();
-        Some(
-            (0..count)
-                .map(|i| SvgNode {
-                    doc: self.doc(),
-                    base: base.clone(),
-                    path: vec![i],
-                })
-                .collect(),
-        )
-    }
-}
-#[napi]
-impl LegacyMask {
-    #[doc = " The mask applied to this mask's own content, if any. `null` too"]
-    #[doc = " when the handle came from no document."]
-    #[napi]
-    pub fn mask(&self) -> Option<LegacyMask> {
-        let target = self.inner.mask()?;
-        let tree = self.doc.tree.as_ref()?.get()?;
-        find_def(tree.masks(), target).map(|m| LegacyMask::wrap(m, self.doc()))
-    }
-}
-#[napi]
-impl LegacyPositionedGlyph {
-    #[doc = " The face that drew this glyph, from the database its document"]
-    #[doc = " was parsed with. `null` for a glyph that came from no document."]
-    #[napi(getter)]
-    pub fn font(&self) -> Option<FontFace> {
-        let fonts = self.doc.fonts.as_ref()?;
-        fonts
-            .face(self.inner.font)
-            .map(|face| FontFace::wrap(face.clone(), self.doc()))
     }
 }
 #[doc = " A parsed tree with the image and font hrefs it could not resolve."]
@@ -4064,81 +1172,6 @@ fn throw_parse(env: &Env, e: &usvg::Error) -> Error {
 fn rejected_parse<'e>(env: &'e Env, e: &usvg::Error) -> Result<Unknown<'e>> {
     PromiseRaw::<Unknown>::reject(env, parse_error(env, e)?).map(|p| p.to_unknown())
 }
-#[doc = " A document's tree: the parsed one, or the SVG an `<image>` node"]
-#[doc = " embeds, re-resolved through that node on each use -- usvg owns it"]
-#[doc = " by value inside the image, so there is no `Arc` to hold."]
-#[derive(Clone)]
-enum TreeRef {
-    Root(std::sync::Arc<usvg::Tree>),
-    Embedded(Box<NodeBase>, Vec<usize>),
-}
-impl TreeRef {
-    fn get(&self) -> Option<&usvg::Tree> {
-        match self {
-            TreeRef::Root(t) => Some(t),
-            TreeRef::Embedded(base, path) => match node_at(base.group()?, path)? {
-                usvg::Node::Image(image) => match image.kind() {
-                    usvg::ImageKind::SVG(tree) => Some(tree),
-                    _ => None,
-                },
-                _ => None,
-            },
-        }
-    }
-}
-#[doc = " Where a node path starts from."]
-#[derive(Clone)]
-enum NodeBase {
-    Tree(TreeRef),
-    Def(std::sync::Arc<dyn HasRoot>),
-    #[doc = " The `feImage` primitive at this index of the filter."]
-    FeImage(std::sync::Arc<usvg::filter::Filter>, usize),
-    #[doc = " The flattened outlines of the text node at this path."]
-    TextFlat(Box<NodeBase>, Vec<usize>),
-}
-impl NodeBase {
-    fn group(&self) -> Option<&usvg::Group> {
-        match self {
-            NodeBase::Tree(t) => Some(t.get()?.root()),
-            NodeBase::Def(d) => Some(d.group()),
-            NodeBase::FeImage(f, i) => match f.primitives().get(*i)?.kind() {
-                usvg::filter::Kind::Image(image) => Some(image.root()),
-                _ => None,
-            },
-            NodeBase::TextFlat(base, path) => match node_at(base.group()?, path)? {
-                usvg::Node::Text(text) => Some(text.flattened()),
-                _ => None,
-            },
-        }
-    }
-}
-fn node_at<'t>(root: &'t usvg::Group, path: &[usize]) -> Option<&'t usvg::Node> {
-    let (last, rest) = path.split_last()?;
-    let mut group = root;
-    for i in rest {
-        match group.children().get(*i)? {
-            usvg::Node::Group(g) => group = g,
-            _ => return None,
-        }
-    }
-    group.children().get(*last)
-}
-#[doc = " Depth-first search for an element id, returning its index path."]
-fn path_of_id(group: &usvg::Group, id: &str, prefix: &mut Vec<usize>) -> Option<Vec<usize>> {
-    for (i, child) in group.children().iter().enumerate() {
-        prefix.push(i);
-        if child.id() == id {
-            return Some(prefix.clone());
-        }
-        if let usvg::Node::Group(g) = child
-            && let Some(found) = path_of_id(g, id, prefix)
-        {
-            return Some(found);
-        }
-        prefix.pop();
-    }
-    None
-}
 #[doc = " One command of a path outline, in the document's own units."]
 #[doc = ""]
 #[doc = " `points` holds x,y pairs, and how many depends on `type`: one point"]
@@ -4174,344 +1207,6 @@ fn path_segments(p: &tiny_skia::Path) -> Vec<PathSegment> {
             tiny_skia::PathSegment::Close => seg("close", &[]),
         })
         .collect()
-}
-#[doc = " A read-only handle on one element of the parsed tree."]
-#[doc = ""]
-#[doc = " usvg stores nodes as `Box`, not `Arc`, so a handle cannot own one. It"]
-#[doc = " keeps the tree alive plus the child-index path instead, and re-resolves"]
-#[doc = " on each call -- safe because a parsed tree is immutable."]
-#[napi]
-#[derive(Clone)]
-pub struct SvgNode {
-    doc: Doc,
-    base: NodeBase,
-    path: Vec<usize>,
-}
-impl SvgNode {
-    fn node(&self) -> Result<&usvg::Node> {
-        self.base
-            .group()
-            .and_then(|root| node_at(root, &self.path))
-            .ok_or_else(|| Error::from_reason("node path no longer resolves"))
-    }
-    fn child(&self, i: usize) -> Self {
-        let mut path = self.path.clone();
-        path.push(i);
-        Self {
-            doc: self.doc.clone(),
-            base: self.base.clone(),
-            path,
-        }
-    }
-}
-#[napi]
-impl SvgNode {
-    #[doc = " `group`, `path`, `image` or `text`."]
-    #[napi(getter)]
-    pub fn kind(&self) -> Result<NodeKind> {
-        Ok(match self.node()? {
-            usvg::Node::Group(_) => NodeKind::Group,
-            usvg::Node::Path(_) => NodeKind::Path,
-            usvg::Node::Image(_) => NodeKind::Image,
-            usvg::Node::Text(_) => NodeKind::Text,
-        })
-    }
-    #[doc = " The laid-out content of a text node: chunks, spans, resolved"]
-    #[doc = " fonts. Null for anything that is not text."]
-    #[doc = ""]
-    #[doc = " Its presence is what makes the text types map at all -- a node"]
-    #[doc = " payload is not a collection, so nothing else nominates them."]
-    #[napi]
-    pub fn text(&self) -> Result<Option<LegacyText>> {
-        Ok(match self.node()? {
-            usvg::Node::Text(t) => Some(LegacyText::wrap((**t).clone(), self.doc())),
-            _ => None,
-        })
-    }
-    #[doc = " A text node's glyphs as paths: the children of usvg's"]
-    #[doc = " `Text::flattened()`, the outlines `renderPng` draws. Null for"]
-    #[doc = " anything that is not text."]
-    #[napi]
-    pub fn flattened_children(&self) -> Result<Option<Vec<SvgNode>>> {
-        let usvg::Node::Text(text) = self.node()? else {
-            return Ok(None);
-        };
-        let base = NodeBase::TextFlat(Box::new(self.base.clone()), self.path.clone());
-        Ok(Some(
-            (0..text.flattened().children().len())
-                .map(|i| SvgNode {
-                    doc: self.doc(),
-                    base: base.clone(),
-                    path: vec![i],
-                })
-                .collect(),
-        ))
-    }
-    #[doc = " Children of the SVG document this image node embeds: usvg's"]
-    #[doc = " `ImageKind::SVG` tree. Null for a raster image or any other node."]
-    #[doc = ""]
-    #[doc = " The nodes belong to that inner document, so their `clipPath()` and"]
-    #[doc = " `mask()` resolve against its own definitions. Fonts and logs are the"]
-    #[doc = " outer document's, which the inner one was parsed with."]
-    #[napi]
-    pub fn svg_children(&self) -> Result<Option<Vec<SvgNode>>> {
-        let usvg::Node::Image(image) = self.node()? else {
-            return Ok(None);
-        };
-        let usvg::ImageKind::SVG(tree) = image.kind() else {
-            return Ok(None);
-        };
-        let inner = TreeRef::Embedded(Box::new(self.base.clone()), self.path.clone());
-        let doc = Doc {
-            tree: Some(inner.clone()),
-            ..self.doc()
-        };
-        let base = NodeBase::Tree(inner);
-        Ok(Some(
-            (0..tree.root().children().len())
-                .map(|i| SvgNode {
-                    doc: doc.clone(),
-                    base: base.clone(),
-                    path: vec![i],
-                })
-                .collect(),
-        ))
-    }
-    #[doc = " The shape of a path node: geometry, fill, stroke, paint order."]
-    #[doc = " Null for a group, an image or a text node."]
-    #[doc = ""]
-    #[doc = " This is what makes `Fill`, `Stroke` and `Path` reachable at all: the"]
-    #[doc = " mapper prunes any generated type no exposed method hands out."]
-    #[napi(ts_return_type = "Path | null")]
-    pub fn path(&self) -> Result<Option<Path>> {
-        Ok(match self.node()? {
-            usvg::Node::Path(p) => Some(Path::from(&**p)),
-            _ => None,
-        })
-    }
-    #[doc = " The content of an image node: where it sits, how it is to"]
-    #[doc = " be scaled, and the bytes themselves. Null for anything else."]
-    #[doc = ""]
-    #[doc = " `kind` is a discriminated union. The four raster variants"]
-    #[doc = " carry the encoded bytes exactly as the document supplied"]
-    #[doc = " them -- usvg says they should be decoded by the caller, and"]
-    #[doc = " this is the caller -- while `svg` carries none, an embedded"]
-    #[doc = " SVG being a tree rather than a payload."]
-    #[napi]
-    pub fn image(&self) -> Result<Option<LegacyImage>> {
-        Ok(match self.node()? {
-            usvg::Node::Image(i) => Some(LegacyImage::wrap((**i).clone(), self.doc())),
-            _ => None,
-        })
-    }
-    #[doc = " Direct children. Empty for anything that is not a group."]
-    #[napi]
-    pub fn children(&self) -> Result<Vec<SvgNode>> {
-        let count = match self.node()? {
-            usvg::Node::Group(g) => g.children().len(),
-            _ => 0,
-        };
-        Ok((0..count).map(|i| self.child(i)).collect())
-    }
-    #[doc = " Extent of this element's own filters, if it is a filtered group."]
-    #[doc = " This is what the document-level `filtersBoundingBox()` cannot see:"]
-    #[doc = " usvg wraps every filtered element in an inner group."]
-    #[napi]
-    pub fn filters_bbox(&self) -> Result<Option<BBox>> {
-        Ok(match self.node()? {
-            usvg::Node::Group(g) => g.filters_bounding_box().map(BBox::from),
-            _ => None,
-        })
-    }
-    #[doc = " Extent this element will actually occupy once rendered, contours and"]
-    #[doc = " filters included."]
-    #[napi]
-    pub fn extent(&self) -> Result<Option<BBox>> {
-        Ok(node_extent(self.node()?).map(BBox::from))
-    }
-    #[doc = " Clip path applied to this element, if it is a clipped group."]
-    #[doc = ""]
-    #[doc = " usvg hands out a bare `&ClipPath` here, with no `Arc` to hold on to,"]
-    #[doc = " so it is found in the document's clip-path table by identity."]
-    #[napi]
-    pub fn clip_path(&self) -> Result<Option<LegacyClipPath>> {
-        let usvg::Node::Group(g) = self.node()? else {
-            return Ok(None);
-        };
-        let Some(target) = g.clip_path() else {
-            return Ok(None);
-        };
-        let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
-            return Ok(None);
-        };
-        Ok(find_def(tree.clip_paths(), target).map(|c| LegacyClipPath::wrap(c, self.doc())))
-    }
-    #[doc = " Mask applied to this element, found like `clipPath`."]
-    #[napi]
-    pub fn mask(&self) -> Result<Option<LegacyMask>> {
-        let usvg::Node::Group(g) = self.node()? else {
-            return Ok(None);
-        };
-        let Some(target) = g.mask() else {
-            return Ok(None);
-        };
-        let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
-            return Ok(None);
-        };
-        Ok(find_def(tree.masks(), target).map(|m| LegacyMask::wrap(m, self.doc())))
-    }
-    #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
-    fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
-        let node = self.node()?;
-        self.doc
-            .logs
-            .scope(|| render_node_png(node, &params.unwrap_or_default()))
-    }
-    #[doc = " Renders this element alone, sized to its own extent."]
-    #[napi]
-    pub fn render_png(&self, params: Option<RenderParams>) -> Result<Buffer> {
-        self.png_bytes(params).map(IntoJs::into_js)
-    }
-    #[doc = " Returns node's ID."]
-    #[napi]
-    pub fn id(&self) -> Result<String> {
-        let __n = self.node()?;
-        Ok(__n.id().to_string())
-    }
-    #[doc = " Returns node's absolute transform."]
-    #[doc = ""]
-    #[doc = " This method is cheap since absolute transforms are already resolved."]
-    #[napi]
-    pub fn abs_transform(&self) -> Result<Matrix> {
-        let __n = self.node()?;
-        Ok(Matrix::from(__n.abs_transform()))
-    }
-    #[doc = " Returns node's bounding box in object coordinates, if any."]
-    #[napi]
-    pub fn bounding_box(&self) -> Result<BBox> {
-        let __n = self.node()?;
-        Ok(BBox::from(__n.bounding_box()))
-    }
-    #[doc = " Returns node's bounding box in canvas coordinates, if any."]
-    #[napi]
-    pub fn abs_bounding_box(&self) -> Result<BBox> {
-        let __n = self.node()?;
-        Ok(BBox::from(__n.abs_bounding_box()))
-    }
-    #[doc = " Returns node's bounding box, including stroke, in object coordinates, if any."]
-    #[napi]
-    pub fn stroke_bounding_box(&self) -> Result<BBox> {
-        let __n = self.node()?;
-        Ok(BBox::from(__n.stroke_bounding_box()))
-    }
-    #[doc = " Returns node's bounding box, including stroke, in canvas coordinates, if any."]
-    #[napi]
-    pub fn abs_stroke_bounding_box(&self) -> Result<BBox> {
-        let __n = self.node()?;
-        Ok(BBox::from(__n.abs_stroke_bounding_box()))
-    }
-    #[doc = " Element's \"layer\" bounding box in canvas units, if any."]
-    #[doc = ""]
-    #[doc = " For most nodes this is just `abs_bounding_box`,"]
-    #[doc = " but for groups this is `abs_layer_bounding_box`."]
-    #[doc = ""]
-    #[doc = " See [`Group::layer_bounding_box`] for details."]
-    #[napi]
-    pub fn abs_layer_bounding_box(&self) -> Result<Option<BBox>> {
-        let __n = self.node()?;
-        Ok(__n.abs_layer_bounding_box().map(BBox::from))
-    }
-    #[doc = " Element's transform."]
-    #[doc = ""]
-    #[doc = " This is a relative transform. The one that is set via the `transform` attribute in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Result<Option<Matrix>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(Matrix::from(__g.transform())))
-    }
-    #[doc = " Group opacity."]
-    #[doc = ""]
-    #[doc = " After the group is rendered we should combine"]
-    #[doc = " it with a parent group using the specified opacity."]
-    #[napi]
-    pub fn opacity(&self) -> Result<Option<f64>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(f64::from(__g.opacity().get())))
-    }
-    #[doc = " Group blend mode."]
-    #[doc = ""]
-    #[doc = " `mix-blend-mode` in SVG."]
-    #[napi]
-    pub fn blend_mode(&self) -> Result<Option<BlendMode>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(BlendMode::from(__g.blend_mode())))
-    }
-    #[doc = " Group isolation."]
-    #[doc = ""]
-    #[doc = " `isolation` in SVG."]
-    #[napi]
-    pub fn isolate(&self) -> Result<Option<bool>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(__g.isolate()))
-    }
-    #[doc = " Element's filters."]
-    #[napi]
-    pub fn filters(&self) -> Result<Option<Vec<LegacyFilter>>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(
-            __g.filters()
-                .iter()
-                .map(|x| LegacyFilter::wrap(x.clone(), self.doc()))
-                .collect(),
-        ))
-    }
-    #[doc = " Element's \"layer\" bounding box in object units."]
-    #[doc = ""]
-    #[doc = " Conceptually, this is `stroke_bounding_box` expanded and/or clipped"]
-    #[doc = " by `filters_bounding_box`, but also including all the children."]
-    #[doc = " Groups without filters are additionally clipped by their clip path."]
-    #[doc = " This is the bounding box `resvg` will later use to allocate layers/pixmaps"]
-    #[doc = " during isolated groups rendering."]
-    #[doc = ""]
-    #[doc = " Only groups have it, because only groups can have filters."]
-    #[doc = " For other nodes layer bounding box is the same as stroke bounding box."]
-    #[doc = ""]
-    #[doc = " Unlike other bounding boxes, cannot have zero size."]
-    #[doc = ""]
-    #[doc = " Returns 0x0x1x1 for empty groups."]
-    #[napi]
-    pub fn layer_bounding_box(&self) -> Result<Option<BBox>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(BBox::from(__g.layer_bounding_box())))
-    }
-    #[doc = " Checks if this group should be isolated during rendering."]
-    #[napi]
-    pub fn should_isolate(&self) -> Result<Option<bool>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(__g.should_isolate()))
-    }
-    #[doc = " Returns `true` if the group has any children."]
-    #[napi]
-    pub fn has_children(&self) -> Result<Option<bool>> {
-        let usvg::Node::Group(__g) = self.node()? else {
-            return Ok(None);
-        };
-        Ok(Some(__g.has_children()))
-    }
 }
 #[doc = " A parsed SVG, ready to be rendered any number of times."]
 #[napi]
@@ -4567,7 +1262,7 @@ impl Resvg {
     #[doc = " Frees the parsed tree, the source and the images now, not at garbage"]
     #[doc = " collection; every later call throws. Also `[Symbol.dispose]` where"]
     #[doc = " the runtime has it, so `using doc = new Resvg(svg)` frees it at the"]
-    #[doc = " end of the block. A node or async call holding the tree keeps it."]
+    #[doc = " end of the block. An async call holding the tree keeps it."]
     #[napi]
     pub fn dispose(&mut self) {
         static EMPTY: std::sync::OnceLock<std::sync::Arc<usvg::Tree>> = std::sync::OnceLock::new();
@@ -4616,30 +1311,6 @@ impl Resvg {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| self.pending_fonts.to_vec())())
-    }
-    #[doc = " The face that actually drew a glyph, from the database this"]
-    #[doc = " document was parsed with."]
-    #[doc = ""]
-    #[doc = " `pendingFonts()` names the families that were missing; this names"]
-    #[doc = " what was used instead, glyph by glyph, which is the half a"]
-    #[doc = " document-wide list cannot answer. A fallback that renders is the"]
-    #[doc = " failure nobody sees."]
-    #[doc = ""]
-    #[doc = " Same answer as `glyph.font`, plus a provenance check: a glyph laid"]
-    #[doc = " out against another database comes back `null`. A `fontdb::ID` is"]
-    #[doc = " a slotmap key, meaningless outside the database that issued it,"]
-    #[doc = " and read against this one it could name an unrelated face."]
-    #[napi]
-    pub fn face_of(&self, glyph: &LegacyPositionedGlyph) -> Result<Option<FontFace>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            let fonts = glyph.doc.fonts.as_ref()?;
-            if !std::sync::Arc::ptr_eq(fonts, &self.fonts) {
-                return None;
-            }
-            glyph.font()
-        })())
     }
     #[doc = " Supplies one image and re-parses the document."]
     #[doc = ""]
@@ -4717,65 +1388,6 @@ impl Resvg {
             signal.map(|s| s.0),
         )
     }
-    #[doc = " Bounding box of one element, by `id`, as it will be rendered"]
-    #[doc = " (contours, filters and transforms included). `null` if there is no"]
-    #[doc = " such id or the element has no visible size."]
-    #[napi]
-    pub fn node_bbox(&self, id: String) -> Result<Option<BBox>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .node_by_id(&id)
-                .and_then(node_extent)
-                .map(BBox::from)
-        })())
-    }
-    #[doc = " Renders a single element, by `id`, into its own PNG -- the output is"]
-    #[doc = " sized to that element, not to the document. Useful to slice an icon"]
-    #[doc = " out of a sprite sheet."]
-    #[napi]
-    pub fn render_node_png(&self, id: String, params: Option<RenderParams>) -> Result<Buffer> {
-        self.live()?;
-        self.node_png_bytes(id, params).map(IntoJs::into_js)
-    }
-    #[doc = " The Send half of `renderNodePng`."]
-    fn node_png_bytes(&self, id: String, params: Option<RenderParams>) -> Result<Vec<u8>> {
-        let node = self
-            .tree
-            .node_by_id(&id)
-            .ok_or_else(|| Error::from_reason(format!("no element with id {id:?}")))?;
-        self.logs
-            .scope(|| render_node_png(node, &params.unwrap_or_default()))
-    }
-    #[doc = " Handle on one element, by `id`."]
-    #[napi]
-    pub fn node(&self, id: String) -> Result<Option<SvgNode>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            path_of_id(self.tree.root(), &id, &mut Vec::new()).map(|path| SvgNode {
-                doc: self.doc(),
-                base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
-                path,
-            })
-        })())
-    }
-    #[doc = " Direct children of the root group."]
-    #[napi]
-    pub fn children(&self) -> Result<Vec<SvgNode>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            (0..self.tree.root().children().len())
-                .map(|i| SvgNode {
-                    doc: self.doc(),
-                    base: NodeBase::Tree(TreeRef::Root(self.tree.clone())),
-                    path: vec![i],
-                })
-                .collect()
-        })())
-    }
     #[doc = " Image size."]
     #[doc = ""]
     #[doc = " Size of an image that should be created to fit the SVG."]
@@ -4806,92 +1418,12 @@ impl Resvg {
         #[allow(clippy::redundant_closure_call)]
         Ok((|| self.tree.has_defs_nodes())())
     }
-    #[doc = " Returns a list of all unique [`LinearGradient`]s in the tree."]
-    #[napi]
-    pub fn linear_gradients(&self) -> Result<Vec<LegacyLinearGradient>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .linear_gradients()
-                .iter()
-                .map(|x| LegacyLinearGradient::wrap(x.clone(), self.doc()))
-                .collect()
-        })())
-    }
-    #[doc = " Returns a list of all unique [`RadialGradient`]s in the tree."]
-    #[napi]
-    pub fn radial_gradients(&self) -> Result<Vec<LegacyRadialGradient>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .radial_gradients()
-                .iter()
-                .map(|x| LegacyRadialGradient::wrap(x.clone(), self.doc()))
-                .collect()
-        })())
-    }
-    #[doc = " Returns a list of all unique [`Pattern`]s in the tree."]
-    #[napi]
-    pub fn patterns(&self) -> Result<Vec<LegacyPattern>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .patterns()
-                .iter()
-                .map(|x| LegacyPattern::wrap(x.clone(), self.doc()))
-                .collect()
-        })())
-    }
-    #[doc = " Returns a list of all unique [`ClipPath`]s in the tree."]
-    #[napi]
-    pub fn clip_paths(&self) -> Result<Vec<LegacyClipPath>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .clip_paths()
-                .iter()
-                .map(|x| LegacyClipPath::wrap(x.clone(), self.doc()))
-                .collect()
-        })())
-    }
-    #[doc = " Returns a list of all unique [`Mask`]s in the tree."]
-    #[napi]
-    pub fn masks(&self) -> Result<Vec<LegacyMask>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .masks()
-                .iter()
-                .map(|x| LegacyMask::wrap(x.clone(), self.doc()))
-                .collect()
-        })())
-    }
-    #[doc = " Returns a list of all unique [`Filter`](filter::Filter)s in the tree."]
-    #[napi]
-    pub fn filters(&self) -> Result<Vec<LegacyFilter>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            self.tree
-                .filters()
-                .iter()
-                .map(|x| LegacyFilter::wrap(x.clone(), self.doc()))
-                .collect()
-        })())
-    }
     #[doc = " Returns the font database that applies to all text nodes in the tree."]
     #[napi]
     pub fn fontdb(&self) -> Result<FontDatabase> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            FontDatabase::wrap(self.tree.fontdb().clone(), self.doc())
-        })())
+        Ok((|| FontDatabase::wrap(self.tree.fontdb().clone()))())
     }
     #[doc = " Element's transform."]
     #[doc = ""]
@@ -5057,13 +1589,6 @@ impl Resvg {
         }
         Ok(())
     }
-    fn doc(&self) -> Doc {
-        Doc {
-            tree: Some(TreeRef::Root(self.tree.clone())),
-            fonts: Some(self.fonts.clone()),
-            logs: self.logs.clone(),
-        }
-    }
 }
 impl Resvg {
     fn build(
@@ -5147,8 +1672,7 @@ fn to_px(v: f64) -> u32 {
 fn ratio(px: u32, base: f32) -> f32 {
     to_f32(f64::from(px)) / base
 }
-#[doc = " Size, scale and background of one render pass, shared by `draw`"]
-#[doc = " and `render_node_png`."]
+#[doc = " Size, scale and background of one render pass."]
 fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia::Pixmap)> {
     let px = |v: Option<f64>, name: &str| -> Result<Option<u32>> {
         match v.map(f64::round) {
@@ -5198,46 +1722,6 @@ fn canvas(base_w: f32, base_h: f32, p: &RenderParams) -> Result<(f32, tiny_skia:
         ));
     }
     Ok((scale, pixmap))
-}
-#[doc = " Shared by `Resvg.renderNodePng` and `SvgNode.renderPng`."]
-fn render_node_png(node: &usvg::Node, p: &RenderParams) -> Result<Vec<u8>> {
-    if p.crop.is_some() {
-        return Err(Error::new(
-            Status::InvalidArg,
-            "crop is not supported when rendering a single node",
-        ));
-    }
-    let bbox =
-        node_extent(node).ok_or_else(|| Error::from_reason("element has no visible size"))?;
-    let inner = node
-        .abs_layer_bounding_box()
-        .ok_or_else(|| Error::from_reason("element is empty"))?;
-    let (scale, mut pixmap) = canvas(bbox.width(), bbox.height(), p)?;
-    contained("resvg", || {
-        resvg::render_node(
-            node,
-            tiny_skia::Transform::from_scale(scale, scale)
-                .pre_translate(-bbox.x(), -bbox.y())
-                .pre_concat(node.abs_transform())
-                .pre_translate(inner.x(), inner.y()),
-            &mut pixmap.as_mut(),
-        )
-    })?
-    .ok_or_else(|| Error::from_reason("element is empty"))?;
-    encode_png(&pixmap)
-}
-#[doc = " Rendered extent of a node."]
-#[doc = ""]
-#[doc = " `Node::abs_layer_bounding_box` gives a Group its full layer box but"]
-#[doc = " hands back only the *geometric* box for a Path or Text, which would"]
-#[doc = " clip the stroke, so widen those here."]
-fn node_extent(node: &usvg::Node) -> Option<usvg::NonZeroRect> {
-    match node {
-        usvg::Node::Group(g) => Some(g.abs_layer_bounding_box()),
-        usvg::Node::Path(p) => p.abs_stroke_bounding_box().to_non_zero_rect(),
-        usvg::Node::Text(t) => t.abs_stroke_bounding_box().to_non_zero_rect(),
-        usvg::Node::Image(i) => i.abs_bounding_box().to_non_zero_rect(),
-    }
 }
 #[doc = " Parse on a libuv worker thread, resolving to a ready `Resvg`."]
 pub struct ParseTask {
@@ -5731,7 +2215,6 @@ pub enum UsvgWritingMode {
 #[napi(js_name = "Database", namespace = "fontdb")]
 pub struct FontdbDatabase {
     inner: std::sync::Arc<usvg::fontdb::Database>,
-    doc: Doc,
 }
 #[doc = " Processing options."]
 #[doc = ""]
@@ -5918,19 +2401,16 @@ pub struct UsvgWriteOptions {
 #[napi(js_name = "Filter", namespace = "usvg")]
 pub struct UsvgFilter {
     inner: std::sync::Arc<usvg::filter::Filter>,
-    doc: Doc,
 }
 #[doc = " Read-only handle on a `usvg::RadialGradient`."]
 #[napi(js_name = "RadialGradient", namespace = "usvg")]
 pub struct UsvgRadialGradient {
     inner: std::sync::Arc<usvg::RadialGradient>,
-    doc: Doc,
 }
 #[doc = " Read-only handle on a `usvg::LinearGradient`."]
 #[napi(js_name = "LinearGradient", namespace = "usvg")]
 pub struct UsvgLinearGradient {
     inner: std::sync::Arc<usvg::LinearGradient>,
-    doc: Doc,
 }
 #[doc = " A nodes tree container."]
 #[doc = ""]
@@ -5938,7 +2418,6 @@ pub struct UsvgLinearGradient {
 #[napi(js_name = "Tree", namespace = "usvg")]
 pub struct UsvgTree {
     inner: std::sync::Arc<usvg::Tree>,
-    doc: Doc,
 }
 #[doc = " A group container."]
 #[doc = ""]
@@ -6431,7 +2910,6 @@ pub struct UsvgFlood {
 #[napi(js_name = "Font", namespace = "usvg")]
 pub struct UsvgFont {
     inner: usvg::Font,
-    doc: Doc,
 }
 #[doc = " Plain view of a `FontVariation`."]
 #[napi(object, js_name = "FontVariation", namespace = "usvg")]
@@ -6475,7 +2953,6 @@ pub struct UsvgOffset {
 #[napi(js_name = "PositionedGlyph", namespace = "usvg")]
 pub struct UsvgPositionedGlyph {
     inner: usvg::layout::PositionedGlyph,
-    doc: Doc,
 }
 #[doc = " `Kind::Blend`."]
 #[napi(object, js_name = "KindBlend", namespace = "usvg")]
@@ -6689,7 +3166,6 @@ pub struct UsvgPrimitive {
 #[napi(js_name = "Span", namespace = "usvg")]
 pub struct UsvgSpan {
     inner: usvg::layout::Span,
-    doc: Doc,
 }
 #[doc = " Plain view of a `Stop`."]
 #[napi(object, js_name = "Stop", namespace = "usvg")]
@@ -6717,7 +3193,6 @@ pub struct UsvgStroke {
 #[napi(js_name = "TextChunk", namespace = "usvg")]
 pub struct UsvgTextChunk {
     inner: usvg::TextChunk,
-    doc: Doc,
 }
 #[doc = " Plain view of a `TextDecorationStyle`."]
 #[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
@@ -6738,7 +3213,6 @@ pub struct UsvgTextDecoration {
 #[napi(js_name = "TextSpan", namespace = "usvg")]
 pub struct UsvgTextSpan {
     inner: usvg::TextSpan,
-    doc: Doc,
 }
 #[doc = " The payload-free variants of `BaselineShift`."]
 #[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
@@ -6828,7 +3302,6 @@ pub enum FontdbStretch {
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
     inner: usvg::fontdb::FaceInfo,
-    doc: Doc,
 }
 #[doc = " Renders a tree onto the pixmap."]
 #[doc = ""]
@@ -6882,9 +3355,6 @@ pub fn resvg_render_node(
 impl SvgtypesColor {
     fn __from(inner: svgtypes::Color) -> Self {
         Self { inner }
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "svgtypes")]
@@ -7053,9 +3523,6 @@ impl SvgtypesColor {
 impl TinySkiaPixmap {
     fn __from(inner: tiny_skia::Pixmap) -> Self {
         Self { inner: Some(inner) }
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
     fn __ref(&self) -> Result<&tiny_skia::Pixmap, String> {
         self.inner
@@ -7229,9 +3696,6 @@ impl TinySkiaColor {
     fn __from(inner: tiny_skia::Color) -> Self {
         Self { inner }
     }
-    fn doc(&self) -> Doc {
-        Doc::default()
-    }
 }
 #[napi(namespace = "tiny_skia")]
 impl TinySkiaColor {
@@ -7374,9 +3838,6 @@ impl TinySkiaIntSize {
     fn __from(inner: tiny_skia::IntSize) -> Self {
         Self { inner }
     }
-    fn doc(&self) -> Doc {
-        Doc::default()
-    }
 }
 #[napi(namespace = "tiny_skia")]
 impl TinySkiaIntSize {
@@ -7463,9 +3924,6 @@ impl TinySkiaIntSize {
 impl TinySkiaTransform {
     fn __from(inner: tiny_skia::Transform) -> Self {
         Self { inner }
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -7885,9 +4343,6 @@ impl TinySkiaRect {
     fn __from(inner: tiny_skia::Rect) -> Self {
         Self { inner }
     }
-    fn doc(&self) -> Doc {
-        Doc::default()
-    }
 }
 #[napi(namespace = "tiny_skia")]
 impl TinySkiaRect {
@@ -8074,9 +4529,6 @@ impl TinySkiaRect {
 impl TinySkiaSize {
     fn __from(inner: tiny_skia::Size) -> Self {
         Self { inner }
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -8751,11 +5203,8 @@ impl UsvgWriteOptions {
     }
 }
 impl UsvgFilter {
-    fn wrap(inner: std::sync::Arc<usvg::filter::Filter>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: std::sync::Arc<usvg::filter::Filter>) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -8786,11 +5235,8 @@ impl UsvgFilter {
     }
 }
 impl UsvgRadialGradient {
-    fn wrap(inner: std::sync::Arc<usvg::RadialGradient>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: std::sync::Arc<usvg::RadialGradient>) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -8854,11 +5300,8 @@ impl UsvgRadialGradient {
     }
 }
 impl UsvgLinearGradient {
-    fn wrap(inner: std::sync::Arc<usvg::LinearGradient>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: std::sync::Arc<usvg::LinearGradient>) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -8912,14 +5355,11 @@ impl UsvgLinearGradient {
     }
 }
 impl UsvgTree {
-    fn wrap(inner: std::sync::Arc<usvg::Tree>, doc: Doc) -> Self {
-        Self { inner, doc }
+    fn wrap(inner: std::sync::Arc<usvg::Tree>) -> Self {
+        Self { inner }
     }
     fn __from(inner: usvg::Tree) -> Self {
-        Self::wrap(std::sync::Arc::new(inner), Doc::default())
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+        Self::wrap(std::sync::Arc::new(inner))
     }
 }
 #[napi(namespace = "usvg")]
@@ -9078,7 +5518,7 @@ impl UsvgTree {
             .map_err(napi_support::coded)?;
         Ok(__v
             .iter()
-            .map(|x| UsvgLinearGradient::wrap(x.clone(), self.doc()))
+            .map(|x| UsvgLinearGradient::wrap(x.clone()))
             .collect())
     }
     #[doc = " Returns a list of all unique [`RadialGradient`]s in the tree."]
@@ -9090,7 +5530,7 @@ impl UsvgTree {
             .map_err(napi_support::coded)?;
         Ok(__v
             .iter()
-            .map(|x| UsvgRadialGradient::wrap(x.clone(), self.doc()))
+            .map(|x| UsvgRadialGradient::wrap(x.clone()))
             .collect())
     }
     #[doc = " Returns a list of all unique [`Pattern`]s in the tree."]
@@ -9142,10 +5582,7 @@ impl UsvgTree {
         let __self = &self.inner;
         let __v = napi_support::contained("Tree::filters", || __self.filters())
             .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgFilter::wrap(x.clone(), self.doc()))
-            .collect())
+        Ok(__v.iter().map(|x| UsvgFilter::wrap(x.clone())).collect())
     }
     #[doc = " Returns the font database that applies to all text nodes in the tree."]
     #[napi]
@@ -9154,10 +5591,7 @@ impl UsvgTree {
         let __self = &self.inner;
         let __v = napi_support::contained("Tree::fontdb", || __self.fontdb())
             .map_err(napi_support::coded)?;
-        Ok(FontdbDatabase::wrap(
-            std::sync::Arc::clone(__v),
-            Doc::default(),
-        ))
+        Ok(FontdbDatabase::wrap(std::sync::Arc::clone(__v)))
     }
     #[doc = " Writes `usvg::Tree` back to SVG."]
     #[napi]
@@ -9185,11 +5619,8 @@ impl UsvgGroup {
     fn __from(inner: usvg::Group) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::Group, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::Group) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -9299,10 +5730,7 @@ impl UsvgGroup {
         let __self = self.inner.get();
         let __v = napi_support::contained("Group::filters", || __self.filters())
             .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgFilter::wrap(x.clone(), self.doc()))
-            .collect())
+        Ok(__v.iter().map(|x| UsvgFilter::wrap(x.clone())).collect())
     }
     #[doc = " Element's object bounding box."]
     #[doc = ""]
@@ -9456,11 +5884,8 @@ impl UsvgPath {
     fn __from(inner: usvg::Path) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::Path, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::Path) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -9615,11 +6040,8 @@ impl UsvgImage {
     fn __from(inner: usvg::Image) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::Image, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::Image) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -9738,11 +6160,8 @@ impl UsvgText {
     fn __from(inner: usvg::Text) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::Text, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::Text) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -9820,10 +6239,7 @@ impl UsvgText {
         let __self = self.inner.get();
         let __v = napi_support::contained("Text::chunks", || __self.chunks())
             .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgTextChunk::wrap(x.clone(), self.doc()))
-            .collect())
+        Ok(__v.iter().map(|x| UsvgTextChunk::wrap(x.clone())).collect())
     }
     #[doc = " Element's absolute transform."]
     #[doc = ""]
@@ -9935,10 +6351,7 @@ impl UsvgText {
         let __self = self.inner.get();
         let __v = napi_support::contained("Text::layouted", || __self.layouted())
             .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgSpan::wrap(x.clone(), self.doc()))
-            .collect())
+        Ok(__v.iter().map(|x| UsvgSpan::wrap(x.clone())).collect())
     }
 }
 impl UsvgClipPath {
@@ -9948,11 +6361,8 @@ impl UsvgClipPath {
     fn __from(inner: usvg::ClipPath) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::ClipPath, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::ClipPath) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -10018,11 +6428,8 @@ impl UsvgMask {
     fn __from(inner: usvg::Mask) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::Mask, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::Mask) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -10101,11 +6508,8 @@ impl UsvgPattern {
     fn __from(inner: usvg::Pattern) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn wrap(inner: usvg::Pattern, _doc: Doc) -> Self {
+    fn wrap(inner: usvg::Pattern) -> Self {
         Self::__from(inner)
-    }
-    fn doc(&self) -> Doc {
-        Doc::default()
     }
 }
 #[napi(namespace = "usvg")]
@@ -10382,11 +6786,8 @@ impl From<&usvg::filter::Flood> for UsvgFlood {
     }
 }
 impl UsvgFont {
-    fn wrap(inner: usvg::Font, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::Font) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -10465,11 +6866,8 @@ impl From<&usvg::filter::PointLight> for UsvgPointLight {
     }
 }
 impl UsvgPositionedGlyph {
-    fn wrap(inner: usvg::layout::PositionedGlyph, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::layout::PositionedGlyph) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -10521,11 +6919,8 @@ impl From<&usvg::filter::Primitive> for UsvgPrimitive {
     }
 }
 impl UsvgSpan {
-    fn wrap(inner: usvg::layout::Span, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::layout::Span) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -10575,7 +6970,7 @@ impl UsvgSpan {
         v.positioned_glyphs
             .clone()
             .iter()
-            .map(|x| UsvgPositionedGlyph::wrap(x.clone(), self.doc()))
+            .map(|x| UsvgPositionedGlyph::wrap(x.clone()))
             .collect()
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -10646,11 +7041,8 @@ impl From<&usvg::Stroke> for UsvgStroke {
     }
 }
 impl UsvgTextChunk {
-    fn wrap(inner: usvg::TextChunk, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::TextChunk) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -10675,7 +7067,7 @@ impl UsvgTextChunk {
         let v = &self.inner;
         v.spans()
             .iter()
-            .map(|x| UsvgTextSpan::wrap(x.clone(), self.doc()))
+            .map(|x| UsvgTextSpan::wrap(x.clone()))
             .collect()
     }
     #[napi(getter)]
@@ -10707,11 +7099,8 @@ impl From<&usvg::TextDecorationStyle> for UsvgTextDecorationStyle {
     }
 }
 impl UsvgTextSpan {
-    fn wrap(inner: usvg::TextSpan, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::TextSpan) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "usvg")]
@@ -10744,7 +7133,7 @@ impl UsvgTextSpan {
     #[napi(getter)]
     pub fn font(&self) -> UsvgFont {
         let v = &self.inner;
-        UsvgFont::wrap(v.font().clone(), self.doc())
+        UsvgFont::wrap(v.font().clone())
     }
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
@@ -11228,14 +7617,11 @@ impl From<usvg::fontdb::Stretch> for FontdbStretch {
     }
 }
 impl FontdbDatabase {
-    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>, doc: Doc) -> Self {
-        Self { inner, doc }
+    fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
+        Self { inner }
     }
     fn __from(inner: usvg::fontdb::Database) -> Self {
-        Self::wrap(std::sync::Arc::new(inner), Doc::default())
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+        Self::wrap(std::sync::Arc::new(inner))
     }
 }
 #[napi(namespace = "fontdb")]
@@ -11403,16 +7789,13 @@ impl FontdbDatabase {
             .map_err(napi_support::coded)?;
         Ok(__v
             .into_iter()
-            .map(|x| FontdbFaceInfo::wrap(x.clone(), self.doc()))
+            .map(|x| FontdbFaceInfo::wrap(x.clone()))
             .collect())
     }
 }
 impl FontdbFaceInfo {
-    fn wrap(inner: usvg::fontdb::FaceInfo, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
+    fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
+        Self { inner }
     }
 }
 #[napi(namespace = "fontdb")]
@@ -11449,39 +7832,6 @@ impl FontdbFaceInfo {
     }
 }
 #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-pub struct SvgNodePngBytesTask {
-    recv: SvgNode,
-    params: Option<RenderParams>,
-}
-impl Task for SvgNodePngBytesTask {
-    type Output = Vec<u8>;
-    type JsValue = <Vec<u8> as IntoJs>::Js;
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.recv.png_bytes(self.params.clone())
-    }
-    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-        Ok(out.into_js())
-    }
-}
-#[napi]
-impl SvgNode {
-    #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-    #[napi(ts_return_type = "Promise<Buffer>")]
-    pub fn render_png_async(
-        &self,
-        params: Option<RenderParams>,
-        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> AsyncTask<SvgNodePngBytesTask> {
-        AsyncTask::with_optional_signal(
-            SvgNodePngBytesTask {
-                recv: self.clone(),
-                params,
-            },
-            signal.map(|s| s.0),
-        )
-    }
-}
-#[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
 pub struct ResvgPngBytesTask {
     recv: Resvg,
     params: Option<RenderParams>,
@@ -11511,47 +7861,6 @@ impl Resvg {
             AsyncTask::with_optional_signal(
                 ResvgPngBytesTask {
                     recv: self.clone(),
-                    params,
-                },
-                signal.map(|s| s.0),
-            )
-        })())
-    }
-}
-#[doc = " `renderNodePng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-pub struct ResvgNodePngBytesTask {
-    recv: Resvg,
-    id: String,
-    params: Option<RenderParams>,
-}
-impl Task for ResvgNodePngBytesTask {
-    type Output = Vec<u8>;
-    type JsValue = <Vec<u8> as IntoJs>::Js;
-    fn compute(&mut self) -> Result<Self::Output> {
-        self.recv
-            .node_png_bytes(self.id.clone(), self.params.clone())
-    }
-    fn resolve(&mut self, _: napi::Env, out: Self::Output) -> Result<Self::JsValue> {
-        Ok(out.into_js())
-    }
-}
-#[napi]
-impl Resvg {
-    #[doc = " `renderNodePng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
-    #[napi(ts_return_type = "Promise<Buffer>")]
-    pub fn render_node_png_async(
-        &self,
-        id: String,
-        params: Option<RenderParams>,
-        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<Signal>,
-    ) -> Result<AsyncTask<ResvgNodePngBytesTask>> {
-        self.live()?;
-        #[allow(clippy::redundant_closure_call)]
-        Ok((|| {
-            AsyncTask::with_optional_signal(
-                ResvgNodePngBytesTask {
-                    recv: self.clone(),
-                    id,
                     params,
                 },
                 signal.map(|s| s.0),
@@ -11697,599 +8006,6 @@ impl FontFace {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "FontFace".to_string()
-    }
-}
-#[napi]
-impl LegacyFont {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyFont",
-            &["style", "stretch", "weight", "variations", "families"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyFont".to_string()
-    }
-}
-#[napi]
-impl LegacyImage {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyImage",
-            &[
-                "id",
-                "isVisible",
-                "size",
-                "renderingMode",
-                "kind",
-                "absTransform",
-                "boundingBox",
-                "absBoundingBox",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyImage".to_string()
-    }
-}
-#[napi]
-impl LegacyPositionedGlyph {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyPositionedGlyph",
-            &[
-                "fontSize",
-                "transform",
-                "outlineTransform",
-                "svgTransform",
-                "colrTransform",
-                "id",
-                "text",
-                "font",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyPositionedGlyph".to_string()
-    }
-}
-#[napi]
-impl LegacySpan {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacySpan",
-            &[
-                "fill",
-                "stroke",
-                "paintOrder",
-                "fontSize",
-                "variations",
-                "fontOpticalSizing",
-                "visible",
-                "positionedGlyphs",
-                "underline",
-                "overline",
-                "lineThrough",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacySpan".to_string()
-    }
-}
-#[napi]
-impl LegacyText {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyText",
-            &[
-                "id",
-                "renderingMode",
-                "dx",
-                "dy",
-                "rotate",
-                "writingMode",
-                "chunks",
-                "absTransform",
-                "boundingBox",
-                "absBoundingBox",
-                "strokeBoundingBox",
-                "absStrokeBoundingBox",
-                "layouted",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyText".to_string()
-    }
-}
-#[napi]
-impl LegacyTextChunk {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyTextChunk",
-            &["x", "y", "anchor", "spans", "textFlow", "text"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyTextChunk".to_string()
-    }
-}
-#[napi]
-impl LegacyTextSpan {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyTextSpan",
-            &[
-                "start",
-                "end",
-                "fill",
-                "stroke",
-                "paintOrder",
-                "font",
-                "fontSize",
-                "smallCaps",
-                "applyKerning",
-                "fontOpticalSizing",
-                "decoration",
-                "dominantBaseline",
-                "alignmentBaseline",
-                "baselineShift",
-                "isVisible",
-                "letterSpacing",
-                "wordSpacing",
-                "textLength",
-                "lengthAdjust",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyTextSpan".to_string()
-    }
-}
-#[napi]
-impl LegacyImageKindJpeg {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyImageKindJpeg",
-            &["type", "bytes"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyImageKindJpeg".to_string()
-    }
-}
-#[napi]
-impl LegacyImageKindPng {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyImageKindPng",
-            &["type", "bytes"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyImageKindPng".to_string()
-    }
-}
-#[napi]
-impl LegacyImageKindGif {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyImageKindGif",
-            &["type", "bytes"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyImageKindGif".to_string()
-    }
-}
-#[napi]
-impl LegacyImageKindWebp {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyImageKindWebp",
-            &["type", "bytes"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyImageKindWebp".to_string()
-    }
-}
-#[napi]
-impl LegacyFilter {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyFilter",
-            &[],
-            &["id"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyFilter".to_string()
-    }
-}
-#[napi]
-impl LegacyRadialGradient {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyRadialGradient",
-            &[],
-            &["cx", "cy", "r", "fx", "fy", "fr", "id", "spreadMethod"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyRadialGradient".to_string()
-    }
-}
-#[napi]
-impl LegacyPattern {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyPattern",
-            &[],
-            &["id"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyPattern".to_string()
-    }
-}
-#[napi]
-impl LegacyMask {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyMask",
-            &[],
-            &["id", "kind"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyMask".to_string()
-    }
-}
-#[napi]
-impl LegacyLinearGradient {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyLinearGradient",
-            &[],
-            &["x1", "y1", "x2", "y2", "id", "spreadMethod"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyLinearGradient".to_string()
-    }
-}
-#[napi]
-impl LegacyClipPath {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "LegacyClipPath",
-            &[],
-            &["id"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "LegacyClipPath".to_string()
-    }
-}
-#[napi]
-impl SvgNode {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "SvgNode",
-            &["kind"],
-            &[
-                "id",
-                "opacity",
-                "blendMode",
-                "isolate",
-                "shouldIsolate",
-                "hasChildren",
-            ],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "SvgNode".to_string()
     }
 }
 #[napi]

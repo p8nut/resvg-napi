@@ -1,7 +1,8 @@
 // BBox (generated from `impl Group` / `impl Tree`), crop, and per-element render.
 import assert from 'node:assert/strict';
-import { fontsOrSkip } from './support.mjs';
-import { Resvg, FontDatabase } from '../index.js';
+import { fontsOrSkip, extent, renderNodePng } from './support.mjs';
+import binding from '../index.js';
+const { Resvg, FontDatabase, usvg } = binding;
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
 const { db, family } = fontsOrSkip(FontDatabase, 'bbox + crop');
@@ -55,16 +56,16 @@ assert.deepEqual([scaled.width, scaled.height], [136, 96], 'width sizes the crop
 assert.deepEqual([...cropped.data.subarray(0, 4)], [0, 0, 0, 255], 'top-left is the stroke');
 assert.throws(() => r.renderPng({ crop: { x: 0, y: 0, width: 0, height: 10 } }), /empty crop/);
 
-// 5. per-element bbox includes the stroke, unlike usvg's own node bbox
-assert.deepEqual(box(r.nodeBbox('box')), [56, 26, 68, 48]);
-assert.equal(r.nodeBbox('nope'), null);
+// 5. per-element extent includes the stroke, unlike usvg's own node bbox
+const tree = usvg.Tree.fromStr(svg);
+assert.deepEqual(box(extent(tree.nodeById('box'))), [56, 26, 68, 48]);
+assert.equal(tree.nodeById('nope'), null);
 
-// 6. renderNodePng must be pixel-identical to cropping to that element
+// 6. one node rendered alone through resvg.renderNode is pixel-identical to
+//    cropping the document to that element
 const decode = (png, w, h) =>
   new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}"><image xlink:href="n" width="${w}" height="${h}"/></svg>`,
     null, null, { n: png }).renderRaw();
-const node = decode(r.renderNodePng('box'), 68, 48);
-assert.deepEqual([...node.data], [...cropped.data], 'renderNodePng ≡ crop to the node');
-assert.deepEqual([decode(r.renderNodePng('box', { scale: 2 }), 136, 96).width], [136]);
-assert.ok(r.renderNodePng('box', { background: 'teal' }).length > 0);
-assert.throws(() => r.renderNodePng('nope'), /no element with id/);
+const node = decode(renderNodePng(binding, tree.nodeById('box')), 68, 48);
+assert.deepEqual([...node.data], [...cropped.data], 'renderNode ≡ crop to the node');
+assert.deepEqual([decode(renderNodePng(binding, tree.nodeById('box'), { scale: 2 }), 136, 96).width], [136]);

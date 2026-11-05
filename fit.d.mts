@@ -5,10 +5,10 @@
  * unlike `index.d.ts`, so they can drift. `npm run typecheck` reads them.
  */
 
-/** A `Resvg` instance, however the caller chose to build one. */
-type Renderer = {
-  node(id: string): { extent(): { width: number } | null } | null
-}
+import type { usvg, BBox } from './index.js'
+
+/** What fitting reads of a parsed `usvg.Tree`. */
+type Renderer = Pick<usvg.Tree, 'size' | 'nodeById'>
 
 /** One element carrying a width constraint, and what is needed to rewrite it. */
 export interface WidthConstraint {
@@ -47,6 +47,13 @@ export interface FitResult {
   problems: string[]
 }
 
+/**
+ * Where a node will draw, contours and filters included: a group's layer box,
+ * a path's or a text's stroke box, an image's box. `null` when it has no
+ * visible size.
+ */
+export function nodeExtent(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText): BBox | null
+
 /** Elements carrying a width constraint, with the tag text needed to rewrite it. */
 export function findWidthConstraints(svg: string): WidthConstraint[]
 
@@ -54,7 +61,7 @@ export function findWidthConstraints(svg: string): WidthConstraint[]
  * Fits every `data-maxwidth` element by compressing it horizontally.
  *
  * @param svg     source, after any templating
- * @param render  `(svg) => Resvg`; supply fonts and options here
+ * @param render  `(svg) => usvg.Tree`; supply fonts and options here
  */
 export function fitTextWidths(
   svg: string,

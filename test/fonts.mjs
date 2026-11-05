@@ -75,66 +75,10 @@ if (file) {
   skip('loading a font from a file', 'no font file found on this host');
 }
 
-// 9. `pendingFonts()` names what was missing. This names what drew the text
-// instead: a fallback that renders is the failure nobody sees, and the report
-// alone cannot say which glyph got which face.
-const withId = (family) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60">
-  <text id="t" x="10" y="40" font-family="${family}" font-size="24">Bonjour</text>
-</svg>`;
-
-const missing = new Resvg(withId('Totally Missing Sans'), opts, db);
-const glyphs = missing.node('t').text().layouted[0].positionedGlyphs;
-assert.ok(glyphs.length > 0, 'the fallback laid glyphs out');
-const used = missing.faceOf(glyphs[0]);
-assert.ok(used, 'the glyph resolves to the face that drew it');
-assert.equal(typeof used.postScriptName, 'string');
-assert.ok(
-  !used.families.includes('Totally Missing Sans'),
-  'and that face is not the family the document asked for',
-);
-
-// 10. the other half of the comparison, so a caller can tell agreement from
-// substitution without knowing what it asked for: the families of the span.
-const askedFor = missing.node('t').text().chunks[0].spans[0].font.families;
-assert.ok(
-  askedFor.includes('Totally Missing Sans'),
-  `the span reports the requested family (got ${JSON.stringify(askedFor)})`,
-);
-
-// 11. with the family installed, asked-for and used agree -- the same two
-// calls, answering "no substitution here".
-const present = new Resvg(withId(family), opts, db);
-const presentFace = present.faceOf(present.node('t').text().layouted[0].positionedGlyphs[0]);
-assert.ok(presentFace.families.includes(family), `used ${presentFace.families} for ${family}`);
-
-// 12. a generic family keeps its CSS spelling rather than becoming a name:
-// usvg holds `FontFamily::SansSerif`, and the string has to say so.
-const generic = new Resvg(withId('sans-serif'), opts, db);
-assert.ok(
-  generic.node('t').text().chunks[0].spans[0].font.families.includes('sans-serif'),
-  'a generic family reads back as its keyword',
-);
-
-// 13. a glyph from a document parsed by another instance is not resolvable
-// against this one: the lookup is the document's own database, not a global.
-assert.equal(new Resvg(withId(family), opts, new FontDatabase()).faceOf(glyphs[0]), null);
-
-// 13b. `glyph.font` answers the same without a document in hand, and the
-//      provenance check is by database, not by key: two databases holding the
-//      same file issue the same slotmap keys, so a key alone would match.
-assert.equal(glyphs[0].font.postScriptName, used.postScriptName);
-{
-  const file = testFontFile();
-  if (file) {
-    const other = new FontDatabase();
-    other.loadFontData(readFileSync(file));
-    const docB = new Resvg(withId(other.faces()[0].families[0]), opts, other);
-    const glyphB = docB.node('t').text().layouted[0].positionedGlyphs[0];
-    assert.ok(glyphB.font, 'glyph.font resolves against its own database');
-    assert.equal(docB.faceOf(glyphB).postScriptName, glyphB.font.postScriptName);
-    assert.equal(present.faceOf(glyphB), null, 'and not against another one');
-  }
-}
+// 9-13. Which face drew a glyph (`faceOf`, `glyph.font`) and which families a
+// span asked for (`font.families`) went with the flat node classes. The
+// namespaced `usvg.PositionedGlyph` carries no face and `usvg.Font` no family
+// names yet: left for later (docs/migration-0.10.md).
 
 // A face from another database does not name a face of this one. IDs are
 // slotmap keys, so the first face of two databases share a key; before the

@@ -12,7 +12,11 @@ import {
   type Path,
   type PathSegment,
   type ParseErrorCode,
-  type usvg,
+  usvg,
+  fontdb,
+  tiny_skia,
+  svgtypes,
+  resvg,
 } from '../index.js';
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80">
@@ -145,3 +149,24 @@ const nsWrite: usvg.WriteOptions = { indent: 'tabs', attributesIndent: 2, coordi
 // @ts-expect-error a plain object is not a `fontdb.Database`
 const nsBadFonts: usvg.Options = { fontdb: {} };
 void [nsOptions, nsWrite, nsBadFonts];
+
+// 11. the Rust render loop, typed: factories, a free function, the classes
+//     as arguments, `T | null` for an Option, the codes of a thrown error.
+function renderNs(bytes: Uint8Array): Buffer {
+  const db = new fontdb.Database();
+  db.loadFontData(bytes);
+  const tree: usvg.Tree = usvg.Tree.fromData(bytes, { fontdb: db });
+  const size: tiny_skia.Size = tree.size();
+  const pixmap = new tiny_skia.Pixmap(Math.ceil(size.width()), Math.ceil(size.height()));
+  const css = svgtypes.Color.fromStr('#fff');
+  pixmap.fill(tiny_skia.Color.fromRgba8(css.red, css.green, css.blue, css.alpha));
+  resvg.render(tree, tiny_skia.Transform.fromScale(2, 2), pixmap);
+  // @ts-expect-error a plain object is not a `tiny_skia.Transform`
+  resvg.render(tree, { sx: 1, kx: 0, ky: 0, sy: 1, tx: 0, ty: 0 }, pixmap);
+  const t: tiny_skia.TransformObject = tiny_skia.Transform.fromObject({ sx: 1, kx: 0, ky: 0, sy: 1, tx: 0, ty: 0 }).toObject();
+  const inverse: tiny_skia.Transform | null = tiny_skia.Transform.fromObject(t).invert();
+  const code: usvg.ErrorCode = 'ParsingFailed';
+  void [inverse, code, tree.toString({ indent: 2 })];
+  return pixmap.encodePng();
+}
+void renderNs;

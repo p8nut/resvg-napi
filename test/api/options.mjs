@@ -1,14 +1,25 @@
 // The option structs as plain objects (ADR 0001; step 5 of
 // docs/migration-0.10.md): `usvg.Options` and `usvg.WriteOptions`, every field
-// optional over usvg's `Default`. Nothing namespaced takes them yet --
-// `usvg.Tree.fromData` comes with step 6, and the runtime checks with it -- so
-// this checks their shape in index.d.ts. The conversion itself (omitted fields
-// keep `Default`, a provider field, the clamp) is tested on the toy crate.
+// optional over usvg's `Default`. Their shape in index.d.ts, then what
+// `usvg.Tree.fromStr` and `tree.toString` make of them.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import binding from '../../index.js';
 import { declarations } from '../../scripts/api-diff.mjs';
+
+const { usvg, fontdb, tiny_skia, resvg } = binding;
+const FONT = readFileSync(new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url));
+const TEXT = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="30">
+  <text x="2" y="22" font-family="IBM Plex Sans" font-size="20">Hi</text></svg>`;
+
+/** Whether rendering `tree` at its size leaves any pixel drawn. */
+function draws(tree) {
+  const size = tree.size();
+  const pixmap = new tiny_skia.Pixmap(Math.ceil(size.width()), Math.ceil(size.height()));
+  resvg.render(tree, tiny_skia.Transform.identity(), pixmap);
+  return pixmap.data().some((v) => v !== 0);
+}
 
 const dts = declarations(readFileSync(new URL('../../index.d.ts', import.meta.url), 'utf8'));
 
@@ -63,4 +74,59 @@ test('enum fields are the namespaced enums, indent its JS form', () => {
 test('option objects are types only: nothing at runtime', () => {
   assert.equal(binding.usvg.Options, undefined);
   assert.equal(binding.usvg.WriteOptions, undefined);
+});
+
+test('left out, the options are usvg::Options::default(): an empty font database', () => {
+  // As in Rust (Q27): no font, so the text renders nothing.
+  for (const tree of [usvg.Tree.fromStr(TEXT), usvg.Tree.fromStr(TEXT, {}), usvg.Tree.fromStr(TEXT, { fontdb: undefined })]) {
+    assert.equal(tree.fontdb().len(), 0);
+    assert.equal(draws(tree), false);
+  }
+});
+
+test('the fontdb field takes a fontdb.Database, shared with the tree', () => {
+  const db = new fontdb.Database();
+  db.loadFontData(FONT);
+  const tree = usvg.Tree.fromStr(TEXT, { fontdb: db });
+  assert.equal(tree.fontdb().len(), db.len());
+  assert.ok(draws(tree), 'the text renders with the font');
+  // A provider field takes its class only.
+  assert.throws(() => usvg.Tree.fromStr(TEXT, { fontdb: {} }));
+  assert.throws(() => usvg.Tree.fromStr(TEXT, { fontdb: new binding.FontDatabase() }));
+});
+
+test('one field changes that field only', () => {
+  // An inch at usvg's default dpi (96) and at a set one.
+  const inch = '<svg xmlns="http://www.w3.org/2000/svg" width="1in" height="2in"/>';
+  const size = (o) => {
+    const s = usvg.Tree.fromStr(inch, o).size();
+    return [s.width(), s.height()];
+  };
+  assert.deepEqual(size(), [96, 192]);
+  assert.deepEqual(size({ dpi: 72 }), [72, 144]);
+  assert.deepEqual(size({ dpi: undefined }), [96, 192]);
+  // `font-size="2em"` against the default font size (12) and a set one.
+  const em = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><text font-size="2em">x</text></svg>';
+  const db = new fontdb.Database();
+  db.loadFontData(FONT);
+  const out = (o) => usvg.Tree.fromStr(em, { fontdb: db, fontFamily: 'IBM Plex Sans', ...o }).toString({ preserveText: true });
+  assert.match(out({}), /font-size="24"/);
+  assert.match(out({ fontSize: 10 }), /font-size="20"/);
+});
+
+test('WriteOptions: indent, precision and quotes reach the writer', () => {
+  const tree = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+    <g opacity="0.5"><path d="M 0.123456 0 L 10 10" stroke="black"/></g></svg>`);
+  const byDefault = tree.toString();
+  assert.equal(tree.toString({}), byDefault);
+  assert.match(byDefault, /\n {4}<g/, 'usvg indents by 4 spaces');
+  assert.match(tree.toString({ indent: 2 }), /\n {2}<g/);
+  assert.match(tree.toString({ indent: 'tabs' }), /\n\t<g/);
+  assert.doesNotMatch(tree.toString({ indent: 'none' }), /\n/);
+  assert.match(byDefault, /M 0\.123456 0/);
+  assert.match(tree.toString({ coordinatesPrecision: 2 }), /M 0\.12 0/);
+  // Clamped to usvg's table, never an index past it.
+  assert.match(tree.toString({ coordinatesPrecision: 200 }), /M 0\.123456 0/);
+  assert.match(tree.toString({ useSingleQuote: true }), /width='10'/);
+  assert.throws(() => tree.toString({ indent: 'wide' }), /invalid indent/);
 });

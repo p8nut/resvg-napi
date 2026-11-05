@@ -1833,8 +1833,24 @@ export interface WriteOptions {
 export type WritingMode = 'leftToRight' | 'topToBottom'
 
 export declare namespace fontdb {
-  /** Handle on a `usvg::fontdb::Database`, copied on the first write while shared. */
+  /**
+   * A font database.
+   *
+   * A shared `usvg::fontdb::Database`, copied on the first write while shared.
+   */
   export class Database {
+    /**
+     * Create a new, empty `Database`.
+     *
+     * Generic font families would be set to:
+     *
+     * - `serif` - Times New Roman
+     * - `sans-serif` - Arial
+     * - `cursive` - Comic Sans MS
+     * - `fantasy` - Impact (Papyrus on macOS/iOS)
+     * - `monospace` - Courier New
+     */
+    constructor()
     /**
      * Loads a font data into the `Database`.
      *
@@ -1917,6 +1933,486 @@ export declare namespace fontdb {
   export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
   /** Allows italic or oblique faces to be selected. */
   export type Style = 'normal' | 'italic' | 'oblique'
+}
+
+export declare namespace resvg {
+  /**
+   * Renders a tree onto the pixmap.
+   *
+   * `transform` will be used as a root transform.
+   * Can be used to position SVG inside the `pixmap`.
+   *
+   * The produced content is in the sRGB color space.
+   */
+  export function render(tree: usvg.Tree, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): void
+}
+
+export declare namespace svgtypes {
+  /**
+   * Representation of the [`<color>`] type.
+   *
+   * [`<color>`]: https://www.w3.org/TR/css-color-3/
+   *
+   * A `svgtypes::Color`, held by value.
+   */
+  export class Color {
+    /** Constructs a new `Color` from RGB values. */
+    static newRgb(red: number, green: number, blue: number): Color
+    /** Constructs a new `Color` from RGBA values. */
+    static newRgba(red: number, green: number, blue: number, alpha: number): Color
+    /** Constructs a new `Color` set to black. */
+    static black(): Color
+    /** Constructs a new `Color` set to white. */
+    static white(): Color
+    /** Constructs a new `Color` set to gray. */
+    static gray(): Color
+    /** Constructs a new `Color` set to red. */
+    static red(): Color
+    /** Constructs a new `Color` set to green. */
+    static green(): Color
+    /** Constructs a new `Color` set to blue. */
+    static blue(): Color
+    /** Parses a `Color`, as Rust's `FromStr` does. Throws when it does not parse. */
+    static fromStr(s: string): Color
+    get red(): number
+    set red(value: number)
+    get green(): number
+    set green(value: number)
+    get blue(): number
+    set blue(value: number)
+    get alpha(): number
+    set alpha(value: number)
+    /** A `Color` from a plain object of its fields. */
+    static fromObject(obj: svgtypes.ColorObject): Color
+    /** Its fields, as a plain object `fromObject` takes back. */
+    toObject(): svgtypes.ColorObject
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type SvgtypesColor = Color
+  /** A `Color`'s public fields, as a plain object. */
+  export interface ColorObject {
+    red: number
+    green: number
+    blue: number
+    alpha: number
+  }
+  /** The `code` a thrown `svgtypes::Error` carries: the variant's name. The message is its `Display`. */
+  export type ErrorCode = 'UnexpectedEndOfStream' | 'UnexpectedData' | 'InvalidValue' | 'InvalidIdent' | 'InvalidChar' | 'InvalidString' | 'InvalidNumber'
+}
+
+export declare namespace tiny_skia {
+  /**
+   * An RGBA color value, holding four floating point components.
+   *
+   * # Guarantees
+   *
+   * - All values are in 0..=1 range.
+   *
+   * A `tiny_skia::Color`, held by value.
+   */
+  export class Color {
+    /**
+     * Creates a new color from 4 components.
+     *
+     * u8 will be divided by 255 to get the float component.
+     */
+    static fromRgba8(r: number, g: number, b: number, a: number): Color
+    /**
+     * Returns color's red component.
+     *
+     * The value is guarantee to be in a 0..=1 range.
+     */
+    red(): number
+    /**
+     * Returns color's green component.
+     *
+     * The value is guarantee to be in a 0..=1 range.
+     */
+    green(): number
+    /**
+     * Returns color's blue component.
+     *
+     * The value is guarantee to be in a 0..=1 range.
+     */
+    blue(): number
+    /**
+     * Returns color's alpha component.
+     *
+     * The value is guarantee to be in a 0..=1 range.
+     */
+    alpha(): number
+    /**
+     * Sets the red component value.
+     *
+     * The new value will be clipped to the 0..=1 range.
+     */
+    setRed(c: number): void
+    /**
+     * Sets the green component value.
+     *
+     * The new value will be clipped to the 0..=1 range.
+     */
+    setGreen(c: number): void
+    /**
+     * Sets the blue component value.
+     *
+     * The new value will be clipped to the 0..=1 range.
+     */
+    setBlue(c: number): void
+    /**
+     * Sets the alpha component value.
+     *
+     * The new value will be clipped to the 0..=1 range.
+     */
+    setAlpha(c: number): void
+    /**
+     * Shifts color's opacity.
+     *
+     * Essentially, multiplies color's alpha by opacity.
+     *
+     * `opacity` will be clamped to the 0..=1 range first.
+     * The final alpha will also be clamped.
+     */
+    applyOpacity(opacity: number): void
+    /**
+     * Check that color is opaque.
+     *
+     * Alpha == 1.0
+     */
+    isOpaque(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaColor = Color
+  /**
+   * An integer size.
+   *
+   * # Guarantees
+   *
+   * - Width and height are positive and non-zero.
+   *
+   * A `tiny_skia::IntSize`, held by value.
+   */
+  export class IntSize {
+    /** Creates a new `IntSize` from width and height. */
+    static fromWh(width: number, height: number): tiny_skia.IntSize | null
+    /** Returns width. */
+    width(): number
+    /** Returns height. */
+    height(): number
+    /** Scales current size by the specified factor. */
+    scaleBy(factor: number): tiny_skia.IntSize | null
+    /** Scales current size to the specified size. */
+    scaleTo(to: tiny_skia.IntSize): tiny_skia.IntSize
+    /** Scales current size to the specified width. */
+    scaleToWidth(newWidth: number): tiny_skia.IntSize | null
+    /** Scales current size to the specified height. */
+    scaleToHeight(newHeight: number): tiny_skia.IntSize | null
+    /** Converts into [`Size`]. */
+    toSize(): tiny_skia.Size
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaIntSize = IntSize
+  /**
+   * A container that owns premultiplied RGBA pixels.
+   *
+   * The data is not aligned, therefore width == stride.
+   *
+   * A `tiny_skia::Pixmap`, owned. A method that consumes it in Rust leaves this
+   * instance spent: every later call throws.
+   */
+  export class Pixmap {
+    /**
+     * Allocates a new pixmap.
+     *
+     * A pixmap is filled with transparent black by default, aka (0, 0, 0, 0).
+     *
+     * Zero size in an error.
+     *
+     * Pixmap's width is limited by i32::MAX/4.
+     */
+    constructor(width: number, height: number)
+    /**
+     * Creates a new pixmap by taking ownership over an image buffer
+     * (premultiplied RGBA pixels).
+     *
+     * The size needs to match the data provided.
+     *
+     * Pixmap's width is limited by i32::MAX/4.
+     */
+    static fromVec(data: Uint8Array, size: tiny_skia.IntSize): tiny_skia.Pixmap | null
+    /**
+     * Decodes a PNG data into a `Pixmap`.
+     *
+     * Only 8-bit images are supported.
+     * Index PNGs are not supported.
+     */
+    static decodePng(data: Uint8Array): tiny_skia.Pixmap
+    /**
+     * Loads a PNG file into a `Pixmap`.
+     *
+     * Only 8-bit images are supported.
+     * Index PNGs are not supported.
+     */
+    static loadPng(path: string): tiny_skia.Pixmap
+    /** Encodes pixmap into a PNG data. */
+    encodePng(): Buffer
+    /** Saves pixmap as a PNG file. */
+    savePng(path: string): void
+    /** Returns pixmap's width. */
+    width(): number
+    /** Returns pixmap's height. */
+    height(): number
+    /** Fills the entire pixmap with a specified color. */
+    fill(color: tiny_skia.Color): void
+    /**
+     * Returns the internal data.
+     *
+     * Byteorder: RGBA
+     */
+    data(): Buffer
+    /**
+     * Consumes the internal data.
+     *
+     * Byteorder: RGBA
+     */
+    take(): Buffer
+    /**
+     * Consumes the pixmap and returns the internal data as demultiplied RGBA bytes.
+     *
+     * Byteorder: RGBA
+     */
+    takeDemultiplied(): Buffer
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaPixmap = Pixmap
+  /**
+   * A rectangle defined by left, top, right and bottom edges.
+   *
+   * Can have zero width and/or height. But not a negative one.
+   *
+   * # Guarantees
+   *
+   * - All values are finite.
+   * - Left edge is <= right.
+   * - Top edge is <= bottom.
+   * - Width and height are <= f32::MAX.
+   *
+   * A `tiny_skia::Rect`, held by value.
+   */
+  export class Rect {
+    /** Creates new `Rect`. */
+    static fromLtrb(left: number, top: number, right: number, bottom: number): tiny_skia.Rect | null
+    /** Creates new `Rect`. */
+    static fromXywh(x: number, y: number, w: number, h: number): tiny_skia.Rect | null
+    /** Returns the left edge. */
+    left(): number
+    /** Returns the top edge. */
+    top(): number
+    /** Returns the right edge. */
+    right(): number
+    /** Returns the bottom edge. */
+    bottom(): number
+    /** Returns rect's X position. */
+    x(): number
+    /** Returns rect's Y position. */
+    y(): number
+    /** Returns rect's width. */
+    width(): number
+    /** Returns rect's height. */
+    height(): number
+    /** Returns true if the rect is empty. */
+    isEmpty(): boolean
+    /**
+     * Returns an intersection of two rectangles.
+     *
+     * Returns `None` otherwise.
+     */
+    intersect(other: tiny_skia.Rect): tiny_skia.Rect | null
+    /**
+     * Returns the union of two rectangles.
+     *
+     * Returns `None` if the width or height would overflow.
+     */
+    join(other: tiny_skia.Rect): tiny_skia.Rect | null
+    /** Insets the rectangle by the specified offset. */
+    inset(dx: number, dy: number): tiny_skia.Rect | null
+    /** Outsets the rectangle by the specified offset. */
+    outset(dx: number, dy: number): tiny_skia.Rect | null
+    /**
+     * Transforms the rect using the provided `Transform`.
+     *
+     * If the transform is a skew, the result will be a bounding box around the skewed rectangle.
+     */
+    transform(ts: tiny_skia.Transform): tiny_skia.Rect | null
+    /** Converts into [`NonZeroRect`]. */
+    toNonZeroRect(): BBox | null
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaRect = Rect
+  /**
+   * A size.
+   *
+   * # Guarantees
+   *
+   * - Width and height are positive, non-zero and finite.
+   *
+   * A `tiny_skia::Size`, held by value.
+   */
+  export class Size {
+    /** Creates a new `Size` from width and height. */
+    static fromWh(width: number, height: number): tiny_skia.Size | null
+    /** Returns width. */
+    width(): number
+    /** Returns height. */
+    height(): number
+    /** Scales current size to specified size. */
+    scaleTo(to: tiny_skia.Size): tiny_skia.Size
+    /** Expands current size to specified size. */
+    expandTo(to: tiny_skia.Size): tiny_skia.Size
+    /** Scales current size by the specified factor. */
+    scaleBy(factor: number): tiny_skia.Size | null
+    /** Scales current size to the specified width. */
+    scaleToWidth(newWidth: number): tiny_skia.Size | null
+    /** Scales current size to the specified height. */
+    scaleToHeight(newHeight: number): tiny_skia.Size | null
+    /** Converts into [`IntSize`]. */
+    toIntSize(): tiny_skia.IntSize
+    /** Converts the current size to `Rect` at provided position. */
+    toRect(x: number, y: number): tiny_skia.Rect | null
+    /** Converts the current size to `NonZeroRect` at provided position. */
+    toNonZeroRect(x: number, y: number): BBox
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaSize = Size
+  /**
+   * An affine transformation matrix.
+   *
+   * Unlike other types, doesn't guarantee to be valid. This is Skia quirk.
+   * Meaning Transform(0, 0, 0, 0, 0, 0) is ok, while it's technically not.
+   * Non-finite values are also not an error.
+   *
+   * A `tiny_skia::Transform`, held by value.
+   */
+  export class Transform {
+    /** Creates an identity transform. */
+    static identity(): tiny_skia.Transform
+    /**
+     * Creates a new `Transform`.
+     *
+     * We are using column-major-column-vector matrix notation, therefore it's ky-kx, not kx-ky.
+     */
+    static fromRow(sx: number, ky: number, kx: number, sy: number, tx: number, ty: number): tiny_skia.Transform
+    /** Creates a new translating `Transform`. */
+    static fromTranslate(tx: number, ty: number): tiny_skia.Transform
+    /** Creates a new scaling `Transform`. */
+    static fromScale(sx: number, sy: number): tiny_skia.Transform
+    /** Creates a new skewing `Transform`. */
+    static fromSkew(kx: number, ky: number): tiny_skia.Transform
+    /**
+     * Creates a new rotating `Transform`.
+     *
+     * `angle` in degrees.
+     */
+    static fromRotate(angle: number): tiny_skia.Transform
+    /**
+     * Creates a new rotating `Transform` at the specified position.
+     *
+     * `angle` in degrees.
+     */
+    static fromRotateAt(angle: number, tx: number, ty: number): tiny_skia.Transform
+    /** Checks that transform is finite. */
+    isFinite(): boolean
+    /** Checks that transform is finite and has non-zero scale. */
+    isValid(): boolean
+    /** Checks that transform is identity. */
+    isIdentity(): boolean
+    /** Checks that transform is scale-only. */
+    isScale(): boolean
+    /** Checks that transform is skew-only. */
+    isSkew(): boolean
+    /** Checks that transform is translate-only. */
+    isTranslate(): boolean
+    /** Checks that transform contains only scale and translate. */
+    isScaleTranslate(): boolean
+    /** Checks that transform contains a scale part. */
+    hasScale(): boolean
+    /** Checks that transform contains a skew part. */
+    hasSkew(): boolean
+    /** Checks that transform contains a translate part. */
+    hasTranslate(): boolean
+    /** Pre-scales the current transform. */
+    preScale(sx: number, sy: number): tiny_skia.Transform
+    /** Post-scales the current transform. */
+    postScale(sx: number, sy: number): tiny_skia.Transform
+    /** Pre-translates the current transform. */
+    preTranslate(tx: number, ty: number): tiny_skia.Transform
+    /** Post-translates the current transform. */
+    postTranslate(tx: number, ty: number): tiny_skia.Transform
+    /**
+     * Pre-rotates the current transform.
+     *
+     * `angle` in degrees.
+     */
+    preRotate(angle: number): tiny_skia.Transform
+    /**
+     * Post-rotates the current transform.
+     *
+     * `angle` in degrees.
+     */
+    postRotate(angle: number): tiny_skia.Transform
+    /**
+     * Pre-rotates the current transform by the specified position.
+     *
+     * `angle` in degrees.
+     */
+    preRotateAt(angle: number, tx: number, ty: number): tiny_skia.Transform
+    /**
+     * Post-rotates the current transform by the specified position.
+     *
+     * `angle` in degrees.
+     */
+    postRotateAt(angle: number, tx: number, ty: number): tiny_skia.Transform
+    /** Pre-concats the current transform. */
+    preConcat(other: tiny_skia.Transform): tiny_skia.Transform
+    /** Post-concats the current transform. */
+    postConcat(other: tiny_skia.Transform): tiny_skia.Transform
+    /** Returns an inverted transform. */
+    invert(): tiny_skia.Transform | null
+    get sx(): number
+    set sx(value: number)
+    get kx(): number
+    set kx(value: number)
+    get ky(): number
+    set ky(value: number)
+    get sy(): number
+    set sy(value: number)
+    get tx(): number
+    set tx(value: number)
+    get ty(): number
+    set ty(value: number)
+    /** A `Transform` from a plain object of its fields. */
+    static fromObject(obj: tiny_skia.TransformObject): tiny_skia.Transform
+    /** Its fields, as a plain object `fromObject` takes back. */
+    toObject(): tiny_skia.TransformObject
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaTransform = Transform
+  /** A `Transform`'s public fields, as a plain object. */
+  export interface TransformObject {
+    sx: number
+    kx: number
+    ky: number
+    sy: number
+    tx: number
+    ty: number
+  }
 }
 
 export declare namespace usvg {
@@ -2234,6 +2730,63 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgTextSpan = TextSpan
+  /**
+   * A nodes tree container.
+   *
+   * A shared, read-only `usvg::Tree`.
+   */
+  export class Tree {
+    /**
+     * Parses `Tree` from an SVG data.
+     *
+     * Can contain an SVG string or a gzip compressed data.
+     */
+    static fromData(data: Uint8Array, opt?: usvg.Options | undefined | null): usvg.Tree
+    /**
+     * Similar to the `from_data` method, except that it ignores all `image` elements linking to
+     * external files, as required by the SVG specification when SVG files are loaded
+     * for `<image href="..." />` tags.
+     */
+    static fromDataNested(data: Uint8Array, opt?: usvg.Options | undefined | null): usvg.Tree
+    /** Parses `Tree` from an SVG string. */
+    static fromStr(text: string, opt?: usvg.Options | undefined | null): usvg.Tree
+    /**
+     * Image size.
+     *
+     * Size of an image that should be created to fit the SVG.
+     *
+     * `width` and `height` in SVG.
+     *
+     * Note that this does not necessarily represent the bounding box of the
+     * rendered contents. Use
+     * [`self.root().abs_layer_bounding_box()`](Group::abs_layer_bounding_box)
+     * to retrieve it instead.
+     */
+    size(): tiny_skia.Size
+    /** Checks if the current tree has any text nodes. */
+    hasTextNodes(): boolean
+    /** Checks if the current tree has any `defs` nodes. */
+    hasDefsNodes(): boolean
+    /** Returns a list of all unique [`LinearGradient`]s in the tree. */
+    linearGradients(): Array<usvg.LinearGradient>
+    /** Returns a list of all unique [`RadialGradient`]s in the tree. */
+    radialGradients(): Array<usvg.RadialGradient>
+    /** Returns a list of all unique [`Pattern`]s in the tree. */
+    patterns(): Array<usvg.Pattern>
+    /** Returns a list of all unique [`ClipPath`]s in the tree. */
+    clipPaths(): Array<usvg.ClipPath>
+    /** Returns a list of all unique [`Mask`]s in the tree. */
+    masks(): Array<usvg.Mask>
+    /** Returns a list of all unique [`Filter`](filter::Filter)s in the tree. */
+    filters(): Array<usvg.Filter>
+    /** Returns the font database that applies to all text nodes in the tree. */
+    fontdb(): fontdb.Database
+    /** Writes `usvg::Tree` back to SVG. */
+    toString(opt?: usvg.WriteOptions | undefined | null): string
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgTree = Tree
   /** An alignment baseline property. */
   export type AlignmentBaseline = 'auto' | 'baseline' | 'beforeEdge' | 'textBeforeEdge' | 'middle' | 'central' | 'afterEdge' | 'textAfterEdge' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical'
   /** `BaselineShift::Number`. */
@@ -2381,6 +2934,8 @@ export declare namespace usvg {
   }
   /** An edges processing mode. */
   export type EdgeMode = 'none' | 'duplicate' | 'wrap'
+  /** The `code` a thrown `usvg::Error` carries: the variant's name. The message is its `Display`. */
+  export type ErrorCode = 'NotAnUtf8Str' | 'SvgzFeatureNotEnabled' | 'MalformedGZip' | 'ElementsLimitReached' | 'InvalidSize' | 'ParsingFailed'
   /** Plain view of a `Fill`. */
   export interface Fill {
     paint: usvg.PaintColor | usvg.PaintLinearGradient | usvg.PaintRadialGradient | usvg.PaintPattern

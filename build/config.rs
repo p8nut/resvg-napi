@@ -9,7 +9,7 @@
 //! wrapped impl blocks (`PASSES`), the index bounds, and the upstream spellings of
 //! the template's domain shapes.
 
-use napi_gen::{Config, ContentView, Converter, Provider, Shapes};
+use napi_gen::{Config, ContentView, Converter, Provider, Shapes, View};
 
 /// One crate the binding wraps.
 pub struct Upstream {
@@ -266,17 +266,59 @@ pub const GEN: Config = Config {
         ("fs", "true"),
         ("fontconfig", "true"),
         ("memmap", "not(target_family = \"wasm\")"),
+        // tiny-skia's PNG codec; resvg turns it on, on every target.
+        ("png-format", "true"),
     ],
     // The second surface (ADR 0002, Q21): one namespace per crate, each type
     // under the crate that defines it. fontdb is reached through usvg's
-    // re-export, and is still `fontdb` from JS. The flat exports stay beside
-    // it until the migration removes them.
-    namespaces: &[("usvg", "usvg"), ("usvg::fontdb", "fontdb")],
+    // re-export, and is still `fontdb` from JS; tiny-skia and resvg through
+    // resvg's. The flat exports stay beside it until the migration removes
+    // them.
+    namespaces: &[
+        ("usvg", "usvg"),
+        ("usvg::fontdb", "fontdb"),
+        ("tiny_skia", "tiny_skia"),
+        ("svgtypes", "svgtypes"),
+        ("resvg", "resvg"),
+    ],
     // A flat class named like a namespaced one (`ClipPath`, `Text`...) is
     // renamed `LegacyClipPath`, `LegacyText`: napi keeps one constructor per
     // class name. Both go with the flat surface in step 13 (decision Q36).
     legacy_prefix: Some("Legacy"),
-    classes: &[],
-    functions: &[],
-    views: &[],
+    // The classes with their constructors, statics, errors and conversions
+    // (step 6 of the migration). An allowlist on purpose: tiny-skia alone has
+    // forty public types, and these are the ones parsing, rendering and the
+    // helpers need. `Transform` is tiny-skia's, so `tiny_skia.Transform`
+    // (Q21), and `svgtypes.Color` parses CSS colours (Q33).
+    classes: &[
+        ("usvg", "Tree"),
+        ("usvg::fontdb", "Database"),
+        ("tiny_skia", "Pixmap"),
+        ("tiny_skia", "Color"),
+        ("tiny_skia", "IntSize"),
+        ("tiny_skia", "Transform"),
+        ("tiny_skia", "Rect"),
+        ("tiny_skia", "Size"),
+        ("svgtypes", "Color"),
+    ],
+    // `resvg.render`. `render_node` takes a `&usvg::Node`, which waits for
+    // the node projections of step 7.
+    functions: &[("resvg", "render")],
+    // `resvg::render` draws on a `&mut PixmapMut`: JS passes the
+    // `tiny_skia.Pixmap`, borrowed with `as_mut()` for the call.
+    views: &[View {
+        ty: "PixmapMut",
+        class: "Pixmap",
+        via: "as_mut",
+    }],
 };
+
+/// Crates parsed only for the classes and functions `GEN` lists, never for
+/// discovery: (the Cargo packages, read as one, and the path they are
+/// reached by). tiny-skia re-exports `Transform`, `Rect` and `Size` from
+/// tiny-skia-path, so the two are one source; resvg re-exports both crates.
+pub const CLASS_CRATES: &[(&[&str], &str)] = &[
+    (&["tiny-skia", "tiny-skia-path"], "tiny_skia"),
+    (&["svgtypes"], "svgtypes"),
+    (&["resvg"], "resvg"),
+];

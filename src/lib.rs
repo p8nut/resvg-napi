@@ -5323,6 +5323,116 @@ pub fn render_async(
         signal.map(|s| s.0),
     )
 }
+#[doc = " Representation of the [`<color>`] type."]
+#[doc = ""]
+#[doc = " [`<color>`]: https://www.w3.org/TR/css-color-3/"]
+#[doc = ""]
+#[doc = " A `svgtypes::Color`, held by value."]
+#[napi(js_name = "Color", namespace = "svgtypes")]
+pub struct SvgtypesColor {
+    inner: svgtypes::Color,
+}
+#[doc = " A `Color`'s public fields, as a plain object."]
+#[napi(object, js_name = "ColorObject", namespace = "svgtypes")]
+#[derive(Clone)]
+pub struct SvgtypesColorObject {
+    pub red: u32,
+    pub green: u32,
+    pub blue: u32,
+    pub alpha: u32,
+}
+#[doc = " The `code` a thrown `svgtypes::Error` carries: the variant's name. The message is its `Display`."]
+#[napi(string_enum, js_name = "ErrorCode", namespace = "svgtypes")]
+pub enum SvgtypesErrorCode {
+    UnexpectedEndOfStream,
+    UnexpectedData,
+    InvalidValue,
+    InvalidIdent,
+    InvalidChar,
+    InvalidString,
+    InvalidNumber,
+}
+#[doc = " A container that owns premultiplied RGBA pixels."]
+#[doc = ""]
+#[doc = " The data is not aligned, therefore width == stride."]
+#[doc = ""]
+#[doc = " A `tiny_skia::Pixmap`, owned. A method that consumes it in Rust leaves this"]
+#[doc = " instance spent: every later call throws."]
+#[napi(js_name = "Pixmap", namespace = "tiny_skia")]
+pub struct TinySkiaPixmap {
+    inner: Option<tiny_skia::Pixmap>,
+}
+#[doc = " An RGBA color value, holding four floating point components."]
+#[doc = ""]
+#[doc = " # Guarantees"]
+#[doc = ""]
+#[doc = " - All values are in 0..=1 range."]
+#[doc = ""]
+#[doc = " A `tiny_skia::Color`, held by value."]
+#[napi(js_name = "Color", namespace = "tiny_skia")]
+pub struct TinySkiaColor {
+    inner: tiny_skia::Color,
+}
+#[doc = " An integer size."]
+#[doc = ""]
+#[doc = " # Guarantees"]
+#[doc = ""]
+#[doc = " - Width and height are positive and non-zero."]
+#[doc = ""]
+#[doc = " A `tiny_skia::IntSize`, held by value."]
+#[napi(js_name = "IntSize", namespace = "tiny_skia")]
+pub struct TinySkiaIntSize {
+    inner: tiny_skia::IntSize,
+}
+#[doc = " An affine transformation matrix."]
+#[doc = ""]
+#[doc = " Unlike other types, doesn't guarantee to be valid. This is Skia quirk."]
+#[doc = " Meaning Transform(0, 0, 0, 0, 0, 0) is ok, while it's technically not."]
+#[doc = " Non-finite values are also not an error."]
+#[doc = ""]
+#[doc = " A `tiny_skia::Transform`, held by value."]
+#[napi(js_name = "Transform", namespace = "tiny_skia")]
+pub struct TinySkiaTransform {
+    inner: tiny_skia::Transform,
+}
+#[doc = " A `Transform`'s public fields, as a plain object."]
+#[napi(object, js_name = "TransformObject", namespace = "tiny_skia")]
+#[derive(Clone)]
+pub struct TinySkiaTransformObject {
+    pub sx: f64,
+    pub kx: f64,
+    pub ky: f64,
+    pub sy: f64,
+    pub tx: f64,
+    pub ty: f64,
+}
+#[doc = " A rectangle defined by left, top, right and bottom edges."]
+#[doc = ""]
+#[doc = " Can have zero width and/or height. But not a negative one."]
+#[doc = ""]
+#[doc = " # Guarantees"]
+#[doc = ""]
+#[doc = " - All values are finite."]
+#[doc = " - Left edge is <= right."]
+#[doc = " - Top edge is <= bottom."]
+#[doc = " - Width and height are <= f32::MAX."]
+#[doc = ""]
+#[doc = " A `tiny_skia::Rect`, held by value."]
+#[napi(js_name = "Rect", namespace = "tiny_skia")]
+pub struct TinySkiaRect {
+    inner: tiny_skia::Rect,
+}
+#[doc = " A size."]
+#[doc = ""]
+#[doc = " # Guarantees"]
+#[doc = ""]
+#[doc = " - Width and height are positive, non-zero and finite."]
+#[doc = ""]
+#[doc = " A `tiny_skia::Size`, held by value."]
+#[napi(js_name = "Size", namespace = "tiny_skia")]
+pub struct TinySkiaSize {
+    inner: tiny_skia::Size,
+}
 #[doc = " A color interpolation mode."]
 #[doc = ""]
 #[doc = " The default is `ColorInterpolation::LinearRGB`."]
@@ -5615,7 +5725,9 @@ pub enum UsvgWritingMode {
     LeftToRight,
     TopToBottom,
 }
-#[doc = " Handle on a `usvg::fontdb::Database`, copied on the first write while shared."]
+#[doc = " A font database."]
+#[doc = ""]
+#[doc = " A shared `usvg::fontdb::Database`, copied on the first write while shared."]
 #[napi(js_name = "Database", namespace = "fontdb")]
 pub struct FontdbDatabase {
     inner: std::sync::Arc<usvg::fontdb::Database>,
@@ -5837,6 +5949,24 @@ pub struct UsvgLinearGradient {
 pub struct UsvgClipPath {
     inner: std::sync::Arc<usvg::ClipPath>,
     doc: Doc,
+}
+#[doc = " A nodes tree container."]
+#[doc = ""]
+#[doc = " A shared, read-only `usvg::Tree`."]
+#[napi(js_name = "Tree", namespace = "usvg")]
+pub struct UsvgTree {
+    inner: std::sync::Arc<usvg::Tree>,
+    doc: Doc,
+}
+#[doc = " The `code` a thrown `usvg::Error` carries: the variant's name. The message is its `Display`."]
+#[napi(string_enum, js_name = "ErrorCode", namespace = "usvg")]
+pub enum UsvgErrorCode {
+    NotAnUtf8Str,
+    SvgzFeatureNotEnabled,
+    MalformedGZip,
+    ElementsLimitReached,
+    InvalidSize,
+    ParsingFailed,
 }
 #[doc = " The payload-free variants of `Input`."]
 #[napi(object, js_name = "InputPlain", namespace = "usvg")]
@@ -6619,6 +6749,1346 @@ pub enum FontdbStretch {
 pub struct FontdbFaceInfo {
     inner: usvg::fontdb::FaceInfo,
     doc: Doc,
+}
+#[doc = " Renders a tree onto the pixmap."]
+#[doc = ""]
+#[doc = " `transform` will be used as a root transform."]
+#[doc = " Can be used to position SVG inside the `pixmap`."]
+#[doc = ""]
+#[doc = " The produced content is in the sRGB color space."]
+#[napi(js_name = "render", namespace = "resvg")]
+#[allow(clippy::redundant_closure)]
+pub fn resvg_render(
+    tree: &UsvgTree,
+    transform: &TinySkiaTransform,
+    pixmap: &mut TinySkiaPixmap,
+) -> Result<(), String> {
+    let __tree = &tree.inner;
+    let __transform = transform.inner;
+    let mut __pixmap = pixmap.__mut()?.as_mut();
+    napi_support::contained("render", || {
+        resvg::render(__tree, __transform, &mut __pixmap)
+    })
+    .map_err(napi_support::coded)?;
+    Ok(())
+}
+impl SvgtypesColor {
+    fn __from(inner: svgtypes::Color) -> Self {
+        Self { inner }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "svgtypes")]
+impl SvgtypesColor {
+    #[doc = " Constructs a new `Color` from RGB values."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn new_rgb(red: u32, green: u32, blue: u32) -> Result<Self, String> {
+        let red = u8::try_from(red).map_err(|_| napi_support::invalid("red", red))?;
+        let green = u8::try_from(green).map_err(|_| napi_support::invalid("green", green))?;
+        let blue = u8::try_from(blue).map_err(|_| napi_support::invalid("blue", blue))?;
+        let __v = napi_support::contained("Color::new_rgb", || {
+            <svgtypes::Color>::new_rgb(red, green, blue)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` from RGBA values."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn new_rgba(red: u32, green: u32, blue: u32, alpha: u32) -> Result<Self, String> {
+        let red = u8::try_from(red).map_err(|_| napi_support::invalid("red", red))?;
+        let green = u8::try_from(green).map_err(|_| napi_support::invalid("green", green))?;
+        let blue = u8::try_from(blue).map_err(|_| napi_support::invalid("blue", blue))?;
+        let alpha = u8::try_from(alpha).map_err(|_| napi_support::invalid("alpha", alpha))?;
+        let __v = napi_support::contained("Color::new_rgba", || {
+            <svgtypes::Color>::new_rgba(red, green, blue, alpha)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` set to black."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn black() -> Result<Self, String> {
+        let __v = napi_support::contained("Color::black", <svgtypes::Color>::black)
+            .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` set to white."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn white() -> Result<Self, String> {
+        let __v = napi_support::contained("Color::white", <svgtypes::Color>::white)
+            .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` set to gray."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn gray() -> Result<Self, String> {
+        let __v = napi_support::contained("Color::gray", <svgtypes::Color>::gray)
+            .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` set to red."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn red() -> Result<Self, String> {
+        let __v = napi_support::contained("Color::red", <svgtypes::Color>::red)
+            .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` set to green."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn green() -> Result<Self, String> {
+        let __v = napi_support::contained("Color::green", <svgtypes::Color>::green)
+            .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Constructs a new `Color` set to blue."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn blue() -> Result<Self, String> {
+        let __v = napi_support::contained("Color::blue", <svgtypes::Color>::blue)
+            .map_err(napi_support::coded)?;
+        Ok(SvgtypesColor::__from(__v))
+    }
+    #[doc = " Parses a `Color`, as Rust's `FromStr` does. Throws when it does not parse."]
+    #[napi(factory)]
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: String) -> Result<Self, String> {
+        let __v = s.parse::<svgtypes::Color>().map_err(|e| {
+            let code = match &e {
+                svgtypes::Error::UnexpectedEndOfStream => "UnexpectedEndOfStream",
+                svgtypes::Error::UnexpectedData(..) => "UnexpectedData",
+                svgtypes::Error::InvalidValue => "InvalidValue",
+                svgtypes::Error::InvalidIdent => "InvalidIdent",
+                svgtypes::Error::InvalidChar(..) => "InvalidChar",
+                svgtypes::Error::InvalidString(..) => "InvalidString",
+                svgtypes::Error::InvalidNumber(..) => "InvalidNumber",
+            };
+            napi_support::thrown(code, &e)
+        })?;
+        Ok(Self::__from(__v))
+    }
+    #[napi(getter, js_name = "red")]
+    pub fn field_red(&self) -> Result<u32, String> {
+        let __v = &self.inner;
+        Ok(u32::from(__v.red))
+    }
+    #[napi(setter, js_name = "red")]
+    pub fn set_field_red(&mut self, value: u32) -> Result<(), String> {
+        let value = u8::try_from(value).map_err(|_| napi_support::invalid("red", value))?;
+        self.inner.red = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "green")]
+    pub fn field_green(&self) -> Result<u32, String> {
+        let __v = &self.inner;
+        Ok(u32::from(__v.green))
+    }
+    #[napi(setter, js_name = "green")]
+    pub fn set_field_green(&mut self, value: u32) -> Result<(), String> {
+        let value = u8::try_from(value).map_err(|_| napi_support::invalid("green", value))?;
+        self.inner.green = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "blue")]
+    pub fn field_blue(&self) -> Result<u32, String> {
+        let __v = &self.inner;
+        Ok(u32::from(__v.blue))
+    }
+    #[napi(setter, js_name = "blue")]
+    pub fn set_field_blue(&mut self, value: u32) -> Result<(), String> {
+        let value = u8::try_from(value).map_err(|_| napi_support::invalid("blue", value))?;
+        self.inner.blue = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "alpha")]
+    pub fn field_alpha(&self) -> Result<u32, String> {
+        let __v = &self.inner;
+        Ok(u32::from(__v.alpha))
+    }
+    #[napi(setter, js_name = "alpha")]
+    pub fn set_field_alpha(&mut self, value: u32) -> Result<(), String> {
+        let value = u8::try_from(value).map_err(|_| napi_support::invalid("alpha", value))?;
+        self.inner.alpha = value;
+        Ok(())
+    }
+    #[doc = " A `Color` from a plain object of its fields."]
+    #[napi(factory)]
+    pub fn from_object(obj: SvgtypesColorObject) -> Result<Self, String> {
+        Ok(Self::__from(svgtypes::Color {
+            red: u8::try_from(obj.red).map_err(|_| napi_support::invalid("red", obj.red))?,
+            green: u8::try_from(obj.green)
+                .map_err(|_| napi_support::invalid("green", obj.green))?,
+            blue: u8::try_from(obj.blue).map_err(|_| napi_support::invalid("blue", obj.blue))?,
+            alpha: u8::try_from(obj.alpha)
+                .map_err(|_| napi_support::invalid("alpha", obj.alpha))?,
+        }))
+    }
+    #[doc = " Its fields, as a plain object `fromObject` takes back."]
+    #[napi]
+    pub fn to_object(&self) -> Result<SvgtypesColorObject, String> {
+        let __v = &self.inner;
+        Ok(SvgtypesColorObject {
+            red: u32::from(__v.red),
+            green: u32::from(__v.green),
+            blue: u32::from(__v.blue),
+            alpha: u32::from(__v.alpha),
+        })
+    }
+}
+impl TinySkiaPixmap {
+    fn __from(inner: tiny_skia::Pixmap) -> Self {
+        Self { inner: Some(inner) }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+    fn __ref(&self) -> Result<&tiny_skia::Pixmap, String> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| napi_support::consumed("Pixmap"))
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::Pixmap, String> {
+        self.inner
+            .as_mut()
+            .ok_or_else(|| napi_support::consumed("Pixmap"))
+    }
+    fn __take(&mut self) -> Result<tiny_skia::Pixmap, String> {
+        self.inner
+            .take()
+            .ok_or_else(|| napi_support::consumed("Pixmap"))
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaPixmap {
+    #[doc = " Allocates a new pixmap."]
+    #[doc = ""]
+    #[doc = " A pixmap is filled with transparent black by default, aka (0, 0, 0, 0)."]
+    #[doc = ""]
+    #[doc = " Zero size in an error."]
+    #[doc = ""]
+    #[doc = " Pixmap's width is limited by i32::MAX/4."]
+    #[napi(constructor)]
+    #[allow(clippy::redundant_closure)]
+    pub fn new(width: u32, height: u32) -> Result<Self, String> {
+        let __v =
+            napi_support::contained("Pixmap::new", || <tiny_skia::Pixmap>::new(width, height))
+                .map_err(napi_support::coded)?;
+        let __v = __v.ok_or_else(|| {
+            napi_support::thrown(
+                "InvalidArg",
+                "Pixmap::new returned None: no value for these arguments",
+            )
+        })?;
+        Ok(TinySkiaPixmap::__from(__v))
+    }
+    #[doc = " Creates a new pixmap by taking ownership over an image buffer"]
+    #[doc = " (premultiplied RGBA pixels)."]
+    #[doc = ""]
+    #[doc = " The size needs to match the data provided."]
+    #[doc = ""]
+    #[doc = " Pixmap's width is limited by i32::MAX/4."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_vec(
+        data: Uint8Array,
+        size: &TinySkiaIntSize,
+    ) -> Result<Option<TinySkiaPixmap>, String> {
+        let __size = size.inner;
+        let __v = napi_support::contained("Pixmap::from_vec", || {
+            <tiny_skia::Pixmap>::from_vec(data.to_vec(), __size)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaPixmap::__from(__v)))
+    }
+    #[doc = " Decodes a PNG data into a `Pixmap`."]
+    #[doc = ""]
+    #[doc = " Only 8-bit images are supported."]
+    #[doc = " Index PNGs are not supported."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn decode_png(data: Uint8Array) -> Result<Self, String> {
+        let __v = napi_support::contained("Pixmap::decode_png", || {
+            <tiny_skia::Pixmap>::decode_png(&data)
+        })
+        .map_err(napi_support::coded)?
+        .map_err(|e| napi_support::thrown("GenericFailure", e))?;
+        Ok(TinySkiaPixmap::__from(__v))
+    }
+    #[doc = " Loads a PNG file into a `Pixmap`."]
+    #[doc = ""]
+    #[doc = " Only 8-bit images are supported."]
+    #[doc = " Index PNGs are not supported."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn load_png(path: String) -> Result<Self, String> {
+        let __v =
+            napi_support::contained("Pixmap::load_png", || <tiny_skia::Pixmap>::load_png(path))
+                .map_err(napi_support::coded)?
+                .map_err(|e| napi_support::thrown("GenericFailure", e))?;
+        Ok(TinySkiaPixmap::__from(__v))
+    }
+    #[doc = " Encodes pixmap into a PNG data."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn encode_png(&self) -> Result<Buffer, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Pixmap::encode_png", || __self.encode_png())
+            .map_err(napi_support::coded)?
+            .map_err(|e| napi_support::thrown("GenericFailure", e))?;
+        Ok(__v.into())
+    }
+    #[doc = " Saves pixmap as a PNG file."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn save_png(&self, path: String) -> Result<(), String> {
+        let __self = self.__ref()?;
+        napi_support::contained("Pixmap::save_png", || __self.save_png(path))
+            .map_err(napi_support::coded)?
+            .map_err(|e| napi_support::thrown("GenericFailure", e))?;
+        Ok(())
+    }
+    #[doc = " Returns pixmap's width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Pixmap::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns pixmap's height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Pixmap::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Fills the entire pixmap with a specified color."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn fill(&mut self, color: &TinySkiaColor) -> Result<(), String> {
+        let __color = color.inner;
+        let __self = self.__mut()?;
+        napi_support::contained("Pixmap::fill", || __self.fill(__color))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " Returns the internal data."]
+    #[doc = ""]
+    #[doc = " Byteorder: RGBA"]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn data(&self) -> Result<Buffer, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Pixmap::data", || __self.data())
+            .map_err(napi_support::coded)?;
+        Ok(__v.to_vec().into())
+    }
+    #[doc = " Consumes the internal data."]
+    #[doc = ""]
+    #[doc = " Byteorder: RGBA"]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn take(&mut self) -> Result<Buffer, String> {
+        let __self = self.__take()?;
+        let __v = napi_support::contained("Pixmap::take", || __self.take())
+            .map_err(napi_support::coded)?;
+        Ok(__v.into())
+    }
+    #[doc = " Consumes the pixmap and returns the internal data as demultiplied RGBA bytes."]
+    #[doc = ""]
+    #[doc = " Byteorder: RGBA"]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn take_demultiplied(&mut self) -> Result<Buffer, String> {
+        let __self = self.__take()?;
+        let __v =
+            napi_support::contained("Pixmap::take_demultiplied", || __self.take_demultiplied())
+                .map_err(napi_support::coded)?;
+        Ok(__v.into())
+    }
+}
+impl TinySkiaColor {
+    fn __from(inner: tiny_skia::Color) -> Self {
+        Self { inner }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaColor {
+    #[doc = " Creates a new color from 4 components."]
+    #[doc = ""]
+    #[doc = " u8 will be divided by 255 to get the float component."]
+    #[napi(factory)]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_rgba8(r: u32, g: u32, b: u32, a: u32) -> Result<Self, String> {
+        let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
+        let g = u8::try_from(g).map_err(|_| napi_support::invalid("g", g))?;
+        let b = u8::try_from(b).map_err(|_| napi_support::invalid("b", b))?;
+        let a = u8::try_from(a).map_err(|_| napi_support::invalid("a", a))?;
+        let __v = napi_support::contained("Color::from_rgba8", || {
+            <tiny_skia::Color>::from_rgba8(r, g, b, a)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaColor::__from(__v))
+    }
+    #[doc = " Returns color's red component."]
+    #[doc = ""]
+    #[doc = " The value is guarantee to be in a 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn red(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Color::red", || __self.red()).map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns color's green component."]
+    #[doc = ""]
+    #[doc = " The value is guarantee to be in a 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn green(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Color::green", || __self.green())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns color's blue component."]
+    #[doc = ""]
+    #[doc = " The value is guarantee to be in a 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn blue(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Color::blue", || __self.blue())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns color's alpha component."]
+    #[doc = ""]
+    #[doc = " The value is guarantee to be in a 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn alpha(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Color::alpha", || __self.alpha())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Sets the red component value."]
+    #[doc = ""]
+    #[doc = " The new value will be clipped to the 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_red(&mut self, c: f64) -> Result<(), String> {
+        let c = to_f32(c);
+        let __self = &mut self.inner;
+        napi_support::contained("Color::set_red", || __self.set_red(c))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " Sets the green component value."]
+    #[doc = ""]
+    #[doc = " The new value will be clipped to the 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_green(&mut self, c: f64) -> Result<(), String> {
+        let c = to_f32(c);
+        let __self = &mut self.inner;
+        napi_support::contained("Color::set_green", || __self.set_green(c))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " Sets the blue component value."]
+    #[doc = ""]
+    #[doc = " The new value will be clipped to the 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_blue(&mut self, c: f64) -> Result<(), String> {
+        let c = to_f32(c);
+        let __self = &mut self.inner;
+        napi_support::contained("Color::set_blue", || __self.set_blue(c))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " Sets the alpha component value."]
+    #[doc = ""]
+    #[doc = " The new value will be clipped to the 0..=1 range."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set_alpha(&mut self, c: f64) -> Result<(), String> {
+        let c = to_f32(c);
+        let __self = &mut self.inner;
+        napi_support::contained("Color::set_alpha", || __self.set_alpha(c))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " Shifts color's opacity."]
+    #[doc = ""]
+    #[doc = " Essentially, multiplies color's alpha by opacity."]
+    #[doc = ""]
+    #[doc = " `opacity` will be clamped to the 0..=1 range first."]
+    #[doc = " The final alpha will also be clamped."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn apply_opacity(&mut self, opacity: f64) -> Result<(), String> {
+        let opacity = to_f32(opacity);
+        let __self = &mut self.inner;
+        napi_support::contained("Color::apply_opacity", || __self.apply_opacity(opacity))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " Check that color is opaque."]
+    #[doc = ""]
+    #[doc = " Alpha == 1.0"]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_opaque(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Color::is_opaque", || __self.is_opaque())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+}
+impl TinySkiaIntSize {
+    fn __from(inner: tiny_skia::IntSize) -> Self {
+        Self { inner }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaIntSize {
+    #[doc = " Creates a new `IntSize` from width and height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_wh(width: u32, height: u32) -> Result<Option<TinySkiaIntSize>, String> {
+        let __v = napi_support::contained("IntSize::from_wh", || {
+            <tiny_skia::IntSize>::from_wh(width, height)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaIntSize::__from(__v)))
+    }
+    #[doc = " Returns width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<u32, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<u32, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Scales current size by the specified factor."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_by(&self, factor: f64) -> Result<Option<TinySkiaIntSize>, String> {
+        let factor = to_f32(factor);
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::scale_by", || __self.scale_by(factor))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaIntSize::__from(__v)))
+    }
+    #[doc = " Scales current size to the specified size."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_to(&self, to: &TinySkiaIntSize) -> Result<TinySkiaIntSize, String> {
+        let __to = to.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::scale_to", || __self.scale_to(__to))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaIntSize::__from(__v))
+    }
+    #[doc = " Scales current size to the specified width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_to_width(&self, new_width: u32) -> Result<Option<TinySkiaIntSize>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::scale_to_width", || {
+            __self.scale_to_width(new_width)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaIntSize::__from(__v)))
+    }
+    #[doc = " Scales current size to the specified height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_to_height(&self, new_height: u32) -> Result<Option<TinySkiaIntSize>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::scale_to_height", || {
+            __self.scale_to_height(new_height)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaIntSize::__from(__v)))
+    }
+    #[doc = " Converts into [`Size`]."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_size(&self) -> Result<TinySkiaSize, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("IntSize::to_size", || __self.to_size())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaSize::__from(__v))
+    }
+}
+impl TinySkiaTransform {
+    fn __from(inner: tiny_skia::Transform) -> Self {
+        Self { inner }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaTransform {
+    #[doc = " Creates an identity transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn identity() -> Result<Self, String> {
+        let __v = napi_support::contained("Transform::identity", <tiny_skia::Transform>::identity)
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Creates a new `Transform`."]
+    #[doc = ""]
+    #[doc = " We are using column-major-column-vector matrix notation, therefore it's ky-kx, not kx-ky."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_row(sx: f64, ky: f64, kx: f64, sy: f64, tx: f64, ty: f64) -> Result<Self, String> {
+        let sx = to_f32(sx);
+        let ky = to_f32(ky);
+        let kx = to_f32(kx);
+        let sy = to_f32(sy);
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __v = napi_support::contained("Transform::from_row", || {
+            <tiny_skia::Transform>::from_row(sx, ky, kx, sy, tx, ty)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Creates a new translating `Transform`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_translate(tx: f64, ty: f64) -> Result<Self, String> {
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __v = napi_support::contained("Transform::from_translate", || {
+            <tiny_skia::Transform>::from_translate(tx, ty)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Creates a new scaling `Transform`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_scale(sx: f64, sy: f64) -> Result<Self, String> {
+        let sx = to_f32(sx);
+        let sy = to_f32(sy);
+        let __v = napi_support::contained("Transform::from_scale", || {
+            <tiny_skia::Transform>::from_scale(sx, sy)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Creates a new skewing `Transform`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_skew(kx: f64, ky: f64) -> Result<Self, String> {
+        let kx = to_f32(kx);
+        let ky = to_f32(ky);
+        let __v = napi_support::contained("Transform::from_skew", || {
+            <tiny_skia::Transform>::from_skew(kx, ky)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Creates a new rotating `Transform`."]
+    #[doc = ""]
+    #[doc = " `angle` in degrees."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_rotate(angle: f64) -> Result<Self, String> {
+        let angle = to_f32(angle);
+        let __v = napi_support::contained("Transform::from_rotate", || {
+            <tiny_skia::Transform>::from_rotate(angle)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Creates a new rotating `Transform` at the specified position."]
+    #[doc = ""]
+    #[doc = " `angle` in degrees."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_rotate_at(angle: f64, tx: f64, ty: f64) -> Result<Self, String> {
+        let angle = to_f32(angle);
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __v = napi_support::contained("Transform::from_rotate_at", || {
+            <tiny_skia::Transform>::from_rotate_at(angle, tx, ty)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Checks that transform is finite."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_finite(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_finite", || __self.is_finite())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform is finite and has non-zero scale."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_valid(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_valid", || __self.is_valid())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform is identity."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_identity(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_identity", || __self.is_identity())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform is scale-only."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_scale(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_scale", || __self.is_scale())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform is skew-only."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_skew(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_skew", || __self.is_skew())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform is translate-only."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_translate(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_translate", || __self.is_translate())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform contains only scale and translate."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_scale_translate(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::is_scale_translate", || {
+            __self.is_scale_translate()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform contains a scale part."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn has_scale(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::has_scale", || __self.has_scale())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform contains a skew part."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn has_skew(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::has_skew", || __self.has_skew())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks that transform contains a translate part."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn has_translate(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::has_translate", || __self.has_translate())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Pre-scales the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn pre_scale(&self, sx: f64, sy: f64) -> Result<TinySkiaTransform, String> {
+        let sx = to_f32(sx);
+        let sy = to_f32(sy);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::pre_scale", || __self.pre_scale(sx, sy))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Post-scales the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn post_scale(&self, sx: f64, sy: f64) -> Result<TinySkiaTransform, String> {
+        let sx = to_f32(sx);
+        let sy = to_f32(sy);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::post_scale", || __self.post_scale(sx, sy))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Pre-translates the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn pre_translate(&self, tx: f64, ty: f64) -> Result<TinySkiaTransform, String> {
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Transform::pre_translate", || __self.pre_translate(tx, ty))
+                .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Post-translates the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn post_translate(&self, tx: f64, ty: f64) -> Result<TinySkiaTransform, String> {
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::post_translate", || {
+            __self.post_translate(tx, ty)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Pre-rotates the current transform."]
+    #[doc = ""]
+    #[doc = " `angle` in degrees."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn pre_rotate(&self, angle: f64) -> Result<TinySkiaTransform, String> {
+        let angle = to_f32(angle);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::pre_rotate", || __self.pre_rotate(angle))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Post-rotates the current transform."]
+    #[doc = ""]
+    #[doc = " `angle` in degrees."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn post_rotate(&self, angle: f64) -> Result<TinySkiaTransform, String> {
+        let angle = to_f32(angle);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::post_rotate", || __self.post_rotate(angle))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Pre-rotates the current transform by the specified position."]
+    #[doc = ""]
+    #[doc = " `angle` in degrees."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn pre_rotate_at(&self, angle: f64, tx: f64, ty: f64) -> Result<TinySkiaTransform, String> {
+        let angle = to_f32(angle);
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::pre_rotate_at", || {
+            __self.pre_rotate_at(angle, tx, ty)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Post-rotates the current transform by the specified position."]
+    #[doc = ""]
+    #[doc = " `angle` in degrees."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn post_rotate_at(
+        &self,
+        angle: f64,
+        tx: f64,
+        ty: f64,
+    ) -> Result<TinySkiaTransform, String> {
+        let angle = to_f32(angle);
+        let tx = to_f32(tx);
+        let ty = to_f32(ty);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::post_rotate_at", || {
+            __self.post_rotate_at(angle, tx, ty)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Pre-concats the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn pre_concat(&self, other: &TinySkiaTransform) -> Result<TinySkiaTransform, String> {
+        let __other = other.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::pre_concat", || __self.pre_concat(__other))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Post-concats the current transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn post_concat(&self, other: &TinySkiaTransform) -> Result<TinySkiaTransform, String> {
+        let __other = other.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::post_concat", || __self.post_concat(__other))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Returns an inverted transform."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn invert(&self) -> Result<Option<TinySkiaTransform>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Transform::invert", || __self.invert())
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaTransform::__from(__v)))
+    }
+    #[napi(getter, js_name = "sx")]
+    pub fn field_sx(&self) -> Result<f64, String> {
+        let __v = &self.inner;
+        Ok(f64::from(__v.sx))
+    }
+    #[napi(setter, js_name = "sx")]
+    pub fn set_field_sx(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.inner.sx = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "kx")]
+    pub fn field_kx(&self) -> Result<f64, String> {
+        let __v = &self.inner;
+        Ok(f64::from(__v.kx))
+    }
+    #[napi(setter, js_name = "kx")]
+    pub fn set_field_kx(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.inner.kx = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "ky")]
+    pub fn field_ky(&self) -> Result<f64, String> {
+        let __v = &self.inner;
+        Ok(f64::from(__v.ky))
+    }
+    #[napi(setter, js_name = "ky")]
+    pub fn set_field_ky(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.inner.ky = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "sy")]
+    pub fn field_sy(&self) -> Result<f64, String> {
+        let __v = &self.inner;
+        Ok(f64::from(__v.sy))
+    }
+    #[napi(setter, js_name = "sy")]
+    pub fn set_field_sy(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.inner.sy = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "tx")]
+    pub fn field_tx(&self) -> Result<f64, String> {
+        let __v = &self.inner;
+        Ok(f64::from(__v.tx))
+    }
+    #[napi(setter, js_name = "tx")]
+    pub fn set_field_tx(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.inner.tx = value;
+        Ok(())
+    }
+    #[napi(getter, js_name = "ty")]
+    pub fn field_ty(&self) -> Result<f64, String> {
+        let __v = &self.inner;
+        Ok(f64::from(__v.ty))
+    }
+    #[napi(setter, js_name = "ty")]
+    pub fn set_field_ty(&mut self, value: f64) -> Result<(), String> {
+        let value = to_f32(value);
+        self.inner.ty = value;
+        Ok(())
+    }
+    #[doc = " A `Transform` from a plain object of its fields."]
+    #[napi]
+    pub fn from_object(obj: TinySkiaTransformObject) -> Result<Self, String> {
+        Ok(Self::__from(tiny_skia::Transform {
+            sx: to_f32(obj.sx),
+            kx: to_f32(obj.kx),
+            ky: to_f32(obj.ky),
+            sy: to_f32(obj.sy),
+            tx: to_f32(obj.tx),
+            ty: to_f32(obj.ty),
+        }))
+    }
+    #[doc = " Its fields, as a plain object `fromObject` takes back."]
+    #[napi]
+    pub fn to_object(&self) -> Result<TinySkiaTransformObject, String> {
+        let __v = &self.inner;
+        Ok(TinySkiaTransformObject {
+            sx: f64::from(__v.sx),
+            kx: f64::from(__v.kx),
+            ky: f64::from(__v.ky),
+            sy: f64::from(__v.sy),
+            tx: f64::from(__v.tx),
+            ty: f64::from(__v.ty),
+        })
+    }
+}
+impl TinySkiaRect {
+    fn __from(inner: tiny_skia::Rect) -> Self {
+        Self { inner }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaRect {
+    #[doc = " Creates new `Rect`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_ltrb(
+        left: f64,
+        top: f64,
+        right: f64,
+        bottom: f64,
+    ) -> Result<Option<TinySkiaRect>, String> {
+        let left = to_f32(left);
+        let top = to_f32(top);
+        let right = to_f32(right);
+        let bottom = to_f32(bottom);
+        let __v = napi_support::contained("Rect::from_ltrb", || {
+            <tiny_skia::Rect>::from_ltrb(left, top, right, bottom)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Creates new `Rect`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_xywh(x: f64, y: f64, w: f64, h: f64) -> Result<Option<TinySkiaRect>, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let w = to_f32(w);
+        let h = to_f32(h);
+        let __v = napi_support::contained("Rect::from_xywh", || {
+            <tiny_skia::Rect>::from_xywh(x, y, w, h)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Returns the left edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn left(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Rect::left", || __self.left()).map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the top edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn top(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Rect::top", || __self.top()).map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the right edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn right(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::right", || __self.right())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns the bottom edge."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bottom(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::bottom", || __self.bottom())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's X position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn x(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::x", || __self.x()).map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's Y position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn y(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::y", || __self.y()).map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns rect's height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns true if the rect is empty."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_empty(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::is_empty", || __self.is_empty())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns an intersection of two rectangles."]
+    #[doc = ""]
+    #[doc = " Returns `None` otherwise."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn intersect(&self, other: &TinySkiaRect) -> Result<Option<TinySkiaRect>, String> {
+        let __other = &other.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::intersect", || __self.intersect(__other))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Returns the union of two rectangles."]
+    #[doc = ""]
+    #[doc = " Returns `None` if the width or height would overflow."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn join(&self, other: &TinySkiaRect) -> Result<Option<TinySkiaRect>, String> {
+        let __other = &other.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::join", || __self.join(__other))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Insets the rectangle by the specified offset."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn inset(&self, dx: f64, dy: f64) -> Result<Option<TinySkiaRect>, String> {
+        let dx = to_f32(dx);
+        let dy = to_f32(dy);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::inset", || __self.inset(dx, dy))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Outsets the rectangle by the specified offset."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn outset(&self, dx: f64, dy: f64) -> Result<Option<TinySkiaRect>, String> {
+        let dx = to_f32(dx);
+        let dy = to_f32(dy);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::outset", || __self.outset(dx, dy))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Transforms the rect using the provided `Transform`."]
+    #[doc = ""]
+    #[doc = " If the transform is a skew, the result will be a bounding box around the skewed rectangle."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn transform(&self, ts: &TinySkiaTransform) -> Result<Option<TinySkiaRect>, String> {
+        let __ts = ts.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::transform", || __self.transform(__ts))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Converts into [`NonZeroRect`]."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_non_zero_rect(&self) -> Result<Option<BBox>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Rect::to_non_zero_rect", || __self.to_non_zero_rect())
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| BBox::from(__v)))
+    }
+}
+impl TinySkiaSize {
+    fn __from(inner: tiny_skia::Size) -> Self {
+        Self { inner }
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaSize {
+    #[doc = " Creates a new `Size` from width and height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_wh(width: f64, height: f64) -> Result<Option<TinySkiaSize>, String> {
+        let width = to_f32(width);
+        let height = to_f32(height);
+        let __v = napi_support::contained("Size::from_wh", || {
+            <tiny_skia::Size>::from_wh(width, height)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaSize::__from(__v)))
+    }
+    #[doc = " Returns width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Returns height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<f64, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v))
+    }
+    #[doc = " Scales current size to specified size."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_to(&self, to: &TinySkiaSize) -> Result<TinySkiaSize, String> {
+        let __to = to.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::scale_to", || __self.scale_to(__to))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaSize::__from(__v))
+    }
+    #[doc = " Expands current size to specified size."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn expand_to(&self, to: &TinySkiaSize) -> Result<TinySkiaSize, String> {
+        let __to = to.inner;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::expand_to", || __self.expand_to(__to))
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaSize::__from(__v))
+    }
+    #[doc = " Scales current size by the specified factor."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_by(&self, factor: f64) -> Result<Option<TinySkiaSize>, String> {
+        let factor = to_f32(factor);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::scale_by", || __self.scale_by(factor))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaSize::__from(__v)))
+    }
+    #[doc = " Scales current size to the specified width."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_to_width(&self, new_width: f64) -> Result<Option<TinySkiaSize>, String> {
+        let new_width = to_f32(new_width);
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Size::scale_to_width", || __self.scale_to_width(new_width))
+                .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaSize::__from(__v)))
+    }
+    #[doc = " Scales current size to the specified height."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn scale_to_height(&self, new_height: f64) -> Result<Option<TinySkiaSize>, String> {
+        let new_height = to_f32(new_height);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::scale_to_height", || {
+            __self.scale_to_height(new_height)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaSize::__from(__v)))
+    }
+    #[doc = " Converts into [`IntSize`]."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_int_size(&self) -> Result<TinySkiaIntSize, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::to_int_size", || __self.to_int_size())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaIntSize::__from(__v))
+    }
+    #[doc = " Converts the current size to `Rect` at provided position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_rect(&self, x: f64, y: f64) -> Result<Option<TinySkiaRect>, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let __self = &self.inner;
+        let __v = napi_support::contained("Size::to_rect", || __self.to_rect(x, y))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Converts the current size to `NonZeroRect` at provided position."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_non_zero_rect(&self, x: f64, y: f64) -> Result<BBox, String> {
+        let x = to_f32(x);
+        let y = to_f32(y);
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Size::to_non_zero_rect", || __self.to_non_zero_rect(x, y))
+                .map_err(napi_support::coded)?;
+        Ok(BBox::from(__v))
+    }
 }
 impl From<UsvgColorInterpolation> for usvg::filter::ColorInterpolation {
     fn from(v: UsvgColorInterpolation) -> Self {
@@ -7424,6 +8894,230 @@ impl UsvgClipPath {
     #[napi]
     pub fn transform(&self) -> Matrix {
         Matrix::from(self.inner.transform())
+    }
+}
+impl UsvgTree {
+    fn wrap(inner: std::sync::Arc<usvg::Tree>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn __from(inner: usvg::Tree) -> Self {
+        Self::wrap(std::sync::Arc::new(inner), Doc::default())
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTree {
+    #[doc = " Parses `Tree` from an SVG data."]
+    #[doc = ""]
+    #[doc = " Can contain an SVG string or a gzip compressed data."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_data(data: Uint8Array, opt: Option<UsvgOptions>) -> Result<Self, String> {
+        let __opt = opt
+            .unwrap_or_default()
+            .to_upstream()
+            .map_err(napi_support::coded)?;
+        let __v =
+            napi_support::contained("Tree::from_data", || <usvg::Tree>::from_data(&data, &__opt))
+                .map_err(napi_support::coded)?
+                .map_err(|e| {
+                    let code = match &e {
+                        usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
+                        usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
+                        usvg::Error::MalformedGZip => "MalformedGZip",
+                        usvg::Error::ElementsLimitReached => "ElementsLimitReached",
+                        usvg::Error::InvalidSize => "InvalidSize",
+                        usvg::Error::ParsingFailed(..) => "ParsingFailed",
+                    };
+                    napi_support::thrown(code, &e)
+                })?;
+        Ok(UsvgTree::__from(__v))
+    }
+    #[doc = " Similar to the `from_data` method, except that it ignores all `image` elements linking to"]
+    #[doc = " external files, as required by the SVG specification when SVG files are loaded"]
+    #[doc = " for `<image href=\"...\" />` tags."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_data_nested(data: Uint8Array, opt: Option<UsvgOptions>) -> Result<Self, String> {
+        let __opt = opt
+            .unwrap_or_default()
+            .to_upstream()
+            .map_err(napi_support::coded)?;
+        let __v = napi_support::contained("Tree::from_data_nested", || {
+            <usvg::Tree>::from_data_nested(&data, &__opt)
+        })
+        .map_err(napi_support::coded)?
+        .map_err(|e| {
+            let code = match &e {
+                usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
+                usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
+                usvg::Error::MalformedGZip => "MalformedGZip",
+                usvg::Error::ElementsLimitReached => "ElementsLimitReached",
+                usvg::Error::InvalidSize => "InvalidSize",
+                usvg::Error::ParsingFailed(..) => "ParsingFailed",
+            };
+            napi_support::thrown(code, &e)
+        })?;
+        Ok(UsvgTree::__from(__v))
+    }
+    #[doc = " Parses `Tree` from an SVG string."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_str(text: String, opt: Option<UsvgOptions>) -> Result<Self, String> {
+        let __opt = opt
+            .unwrap_or_default()
+            .to_upstream()
+            .map_err(napi_support::coded)?;
+        let __v =
+            napi_support::contained("Tree::from_str", || <usvg::Tree>::from_str(&text, &__opt))
+                .map_err(napi_support::coded)?
+                .map_err(|e| {
+                    let code = match &e {
+                        usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
+                        usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
+                        usvg::Error::MalformedGZip => "MalformedGZip",
+                        usvg::Error::ElementsLimitReached => "ElementsLimitReached",
+                        usvg::Error::InvalidSize => "InvalidSize",
+                        usvg::Error::ParsingFailed(..) => "ParsingFailed",
+                    };
+                    napi_support::thrown(code, &e)
+                })?;
+        Ok(UsvgTree::__from(__v))
+    }
+    #[doc = " Image size."]
+    #[doc = ""]
+    #[doc = " Size of an image that should be created to fit the SVG."]
+    #[doc = ""]
+    #[doc = " `width` and `height` in SVG."]
+    #[doc = ""]
+    #[doc = " Note that this does not necessarily represent the bounding box of the"]
+    #[doc = " rendered contents. Use"]
+    #[doc = " [`self.root().abs_layer_bounding_box()`](Group::abs_layer_bounding_box)"]
+    #[doc = " to retrieve it instead."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn size(&self) -> Result<TinySkiaSize, String> {
+        let __self = &self.inner;
+        let __v =
+            napi_support::contained("Tree::size", || __self.size()).map_err(napi_support::coded)?;
+        Ok(TinySkiaSize::__from(__v))
+    }
+    #[doc = " Checks if the current tree has any text nodes."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn has_text_nodes(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::has_text_nodes", || __self.has_text_nodes())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Checks if the current tree has any `defs` nodes."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn has_defs_nodes(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::has_defs_nodes", || __self.has_defs_nodes())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns a list of all unique [`LinearGradient`]s in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn linear_gradients(&self) -> Result<Vec<UsvgLinearGradient>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::linear_gradients", || __self.linear_gradients())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgLinearGradient::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Returns a list of all unique [`RadialGradient`]s in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn radial_gradients(&self) -> Result<Vec<UsvgRadialGradient>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::radial_gradients", || __self.radial_gradients())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgRadialGradient::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Returns a list of all unique [`Pattern`]s in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn patterns(&self) -> Result<Vec<UsvgPattern>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::patterns", || __self.patterns())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgPattern::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Returns a list of all unique [`ClipPath`]s in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn clip_paths(&self) -> Result<Vec<UsvgClipPath>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::clip_paths", || __self.clip_paths())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgClipPath::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Returns a list of all unique [`Mask`]s in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn masks(&self) -> Result<Vec<UsvgMask>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::masks", || __self.masks())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgMask::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Returns a list of all unique [`Filter`](filter::Filter)s in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn filters(&self) -> Result<Vec<UsvgFilter>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::filters", || __self.filters())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgFilter::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Returns the font database that applies to all text nodes in the tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn fontdb(&self) -> Result<FontdbDatabase, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::fontdb", || __self.fontdb())
+            .map_err(napi_support::coded)?;
+        Ok(FontdbDatabase::wrap(
+            std::sync::Arc::clone(__v),
+            Doc::default(),
+        ))
+    }
+    #[doc = " Writes `usvg::Tree` back to SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_string(&self, opt: Option<UsvgWriteOptions>) -> Result<String, String> {
+        let __opt = opt
+            .unwrap_or_default()
+            .to_upstream()
+            .map_err(napi_support::coded)?;
+        let __self = &self.inner;
+        let __v = napi_support::contained("Tree::to_string", || __self.to_string(&__opt))
+            .map_err(napi_support::coded)?;
+        Ok(__v)
     }
 }
 impl From<&usvg::filter::Blend> for UsvgBlend {
@@ -8564,27 +10258,55 @@ impl FontdbDatabase {
     fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>, doc: Doc) -> Self {
         Self { inner, doc }
     }
+    fn __from(inner: usvg::fontdb::Database) -> Self {
+        Self::wrap(std::sync::Arc::new(inner), Doc::default())
+    }
     fn doc(&self) -> Doc {
         self.doc.clone()
     }
 }
 #[napi(namespace = "fontdb")]
 impl FontdbDatabase {
+    #[doc = " Create a new, empty `Database`."]
+    #[doc = ""]
+    #[doc = " Generic font families would be set to:"]
+    #[doc = ""]
+    #[doc = " - `serif` - Times New Roman"]
+    #[doc = " - `sans-serif` - Arial"]
+    #[doc = " - `cursive` - Comic Sans MS"]
+    #[doc = " - `fantasy` - Impact (Papyrus on macOS/iOS)"]
+    #[doc = " - `monospace` - Courier New"]
+    #[napi(constructor)]
+    #[allow(clippy::redundant_closure)]
+    pub fn new() -> Result<Self, String> {
+        let __v = napi_support::contained("Database::new", <usvg::fontdb::Database>::new)
+            .map_err(napi_support::coded)?;
+        Ok(FontdbDatabase::__from(__v))
+    }
     #[doc = " Loads a font data into the `Database`."]
     #[doc = ""]
     #[doc = " Will load all font faces in case of a font collection."]
     #[napi]
-    pub fn load_font_data(&mut self, data: Uint8Array) {
-        std::sync::Arc::make_mut(&mut self.inner).load_font_data(data.to_vec())
+    #[allow(clippy::redundant_closure)]
+    pub fn load_font_data(&mut self, data: Uint8Array) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::load_font_data", || {
+            __self.load_font_data(data.to_vec())
+        })
+        .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Loads a font file into the `Database`."]
     #[doc = ""]
     #[doc = " Will load all font faces in case of a font collection."]
     #[napi]
-    pub fn load_font_file(&mut self, path: String) -> Result<()> {
-        std::sync::Arc::make_mut(&mut self.inner)
-            .load_font_file(path)
-            .map_err(|e| Error::from_reason(e.to_string()))
+    #[allow(clippy::redundant_closure)]
+    pub fn load_font_file(&mut self, path: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::load_font_file", || __self.load_font_file(path))
+            .map_err(napi_support::coded)?
+            .map_err(|e| napi_support::thrown("GenericFailure", e))?;
+        Ok(())
     }
     #[doc = " Loads font files from the selected directory into the `Database`."]
     #[doc = ""]
@@ -8595,8 +10317,12 @@ impl FontdbDatabase {
     #[doc = " Unlike other `load_*` methods, this one doesn't return an error."]
     #[doc = " It will simply skip malformed fonts and will print a warning into the log for each of them."]
     #[napi]
-    pub fn load_fonts_dir(&mut self, dir: String) {
-        std::sync::Arc::make_mut(&mut self.inner).load_fonts_dir(dir)
+    #[allow(clippy::redundant_closure)]
+    pub fn load_fonts_dir(&mut self, dir: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::load_fonts_dir", || __self.load_fonts_dir(dir))
+            .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Attempts to load system fonts."]
     #[doc = ""]
@@ -8609,13 +10335,21 @@ impl FontdbDatabase {
     #[doc = " Which means that fonts that are not in those directories must"]
     #[doc = " be added manually."]
     #[napi]
-    pub fn load_system_fonts(&mut self) {
-        std::sync::Arc::make_mut(&mut self.inner).load_system_fonts()
+    #[allow(clippy::redundant_closure)]
+    pub fn load_system_fonts(&mut self) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::load_system_fonts", || __self.load_system_fonts())
+            .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Returns `true` if the `Database` contains no font faces."]
     #[napi]
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+    #[allow(clippy::redundant_closure)]
+    pub fn is_empty(&self) -> Result<bool, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Database::is_empty", || __self.is_empty())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
     }
     #[doc = " Returns the number of font faces in the `Database`."]
     #[doc = ""]
@@ -8623,44 +10357,81 @@ impl FontdbDatabase {
     #[doc = " For example, if a caller will try to load a font collection (`*.ttc`) that contains 5 faces,"]
     #[doc = " then the `Database` will load 5 font faces and this method will return 5, not 1."]
     #[napi]
-    pub fn len(&self) -> u32 {
-        u32::try_from(self.inner.len()).unwrap_or(u32::MAX)
+    #[allow(clippy::redundant_closure)]
+    pub fn len(&self) -> Result<u32, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Database::len", || __self.len())
+            .map_err(napi_support::coded)?;
+        Ok(u32::try_from(__v).unwrap_or(u32::MAX))
     }
     #[doc = " Sets the family that will be used by `Family::Serif`."]
     #[napi]
-    pub fn set_serif_family(&mut self, family: String) {
-        std::sync::Arc::make_mut(&mut self.inner).set_serif_family(family)
+    #[allow(clippy::redundant_closure)]
+    pub fn set_serif_family(&mut self, family: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::set_serif_family", || {
+            __self.set_serif_family(family)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Sets the family that will be used by `Family::SansSerif`."]
     #[napi]
-    pub fn set_sans_serif_family(&mut self, family: String) {
-        std::sync::Arc::make_mut(&mut self.inner).set_sans_serif_family(family)
+    #[allow(clippy::redundant_closure)]
+    pub fn set_sans_serif_family(&mut self, family: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::set_sans_serif_family", || {
+            __self.set_sans_serif_family(family)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Sets the family that will be used by `Family::Cursive`."]
     #[napi]
-    pub fn set_cursive_family(&mut self, family: String) {
-        std::sync::Arc::make_mut(&mut self.inner).set_cursive_family(family)
+    #[allow(clippy::redundant_closure)]
+    pub fn set_cursive_family(&mut self, family: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::set_cursive_family", || {
+            __self.set_cursive_family(family)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Sets the family that will be used by `Family::Fantasy`."]
     #[napi]
-    pub fn set_fantasy_family(&mut self, family: String) {
-        std::sync::Arc::make_mut(&mut self.inner).set_fantasy_family(family)
+    #[allow(clippy::redundant_closure)]
+    pub fn set_fantasy_family(&mut self, family: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::set_fantasy_family", || {
+            __self.set_fantasy_family(family)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Sets the family that will be used by `Family::Monospace`."]
     #[napi]
-    pub fn set_monospace_family(&mut self, family: String) {
-        std::sync::Arc::make_mut(&mut self.inner).set_monospace_family(family)
+    #[allow(clippy::redundant_closure)]
+    pub fn set_monospace_family(&mut self, family: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        napi_support::contained("Database::set_monospace_family", || {
+            __self.set_monospace_family(family)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[doc = " Returns an iterator over the internal storage."]
     #[doc = ""]
     #[doc = " This can be used for manual font matching."]
     #[napi]
-    pub fn faces(&self) -> Vec<FontdbFaceInfo> {
-        self.inner
-            .faces()
+    #[allow(clippy::redundant_closure)]
+    pub fn faces(&self) -> Result<Vec<FontdbFaceInfo>, String> {
+        let __self = &self.inner;
+        let __v = napi_support::contained("Database::faces", || __self.faces())
+            .map_err(napi_support::coded)?;
+        Ok(__v
             .into_iter()
             .map(|x| FontdbFaceInfo::wrap(x.clone(), self.doc()))
-            .collect()
+            .collect())
     }
 }
 impl FontdbFaceInfo {
@@ -9583,6 +11354,222 @@ impl Resvg {
         "Resvg".to_string()
     }
 }
+#[napi(namespace = "svgtypes")]
+impl SvgtypesColor {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Color",
+            &["red", "green", "blue", "alpha"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Color".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaPixmap {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Pixmap",
+            &[],
+            &["width", "height"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Pixmap".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaColor {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Color",
+            &[],
+            &["red", "green", "blue", "alpha", "isOpaque"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Color".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaIntSize {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "IntSize",
+            &[],
+            &["width", "height"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "IntSize".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaTransform {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Transform",
+            &["sx", "kx", "ky", "sy", "tx", "ty"],
+            &[
+                "isFinite",
+                "isValid",
+                "isIdentity",
+                "isScale",
+                "isSkew",
+                "isTranslate",
+                "isScaleTranslate",
+                "hasScale",
+                "hasSkew",
+                "hasTranslate",
+            ],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Transform".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaRect {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Rect",
+            &[],
+            &[
+                "left", "top", "right", "bottom", "x", "y", "width", "height", "isEmpty",
+            ],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Rect".to_string()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaSize {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Size",
+            &[],
+            &["width", "height"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Size".to_string()
+    }
+}
 #[napi(namespace = "fontdb")]
 impl FontdbDatabase {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
@@ -9775,6 +11762,35 @@ impl UsvgClipPath {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "ClipPath".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTree {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Tree",
+            &[],
+            &["hasTextNodes", "hasDefsNodes"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Tree".to_string()
     }
 }
 #[napi(namespace = "usvg")]

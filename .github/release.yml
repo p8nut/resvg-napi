@@ -1,0 +1,9 @@
+# How `gh release create --generate-notes` (CI.yml's release job) groups the
+# pull requests merged since the last tag. `breaking-api` is set by api.yml from
+# each pull request's index.d.ts diff, and by resvg.yml on the bumps it opens.
+changelog:
+  categories:
+    - title: Breaking
+      labels: [breaking-api]
+    - title: Other changes
+      labels: ['*']

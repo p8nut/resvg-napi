@@ -4,6 +4,13 @@ Almost none of `src/lib.rs` is written by hand. Read this before changing it --
 or rather, before changing the generator in `build.rs` and `build/`, which is
 what writes it.
 
+Where the project is heading is recorded as decisions in [`docs/adr/`](docs/adr/).
+[ADR 0001](docs/adr/0001-thin-generic-wrapper.md) makes the API a direct
+mirror of the Rust crates, with JS helpers beside it and a generator kept
+generic, and [ADR 0002](docs/adr/0002-api-details.md) settles the details.
+Check new work against them. The steps to 0.10.0 are in
+[`docs/migration-0.10.md`](docs/migration-0.10.md).
+
 ## How the bindings are generated
 
 The generator parses the sources of `usvg`, `resvg`, `fontdb`, `tiny-skia-path`

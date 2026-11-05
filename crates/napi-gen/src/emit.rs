@@ -1833,19 +1833,33 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
 /// copy. A path (`a::Point`), a field or a method (`.point`) and an enum's
 /// variants are never renamed: those name upstream, not the copy.
 ///
-/// A class is left out when its JS name is in `taken` or already used by an
-/// earlier part: napi keeps one constructor per JS class name, namespace or
-/// not (see [`class_names`]). So is everything that names a left-out item.
+/// napi keeps one constructor per JS class name, namespace or not (see
+/// [`class_names`]), so a copied class may not share its JS name with a
+/// class of `flat` or of an earlier part. When it collides with one of
+/// `flat`'s and [`Config::legacy_prefix`](crate::Config::legacy_prefix) is
+/// set, the flat class gives way: it is renamed with the prefix, Rust ident
+/// and every reference to it in `flat` (`ClipPath` becomes `LegacyClipPath`),
+/// and the copy keeps the upstream name. Otherwise the copy is left out, and
+/// so is everything that names a left-out item.
 ///
 /// napi resolves a reference to its TypeScript name when the referencing
 /// item expands, from what has expanded before it, and falls back to the
 /// Rust identifier. The copies' struct and enum definitions are therefore
 /// put before whatever names them, and every impl and function after all of
 /// them.
-pub fn namespaced(
-    parts: &[(&str, TokenStream)],
-    taken: &BTreeSet<String>,
-) -> (TokenStream, Vec<String>) {
+pub fn namespaced(parts: &[(&str, TokenStream)], flat: &TokenStream) -> Surfaces {
+    // The flat classes, by JS name, with their Rust ident.
+    let flat_file: syn::File = syn::parse2(flat.clone()).expect("a flat surface that parses");
+    let flat_classes: BTreeMap<String, String> = flat_file
+        .items
+        .iter()
+        .filter_map(class_of)
+        .map(|(id, js, _)| (js, id.to_string()))
+        .collect();
+    let prefix = config().legacy_prefix;
+    // flat Rust ident -> its legacy one
+    let mut legacy: BTreeMap<String, proc_macro2::Ident> = BTreeMap::new();
+    let mut report: Vec<String> = Vec::new();
     let parsed: Vec<(&str, syn::File)> = parts
         .iter()
         .map(|(ns, code)| {
@@ -1868,7 +1882,7 @@ pub fn namespaced(
     let mut names: BTreeMap<String, (proc_macro2::Ident, String, &str)> = BTreeMap::new();
     // What is left out, with the reason; the rest follows from it below.
     let mut out_why: BTreeMap<String, String> = BTreeMap::new();
-    let mut classes = taken.clone();
+    let mut classes: BTreeSet<String> = BTreeSet::new();
     for (ns, file) in &parsed {
         let pascal = ns.to_case(convert_case::Case::Pascal);
         let snake = ns.to_case(convert_case::Case::Snake);
@@ -1889,11 +1903,30 @@ pub fn namespaced(
                 _ => continue,
             };
             let js = upstream(&id.to_string());
-            if class_of(item).is_some() && !classes.insert(js.clone()) {
-                out_why.insert(
-                    id.to_string(),
-                    format!("{ns}.{js}: a class named {js} exists already"),
-                );
+            if class_of(item).is_some() {
+                match (flat_classes.get(&js), prefix) {
+                    (Some(old), Some(prefix)) if classes.insert(js.clone()) => {
+                        assert_eq!(
+                            old, &js,
+                            "flat class {old} has a js_name of its own ({js}): a legacy rename \
+                             would have to edit it"
+                        );
+                        let new = format_ident!("{prefix}{old}");
+                        report.push(format!(
+                            "legacy flat name: {new} (was {old}), beside {ns}.{js}"
+                        ));
+                        legacy.insert(old.clone(), new);
+                    }
+                    // Taken on the flat surface with no prefix to move it
+                    // by, or by an earlier namespace.
+                    (flat, _) if flat.is_some() || !classes.insert(js.clone()) => {
+                        out_why.insert(
+                            id.to_string(),
+                            format!("not namespaced: {ns}.{js}: a class named {js} exists already"),
+                        );
+                    }
+                    _ => {}
+                }
             }
             let prior = names.insert(id.to_string(), (new, js, ns));
             assert!(
@@ -1946,7 +1979,10 @@ pub fn namespaced(
             .filter_map(|(id, _, _, named)| {
                 let gone = named.iter().find(|n| out_why.contains_key(*n))?;
                 let (_, js, ns) = &names[id];
-                Some((id.clone(), format!("{ns}.{js}: it names {}", names[gone].1)))
+                Some((
+                    id.clone(),
+                    format!("not namespaced: {ns}.{js}: it names {}", names[gone].1),
+                ))
             })
             .collect();
         if more.is_empty() {
@@ -1992,7 +2028,30 @@ pub fn namespaced(
         visit(i, &defs, &index, &mut state, &mut out);
     }
     out.extend(rest.into_iter().map(|(_, _, code, _)| code));
-    (out, out_why.into_values().collect())
+    for (old, new) in &legacy {
+        assert!(
+            !flat_classes.contains_key(&new.to_string()),
+            "legacy name {new} for {old} is a flat class already"
+        );
+    }
+    report.extend(out_why.into_values());
+    Surfaces {
+        flat: rename_idents(flat.clone(), &legacy, &mut BTreeSet::new()),
+        namespaced: out,
+        report,
+    }
+}
+
+/// What [`namespaced`] makes of the two surfaces.
+pub struct Surfaces {
+    /// The flat surface, its colliding classes renamed with
+    /// [`Config::legacy_prefix`](crate::Config::legacy_prefix).
+    pub flat: TokenStream,
+    /// The copies, under their namespaces.
+    pub namespaced: TokenStream,
+    /// One line per class renamed on the flat surface (`legacy flat name`)
+    /// and per item left out of the namespaced one (`not namespaced`).
+    pub report: Vec<String>,
 }
 
 /// A `#[napi]` struct that is a class, not an object: its Rust ident, its JS
@@ -2018,7 +2077,8 @@ fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<String>)> {
 /// napi keeps one constructor per JS class name, whatever its namespace, and
 /// builds every instance it returns from the constructor registered under
 /// that name: two classes sharing one leave one of them handing out
-/// instances of the other. [`namespaced`] is given these to stay clear of.
+/// instances of the other. [`namespaced`] reads them off the flat surface to
+/// stay clear of.
 pub fn class_names(code: &TokenStream) -> BTreeSet<String> {
     let file: syn::File = syn::parse2(code.clone()).expect("generated code that parses");
     file.items

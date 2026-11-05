@@ -107,11 +107,11 @@ for (const id of ['grp', 'r', 't', 'v', 'im']) walk(doc.node(id), 0);
 // The members the review found untested anywhere, by class: each must have
 // been reached, or the document above stopped exercising it.
 const wanted = [
-  'TextSpan.letterSpacing', 'TextSpan.wordSpacing', 'TextSpan.smallCaps', 'TextSpan.applyKerning',
-  'TextSpan.dominantBaseline', 'TextSpan.alignmentBaseline', 'TextSpan.paintOrder', 'Font.variations',
-  'TextChunk.textFlow', 'Text.dy', 'Text.writingMode',
-  'PositionedGlyph.outlineTransform', 'PositionedGlyph.svgTransform', 'PositionedGlyph.colrTransform',
-  'RadialGradient.fx', 'RadialGradient.fy', 'Image.isVisible',
+  'LegacyTextSpan.letterSpacing', 'LegacyTextSpan.wordSpacing', 'LegacyTextSpan.smallCaps', 'LegacyTextSpan.applyKerning',
+  'LegacyTextSpan.dominantBaseline', 'LegacyTextSpan.alignmentBaseline', 'LegacyTextSpan.paintOrder', 'LegacyFont.variations',
+  'LegacyTextChunk.textFlow', 'LegacyText.dy', 'LegacyText.writingMode',
+  'LegacyPositionedGlyph.outlineTransform', 'LegacyPositionedGlyph.svgTransform', 'LegacyPositionedGlyph.colrTransform',
+  'LegacyRadialGradient.fx', 'LegacyRadialGradient.fy', 'LegacyImage.isVisible',
 ];
 const missed = wanted.filter((m) => !read.has(m));
 assert.deepEqual(missed, [], 'getters the walk should have reached');

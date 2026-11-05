@@ -1941,11 +1941,11 @@ impl From<&usvg::filter::Flood> for Flood {
 }
 #[doc = " Read-only view of a `Font`."]
 #[napi]
-pub struct Font {
+pub struct LegacyFont {
     inner: usvg::Font,
     doc: Doc,
 }
-impl Font {
+impl LegacyFont {
     fn wrap(inner: usvg::Font, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -1954,7 +1954,7 @@ impl Font {
     }
 }
 #[napi]
-impl Font {
+impl LegacyFont {
     #[napi(getter)]
     pub fn style(&self) -> FontStyle {
         let v = &self.inner;
@@ -2010,11 +2010,11 @@ impl From<&usvg::filter::GaussianBlur> for GaussianBlur {
 }
 #[doc = " Read-only view of an `Image`."]
 #[napi]
-pub struct Image {
+pub struct LegacyImage {
     inner: usvg::Image,
     doc: Doc,
 }
-impl Image {
+impl LegacyImage {
     fn wrap(inner: usvg::Image, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -2023,7 +2023,7 @@ impl Image {
     }
 }
 #[napi]
-impl Image {
+impl LegacyImage {
     #[napi(getter)]
     pub fn id(&self) -> String {
         let v = &self.inner;
@@ -2047,7 +2047,13 @@ impl Image {
     #[napi(getter)]
     pub fn kind(
         &self,
-    ) -> Either5<ImageKindJpeg, ImageKindPng, ImageKindGif, ImageKindWebp, ImageKindSvg> {
+    ) -> Either5<
+        LegacyImageKindJpeg,
+        LegacyImageKindPng,
+        LegacyImageKindGif,
+        LegacyImageKindWebp,
+        ImageKindSvg,
+    > {
         let v = &self.inner;
         image_kind_to_js(v.kind())
     }
@@ -2170,11 +2176,11 @@ impl From<&usvg::filter::PointLight> for PointLight {
 }
 #[doc = " Read-only view of a `PositionedGlyph`."]
 #[napi]
-pub struct PositionedGlyph {
+pub struct LegacyPositionedGlyph {
     inner: usvg::layout::PositionedGlyph,
     doc: Doc,
 }
-impl PositionedGlyph {
+impl LegacyPositionedGlyph {
     fn wrap(inner: usvg::layout::PositionedGlyph, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -2183,7 +2189,7 @@ impl PositionedGlyph {
     }
 }
 #[napi]
-impl PositionedGlyph {
+impl LegacyPositionedGlyph {
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
         let v = &self.inner;
@@ -2259,11 +2265,11 @@ impl From<&usvg::filter::Primitive> for Primitive {
 }
 #[doc = " Read-only view of a `Span`."]
 #[napi]
-pub struct Span {
+pub struct LegacySpan {
     inner: usvg::layout::Span,
     doc: Doc,
 }
-impl Span {
+impl LegacySpan {
     fn wrap(inner: usvg::layout::Span, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -2272,7 +2278,7 @@ impl Span {
     }
 }
 #[napi]
-impl Span {
+impl LegacySpan {
     #[napi(getter)]
     pub fn fill(&self) -> Option<Fill> {
         let v = &self.inner;
@@ -2313,12 +2319,12 @@ impl Span {
         v.visible
     }
     #[napi(getter)]
-    pub fn positioned_glyphs(&self) -> Vec<PositionedGlyph> {
+    pub fn positioned_glyphs(&self) -> Vec<LegacyPositionedGlyph> {
         let v = &self.inner;
         v.positioned_glyphs
             .clone()
             .iter()
-            .map(|x| PositionedGlyph::wrap(x.clone(), self.doc()))
+            .map(|x| LegacyPositionedGlyph::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -2435,11 +2441,11 @@ impl From<&usvg::Stroke> for Stroke {
 }
 #[doc = " Read-only view of a `Text`."]
 #[napi]
-pub struct Text {
+pub struct LegacyText {
     inner: usvg::Text,
     doc: Doc,
 }
-impl Text {
+impl LegacyText {
     fn wrap(inner: usvg::Text, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -2448,7 +2454,7 @@ impl Text {
     }
 }
 #[napi]
-impl Text {
+impl LegacyText {
     #[napi(getter)]
     pub fn id(&self) -> String {
         let v = &self.inner;
@@ -2480,11 +2486,11 @@ impl Text {
         WritingMode::from(v.writing_mode())
     }
     #[napi(getter)]
-    pub fn chunks(&self) -> Vec<TextChunk> {
+    pub fn chunks(&self) -> Vec<LegacyTextChunk> {
         let v = &self.inner;
         v.chunks()
             .iter()
-            .map(|x| TextChunk::wrap(x.clone(), self.doc()))
+            .map(|x| LegacyTextChunk::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[napi(getter)]
@@ -2513,21 +2519,21 @@ impl Text {
         BBox::from(v.abs_stroke_bounding_box())
     }
     #[napi(getter)]
-    pub fn layouted(&self) -> Vec<Span> {
+    pub fn layouted(&self) -> Vec<LegacySpan> {
         let v = &self.inner;
         v.layouted()
             .iter()
-            .map(|x| Span::wrap(x.clone(), self.doc()))
+            .map(|x| LegacySpan::wrap(x.clone(), self.doc()))
             .collect()
     }
 }
 #[doc = " Read-only view of a `TextChunk`."]
 #[napi]
-pub struct TextChunk {
+pub struct LegacyTextChunk {
     inner: usvg::TextChunk,
     doc: Doc,
 }
-impl TextChunk {
+impl LegacyTextChunk {
     fn wrap(inner: usvg::TextChunk, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -2536,7 +2542,7 @@ impl TextChunk {
     }
 }
 #[napi]
-impl TextChunk {
+impl LegacyTextChunk {
     #[napi(getter)]
     pub fn x(&self) -> Option<f64> {
         let v = &self.inner;
@@ -2553,11 +2559,11 @@ impl TextChunk {
         TextAnchor::from(v.anchor())
     }
     #[napi(getter)]
-    pub fn spans(&self) -> Vec<TextSpan> {
+    pub fn spans(&self) -> Vec<LegacyTextSpan> {
         let v = &self.inner;
         v.spans()
             .iter()
-            .map(|x| TextSpan::wrap(x.clone(), self.doc()))
+            .map(|x| LegacyTextSpan::wrap(x.clone(), self.doc()))
             .collect()
     }
     #[napi(getter)]
@@ -2605,11 +2611,11 @@ impl From<&usvg::TextDecorationStyle> for TextDecorationStyle {
 }
 #[doc = " Read-only view of a `TextSpan`."]
 #[napi]
-pub struct TextSpan {
+pub struct LegacyTextSpan {
     inner: usvg::TextSpan,
     doc: Doc,
 }
-impl TextSpan {
+impl LegacyTextSpan {
     fn wrap(inner: usvg::TextSpan, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -2618,7 +2624,7 @@ impl TextSpan {
     }
 }
 #[napi]
-impl TextSpan {
+impl LegacyTextSpan {
     #[napi(getter)]
     pub fn start(&self) -> u32 {
         let v = &self.inner;
@@ -2645,9 +2651,9 @@ impl TextSpan {
         PaintOrder::from(v.paint_order())
     }
     #[napi(getter)]
-    pub fn font(&self) -> Font {
+    pub fn font(&self) -> LegacyFont {
         let v = &self.inner;
-        Font::wrap(v.font().clone(), self.doc())
+        LegacyFont::wrap(v.font().clone(), self.doc())
     }
     #[napi(getter)]
     pub fn font_size(&self) -> f64 {
@@ -2906,11 +2912,11 @@ fn composite_operator_to_js(
 }
 #[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
 #[napi]
-pub struct ImageKindJpeg {
+pub struct LegacyImageKindJpeg {
     raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
-impl ImageKindJpeg {
+impl LegacyImageKindJpeg {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'jpeg'")]
     pub fn kind_tag(&self) -> &'static str {
@@ -2924,11 +2930,11 @@ impl ImageKindJpeg {
 }
 #[doc = " `ImageKind::PNG`. The bytes are the document's own."]
 #[napi]
-pub struct ImageKindPng {
+pub struct LegacyImageKindPng {
     raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
-impl ImageKindPng {
+impl LegacyImageKindPng {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'png'")]
     pub fn kind_tag(&self) -> &'static str {
@@ -2942,11 +2948,11 @@ impl ImageKindPng {
 }
 #[doc = " `ImageKind::GIF`. The bytes are the document's own."]
 #[napi]
-pub struct ImageKindGif {
+pub struct LegacyImageKindGif {
     raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
-impl ImageKindGif {
+impl LegacyImageKindGif {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'gif'")]
     pub fn kind_tag(&self) -> &'static str {
@@ -2960,11 +2966,11 @@ impl ImageKindGif {
 }
 #[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
 #[napi]
-pub struct ImageKindWebp {
+pub struct LegacyImageKindWebp {
     raw: std::sync::Arc<Vec<u8>>,
 }
 #[napi]
-impl ImageKindWebp {
+impl LegacyImageKindWebp {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'webp'")]
     pub fn kind_tag(&self) -> &'static str {
@@ -2986,12 +2992,18 @@ pub struct ImageKindSvg {
 }
 fn image_kind_to_js(
     v: &usvg::ImageKind,
-) -> Either5<ImageKindJpeg, ImageKindPng, ImageKindGif, ImageKindWebp, ImageKindSvg> {
+) -> Either5<
+    LegacyImageKindJpeg,
+    LegacyImageKindPng,
+    LegacyImageKindGif,
+    LegacyImageKindWebp,
+    ImageKindSvg,
+> {
     match v {
-        usvg::ImageKind::JPEG(v) => Either5::A(ImageKindJpeg { raw: v.clone() }),
-        usvg::ImageKind::PNG(v) => Either5::B(ImageKindPng { raw: v.clone() }),
-        usvg::ImageKind::GIF(v) => Either5::C(ImageKindGif { raw: v.clone() }),
-        usvg::ImageKind::WEBP(v) => Either5::D(ImageKindWebp { raw: v.clone() }),
+        usvg::ImageKind::JPEG(v) => Either5::A(LegacyImageKindJpeg { raw: v.clone() }),
+        usvg::ImageKind::PNG(v) => Either5::B(LegacyImageKindPng { raw: v.clone() }),
+        usvg::ImageKind::GIF(v) => Either5::C(LegacyImageKindGif { raw: v.clone() }),
+        usvg::ImageKind::WEBP(v) => Either5::D(LegacyImageKindWebp { raw: v.clone() }),
         usvg::ImageKind::SVG(_) => Either5::E(ImageKindSvg {
             r#type: "svg".to_string(),
         }),
@@ -3491,11 +3503,11 @@ fn transfer_function_to_js(
 }
 #[doc = " Read-only handle on a `usvg::filter::Filter`."]
 #[napi]
-pub struct Filter {
+pub struct LegacyFilter {
     inner: std::sync::Arc<usvg::filter::Filter>,
     doc: Doc,
 }
-impl Filter {
+impl LegacyFilter {
     fn wrap(inner: std::sync::Arc<usvg::filter::Filter>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -3504,7 +3516,7 @@ impl Filter {
     }
 }
 #[napi]
-impl Filter {
+impl LegacyFilter {
     #[doc = " Element's ID."]
     #[doc = ""]
     #[doc = " Taken from the SVG itself."]
@@ -3532,11 +3544,11 @@ impl Filter {
 }
 #[doc = " Read-only handle on a `usvg::RadialGradient`."]
 #[napi]
-pub struct RadialGradient {
+pub struct LegacyRadialGradient {
     inner: std::sync::Arc<usvg::RadialGradient>,
     doc: Doc,
 }
-impl RadialGradient {
+impl LegacyRadialGradient {
     fn wrap(inner: std::sync::Arc<usvg::RadialGradient>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -3545,7 +3557,7 @@ impl RadialGradient {
     }
 }
 #[napi]
-impl RadialGradient {
+impl LegacyRadialGradient {
     #[doc = " `cx` coordinate."]
     #[napi]
     pub fn cx(&self) -> f64 {
@@ -3606,11 +3618,11 @@ impl RadialGradient {
 }
 #[doc = " Read-only handle on a `usvg::Pattern`."]
 #[napi]
-pub struct Pattern {
+pub struct LegacyPattern {
     inner: std::sync::Arc<usvg::Pattern>,
     doc: Doc,
 }
-impl Pattern {
+impl LegacyPattern {
     fn wrap(inner: std::sync::Arc<usvg::Pattern>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -3619,7 +3631,7 @@ impl Pattern {
     }
 }
 #[napi]
-impl Pattern {
+impl LegacyPattern {
     #[doc = " Element's ID."]
     #[doc = ""]
     #[doc = " Taken from the SVG itself."]
@@ -3649,7 +3661,7 @@ impl HasRoot for usvg::Pattern {
     }
 }
 #[napi]
-impl Pattern {
+impl LegacyPattern {
     #[doc = " Children of this definition's content group."]
     #[napi]
     pub fn children(&self) -> Vec<SvgNode> {
@@ -3665,11 +3677,11 @@ impl Pattern {
 }
 #[doc = " Read-only handle on a `usvg::Mask`."]
 #[napi]
-pub struct Mask {
+pub struct LegacyMask {
     inner: std::sync::Arc<usvg::Mask>,
     doc: Doc,
 }
-impl Mask {
+impl LegacyMask {
     fn wrap(inner: std::sync::Arc<usvg::Mask>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -3678,7 +3690,7 @@ impl Mask {
     }
 }
 #[napi]
-impl Mask {
+impl LegacyMask {
     #[doc = " Element's ID."]
     #[doc = ""]
     #[doc = " Taken from the SVG itself."]
@@ -3708,7 +3720,7 @@ impl HasRoot for usvg::Mask {
     }
 }
 #[napi]
-impl Mask {
+impl LegacyMask {
     #[doc = " Children of this definition's content group."]
     #[napi]
     pub fn children(&self) -> Vec<SvgNode> {
@@ -3724,11 +3736,11 @@ impl Mask {
 }
 #[doc = " Read-only handle on a `usvg::LinearGradient`."]
 #[napi]
-pub struct LinearGradient {
+pub struct LegacyLinearGradient {
     inner: std::sync::Arc<usvg::LinearGradient>,
     doc: Doc,
 }
-impl LinearGradient {
+impl LegacyLinearGradient {
     fn wrap(inner: std::sync::Arc<usvg::LinearGradient>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -3737,7 +3749,7 @@ impl LinearGradient {
     }
 }
 #[napi]
-impl LinearGradient {
+impl LegacyLinearGradient {
     #[doc = " `x1` coordinate."]
     #[napi]
     pub fn x1(&self) -> f64 {
@@ -3788,11 +3800,11 @@ impl LinearGradient {
 }
 #[doc = " Read-only handle on a `usvg::ClipPath`."]
 #[napi]
-pub struct ClipPath {
+pub struct LegacyClipPath {
     inner: std::sync::Arc<usvg::ClipPath>,
     doc: Doc,
 }
-impl ClipPath {
+impl LegacyClipPath {
     fn wrap(inner: std::sync::Arc<usvg::ClipPath>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -3801,7 +3813,7 @@ impl ClipPath {
     }
 }
 #[napi]
-impl ClipPath {
+impl LegacyClipPath {
     #[doc = " Element's ID."]
     #[doc = ""]
     #[doc = " Taken from the SVG itself."]
@@ -3824,7 +3836,7 @@ impl HasRoot for usvg::ClipPath {
     }
 }
 #[napi]
-impl ClipPath {
+impl LegacyClipPath {
     #[doc = " Children of this definition's content group."]
     #[napi]
     pub fn children(&self) -> Vec<SvgNode> {
@@ -3893,7 +3905,7 @@ impl FontFace {
 #[doc = " drew the text, with nothing to compare it against."]
 #[doc = " Decision: the strings usvg's own writer emits, keywords included."]
 #[napi]
-impl Font {
+impl LegacyFont {
     #[doc = " Families this span asked for, in order. Never empty: usvg appends"]
     #[doc = " `RenderOptions.fontFamily` as the last resort."]
     #[napi(getter)]
@@ -3932,18 +3944,18 @@ impl SvgNode {
     }
 }
 #[napi]
-impl ClipPath {
+impl LegacyClipPath {
     #[doc = " The clip path applied to this clip path's own content, if any."]
     #[doc = " `null` too when the handle came from no document."]
     #[napi]
-    pub fn clip_path(&self) -> Option<ClipPath> {
+    pub fn clip_path(&self) -> Option<LegacyClipPath> {
         let target = self.inner.clip_path()?;
         let tree = self.doc.tree.as_ref()?.get()?;
-        find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc()))
+        find_def(tree.clip_paths(), target).map(|c| LegacyClipPath::wrap(c, self.doc()))
     }
 }
 #[napi]
-impl Filter {
+impl LegacyFilter {
     #[doc = " Children of the `feImage` primitive at `index` in `primitives`:"]
     #[doc = " usvg's `filter::Image::root()`. `null` for any other primitive."]
     #[doc = ""]
@@ -3966,18 +3978,18 @@ impl Filter {
     }
 }
 #[napi]
-impl Mask {
+impl LegacyMask {
     #[doc = " The mask applied to this mask's own content, if any. `null` too"]
     #[doc = " when the handle came from no document."]
     #[napi]
-    pub fn mask(&self) -> Option<Mask> {
+    pub fn mask(&self) -> Option<LegacyMask> {
         let target = self.inner.mask()?;
         let tree = self.doc.tree.as_ref()?.get()?;
-        find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc()))
+        find_def(tree.masks(), target).map(|m| LegacyMask::wrap(m, self.doc()))
     }
 }
 #[napi]
-impl PositionedGlyph {
+impl LegacyPositionedGlyph {
     #[doc = " The face that drew this glyph, from the database its document"]
     #[doc = " was parsed with. `null` for a glyph that came from no document."]
     #[napi(getter)]
@@ -4197,9 +4209,9 @@ impl SvgNode {
     #[doc = " Its presence is what makes the text types map at all -- a node"]
     #[doc = " payload is not a collection, so nothing else nominates them."]
     #[napi]
-    pub fn text(&self) -> Result<Option<Text>> {
+    pub fn text(&self) -> Result<Option<LegacyText>> {
         Ok(match self.node()? {
-            usvg::Node::Text(t) => Some(Text::wrap((**t).clone(), self.doc())),
+            usvg::Node::Text(t) => Some(LegacyText::wrap((**t).clone(), self.doc())),
             _ => None,
         })
     }
@@ -4273,9 +4285,9 @@ impl SvgNode {
     #[doc = " this is the caller -- while `svg` carries none, an embedded"]
     #[doc = " SVG being a tree rather than a payload."]
     #[napi]
-    pub fn image(&self) -> Result<Option<Image>> {
+    pub fn image(&self) -> Result<Option<LegacyImage>> {
         Ok(match self.node()? {
-            usvg::Node::Image(i) => Some(Image::wrap((**i).clone(), self.doc())),
+            usvg::Node::Image(i) => Some(LegacyImage::wrap((**i).clone(), self.doc())),
             _ => None,
         })
     }
@@ -4309,7 +4321,7 @@ impl SvgNode {
     #[doc = " usvg hands out a bare `&ClipPath` here, with no `Arc` to hold on to,"]
     #[doc = " so it is found in the document's clip-path table by identity."]
     #[napi]
-    pub fn clip_path(&self) -> Result<Option<ClipPath>> {
+    pub fn clip_path(&self) -> Result<Option<LegacyClipPath>> {
         let usvg::Node::Group(g) = self.node()? else {
             return Ok(None);
         };
@@ -4319,11 +4331,11 @@ impl SvgNode {
         let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
             return Ok(None);
         };
-        Ok(find_def(tree.clip_paths(), target).map(|c| ClipPath::wrap(c, self.doc())))
+        Ok(find_def(tree.clip_paths(), target).map(|c| LegacyClipPath::wrap(c, self.doc())))
     }
     #[doc = " Mask applied to this element, found like `clipPath`."]
     #[napi]
-    pub fn mask(&self) -> Result<Option<Mask>> {
+    pub fn mask(&self) -> Result<Option<LegacyMask>> {
         let usvg::Node::Group(g) = self.node()? else {
             return Ok(None);
         };
@@ -4333,7 +4345,7 @@ impl SvgNode {
         let Some(tree) = self.doc.tree.as_ref().and_then(TreeRef::get) else {
             return Ok(None);
         };
-        Ok(find_def(tree.masks(), target).map(|m| Mask::wrap(m, self.doc())))
+        Ok(find_def(tree.masks(), target).map(|m| LegacyMask::wrap(m, self.doc())))
     }
     #[doc = " The Send half: bytes, no JS handle, so a worker thread can run it."]
     fn png_bytes(&self, params: Option<RenderParams>) -> Result<Vec<u8>> {
@@ -4439,14 +4451,14 @@ impl SvgNode {
     }
     #[doc = " Element's filters."]
     #[napi]
-    pub fn filters(&self) -> Result<Option<Vec<Filter>>> {
+    pub fn filters(&self) -> Result<Option<Vec<LegacyFilter>>> {
         let usvg::Node::Group(__g) = self.node()? else {
             return Ok(None);
         };
         Ok(Some(
             __g.filters()
                 .iter()
-                .map(|x| Filter::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyFilter::wrap(x.clone(), self.doc()))
                 .collect(),
         ))
     }
@@ -4605,7 +4617,7 @@ impl Resvg {
     #[doc = " a slotmap key, meaningless outside the database that issued it,"]
     #[doc = " and read against this one it could name an unrelated face."]
     #[napi]
-    pub fn face_of(&self, glyph: &PositionedGlyph) -> Result<Option<FontFace>> {
+    pub fn face_of(&self, glyph: &LegacyPositionedGlyph) -> Result<Option<FontFace>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
@@ -4783,79 +4795,79 @@ impl Resvg {
     }
     #[doc = " Returns a list of all unique [`LinearGradient`]s in the tree."]
     #[napi]
-    pub fn linear_gradients(&self) -> Result<Vec<LinearGradient>> {
+    pub fn linear_gradients(&self) -> Result<Vec<LegacyLinearGradient>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
             self.tree
                 .linear_gradients()
                 .iter()
-                .map(|x| LinearGradient::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyLinearGradient::wrap(x.clone(), self.doc()))
                 .collect()
         })())
     }
     #[doc = " Returns a list of all unique [`RadialGradient`]s in the tree."]
     #[napi]
-    pub fn radial_gradients(&self) -> Result<Vec<RadialGradient>> {
+    pub fn radial_gradients(&self) -> Result<Vec<LegacyRadialGradient>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
             self.tree
                 .radial_gradients()
                 .iter()
-                .map(|x| RadialGradient::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyRadialGradient::wrap(x.clone(), self.doc()))
                 .collect()
         })())
     }
     #[doc = " Returns a list of all unique [`Pattern`]s in the tree."]
     #[napi]
-    pub fn patterns(&self) -> Result<Vec<Pattern>> {
+    pub fn patterns(&self) -> Result<Vec<LegacyPattern>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
             self.tree
                 .patterns()
                 .iter()
-                .map(|x| Pattern::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyPattern::wrap(x.clone(), self.doc()))
                 .collect()
         })())
     }
     #[doc = " Returns a list of all unique [`ClipPath`]s in the tree."]
     #[napi]
-    pub fn clip_paths(&self) -> Result<Vec<ClipPath>> {
+    pub fn clip_paths(&self) -> Result<Vec<LegacyClipPath>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
             self.tree
                 .clip_paths()
                 .iter()
-                .map(|x| ClipPath::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyClipPath::wrap(x.clone(), self.doc()))
                 .collect()
         })())
     }
     #[doc = " Returns a list of all unique [`Mask`]s in the tree."]
     #[napi]
-    pub fn masks(&self) -> Result<Vec<Mask>> {
+    pub fn masks(&self) -> Result<Vec<LegacyMask>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
             self.tree
                 .masks()
                 .iter()
-                .map(|x| Mask::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyMask::wrap(x.clone(), self.doc()))
                 .collect()
         })())
     }
     #[doc = " Returns a list of all unique [`Filter`](filter::Filter)s in the tree."]
     #[napi]
-    pub fn filters(&self) -> Result<Vec<Filter>> {
+    pub fn filters(&self) -> Result<Vec<LegacyFilter>> {
         self.live()?;
         #[allow(clippy::redundant_closure_call)]
         Ok((|| {
             self.tree
                 .filters()
                 .iter()
-                .map(|x| Filter::wrap(x.clone(), self.doc()))
+                .map(|x| LegacyFilter::wrap(x.clone(), self.doc()))
                 .collect()
         })())
     }
@@ -5590,6 +5602,42 @@ pub enum UsvgWritingMode {
     LeftToRight,
     TopToBottom,
 }
+#[doc = " Read-only handle on a `usvg::filter::Filter`."]
+#[napi(js_name = "Filter", namespace = "usvg")]
+pub struct UsvgFilter {
+    inner: std::sync::Arc<usvg::filter::Filter>,
+    doc: Doc,
+}
+#[doc = " Read-only handle on a `usvg::RadialGradient`."]
+#[napi(js_name = "RadialGradient", namespace = "usvg")]
+pub struct UsvgRadialGradient {
+    inner: std::sync::Arc<usvg::RadialGradient>,
+    doc: Doc,
+}
+#[doc = " Read-only handle on a `usvg::Pattern`."]
+#[napi(js_name = "Pattern", namespace = "usvg")]
+pub struct UsvgPattern {
+    inner: std::sync::Arc<usvg::Pattern>,
+    doc: Doc,
+}
+#[doc = " Read-only handle on a `usvg::Mask`."]
+#[napi(js_name = "Mask", namespace = "usvg")]
+pub struct UsvgMask {
+    inner: std::sync::Arc<usvg::Mask>,
+    doc: Doc,
+}
+#[doc = " Read-only handle on a `usvg::LinearGradient`."]
+#[napi(js_name = "LinearGradient", namespace = "usvg")]
+pub struct UsvgLinearGradient {
+    inner: std::sync::Arc<usvg::LinearGradient>,
+    doc: Doc,
+}
+#[doc = " Read-only handle on a `usvg::ClipPath`."]
+#[napi(js_name = "ClipPath", namespace = "usvg")]
+pub struct UsvgClipPath {
+    inner: std::sync::Arc<usvg::ClipPath>,
+    doc: Doc,
+}
 #[doc = " The payload-free variants of `Input`."]
 #[napi(object, js_name = "InputPlain", namespace = "usvg")]
 #[derive(Clone)]
@@ -5940,6 +5988,12 @@ pub struct UsvgFlood {
     pub color: UsvgColor,
     pub opacity: f64,
 }
+#[doc = " Read-only view of a `Font`."]
+#[napi(js_name = "Font", namespace = "usvg")]
+pub struct UsvgFont {
+    inner: usvg::Font,
+    doc: Doc,
+}
 #[doc = " Plain view of a `FontVariation`."]
 #[napi(object, js_name = "FontVariation", namespace = "usvg")]
 #[derive(Clone)]
@@ -5954,6 +6008,12 @@ pub struct UsvgGaussianBlur {
     pub input: Either<UsvgInputPlain, UsvgInputReference>,
     pub std_dev_x: f64,
     pub std_dev_y: f64,
+}
+#[doc = " Read-only view of an `Image`."]
+#[napi(js_name = "Image", namespace = "usvg")]
+pub struct UsvgImage {
+    inner: usvg::Image,
+    doc: Doc,
 }
 #[doc = " Plain view of a `Merge`."]
 #[napi(object, js_name = "Merge", namespace = "usvg")]
@@ -6008,6 +6068,12 @@ pub struct UsvgPath {
     pub abs_bounding_box: BBox,
     pub stroke_bounding_box: BBox,
     pub abs_stroke_bounding_box: BBox,
+}
+#[doc = " Read-only view of a `PositionedGlyph`."]
+#[napi(js_name = "PositionedGlyph", namespace = "usvg")]
+pub struct UsvgPositionedGlyph {
+    inner: usvg::layout::PositionedGlyph,
+    doc: Doc,
 }
 #[doc = " `Kind::Blend`."]
 #[napi(object, js_name = "KindBlend", namespace = "usvg")]
@@ -6217,6 +6283,12 @@ pub struct UsvgPrimitive {
         UsvgKindTurbulence,
     >,
 }
+#[doc = " Read-only view of a `Span`."]
+#[napi(js_name = "Span", namespace = "usvg")]
+pub struct UsvgSpan {
+    inner: usvg::layout::Span,
+    doc: Doc,
+}
 #[doc = " Plain view of a `Stop`."]
 #[napi(object, js_name = "Stop", namespace = "usvg")]
 #[derive(Clone)]
@@ -6224,6 +6296,18 @@ pub struct UsvgStop {
     pub offset: f64,
     pub color: UsvgColor,
     pub opacity: f64,
+}
+#[doc = " Read-only view of a `Text`."]
+#[napi(js_name = "Text", namespace = "usvg")]
+pub struct UsvgText {
+    inner: usvg::Text,
+    doc: Doc,
+}
+#[doc = " Read-only view of a `TextChunk`."]
+#[napi(js_name = "TextChunk", namespace = "usvg")]
+pub struct UsvgTextChunk {
+    inner: usvg::TextChunk,
+    doc: Doc,
 }
 #[doc = " Plain view of a `TextDecorationStyle`."]
 #[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
@@ -6239,6 +6323,12 @@ pub struct UsvgTextDecoration {
     pub underline: Option<UsvgTextDecorationStyle>,
     pub overline: Option<UsvgTextDecorationStyle>,
     pub line_through: Option<UsvgTextDecorationStyle>,
+}
+#[doc = " Read-only view of a `TextSpan`."]
+#[napi(js_name = "TextSpan", namespace = "usvg")]
+pub struct UsvgTextSpan {
+    inner: usvg::TextSpan,
+    doc: Doc,
 }
 #[doc = " The payload-free variants of `BaselineShift`."]
 #[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
@@ -6256,6 +6346,26 @@ pub struct UsvgBaselineShiftNumber {
     #[napi(ts_type = "'number'")]
     pub r#type: String,
     pub value: f64,
+}
+#[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
+pub struct UsvgImageKindJpeg {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[doc = " `ImageKind::PNG`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindPng", namespace = "usvg")]
+pub struct UsvgImageKindPng {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[doc = " `ImageKind::GIF`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindGif", namespace = "usvg")]
+pub struct UsvgImageKindGif {
+    raw: std::sync::Arc<Vec<u8>>,
+}
+#[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
+#[napi(js_name = "ImageKindWebp", namespace = "usvg")]
+pub struct UsvgImageKindWebp {
+    raw: std::sync::Arc<Vec<u8>>,
 }
 #[doc = " `ImageKind::SVG`."]
 #[napi(object, js_name = "ImageKindSvg", namespace = "usvg")]
@@ -6798,6 +6908,259 @@ impl From<usvg::WritingMode> for UsvgWritingMode {
         }
     }
 }
+impl UsvgFilter {
+    fn wrap(inner: std::sync::Arc<usvg::filter::Filter>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFilter {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    pub fn id(&self) -> String {
+        self.inner.id().to_string()
+    }
+    #[doc = " Filter region."]
+    #[doc = ""]
+    #[doc = " `x`, `y`, `width` and `height` in the SVG."]
+    #[napi]
+    pub fn rect(&self) -> BBox {
+        BBox::from(self.inner.rect())
+    }
+    #[doc = " A list of filter primitives."]
+    #[napi]
+    pub fn primitives(&self) -> Vec<UsvgPrimitive> {
+        self.inner
+            .primitives()
+            .iter()
+            .map(UsvgPrimitive::from)
+            .collect()
+    }
+}
+impl UsvgRadialGradient {
+    fn wrap(inner: std::sync::Arc<usvg::RadialGradient>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgRadialGradient {
+    #[doc = " `cx` coordinate."]
+    #[napi]
+    pub fn cx(&self) -> f64 {
+        f64::from(self.inner.cx())
+    }
+    #[doc = " `cy` coordinate."]
+    #[napi]
+    pub fn cy(&self) -> f64 {
+        f64::from(self.inner.cy())
+    }
+    #[doc = " Gradient radius."]
+    #[napi]
+    pub fn r(&self) -> f64 {
+        f64::from(self.inner.r().get())
+    }
+    #[doc = " `fx` coordinate."]
+    #[napi]
+    pub fn fx(&self) -> f64 {
+        f64::from(self.inner.fx())
+    }
+    #[doc = " `fy` coordinate."]
+    #[napi]
+    pub fn fy(&self) -> f64 {
+        f64::from(self.inner.fy())
+    }
+    #[doc = " Focal radius."]
+    #[napi]
+    pub fn fr(&self) -> f64 {
+        f64::from(self.inner.fr().get())
+    }
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    pub fn id(&self) -> String {
+        self.inner.id().to_string()
+    }
+    #[doc = " Gradient transform."]
+    #[doc = ""]
+    #[doc = " `gradientTransform` in SVG."]
+    #[napi]
+    pub fn transform(&self) -> Matrix {
+        Matrix::from(self.inner.transform())
+    }
+    #[doc = " Gradient spreading method."]
+    #[doc = ""]
+    #[doc = " `spreadMethod` in SVG."]
+    #[napi]
+    pub fn spread_method(&self) -> UsvgSpreadMethod {
+        UsvgSpreadMethod::from(self.inner.spread_method())
+    }
+    #[doc = " A list of `stop` elements."]
+    #[napi]
+    pub fn stops(&self) -> Vec<UsvgStop> {
+        self.inner.stops().iter().map(UsvgStop::from).collect()
+    }
+}
+impl UsvgPattern {
+    fn wrap(inner: std::sync::Arc<usvg::Pattern>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPattern {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    pub fn id(&self) -> String {
+        self.inner.id().to_string()
+    }
+    #[doc = " Pattern transform."]
+    #[doc = ""]
+    #[doc = " `patternTransform` in SVG."]
+    #[napi]
+    pub fn transform(&self) -> Matrix {
+        Matrix::from(self.inner.transform())
+    }
+    #[doc = " Pattern rectangle."]
+    #[doc = ""]
+    #[doc = " `x`, `y`, `width` and `height` in SVG."]
+    #[napi]
+    pub fn rect(&self) -> BBox {
+        BBox::from(self.inner.rect())
+    }
+}
+impl UsvgMask {
+    fn wrap(inner: std::sync::Arc<usvg::Mask>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgMask {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    pub fn id(&self) -> String {
+        self.inner.id().to_string()
+    }
+    #[doc = " Mask rectangle."]
+    #[doc = ""]
+    #[doc = " `x`, `y`, `width` and `height` in SVG."]
+    #[napi]
+    pub fn rect(&self) -> BBox {
+        BBox::from(self.inner.rect())
+    }
+    #[doc = " Mask type."]
+    #[doc = ""]
+    #[doc = " `mask-type` in SVG."]
+    #[napi]
+    pub fn kind(&self) -> UsvgMaskType {
+        UsvgMaskType::from(self.inner.kind())
+    }
+}
+impl UsvgLinearGradient {
+    fn wrap(inner: std::sync::Arc<usvg::LinearGradient>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgLinearGradient {
+    #[doc = " `x1` coordinate."]
+    #[napi]
+    pub fn x1(&self) -> f64 {
+        f64::from(self.inner.x1())
+    }
+    #[doc = " `y1` coordinate."]
+    #[napi]
+    pub fn y1(&self) -> f64 {
+        f64::from(self.inner.y1())
+    }
+    #[doc = " `x2` coordinate."]
+    #[napi]
+    pub fn x2(&self) -> f64 {
+        f64::from(self.inner.x2())
+    }
+    #[doc = " `y2` coordinate."]
+    #[napi]
+    pub fn y2(&self) -> f64 {
+        f64::from(self.inner.y2())
+    }
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    pub fn id(&self) -> String {
+        self.inner.id().to_string()
+    }
+    #[doc = " Gradient transform."]
+    #[doc = ""]
+    #[doc = " `gradientTransform` in SVG."]
+    #[napi]
+    pub fn transform(&self) -> Matrix {
+        Matrix::from(self.inner.transform())
+    }
+    #[doc = " Gradient spreading method."]
+    #[doc = ""]
+    #[doc = " `spreadMethod` in SVG."]
+    #[napi]
+    pub fn spread_method(&self) -> UsvgSpreadMethod {
+        UsvgSpreadMethod::from(self.inner.spread_method())
+    }
+    #[doc = " A list of `stop` elements."]
+    #[napi]
+    pub fn stops(&self) -> Vec<UsvgStop> {
+        self.inner.stops().iter().map(UsvgStop::from).collect()
+    }
+}
+impl UsvgClipPath {
+    fn wrap(inner: std::sync::Arc<usvg::ClipPath>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgClipPath {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    pub fn id(&self) -> String {
+        self.inner.id().to_string()
+    }
+    #[doc = " Clip path transform."]
+    #[doc = ""]
+    #[doc = " `transform` in SVG."]
+    #[napi]
+    pub fn transform(&self) -> Matrix {
+        Matrix::from(self.inner.transform())
+    }
+}
 impl From<&usvg::filter::Blend> for UsvgBlend {
     fn from(v: &usvg::filter::Blend) -> Self {
         Self {
@@ -6927,6 +7290,37 @@ impl From<&usvg::filter::Flood> for UsvgFlood {
         }
     }
 }
+impl UsvgFont {
+    fn wrap(inner: usvg::Font, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFont {
+    #[napi(getter)]
+    pub fn style(&self) -> UsvgFontStyle {
+        let v = &self.inner;
+        UsvgFontStyle::from(v.style())
+    }
+    #[napi(getter)]
+    pub fn stretch(&self) -> UsvgFontStretch {
+        let v = &self.inner;
+        UsvgFontStretch::from(v.stretch())
+    }
+    #[napi(getter)]
+    pub fn weight(&self) -> u32 {
+        let v = &self.inner;
+        u32::from(v.weight())
+    }
+    #[napi(getter)]
+    pub fn variations(&self) -> Vec<UsvgFontVariation> {
+        let v = &self.inner;
+        v.variations().iter().map(UsvgFontVariation::from).collect()
+    }
+}
 impl From<&usvg::FontVariation> for UsvgFontVariation {
     fn from(v: &usvg::FontVariation) -> Self {
         Self {
@@ -6942,6 +7336,65 @@ impl From<&usvg::filter::GaussianBlur> for UsvgGaussianBlur {
             std_dev_x: f64::from(v.std_dev_x().get()),
             std_dev_y: f64::from(v.std_dev_y().get()),
         }
+    }
+}
+impl UsvgImage {
+    fn wrap(inner: usvg::Image, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImage {
+    #[napi(getter)]
+    pub fn id(&self) -> String {
+        let v = &self.inner;
+        v.id().to_string()
+    }
+    #[napi(getter)]
+    pub fn is_visible(&self) -> bool {
+        let v = &self.inner;
+        v.is_visible()
+    }
+    #[napi(getter)]
+    pub fn size(&self) -> Dimensions {
+        let v = &self.inner;
+        Dimensions::from(v.size())
+    }
+    #[napi(getter)]
+    pub fn rendering_mode(&self) -> UsvgImageRendering {
+        let v = &self.inner;
+        UsvgImageRendering::from(v.rendering_mode())
+    }
+    #[napi(getter)]
+    pub fn kind(
+        &self,
+    ) -> Either5<
+        UsvgImageKindJpeg,
+        UsvgImageKindPng,
+        UsvgImageKindGif,
+        UsvgImageKindWebp,
+        UsvgImageKindSvg,
+    > {
+        let v = &self.inner;
+        usvg_image_kind_to_js(v.kind())
+    }
+    #[napi(getter)]
+    pub fn abs_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.abs_transform())
+    }
+    #[napi(getter)]
+    pub fn bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.bounding_box())
+    }
+    #[napi(getter)]
+    pub fn abs_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.abs_bounding_box())
     }
 }
 impl From<&usvg::filter::Merge> for UsvgMerge {
@@ -6997,6 +7450,52 @@ impl From<&usvg::filter::PointLight> for UsvgPointLight {
         }
     }
 }
+impl UsvgPositionedGlyph {
+    fn wrap(inner: usvg::layout::PositionedGlyph, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPositionedGlyph {
+    #[napi(getter)]
+    pub fn font_size(&self) -> f64 {
+        let v = &self.inner;
+        f64::from(v.font_size())
+    }
+    #[napi(getter)]
+    pub fn transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.transform())
+    }
+    #[napi(getter)]
+    pub fn outline_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.outline_transform())
+    }
+    #[napi(getter)]
+    pub fn svg_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.svg_transform())
+    }
+    #[napi(getter)]
+    pub fn colr_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.colr_transform())
+    }
+    #[napi(getter)]
+    pub fn id(&self) -> u32 {
+        let v = &self.inner;
+        u32::from(v.id.0)
+    }
+    #[napi(getter)]
+    pub fn text(&self) -> String {
+        let v = &self.inner;
+        v.text.clone().to_string()
+    }
+}
 impl From<&usvg::filter::Primitive> for UsvgPrimitive {
     fn from(v: &usvg::filter::Primitive) -> Self {
         Self {
@@ -7005,6 +7504,80 @@ impl From<&usvg::filter::Primitive> for UsvgPrimitive {
             result: v.result().to_string(),
             kind: usvg_kind_to_js(v.kind()),
         }
+    }
+}
+impl UsvgSpan {
+    fn wrap(inner: usvg::layout::Span, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgSpan {
+    #[napi(getter)]
+    pub fn fill(&self) -> Option<UsvgFill> {
+        let v = &self.inner;
+        v.fill.clone().map(|x| UsvgFill::from(&x))
+    }
+    #[napi(getter)]
+    pub fn stroke(&self) -> Option<UsvgStroke> {
+        let v = &self.inner;
+        v.stroke.clone().map(|x| UsvgStroke::from(&x))
+    }
+    #[napi(getter)]
+    pub fn paint_order(&self) -> UsvgPaintOrder {
+        let v = &self.inner;
+        UsvgPaintOrder::from(v.paint_order)
+    }
+    #[napi(getter)]
+    pub fn font_size(&self) -> f64 {
+        let v = &self.inner;
+        f64::from(v.font_size.get())
+    }
+    #[napi(getter)]
+    pub fn variations(&self) -> Vec<UsvgFontVariation> {
+        let v = &self.inner;
+        v.variations
+            .clone()
+            .iter()
+            .map(UsvgFontVariation::from)
+            .collect()
+    }
+    #[napi(getter)]
+    pub fn font_optical_sizing(&self) -> UsvgFontOpticalSizing {
+        let v = &self.inner;
+        UsvgFontOpticalSizing::from(v.font_optical_sizing)
+    }
+    #[napi(getter)]
+    pub fn visible(&self) -> bool {
+        let v = &self.inner;
+        v.visible
+    }
+    #[napi(getter)]
+    pub fn positioned_glyphs(&self) -> Vec<UsvgPositionedGlyph> {
+        let v = &self.inner;
+        v.positioned_glyphs
+            .clone()
+            .iter()
+            .map(|x| UsvgPositionedGlyph::wrap(x.clone(), self.doc()))
+            .collect()
+    }
+    #[napi(getter, ts_return_type = "Path | null")]
+    pub fn underline(&self) -> Option<UsvgPath> {
+        let v = &self.inner;
+        v.underline.clone().map(|x| UsvgPath::from(&x))
+    }
+    #[napi(getter, ts_return_type = "Path | null")]
+    pub fn overline(&self) -> Option<UsvgPath> {
+        let v = &self.inner;
+        v.overline.clone().map(|x| UsvgPath::from(&x))
+    }
+    #[napi(getter, ts_return_type = "Path | null")]
+    pub fn line_through(&self) -> Option<UsvgPath> {
+        let v = &self.inner;
+        v.line_through.clone().map(|x| UsvgPath::from(&x))
     }
 }
 impl From<&usvg::filter::SpecularLighting> for UsvgSpecularLighting {
@@ -7058,6 +7631,132 @@ impl From<&usvg::Stroke> for UsvgStroke {
         }
     }
 }
+impl UsvgText {
+    fn wrap(inner: usvg::Text, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgText {
+    #[napi(getter)]
+    pub fn id(&self) -> String {
+        let v = &self.inner;
+        v.id().to_string()
+    }
+    #[napi(getter)]
+    pub fn rendering_mode(&self) -> UsvgTextRendering {
+        let v = &self.inner;
+        UsvgTextRendering::from(v.rendering_mode())
+    }
+    #[napi(getter)]
+    pub fn dx(&self) -> Vec<f64> {
+        let v = &self.inner;
+        v.dx().iter().map(|v| f64::from(*v)).collect()
+    }
+    #[napi(getter)]
+    pub fn dy(&self) -> Vec<f64> {
+        let v = &self.inner;
+        v.dy().iter().map(|v| f64::from(*v)).collect()
+    }
+    #[napi(getter)]
+    pub fn rotate(&self) -> Vec<f64> {
+        let v = &self.inner;
+        v.rotate().iter().map(|v| f64::from(*v)).collect()
+    }
+    #[napi(getter)]
+    pub fn writing_mode(&self) -> UsvgWritingMode {
+        let v = &self.inner;
+        UsvgWritingMode::from(v.writing_mode())
+    }
+    #[napi(getter)]
+    pub fn chunks(&self) -> Vec<UsvgTextChunk> {
+        let v = &self.inner;
+        v.chunks()
+            .iter()
+            .map(|x| UsvgTextChunk::wrap(x.clone(), self.doc()))
+            .collect()
+    }
+    #[napi(getter)]
+    pub fn abs_transform(&self) -> Matrix {
+        let v = &self.inner;
+        Matrix::from(v.abs_transform())
+    }
+    #[napi(getter)]
+    pub fn bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.bounding_box())
+    }
+    #[napi(getter)]
+    pub fn abs_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.abs_bounding_box())
+    }
+    #[napi(getter)]
+    pub fn stroke_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.stroke_bounding_box())
+    }
+    #[napi(getter)]
+    pub fn abs_stroke_bounding_box(&self) -> BBox {
+        let v = &self.inner;
+        BBox::from(v.abs_stroke_bounding_box())
+    }
+    #[napi(getter)]
+    pub fn layouted(&self) -> Vec<UsvgSpan> {
+        let v = &self.inner;
+        v.layouted()
+            .iter()
+            .map(|x| UsvgSpan::wrap(x.clone(), self.doc()))
+            .collect()
+    }
+}
+impl UsvgTextChunk {
+    fn wrap(inner: usvg::TextChunk, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTextChunk {
+    #[napi(getter)]
+    pub fn x(&self) -> Option<f64> {
+        let v = &self.inner;
+        v.x().map(f64::from)
+    }
+    #[napi(getter)]
+    pub fn y(&self) -> Option<f64> {
+        let v = &self.inner;
+        v.y().map(f64::from)
+    }
+    #[napi(getter)]
+    pub fn anchor(&self) -> UsvgTextAnchor {
+        let v = &self.inner;
+        UsvgTextAnchor::from(v.anchor())
+    }
+    #[napi(getter)]
+    pub fn spans(&self) -> Vec<UsvgTextSpan> {
+        let v = &self.inner;
+        v.spans()
+            .iter()
+            .map(|x| UsvgTextSpan::wrap(x.clone(), self.doc()))
+            .collect()
+    }
+    #[napi(getter)]
+    pub fn text_flow(&self) -> Either<UsvgTextFlowPlain, UsvgTextFlowPath> {
+        let v = &self.inner;
+        usvg_text_flow_to_js(&v.text_flow())
+    }
+    #[napi(getter)]
+    pub fn text(&self) -> String {
+        let v = &self.inner;
+        v.text().to_string()
+    }
+}
 impl From<&usvg::TextDecoration> for UsvgTextDecoration {
     fn from(v: &usvg::TextDecoration) -> Self {
         Self {
@@ -7073,6 +7772,115 @@ impl From<&usvg::TextDecorationStyle> for UsvgTextDecorationStyle {
             fill: v.fill().map(UsvgFill::from),
             stroke: v.stroke().map(UsvgStroke::from),
         }
+    }
+}
+impl UsvgTextSpan {
+    fn wrap(inner: usvg::TextSpan, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTextSpan {
+    #[napi(getter)]
+    pub fn start(&self) -> u32 {
+        let v = &self.inner;
+        u32::try_from(v.start()).unwrap_or(u32::MAX)
+    }
+    #[napi(getter)]
+    pub fn end(&self) -> u32 {
+        let v = &self.inner;
+        u32::try_from(v.end()).unwrap_or(u32::MAX)
+    }
+    #[napi(getter)]
+    pub fn fill(&self) -> Option<UsvgFill> {
+        let v = &self.inner;
+        v.fill().map(UsvgFill::from)
+    }
+    #[napi(getter)]
+    pub fn stroke(&self) -> Option<UsvgStroke> {
+        let v = &self.inner;
+        v.stroke().map(UsvgStroke::from)
+    }
+    #[napi(getter)]
+    pub fn paint_order(&self) -> UsvgPaintOrder {
+        let v = &self.inner;
+        UsvgPaintOrder::from(v.paint_order())
+    }
+    #[napi(getter)]
+    pub fn font(&self) -> UsvgFont {
+        let v = &self.inner;
+        UsvgFont::wrap(v.font().clone(), self.doc())
+    }
+    #[napi(getter)]
+    pub fn font_size(&self) -> f64 {
+        let v = &self.inner;
+        f64::from(v.font_size().get())
+    }
+    #[napi(getter)]
+    pub fn small_caps(&self) -> bool {
+        let v = &self.inner;
+        v.small_caps()
+    }
+    #[napi(getter)]
+    pub fn apply_kerning(&self) -> bool {
+        let v = &self.inner;
+        v.apply_kerning()
+    }
+    #[napi(getter)]
+    pub fn font_optical_sizing(&self) -> UsvgFontOpticalSizing {
+        let v = &self.inner;
+        UsvgFontOpticalSizing::from(v.font_optical_sizing())
+    }
+    #[napi(getter)]
+    pub fn decoration(&self) -> UsvgTextDecoration {
+        let v = &self.inner;
+        UsvgTextDecoration::from(v.decoration())
+    }
+    #[napi(getter)]
+    pub fn dominant_baseline(&self) -> UsvgDominantBaseline {
+        let v = &self.inner;
+        UsvgDominantBaseline::from(v.dominant_baseline())
+    }
+    #[napi(getter)]
+    pub fn alignment_baseline(&self) -> UsvgAlignmentBaseline {
+        let v = &self.inner;
+        UsvgAlignmentBaseline::from(v.alignment_baseline())
+    }
+    #[napi(getter)]
+    pub fn baseline_shift(&self) -> Vec<Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>> {
+        let v = &self.inner;
+        v.baseline_shift()
+            .iter()
+            .map(usvg_baseline_shift_to_js)
+            .collect()
+    }
+    #[napi(getter)]
+    pub fn is_visible(&self) -> bool {
+        let v = &self.inner;
+        v.is_visible()
+    }
+    #[napi(getter)]
+    pub fn letter_spacing(&self) -> f64 {
+        let v = &self.inner;
+        f64::from(v.letter_spacing())
+    }
+    #[napi(getter)]
+    pub fn word_spacing(&self) -> f64 {
+        let v = &self.inner;
+        f64::from(v.word_spacing())
+    }
+    #[napi(getter)]
+    pub fn text_length(&self) -> Option<f64> {
+        let v = &self.inner;
+        v.text_length().map(f64::from)
+    }
+    #[napi(getter)]
+    pub fn length_adjust(&self) -> UsvgLengthAdjust {
+        let v = &self.inner;
+        UsvgLengthAdjust::from(v.length_adjust())
     }
 }
 impl From<&usvg::filter::Tile> for UsvgTile {
@@ -7170,6 +7978,77 @@ fn usvg_composite_operator_to_js(
                 k4: f64::from(*k4),
             })
         }
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindJpeg {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'jpeg'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "jpeg"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindPng {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'png'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "png"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindGif {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'gif'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "gif"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindWebp {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'webp'")]
+    pub fn kind_tag(&self) -> &'static str {
+        "webp"
+    }
+    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Buffer {
+        self.raw.as_slice().into()
+    }
+}
+fn usvg_image_kind_to_js(
+    v: &usvg::ImageKind,
+) -> Either5<
+    UsvgImageKindJpeg,
+    UsvgImageKindPng,
+    UsvgImageKindGif,
+    UsvgImageKindWebp,
+    UsvgImageKindSvg,
+> {
+    match v {
+        usvg::ImageKind::JPEG(v) => Either5::A(UsvgImageKindJpeg { raw: v.clone() }),
+        usvg::ImageKind::PNG(v) => Either5::B(UsvgImageKindPng { raw: v.clone() }),
+        usvg::ImageKind::GIF(v) => Either5::C(UsvgImageKindGif { raw: v.clone() }),
+        usvg::ImageKind::WEBP(v) => Either5::D(UsvgImageKindWebp { raw: v.clone() }),
+        usvg::ImageKind::SVG(_) => Either5::E(UsvgImageKindSvg {
+            r#type: "svg".to_string(),
+        }),
     }
 }
 fn usvg_input_to_js(v: &usvg::filter::Input) -> Either<UsvgInputPlain, UsvgInputReference> {
@@ -7812,7 +8691,7 @@ impl FontFace {
     }
 }
 #[napi]
-impl Font {
+impl LegacyFont {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -7826,7 +8705,7 @@ impl Font {
         napi_support::inspect(
             &env,
             &this,
-            "Font",
+            "LegacyFont",
             &["style", "stretch", "weight", "variations", "families"],
             &[],
             depth,
@@ -7837,11 +8716,11 @@ impl Font {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "Font".to_string()
+        "LegacyFont".to_string()
     }
 }
 #[napi]
-impl Image {
+impl LegacyImage {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -7855,7 +8734,7 @@ impl Image {
         napi_support::inspect(
             &env,
             &this,
-            "Image",
+            "LegacyImage",
             &[
                 "id",
                 "isVisible",
@@ -7875,11 +8754,11 @@ impl Image {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "Image".to_string()
+        "LegacyImage".to_string()
     }
 }
 #[napi]
-impl PositionedGlyph {
+impl LegacyPositionedGlyph {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -7893,7 +8772,7 @@ impl PositionedGlyph {
         napi_support::inspect(
             &env,
             &this,
-            "PositionedGlyph",
+            "LegacyPositionedGlyph",
             &[
                 "fontSize",
                 "transform",
@@ -7913,11 +8792,11 @@ impl PositionedGlyph {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "PositionedGlyph".to_string()
+        "LegacyPositionedGlyph".to_string()
     }
 }
 #[napi]
-impl Span {
+impl LegacySpan {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -7931,7 +8810,7 @@ impl Span {
         napi_support::inspect(
             &env,
             &this,
-            "Span",
+            "LegacySpan",
             &[
                 "fill",
                 "stroke",
@@ -7954,11 +8833,11 @@ impl Span {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "Span".to_string()
+        "LegacySpan".to_string()
     }
 }
 #[napi]
-impl Text {
+impl LegacyText {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -7972,7 +8851,7 @@ impl Text {
         napi_support::inspect(
             &env,
             &this,
-            "Text",
+            "LegacyText",
             &[
                 "id",
                 "renderingMode",
@@ -7997,11 +8876,11 @@ impl Text {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "Text".to_string()
+        "LegacyText".to_string()
     }
 }
 #[napi]
-impl TextChunk {
+impl LegacyTextChunk {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8015,7 +8894,7 @@ impl TextChunk {
         napi_support::inspect(
             &env,
             &this,
-            "TextChunk",
+            "LegacyTextChunk",
             &["x", "y", "anchor", "spans", "textFlow", "text"],
             &[],
             depth,
@@ -8026,11 +8905,11 @@ impl TextChunk {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "TextChunk".to_string()
+        "LegacyTextChunk".to_string()
     }
 }
 #[napi]
-impl TextSpan {
+impl LegacyTextSpan {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8044,7 +8923,7 @@ impl TextSpan {
         napi_support::inspect(
             &env,
             &this,
-            "TextSpan",
+            "LegacyTextSpan",
             &[
                 "start",
                 "end",
@@ -8075,11 +8954,11 @@ impl TextSpan {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "TextSpan".to_string()
+        "LegacyTextSpan".to_string()
     }
 }
 #[napi]
-impl ImageKindJpeg {
+impl LegacyImageKindJpeg {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8093,7 +8972,7 @@ impl ImageKindJpeg {
         napi_support::inspect(
             &env,
             &this,
-            "ImageKindJpeg",
+            "LegacyImageKindJpeg",
             &["type", "bytes"],
             &[],
             depth,
@@ -8104,11 +8983,11 @@ impl ImageKindJpeg {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "ImageKindJpeg".to_string()
+        "LegacyImageKindJpeg".to_string()
     }
 }
 #[napi]
-impl ImageKindPng {
+impl LegacyImageKindPng {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8122,7 +9001,7 @@ impl ImageKindPng {
         napi_support::inspect(
             &env,
             &this,
-            "ImageKindPng",
+            "LegacyImageKindPng",
             &["type", "bytes"],
             &[],
             depth,
@@ -8133,11 +9012,11 @@ impl ImageKindPng {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "ImageKindPng".to_string()
+        "LegacyImageKindPng".to_string()
     }
 }
 #[napi]
-impl ImageKindGif {
+impl LegacyImageKindGif {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8151,7 +9030,7 @@ impl ImageKindGif {
         napi_support::inspect(
             &env,
             &this,
-            "ImageKindGif",
+            "LegacyImageKindGif",
             &["type", "bytes"],
             &[],
             depth,
@@ -8162,11 +9041,11 @@ impl ImageKindGif {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "ImageKindGif".to_string()
+        "LegacyImageKindGif".to_string()
     }
 }
 #[napi]
-impl ImageKindWebp {
+impl LegacyImageKindWebp {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8180,7 +9059,7 @@ impl ImageKindWebp {
         napi_support::inspect(
             &env,
             &this,
-            "ImageKindWebp",
+            "LegacyImageKindWebp",
             &["type", "bytes"],
             &[],
             depth,
@@ -8191,31 +9070,11 @@ impl ImageKindWebp {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "ImageKindWebp".to_string()
+        "LegacyImageKindWebp".to_string()
     }
 }
 #[napi]
-impl Filter {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(&env, &this, "Filter", &[], &["id"], depth, options, inspect)
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Filter".to_string()
-    }
-}
-#[napi]
-impl RadialGradient {
+impl LegacyFilter {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8229,7 +9088,36 @@ impl RadialGradient {
         napi_support::inspect(
             &env,
             &this,
-            "RadialGradient",
+            "LegacyFilter",
+            &[],
+            &["id"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "LegacyFilter".to_string()
+    }
+}
+#[napi]
+impl LegacyRadialGradient {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "LegacyRadialGradient",
             &[],
             &["cx", "cy", "r", "fx", "fy", "fr", "id", "spreadMethod"],
             depth,
@@ -8240,11 +9128,11 @@ impl RadialGradient {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "RadialGradient".to_string()
+        "LegacyRadialGradient".to_string()
     }
 }
 #[napi]
-impl Pattern {
+impl LegacyPattern {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8258,7 +9146,7 @@ impl Pattern {
         napi_support::inspect(
             &env,
             &this,
-            "Pattern",
+            "LegacyPattern",
             &[],
             &["id"],
             depth,
@@ -8269,11 +9157,11 @@ impl Pattern {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "Pattern".to_string()
+        "LegacyPattern".to_string()
     }
 }
 #[napi]
-impl Mask {
+impl LegacyMask {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8287,7 +9175,7 @@ impl Mask {
         napi_support::inspect(
             &env,
             &this,
-            "Mask",
+            "LegacyMask",
             &[],
             &["id", "kind"],
             depth,
@@ -8298,11 +9186,11 @@ impl Mask {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "Mask".to_string()
+        "LegacyMask".to_string()
     }
 }
 #[napi]
-impl LinearGradient {
+impl LegacyLinearGradient {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8316,7 +9204,7 @@ impl LinearGradient {
         napi_support::inspect(
             &env,
             &this,
-            "LinearGradient",
+            "LegacyLinearGradient",
             &[],
             &["x1", "y1", "x2", "y2", "id", "spreadMethod"],
             depth,
@@ -8327,11 +9215,11 @@ impl LinearGradient {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "LinearGradient".to_string()
+        "LegacyLinearGradient".to_string()
     }
 }
 #[napi]
-impl ClipPath {
+impl LegacyClipPath {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -8345,7 +9233,7 @@ impl ClipPath {
         napi_support::inspect(
             &env,
             &this,
-            "ClipPath",
+            "LegacyClipPath",
             &[],
             &["id"],
             depth,
@@ -8356,7 +9244,7 @@ impl ClipPath {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "ClipPath".to_string()
+        "LegacyClipPath".to_string()
     }
 }
 #[napi]
@@ -8428,6 +9316,553 @@ impl Resvg {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Resvg".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFilter {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(&env, &this, "Filter", &[], &["id"], depth, options, inspect)
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Filter".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgRadialGradient {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "RadialGradient",
+            &[],
+            &["cx", "cy", "r", "fx", "fy", "fr", "id", "spreadMethod"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "RadialGradient".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPattern {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Pattern",
+            &[],
+            &["id"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Pattern".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgMask {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Mask",
+            &[],
+            &["id", "kind"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Mask".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgLinearGradient {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "LinearGradient",
+            &[],
+            &["x1", "y1", "x2", "y2", "id", "spreadMethod"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "LinearGradient".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgClipPath {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ClipPath",
+            &[],
+            &["id"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ClipPath".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFont {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Font",
+            &["style", "stretch", "weight", "variations"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Font".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImage {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Image",
+            &[
+                "id",
+                "isVisible",
+                "size",
+                "renderingMode",
+                "kind",
+                "absTransform",
+                "boundingBox",
+                "absBoundingBox",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Image".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPositionedGlyph {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "PositionedGlyph",
+            &[
+                "fontSize",
+                "transform",
+                "outlineTransform",
+                "svgTransform",
+                "colrTransform",
+                "id",
+                "text",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "PositionedGlyph".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgSpan {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Span",
+            &[
+                "fill",
+                "stroke",
+                "paintOrder",
+                "fontSize",
+                "variations",
+                "fontOpticalSizing",
+                "visible",
+                "positionedGlyphs",
+                "underline",
+                "overline",
+                "lineThrough",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Span".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgText {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Text",
+            &[
+                "id",
+                "renderingMode",
+                "dx",
+                "dy",
+                "rotate",
+                "writingMode",
+                "chunks",
+                "absTransform",
+                "boundingBox",
+                "absBoundingBox",
+                "strokeBoundingBox",
+                "absStrokeBoundingBox",
+                "layouted",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Text".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTextChunk {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "TextChunk",
+            &["x", "y", "anchor", "spans", "textFlow", "text"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "TextChunk".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTextSpan {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "TextSpan",
+            &[
+                "start",
+                "end",
+                "fill",
+                "stroke",
+                "paintOrder",
+                "font",
+                "fontSize",
+                "smallCaps",
+                "applyKerning",
+                "fontOpticalSizing",
+                "decoration",
+                "dominantBaseline",
+                "alignmentBaseline",
+                "baselineShift",
+                "isVisible",
+                "letterSpacing",
+                "wordSpacing",
+                "textLength",
+                "lengthAdjust",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "TextSpan".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindJpeg {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ImageKindJpeg",
+            &["type", "bytes"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ImageKindJpeg".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindPng {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ImageKindPng",
+            &["type", "bytes"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ImageKindPng".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindGif {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ImageKindGif",
+            &["type", "bytes"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ImageKindGif".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindWebp {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ImageKindWebp",
+            &["type", "bytes"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ImageKindWebp".to_string()
     }
 }
 #[napi(namespace = "fontdb")]

@@ -110,15 +110,27 @@ napi keeps **one constructor per JS class name**, whatever the namespace
 (`REGISTERED_CLASSES` in napi 3.16). It builds every instance of a class from
 the constructor registered under that name. If a namespaced class has the same
 name as a flat one, one of the two hands out instances of the other, and
-every method call on them throws. So `namespaced` leaves out any class whose
-name is already taken, and anything that refers to it, and the codegen report
-lists each one as `not namespaced`. Today that is every usvg class (`ClipPath`,
-`Text`, `Span`...): they come back when the flat surface goes, or when napi
-keys its registry by namespace. Objects and string enums have no constructor
-and are not affected.
+every method call on them throws. So `namespaced` reads the class names off
+the flat surface, and when a copy would take one of them:
+
+- with `Config::legacy_prefix` set, the **flat class gives way**: its Rust
+  ident, and every reference to it in the flat code (hand-written template
+  included), get the prefix, so its JS name, `.d.ts` type, inspect label and
+  `toStringTag` follow. The root sets `Some("Legacy")`: `ClipPath` becomes
+  `LegacyClipPath` and `usvg.ClipPath` keeps the upstream name (decision Q36).
+  That is the 17 usvg classes (`ClipPath`, `Text`, `Span`...), and they go
+  with the flat surface in step 13. The codegen report lists each one as
+  `legacy flat name`. A flat class with a `js_name` of its own fails the
+  build: the rename would have to edit it.
+- with `None`, the copy is left out, with anything that refers to it, and the
+  report lists it as `not namespaced`.
+
+Two namespaces offering one class name always leave the second out. Objects
+and string enums have no constructor and are not affected.
 
 The toy shows both rules. `toy.Tally` derives `Clone` and is tested for
-copy-on-write. `toy.Counter` is left out because a flat `Counter` exists.
+copy-on-write. `toy.Counter` is namespaced beside a flat `LegacyCounter`, and
+the test checks that instances of the flat one still work.
 `test/api/namespaces.mjs` checks the root's namespaces against `index.d.ts`:
 every class and enum it declares exists at runtime under its Rust name.
 

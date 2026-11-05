@@ -245,4 +245,8 @@ pub const GEN: Config = Config {
     // re-export, and is still `fontdb` from JS. The flat exports stay beside
     // it until the migration removes them.
     namespaces: &[("usvg", "usvg"), ("usvg::fontdb", "fontdb")],
+    // A flat class named like a namespaced one (`ClipPath`, `Text`...) is
+    // renamed `LegacyClipPath`, `LegacyText`: napi keeps one constructor per
+    // class name. Both go with the flat surface in step 13 (decision Q36).
+    legacy_prefix: Some("Legacy"),
 };

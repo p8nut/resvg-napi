@@ -9,76 +9,6 @@ export interface Resvg {
 /** The WASI flavor this loader instantiates. */
 export declare const __napiBindingTarget: 'wasm32-wasi'
 
-/** Read-only handle on a `usvg::ClipPath`. */
-export declare class ClipPath {
-  /**
-   * Element's ID.
-   *
-   * Taken from the SVG itself.
-   * Used only during SVG writing. `resvg` doesn't rely on this property.
-   */
-  id(): string
-  /**
-   * Clip path transform.
-   *
-   * `transform` in SVG.
-   */
-  transform(): Matrix
-  /** Children of this definition's content group. */
-  children(): Array<SvgNode>
-  /**
-   * The clip path applied to this clip path's own content, if any.
-   * `null` too when the handle came from no document.
-   */
-  clipPath(): ClipPath | null
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** Read-only handle on a `usvg::filter::Filter`. */
-export declare class Filter {
-  /**
-   * Element's ID.
-   *
-   * Taken from the SVG itself.
-   * Used only during SVG writing. `resvg` doesn't rely on this property.
-   */
-  id(): string
-  /**
-   * Filter region.
-   *
-   * `x`, `y`, `width` and `height` in the SVG.
-   */
-  rect(): BBox
-  /** A list of filter primitives. */
-  primitives(): Array<Primitive>
-  /**
-   * Children of the `feImage` primitive at `index` in `primitives`:
-   * usvg's `filter::Image::root()`. `null` for any other primitive.
-   *
-   * A method here rather than a field on the `image` kind: a primitive
-   * is a plain object, built without the filter its nodes resolve from.
-   */
-  imageChildren(index: number): Array<SvgNode> | null
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** Read-only view of a `Font`. */
-export declare class Font {
-  get style(): FontStyle
-  get stretch(): FontStretch
-  get weight(): number
-  get variations(): Array<FontVariation>
-  /**
-   * Families this span asked for, in order. Never empty: usvg appends
-   * `RenderOptions.fontFamily` as the last resort.
-   */
-  get families(): Array<string>
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
 /** Opaque wrapper over `fontdb::Database` (memory-mapped faces, no JSON form). */
 export declare class FontDatabase {
   /**
@@ -215,13 +145,83 @@ export declare class FontFace {
   get [globalThis.Symbol.toStringTag](): string
 }
 
+/** Read-only handle on a `usvg::ClipPath`. */
+export declare class LegacyClipPath {
+  /**
+   * Element's ID.
+   *
+   * Taken from the SVG itself.
+   * Used only during SVG writing. `resvg` doesn't rely on this property.
+   */
+  id(): string
+  /**
+   * Clip path transform.
+   *
+   * `transform` in SVG.
+   */
+  transform(): Matrix
+  /** Children of this definition's content group. */
+  children(): Array<SvgNode>
+  /**
+   * The clip path applied to this clip path's own content, if any.
+   * `null` too when the handle came from no document.
+   */
+  clipPath(): LegacyClipPath | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
+/** Read-only handle on a `usvg::filter::Filter`. */
+export declare class LegacyFilter {
+  /**
+   * Element's ID.
+   *
+   * Taken from the SVG itself.
+   * Used only during SVG writing. `resvg` doesn't rely on this property.
+   */
+  id(): string
+  /**
+   * Filter region.
+   *
+   * `x`, `y`, `width` and `height` in the SVG.
+   */
+  rect(): BBox
+  /** A list of filter primitives. */
+  primitives(): Array<Primitive>
+  /**
+   * Children of the `feImage` primitive at `index` in `primitives`:
+   * usvg's `filter::Image::root()`. `null` for any other primitive.
+   *
+   * A method here rather than a field on the `image` kind: a primitive
+   * is a plain object, built without the filter its nodes resolve from.
+   */
+  imageChildren(index: number): Array<SvgNode> | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
+/** Read-only view of a `Font`. */
+export declare class LegacyFont {
+  get style(): FontStyle
+  get stretch(): FontStretch
+  get weight(): number
+  get variations(): Array<FontVariation>
+  /**
+   * Families this span asked for, in order. Never empty: usvg appends
+   * `RenderOptions.fontFamily` as the last resort.
+   */
+  get families(): Array<string>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
 /** Read-only view of an `Image`. */
-export declare class Image {
+export declare class LegacyImage {
   get id(): string
   get isVisible(): boolean
   get size(): Dimensions
   get renderingMode(): ImageRendering
-  get kind(): ImageKindJpeg | ImageKindPng | ImageKindGif | ImageKindWebp | ImageKindSvg
+  get kind(): LegacyImageKindJpeg | LegacyImageKindPng | LegacyImageKindGif | LegacyImageKindWebp | ImageKindSvg
   get absTransform(): Matrix
   get boundingBox(): BBox
   get absBoundingBox(): BBox
@@ -230,7 +230,7 @@ export declare class Image {
 }
 
 /** `ImageKind::GIF`. The bytes are the document's own. */
-export declare class ImageKindGif {
+export declare class LegacyImageKindGif {
   /** Discriminant. Narrow on this. */
   get type(): 'gif'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
@@ -240,7 +240,7 @@ export declare class ImageKindGif {
 }
 
 /** `ImageKind::JPEG`. The bytes are the document's own. */
-export declare class ImageKindJpeg {
+export declare class LegacyImageKindJpeg {
   /** Discriminant. Narrow on this. */
   get type(): 'jpeg'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
@@ -250,7 +250,7 @@ export declare class ImageKindJpeg {
 }
 
 /** `ImageKind::PNG`. The bytes are the document's own. */
-export declare class ImageKindPng {
+export declare class LegacyImageKindPng {
   /** Discriminant. Narrow on this. */
   get type(): 'png'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
@@ -260,7 +260,7 @@ export declare class ImageKindPng {
 }
 
 /** `ImageKind::WEBP`. The bytes are the document's own. */
-export declare class ImageKindWebp {
+export declare class LegacyImageKindWebp {
   /** Discriminant. Narrow on this. */
   get type(): 'webp'
   /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
@@ -270,7 +270,7 @@ export declare class ImageKindWebp {
 }
 
 /** Read-only handle on a `usvg::LinearGradient`. */
-export declare class LinearGradient {
+export declare class LegacyLinearGradient {
   /** `x1` coordinate. */
   x1(): number
   /** `y1` coordinate. */
@@ -305,7 +305,7 @@ export declare class LinearGradient {
 }
 
 /** Read-only handle on a `usvg::Mask`. */
-export declare class Mask {
+export declare class LegacyMask {
   /**
    * Element's ID.
    *
@@ -331,13 +331,13 @@ export declare class Mask {
    * The mask applied to this mask's own content, if any. `null` too
    * when the handle came from no document.
    */
-  mask(): Mask | null
+  mask(): LegacyMask | null
   /** The class name, for `Object.prototype.toString`. */
   get [globalThis.Symbol.toStringTag](): string
 }
 
 /** Read-only handle on a `usvg::Pattern`. */
-export declare class Pattern {
+export declare class LegacyPattern {
   /**
    * Element's ID.
    *
@@ -364,7 +364,7 @@ export declare class Pattern {
 }
 
 /** Read-only view of a `PositionedGlyph`. */
-export declare class PositionedGlyph {
+export declare class LegacyPositionedGlyph {
   get fontSize(): number
   get transform(): Matrix
   get outlineTransform(): Matrix
@@ -382,7 +382,7 @@ export declare class PositionedGlyph {
 }
 
 /** Read-only handle on a `usvg::RadialGradient`. */
-export declare class RadialGradient {
+export declare class LegacyRadialGradient {
   /** `cx` coordinate. */
   cx(): number
   /** `cy` coordinate. */
@@ -416,6 +416,79 @@ export declare class RadialGradient {
   spreadMethod(): SpreadMethod
   /** A list of `stop` elements. */
   stops(): Array<Stop>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
+/** Read-only view of a `Span`. */
+export declare class LegacySpan {
+  get fill(): Fill | null
+  get stroke(): Stroke | null
+  get paintOrder(): PaintOrder
+  get fontSize(): number
+  get variations(): Array<FontVariation>
+  get fontOpticalSizing(): FontOpticalSizing
+  get visible(): boolean
+  get positionedGlyphs(): Array<LegacyPositionedGlyph>
+  get underline(): Path | null
+  get overline(): Path | null
+  get lineThrough(): Path | null
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
+/** Read-only view of a `Text`. */
+export declare class LegacyText {
+  get id(): string
+  get renderingMode(): TextRendering
+  get dx(): Array<number>
+  get dy(): Array<number>
+  get rotate(): Array<number>
+  get writingMode(): WritingMode
+  get chunks(): Array<LegacyTextChunk>
+  get absTransform(): Matrix
+  get boundingBox(): BBox
+  get absBoundingBox(): BBox
+  get strokeBoundingBox(): BBox
+  get absStrokeBoundingBox(): BBox
+  get layouted(): Array<LegacySpan>
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
+/** Read-only view of a `TextChunk`. */
+export declare class LegacyTextChunk {
+  get x(): number | null
+  get y(): number | null
+  get anchor(): TextAnchor
+  get spans(): Array<LegacyTextSpan>
+  get textFlow(): TextFlowPlain | TextFlowPath
+  get text(): string
+  /** The class name, for `Object.prototype.toString`. */
+  get [globalThis.Symbol.toStringTag](): string
+}
+
+/** Read-only view of a `TextSpan`. */
+export declare class LegacyTextSpan {
+  get start(): number
+  get end(): number
+  get fill(): Fill | null
+  get stroke(): Stroke | null
+  get paintOrder(): PaintOrder
+  get font(): LegacyFont
+  get fontSize(): number
+  get smallCaps(): boolean
+  get applyKerning(): boolean
+  get fontOpticalSizing(): FontOpticalSizing
+  get decoration(): TextDecoration
+  get dominantBaseline(): DominantBaseline
+  get alignmentBaseline(): AlignmentBaseline
+  get baselineShift(): Array<BaselineShiftPlain | BaselineShiftNumber>
+  get isVisible(): boolean
+  get letterSpacing(): number
+  get wordSpacing(): number
+  get textLength(): number | null
+  get lengthAdjust(): LengthAdjust
   /** The class name, for `Object.prototype.toString`. */
   get [globalThis.Symbol.toStringTag](): string
 }
@@ -463,7 +536,7 @@ export declare class Resvg {
    * a slotmap key, meaningless outside the database that issued it,
    * and read against this one it could name an unrelated face.
    */
-  faceOf(glyph: PositionedGlyph): FontFace | null
+  faceOf(glyph: LegacyPositionedGlyph): FontFace | null
   /**
    * Supplies one image and re-parses the document.
    *
@@ -520,17 +593,17 @@ export declare class Resvg {
   /** Checks if the current tree has any `defs` nodes. */
   hasDefsNodes(): boolean
   /** Returns a list of all unique [`LinearGradient`]s in the tree. */
-  linearGradients(): Array<LinearGradient>
+  linearGradients(): Array<LegacyLinearGradient>
   /** Returns a list of all unique [`RadialGradient`]s in the tree. */
-  radialGradients(): Array<RadialGradient>
+  radialGradients(): Array<LegacyRadialGradient>
   /** Returns a list of all unique [`Pattern`]s in the tree. */
-  patterns(): Array<Pattern>
+  patterns(): Array<LegacyPattern>
   /** Returns a list of all unique [`ClipPath`]s in the tree. */
-  clipPaths(): Array<ClipPath>
+  clipPaths(): Array<LegacyClipPath>
   /** Returns a list of all unique [`Mask`]s in the tree. */
-  masks(): Array<Mask>
+  masks(): Array<LegacyMask>
   /** Returns a list of all unique [`Filter`](filter::Filter)s in the tree. */
-  filters(): Array<Filter>
+  filters(): Array<LegacyFilter>
   /** Returns the font database that applies to all text nodes in the tree. */
   fontdb(): FontDatabase
   /**
@@ -645,23 +718,6 @@ export declare class Resvg {
   get [globalThis.Symbol.toStringTag](): string
 }
 
-/** Read-only view of a `Span`. */
-export declare class Span {
-  get fill(): Fill | null
-  get stroke(): Stroke | null
-  get paintOrder(): PaintOrder
-  get fontSize(): number
-  get variations(): Array<FontVariation>
-  get fontOpticalSizing(): FontOpticalSizing
-  get visible(): boolean
-  get positionedGlyphs(): Array<PositionedGlyph>
-  get underline(): Path | null
-  get overline(): Path | null
-  get lineThrough(): Path | null
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
 /**
  * A read-only handle on one element of the parsed tree.
  *
@@ -679,7 +735,7 @@ export declare class SvgNode {
    * Its presence is what makes the text types map at all -- a node
    * payload is not a collection, so nothing else nominates them.
    */
-  text(): Text | null
+  text(): LegacyText | null
   /**
    * A text node's glyphs as paths: the children of usvg's
    * `Text::flattened()`, the outlines `renderPng` draws. Null for
@@ -713,7 +769,7 @@ export declare class SvgNode {
    * this is the caller -- while `svg` carries none, an embedded
    * SVG being a tree rather than a payload.
    */
-  image(): Image | null
+  image(): LegacyImage | null
   /** Direct children. Empty for anything that is not a group. */
   children(): Array<SvgNode>
   /**
@@ -733,9 +789,9 @@ export declare class SvgNode {
    * usvg hands out a bare `&ClipPath` here, with no `Arc` to hold on to,
    * so it is found in the document's clip-path table by identity.
    */
-  clipPath(): ClipPath | null
+  clipPath(): LegacyClipPath | null
   /** Mask applied to this element, found like `clipPath`. */
-  mask(): Mask | null
+  mask(): LegacyMask | null
   /** Renders this element alone, sized to its own extent. */
   renderPng(params?: RenderParams | undefined | null): Buffer
   /** Returns node's ID. */
@@ -789,7 +845,7 @@ export declare class SvgNode {
    */
   isolate(): boolean | null
   /** Element's filters. */
-  filters(): Array<Filter> | null
+  filters(): Array<LegacyFilter> | null
   /**
    * Element's "layer" bounding box in object units.
    *
@@ -814,62 +870,6 @@ export declare class SvgNode {
   /** `renderPng` on a worker thread: the work leaves the event loop, and a
   queued call is dropped when the signal fires. */
   renderPngAsync(params?: RenderParams | undefined | null, signal?: AbortSignal | undefined | null): Promise<Buffer>
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** Read-only view of a `Text`. */
-export declare class Text {
-  get id(): string
-  get renderingMode(): TextRendering
-  get dx(): Array<number>
-  get dy(): Array<number>
-  get rotate(): Array<number>
-  get writingMode(): WritingMode
-  get chunks(): Array<TextChunk>
-  get absTransform(): Matrix
-  get boundingBox(): BBox
-  get absBoundingBox(): BBox
-  get strokeBoundingBox(): BBox
-  get absStrokeBoundingBox(): BBox
-  get layouted(): Array<Span>
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** Read-only view of a `TextChunk`. */
-export declare class TextChunk {
-  get x(): number | null
-  get y(): number | null
-  get anchor(): TextAnchor
-  get spans(): Array<TextSpan>
-  get textFlow(): TextFlowPlain | TextFlowPath
-  get text(): string
-  /** The class name, for `Object.prototype.toString`. */
-  get [globalThis.Symbol.toStringTag](): string
-}
-
-/** Read-only view of a `TextSpan`. */
-export declare class TextSpan {
-  get start(): number
-  get end(): number
-  get fill(): Fill | null
-  get stroke(): Stroke | null
-  get paintOrder(): PaintOrder
-  get font(): Font
-  get fontSize(): number
-  get smallCaps(): boolean
-  get applyKerning(): boolean
-  get fontOpticalSizing(): FontOpticalSizing
-  get decoration(): TextDecoration
-  get dominantBaseline(): DominantBaseline
-  get alignmentBaseline(): AlignmentBaseline
-  get baselineShift(): Array<BaselineShiftPlain | BaselineShiftNumber>
-  get isVisible(): boolean
-  get letterSpacing(): number
-  get wordSpacing(): number
-  get textLength(): number | null
-  get lengthAdjust(): LengthAdjust
   /** The class name, for `Object.prototype.toString`. */
   get [globalThis.Symbol.toStringTag](): string
 }
@@ -1915,6 +1915,320 @@ export declare namespace fontdb {
 }
 
 export declare namespace usvg {
+  /** Read-only handle on a `usvg::ClipPath`. */
+  export class ClipPath {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Used only during SVG writing. `resvg` doesn't rely on this property.
+     */
+    id(): string
+    /**
+     * Clip path transform.
+     *
+     * `transform` in SVG.
+     */
+    transform(): Matrix
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgClipPath = ClipPath
+  /** Read-only handle on a `usvg::filter::Filter`. */
+  export class Filter {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Used only during SVG writing. `resvg` doesn't rely on this property.
+     */
+    id(): string
+    /**
+     * Filter region.
+     *
+     * `x`, `y`, `width` and `height` in the SVG.
+     */
+    rect(): BBox
+    /** A list of filter primitives. */
+    primitives(): Array<usvg.Primitive>
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgFilter = Filter
+  /** Read-only view of a `Font`. */
+  export class Font {
+    get style(): usvg.FontStyle
+    get stretch(): usvg.FontStretch
+    get weight(): number
+    get variations(): Array<usvg.FontVariation>
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgFont = Font
+  /** Read-only view of an `Image`. */
+  export class Image {
+    get id(): string
+    get isVisible(): boolean
+    get size(): Dimensions
+    get renderingMode(): usvg.ImageRendering
+    get kind(): usvg.ImageKindJpeg | usvg.ImageKindPng | usvg.ImageKindGif | usvg.ImageKindWebp | usvg.ImageKindSvg
+    get absTransform(): Matrix
+    get boundingBox(): BBox
+    get absBoundingBox(): BBox
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgImage = Image
+  /** `ImageKind::GIF`. The bytes are the document's own. */
+  export class ImageKindGif {
+    /** Discriminant. Narrow on this. */
+    get type(): 'gif'
+    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    get bytes(): Buffer
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgImageKindGif = ImageKindGif
+  /** `ImageKind::JPEG`. The bytes are the document's own. */
+  export class ImageKindJpeg {
+    /** Discriminant. Narrow on this. */
+    get type(): 'jpeg'
+    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    get bytes(): Buffer
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgImageKindJpeg = ImageKindJpeg
+  /** `ImageKind::PNG`. The bytes are the document's own. */
+  export class ImageKindPng {
+    /** Discriminant. Narrow on this. */
+    get type(): 'png'
+    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    get bytes(): Buffer
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgImageKindPng = ImageKindPng
+  /** `ImageKind::WEBP`. The bytes are the document's own. */
+  export class ImageKindWebp {
+    /** Discriminant. Narrow on this. */
+    get type(): 'webp'
+    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    get bytes(): Buffer
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgImageKindWebp = ImageKindWebp
+  /** Read-only handle on a `usvg::LinearGradient`. */
+  export class LinearGradient {
+    /** `x1` coordinate. */
+    x1(): number
+    /** `y1` coordinate. */
+    y1(): number
+    /** `x2` coordinate. */
+    x2(): number
+    /** `y2` coordinate. */
+    y2(): number
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Used only during SVG writing. `resvg` doesn't rely on this property.
+     */
+    id(): string
+    /**
+     * Gradient transform.
+     *
+     * `gradientTransform` in SVG.
+     */
+    transform(): Matrix
+    /**
+     * Gradient spreading method.
+     *
+     * `spreadMethod` in SVG.
+     */
+    spreadMethod(): usvg.SpreadMethod
+    /** A list of `stop` elements. */
+    stops(): Array<usvg.Stop>
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgLinearGradient = LinearGradient
+  /** Read-only handle on a `usvg::Mask`. */
+  export class Mask {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Used only during SVG writing. `resvg` doesn't rely on this property.
+     */
+    id(): string
+    /**
+     * Mask rectangle.
+     *
+     * `x`, `y`, `width` and `height` in SVG.
+     */
+    rect(): BBox
+    /**
+     * Mask type.
+     *
+     * `mask-type` in SVG.
+     */
+    kind(): usvg.MaskType
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgMask = Mask
+  /** Read-only handle on a `usvg::Pattern`. */
+  export class Pattern {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Used only during SVG writing. `resvg` doesn't rely on this property.
+     */
+    id(): string
+    /**
+     * Pattern transform.
+     *
+     * `patternTransform` in SVG.
+     */
+    transform(): Matrix
+    /**
+     * Pattern rectangle.
+     *
+     * `x`, `y`, `width` and `height` in SVG.
+     */
+    rect(): BBox
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgPattern = Pattern
+  /** Read-only view of a `PositionedGlyph`. */
+  export class PositionedGlyph {
+    get fontSize(): number
+    get transform(): Matrix
+    get outlineTransform(): Matrix
+    get svgTransform(): Matrix
+    get colrTransform(): Matrix
+    get id(): number
+    get text(): string
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgPositionedGlyph = PositionedGlyph
+  /** Read-only handle on a `usvg::RadialGradient`. */
+  export class RadialGradient {
+    /** `cx` coordinate. */
+    cx(): number
+    /** `cy` coordinate. */
+    cy(): number
+    /** Gradient radius. */
+    r(): number
+    /** `fx` coordinate. */
+    fx(): number
+    /** `fy` coordinate. */
+    fy(): number
+    /** Focal radius. */
+    fr(): number
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Used only during SVG writing. `resvg` doesn't rely on this property.
+     */
+    id(): string
+    /**
+     * Gradient transform.
+     *
+     * `gradientTransform` in SVG.
+     */
+    transform(): Matrix
+    /**
+     * Gradient spreading method.
+     *
+     * `spreadMethod` in SVG.
+     */
+    spreadMethod(): usvg.SpreadMethod
+    /** A list of `stop` elements. */
+    stops(): Array<usvg.Stop>
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgRadialGradient = RadialGradient
+  /** Read-only view of a `Span`. */
+  export class Span {
+    get fill(): usvg.Fill | null
+    get stroke(): usvg.Stroke | null
+    get paintOrder(): usvg.PaintOrder
+    get fontSize(): number
+    get variations(): Array<usvg.FontVariation>
+    get fontOpticalSizing(): usvg.FontOpticalSizing
+    get visible(): boolean
+    get positionedGlyphs(): Array<usvg.PositionedGlyph>
+    get underline(): Path | null
+    get overline(): Path | null
+    get lineThrough(): Path | null
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgSpan = Span
+  /** Read-only view of a `Text`. */
+  export class Text {
+    get id(): string
+    get renderingMode(): usvg.TextRendering
+    get dx(): Array<number>
+    get dy(): Array<number>
+    get rotate(): Array<number>
+    get writingMode(): usvg.WritingMode
+    get chunks(): Array<usvg.TextChunk>
+    get absTransform(): Matrix
+    get boundingBox(): BBox
+    get absBoundingBox(): BBox
+    get strokeBoundingBox(): BBox
+    get absStrokeBoundingBox(): BBox
+    get layouted(): Array<usvg.Span>
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgText = Text
+  /** Read-only view of a `TextChunk`. */
+  export class TextChunk {
+    get x(): number | null
+    get y(): number | null
+    get anchor(): usvg.TextAnchor
+    get spans(): Array<usvg.TextSpan>
+    get textFlow(): usvg.TextFlowPlain | usvg.TextFlowPath
+    get text(): string
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgTextChunk = TextChunk
+  /** Read-only view of a `TextSpan`. */
+  export class TextSpan {
+    get start(): number
+    get end(): number
+    get fill(): usvg.Fill | null
+    get stroke(): usvg.Stroke | null
+    get paintOrder(): usvg.PaintOrder
+    get font(): usvg.Font
+    get fontSize(): number
+    get smallCaps(): boolean
+    get applyKerning(): boolean
+    get fontOpticalSizing(): usvg.FontOpticalSizing
+    get decoration(): usvg.TextDecoration
+    get dominantBaseline(): usvg.DominantBaseline
+    get alignmentBaseline(): usvg.AlignmentBaseline
+    get baselineShift(): Array<usvg.BaselineShiftPlain | usvg.BaselineShiftNumber>
+    get isVisible(): boolean
+    get letterSpacing(): number
+    get wordSpacing(): number
+    get textLength(): number | null
+    get lengthAdjust(): usvg.LengthAdjust
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgTextSpan = TextSpan
   /** An alignment baseline property. */
   export type AlignmentBaseline = 'auto' | 'baseline' | 'beforeEdge' | 'textBeforeEdge' | 'middle' | 'central' | 'afterEdge' | 'textAfterEdge' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical'
   /** `BaselineShift::Number`. */

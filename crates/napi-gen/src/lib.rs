@@ -86,6 +86,11 @@ pub struct Config {
     /// type goes in the namespace of the source that defines it; a source
     /// listed nowhere gets none. See [`emit::namespaced`] for the naming rule.
     pub namespaces: &'static [(&'static str, &'static str)],
+    /// What a flat class is renamed with when a namespaced copy has its JS
+    /// name (`Some("Legacy")`: `ClipPath` becomes `LegacyClipPath`). napi
+    /// keeps one constructor per class name, so the two cannot share it;
+    /// `None` leaves the copy out instead. See [`emit::namespaced`].
+    pub legacy_prefix: Option<&'static str>,
 }
 
 /// The template types the domain shapes become. Each has a `From` impl for

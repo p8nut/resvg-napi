@@ -810,13 +810,15 @@ fn main() {
                 (ns, code)
             })
             .collect();
-        // napi keeps one constructor per JS class name: a class the first
-        // surface already has under that name stays out until it goes.
-        let (mirror, left_out) = namespaced(&parts, &class_names(&code));
-        for why in left_out {
-            report!("not namespaced: {why}");
+        // napi keeps one constructor per JS class name: a flat class with
+        // the name of a namespaced one is renamed (`GEN.legacy_prefix`)
+        // until the flat surface goes.
+        let surfaces = namespaced(&parts, &code);
+        for line in surfaces.report {
+            report!("{line}");
         }
-        code.extend(mirror);
+        code = surfaces.flat;
+        code.extend(surfaces.namespaced);
     }
 
     // Async twins: the template marks a Send-safe core, the rule writes the

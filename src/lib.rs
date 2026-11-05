@@ -5926,28 +5926,10 @@ pub struct UsvgRadialGradient {
     inner: std::sync::Arc<usvg::RadialGradient>,
     doc: Doc,
 }
-#[doc = " Read-only handle on a `usvg::Pattern`."]
-#[napi(js_name = "Pattern", namespace = "usvg")]
-pub struct UsvgPattern {
-    inner: std::sync::Arc<usvg::Pattern>,
-    doc: Doc,
-}
-#[doc = " Read-only handle on a `usvg::Mask`."]
-#[napi(js_name = "Mask", namespace = "usvg")]
-pub struct UsvgMask {
-    inner: std::sync::Arc<usvg::Mask>,
-    doc: Doc,
-}
 #[doc = " Read-only handle on a `usvg::LinearGradient`."]
 #[napi(js_name = "LinearGradient", namespace = "usvg")]
 pub struct UsvgLinearGradient {
     inner: std::sync::Arc<usvg::LinearGradient>,
-    doc: Doc,
-}
-#[doc = " Read-only handle on a `usvg::ClipPath`."]
-#[napi(js_name = "ClipPath", namespace = "usvg")]
-pub struct UsvgClipPath {
-    inner: std::sync::Arc<usvg::ClipPath>,
     doc: Doc,
 }
 #[doc = " A nodes tree container."]
@@ -6002,6 +5984,36 @@ pub struct UsvgImage {
 pub struct UsvgText {
     inner: napi_support::Projection<usvg::Text>,
     of: Option<napi_support::Projection<usvg::Node>>,
+}
+#[doc = " A clip-path element."]
+#[doc = ""]
+#[doc = " `clipPath` element in SVG."]
+#[doc = ""]
+#[doc = " A `usvg::ClipPath` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "ClipPath", namespace = "usvg")]
+pub struct UsvgClipPath {
+    inner: napi_support::Projection<usvg::ClipPath>,
+}
+#[doc = " A mask element."]
+#[doc = ""]
+#[doc = " `mask` element in SVG."]
+#[doc = ""]
+#[doc = " A `usvg::Mask` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "Mask", namespace = "usvg")]
+pub struct UsvgMask {
+    inner: napi_support::Projection<usvg::Mask>,
+}
+#[doc = " A pattern element."]
+#[doc = ""]
+#[doc = " `pattern` element in SVG."]
+#[doc = ""]
+#[doc = " A `usvg::Pattern` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "Pattern", namespace = "usvg")]
+pub struct UsvgPattern {
+    inner: napi_support::Projection<usvg::Pattern>,
 }
 #[doc = " The `code` a thrown `usvg::Error` carries: the variant's name. The message is its `Display`."]
 #[napi(string_enum, js_name = "ErrorCode", namespace = "usvg")]
@@ -8841,72 +8853,6 @@ impl UsvgRadialGradient {
         self.inner.stops().iter().map(UsvgStop::from).collect()
     }
 }
-impl UsvgPattern {
-    fn wrap(inner: std::sync::Arc<usvg::Pattern>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgPattern {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Pattern transform."]
-    #[doc = ""]
-    #[doc = " `patternTransform` in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
-    }
-    #[doc = " Pattern rectangle."]
-    #[doc = ""]
-    #[doc = " `x`, `y`, `width` and `height` in SVG."]
-    #[napi]
-    pub fn rect(&self) -> BBox {
-        BBox::from(self.inner.rect())
-    }
-}
-impl UsvgMask {
-    fn wrap(inner: std::sync::Arc<usvg::Mask>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgMask {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Mask rectangle."]
-    #[doc = ""]
-    #[doc = " `x`, `y`, `width` and `height` in SVG."]
-    #[napi]
-    pub fn rect(&self) -> BBox {
-        BBox::from(self.inner.rect())
-    }
-    #[doc = " Mask type."]
-    #[doc = ""]
-    #[doc = " `mask-type` in SVG."]
-    #[napi]
-    pub fn kind(&self) -> UsvgMaskType {
-        UsvgMaskType::from(self.inner.kind())
-    }
-}
 impl UsvgLinearGradient {
     fn wrap(inner: std::sync::Arc<usvg::LinearGradient>, doc: Doc) -> Self {
         Self { inner, doc }
@@ -8963,32 +8909,6 @@ impl UsvgLinearGradient {
     #[napi]
     pub fn stops(&self) -> Vec<UsvgStop> {
         self.inner.stops().iter().map(UsvgStop::from).collect()
-    }
-}
-impl UsvgClipPath {
-    fn wrap(inner: std::sync::Arc<usvg::ClipPath>, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgClipPath {
-    #[doc = " Element's ID."]
-    #[doc = ""]
-    #[doc = " Taken from the SVG itself."]
-    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
-    #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
-    }
-    #[doc = " Clip path transform."]
-    #[doc = ""]
-    #[doc = " `transform` in SVG."]
-    #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
     }
 }
 impl UsvgTree {
@@ -9178,36 +9098,42 @@ impl UsvgTree {
     #[allow(clippy::redundant_closure)]
     pub fn patterns(&self) -> Result<Vec<UsvgPattern>, String> {
         let __self = &self.inner;
-        let __v = napi_support::contained("Tree::patterns", || __self.patterns())
-            .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgPattern::wrap(x.clone(), self.doc()))
-            .collect())
+        napi_support::contained("Tree::patterns", || {
+            let __b = napi_support::Projection::of(self.inner.clone());
+            (0..__b.get().patterns().len())
+                .filter_map(|__i| __b.then(move |__s| __s.patterns().get(__i).map(|__a| &**__a)))
+                .map(UsvgPattern::__proj)
+                .collect()
+        })
+        .map_err(napi_support::coded)
     }
     #[doc = " Returns a list of all unique [`ClipPath`]s in the tree."]
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn clip_paths(&self) -> Result<Vec<UsvgClipPath>, String> {
         let __self = &self.inner;
-        let __v = napi_support::contained("Tree::clip_paths", || __self.clip_paths())
-            .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgClipPath::wrap(x.clone(), self.doc()))
-            .collect())
+        napi_support::contained("Tree::clip_paths", || {
+            let __b = napi_support::Projection::of(self.inner.clone());
+            (0..__b.get().clip_paths().len())
+                .filter_map(|__i| __b.then(move |__s| __s.clip_paths().get(__i).map(|__a| &**__a)))
+                .map(UsvgClipPath::__proj)
+                .collect()
+        })
+        .map_err(napi_support::coded)
     }
     #[doc = " Returns a list of all unique [`Mask`]s in the tree."]
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn masks(&self) -> Result<Vec<UsvgMask>, String> {
         let __self = &self.inner;
-        let __v = napi_support::contained("Tree::masks", || __self.masks())
-            .map_err(napi_support::coded)?;
-        Ok(__v
-            .iter()
-            .map(|x| UsvgMask::wrap(x.clone(), self.doc()))
-            .collect())
+        napi_support::contained("Tree::masks", || {
+            let __b = napi_support::Projection::of(self.inner.clone());
+            (0..__b.get().masks().len())
+                .filter_map(|__i| __b.then(move |__s| __s.masks().get(__i).map(|__a| &**__a)))
+                .map(UsvgMask::__proj)
+                .collect()
+        })
+        .map_err(napi_support::coded)
     }
     #[doc = " Returns a list of all unique [`Filter`](filter::Filter)s in the tree."]
     #[napi]
@@ -9346,14 +9272,10 @@ impl UsvgGroup {
     pub fn clip_path(&self) -> Result<Option<UsvgClipPath>, String> {
         let __self = self.inner.get();
         napi_support::contained("Group::clip_path", || {
-            self.inner.get().clip_path().and_then(|__t| {
-                self.inner
-                    .owner::<usvg::Tree>()?
-                    .clip_paths()
-                    .iter()
-                    .find(|__d| std::ptr::eq(std::sync::Arc::as_ptr(__d), __t))
-                    .map(|__d| UsvgClipPath::wrap(__d.clone(), Doc::default()))
-            })
+            self.inner
+                .clone()
+                .then(move |__s| __s.clip_path())
+                .map(UsvgClipPath::__proj)
         })
         .map_err(napi_support::coded)
     }
@@ -9363,14 +9285,10 @@ impl UsvgGroup {
     pub fn mask(&self) -> Result<Option<UsvgMask>, String> {
         let __self = self.inner.get();
         napi_support::contained("Group::mask", || {
-            self.inner.get().mask().and_then(|__t| {
-                self.inner
-                    .owner::<usvg::Tree>()?
-                    .masks()
-                    .iter()
-                    .find(|__d| std::ptr::eq(std::sync::Arc::as_ptr(__d), __t))
-                    .map(|__d| UsvgMask::wrap(__d.clone(), Doc::default()))
-            })
+            self.inner
+                .clone()
+                .then(move |__s| __s.mask())
+                .map(UsvgMask::__proj)
         })
         .map_err(napi_support::coded)
     }
@@ -10021,6 +9939,225 @@ impl UsvgText {
             .iter()
             .map(|x| UsvgSpan::wrap(x.clone(), self.doc()))
             .collect())
+    }
+}
+impl UsvgClipPath {
+    fn __proj(inner: napi_support::Projection<usvg::ClipPath>) -> Self {
+        Self { inner }
+    }
+    fn __from(inner: usvg::ClipPath) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::ClipPath, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgClipPath {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("ClipPath::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Clip path transform."]
+    #[doc = ""]
+    #[doc = " `transform` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("ClipPath::transform", || __self.transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Additional clip path."]
+    #[doc = ""]
+    #[doc = " `clip-path` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn clip_path(&self) -> Result<Option<UsvgClipPath>, String> {
+        let __self = self.inner.get();
+        napi_support::contained("ClipPath::clip_path", || {
+            self.inner
+                .clone()
+                .then(move |__s| __s.clip_path())
+                .map(UsvgClipPath::__proj)
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " Clip path children."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn root(&self) -> Result<UsvgGroup, String> {
+        let __self = self.inner.get();
+        napi_support::contained("ClipPath::root", || {
+            UsvgGroup::__proj(
+                self.inner
+                    .clone()
+                    .then(move |__s| Some(__s.root()))
+                    .expect("a borrow resolves"),
+            )
+        })
+        .map_err(napi_support::coded)
+    }
+}
+impl UsvgMask {
+    fn __proj(inner: napi_support::Projection<usvg::Mask>) -> Self {
+        Self { inner }
+    }
+    fn __from(inner: usvg::Mask) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::Mask, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgMask {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Mask::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Mask rectangle."]
+    #[doc = ""]
+    #[doc = " `x`, `y`, `width` and `height` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn rect(&self) -> Result<BBox, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Mask::rect", || __self.rect()).map_err(napi_support::coded)?;
+        Ok(BBox::from(__v))
+    }
+    #[doc = " Mask type."]
+    #[doc = ""]
+    #[doc = " `mask-type` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn kind(&self) -> Result<UsvgMaskType, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Mask::kind", || __self.kind()).map_err(napi_support::coded)?;
+        Ok(UsvgMaskType::from(__v))
+    }
+    #[doc = " Additional mask."]
+    #[doc = ""]
+    #[doc = " `mask` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn mask(&self) -> Result<Option<UsvgMask>, String> {
+        let __self = self.inner.get();
+        napi_support::contained("Mask::mask", || {
+            self.inner
+                .clone()
+                .then(move |__s| __s.mask())
+                .map(UsvgMask::__proj)
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " Mask children."]
+    #[doc = ""]
+    #[doc = " A mask can have no children, in which case the whole element should be masked out."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn root(&self) -> Result<UsvgGroup, String> {
+        let __self = self.inner.get();
+        napi_support::contained("Mask::root", || {
+            UsvgGroup::__proj(
+                self.inner
+                    .clone()
+                    .then(move |__s| Some(__s.root()))
+                    .expect("a borrow resolves"),
+            )
+        })
+        .map_err(napi_support::coded)
+    }
+}
+impl UsvgPattern {
+    fn __proj(inner: napi_support::Projection<usvg::Pattern>) -> Self {
+        Self { inner }
+    }
+    fn __from(inner: usvg::Pattern) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::Pattern, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPattern {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Pattern::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Pattern transform."]
+    #[doc = ""]
+    #[doc = " `patternTransform` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Pattern::transform", || __self.transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Pattern rectangle."]
+    #[doc = ""]
+    #[doc = " `x`, `y`, `width` and `height` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn rect(&self) -> Result<BBox, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Pattern::rect", || __self.rect())
+            .map_err(napi_support::coded)?;
+        Ok(BBox::from(__v))
+    }
+    #[doc = " Pattern children."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn root(&self) -> Result<UsvgGroup, String> {
+        let __self = self.inner.get();
+        napi_support::contained("Pattern::root", || {
+            UsvgGroup::__proj(
+                self.inner
+                    .clone()
+                    .then(move |__s| Some(__s.root()))
+                    .expect("a borrow resolves"),
+            )
+        })
+        .map_err(napi_support::coded)
     }
 }
 fn usvg_node_to_js(
@@ -12485,64 +12622,6 @@ impl UsvgRadialGradient {
     }
 }
 #[napi(namespace = "usvg")]
-impl UsvgPattern {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Pattern",
-            &[],
-            &["id"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Pattern".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgMask {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Mask",
-            &[],
-            &["id", "kind"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Mask".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
 impl UsvgLinearGradient {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -12569,35 +12648,6 @@ impl UsvgLinearGradient {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "LinearGradient".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgClipPath {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "ClipPath",
-            &[],
-            &["id"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "ClipPath".to_string()
     }
 }
 #[napi(namespace = "usvg")]
@@ -12750,6 +12800,93 @@ impl UsvgText {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Text".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgClipPath {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ClipPath",
+            &[],
+            &["id"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ClipPath".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgMask {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Mask",
+            &[],
+            &["id", "kind"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Mask".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPattern {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Pattern",
+            &[],
+            &["id"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Pattern".to_string()
     }
 }
 #[napi(namespace = "usvg")]

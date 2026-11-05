@@ -99,19 +99,26 @@ Step 7 added `napi_gen::project` and `Config::projections` (CONTRIBUTING,
 "Projections"): `usvg.Group`, `usvg.Path`, `usvg.Image` and `usvg.Text` hold
 a `napi_support::Projection` (the tree's `Arc` and the path to the node,
 found again on each call), and `usvg::Node` is a union of
-`{ kind, value }` objects. `tree.root()`, `tree.nodeById(id)`,
-`group.children()`, `text.flattened()`, `group.clipPath()`, `group.mask()`
-and `resvg.renderNode` come with it (`test/api/nodes.mjs`). What it found:
+`{ kind, value }` objects. `usvg.ClipPath`, `usvg.Mask` and `usvg.Pattern`
+are projections too. `tree.root()`, `tree.nodeById(id)`, `group.children()`,
+`text.flattened()`, `group.clipPath()`, `group.mask()`, the tree's
+definition tables, `clipPath.root()`, `mask.root()`, `pattern.root()` and
+`resvg.renderNode` come with it (`test/api/nodes.mjs`). What it found:
 
-- The projection machinery came out at about 440 lines in `napi-gen`
-  (`project.rs`, 366 with its comments, and about 75 in `class.rs`), some
-  370 without comments: over the plan's ~300. The step path itself is
-  small: `Projection` is 60 lines of `napi-support`, built on closures. The
-  rest is the `{ kind, value }` union both ways (an argument `&Node` reads
-  the object back, about 90 lines) and the definitions found by identity
-  (about 40).
+- The projection machinery came out at about 420 lines in `napi-gen`
+  (`project.rs`, 329 with its comments, and about 75 in `class.rs`), some
+  345 without comments: over the plan's ~300, and
+  was accepted. The step path itself is small: `Projection` is 60 lines of
+  `napi-support`, built on closures. The rest is the `{ kind, value }`
+  union both ways (an argument `&Node` reads the object back, about 90
+  lines).
+- Definitions are projections, not looked up: `group.clipPath()` is a step
+  from the group, like `children()`, and `tree.clipPaths()` a step into the
+  tree's table of `Arc`s. A first version found the `Arc` in the tree's
+  table by identity instead; it is gone.
 - `usvg.Image`, `usvg.Text` and `usvg.Path` were copies of the flat value
-  classes and object. They are now projections with Rust's methods
+  classes and object, and `usvg.ClipPath`, `usvg.Mask` and `usvg.Pattern`
+  handles. They are now projections with Rust's methods
   (`image.size()`, not `image.size`), returning `tiny_skia.Transform`,
   `tiny_skia.Rect` and `tiny_skia.Size` where they had `Matrix`, `BBox` and
   `Dimensions`. That is a breaking change of the namespaced surface, which
@@ -120,18 +127,15 @@ and `resvg.renderNode` come with it (`test/api/nodes.mjs`). What it found:
 - napi has no TypeScript alias for a union: `usvg.Node` is spelled out where
   it is used (`usvg.NodeGroup | usvg.NodePath | ...`).
 - `Option<()>` (`render_node`) returns `true` or `null`.
-- `group.clipPath()` and `group.mask()` find the `Arc` in the tree's tables
-  by identity, through the projection's owner. They are `null` for a group
-  whose owner is not a `usvg.Tree`; no such group is reachable yet.
 - The root module is the usvg class source: `filter::Image`'s methods were
   read as `usvg::Image`'s. And another crate's type of a projected name
   (`tiny_skia_path::Path`) is not the projection.
 
-Left for later: the content of the definitions (`clipPath.root()`,
-`mask.root()`, `pattern.root()`: handle classes of the first generator,
-which has no projection step), the SVG an `<image>` embeds
+Left for later: the SVG an `<image>` embeds
 (`ImageKind::SVG(Tree)`, a tree held by value inside a node: a nested
-owner), and `feImage`'s `root()` (a plain object). `layerBoundingBox()` and
+owner), and `feImage`'s `root()` (a primitive is a plain object, copied
+out of `usvg.Filter`, which stays a handle like the gradients: none of them
+owns content). `layerBoundingBox()` and
 `filtersBoundingBox()` still give `BBox`: `NonZeroRect` has no class.
 
 ## Status

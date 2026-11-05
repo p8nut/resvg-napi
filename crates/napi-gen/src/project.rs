@@ -7,20 +7,20 @@
 //! structs (`V(Box<S>)` or `V(S)`) becomes a [`Union`]: one `{ kind, value }`
 //! object per variant, `kind` the variant's name in camelCase and `value` the
 //! projected class. A method of a projected class, or of a class behind an
-//! `Arc`, that returns `&T`, `Option<&T>` or `&[T]` of either is a step of a
-//! projection from its receiver: the method is called again, on the
-//! receiver found again, each time the result is used.
+//! `Arc`, that returns `&T`, `Option<&T>`, `&[T]` or `&[Arc<T>]` of either
+//! is a step of a projection from its receiver: the method is called again,
+//! on the receiver found again, each time the result is used.
 
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
-use syn::{Fields, ImplItem, ReturnType, Type};
+use syn::{Fields, Type};
 
 use crate::class::{
     Args, Class, Classes, Holding, Source, args, deref, find_enum, find_struct, is, segs,
 };
-use crate::sources::{derives, inherent_impls, is_pub};
-use crate::vocab::{Reason, lower_camel, ty_str, wrapper_ident};
+use crate::sources::derives;
+use crate::vocab::{Reason, lower_camel};
 use crate::{config, namespace_of};
 
 /// A `Config::projections` enum, mirrored as a union of projections.
@@ -180,19 +180,20 @@ impl Classes<'_> {
             Type::Slice(s) => (true, &*s.elem),
             t => (false, t),
         };
+        // An `Arc` in a table (`&[Arc<T>]`) is stepped through to the `T`.
+        let arc = is(elem, "Arc", 1);
+        let elem = if arc { args(elem)[0] } else { elem };
+        let through = arc.then(|| quote!(.map(|__a| &**__a)));
         let (ty, conv) = if let Some(c) = self
             .class_of(ctx, None, elem)
             .filter(|&c| self.classes[c].holding == Holding::Projected)
         {
             let id = self.ident(c);
             (quote!(#id), quote!(#id::__proj))
-        } else if let Some(u) = self.union_of(ctx, elem) {
+        } else {
+            let u = self.union_of(ctx, elem)?;
             let f = self.helper(u, "to_js");
             (self.union_ty(u), quote!(#f))
-        } else if optional && !list && h == Holding::Projected && a.params.is_empty() {
-            return self.arc_def(m, elem).map(Ok);
-        } else {
-            return None;
         };
         let base = match h {
             Holding::Projected => quote!(self.inner.clone()),
@@ -211,7 +212,7 @@ impl Classes<'_> {
             let value = quote!({
                 let __b = #base;
                 (0..__b.get().#m().len())
-                    .filter_map(|__i| __b.then(move |__s| __s.#m().get(__i)))
+                    .filter_map(|__i| __b.then(move |__s| __s.#m().get(__i) #through))
                     .map(#conv)
                     .collect()
             });
@@ -219,50 +220,12 @@ impl Classes<'_> {
         } else if optional {
             (
                 quote!(Option<#ty>),
-                quote!(#base.then(move |__s| __s.#m(#(#fwd),*)).map(#conv)),
+                quote!(#base.then(move |__s| __s.#m(#(#fwd),*) #through).map(#conv)),
             )
         } else {
-            let p =
-                quote!(#base.then(move |__s| Some(__s.#m(#(#fwd),*))).expect("a borrow resolves"));
+            let p = quote!(#base.then(move |__s| Some(__s.#m(#(#fwd),*)) #through).expect("a borrow resolves"));
             (ty, quote!(#conv(#p)))
         }))
-    }
-
-    /// `Option<&T>` where a class behind an `Arc` keeps a table of
-    /// `Arc<T>` (a `&self` method returning `&[Arc<T>]`): the `Arc`, found
-    /// in the projection's owner by identity. `null` when the owner is not
-    /// of that class.
-    fn arc_def(&self, m: &Ident, elem: &Type) -> Option<(TokenStream, TokenStream)> {
-        let name = segs(elem)?.last()?.clone();
-        let want = format!("&[Arc<{name}>]");
-        let (c, table) = self.classes.iter().enumerate().find_map(|(i, c)| {
-            if !matches!(c.holding, Holding::Shared | Holding::SharedCow) {
-                return None;
-            }
-            inherent_impls(self.sources[c.source].files, &c.name)
-                .flat_map(|imp| &imp.items)
-                .find_map(|it| match it {
-                    ImplItem::Fn(f)
-                        if is_pub(&f.vis)
-                            && f.sig.inputs.len() == 1
-                            && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == want) =>
-                    {
-                        Some((i, f.sig.ident.clone()))
-                    }
-                    _ => None,
-                })
-        })?;
-        let owner = self.path(self.classes[c].source, &self.classes[c].name);
-        let w = wrapper_ident(&name);
-        let value = quote!(self.inner.get().#m().and_then(|__t| {
-            self.inner
-                .owner::<#owner>()?
-                .#table()
-                .iter()
-                .find(|__d| std::ptr::eq(std::sync::Arc::as_ptr(__d), __t))
-                .map(|__d| #w::wrap(__d.clone(), Doc::default()))
-        }));
-        Some((quote!(Option<#w>), value))
     }
 
     /// A projected class's struct and helpers: `__proj` from a projection,

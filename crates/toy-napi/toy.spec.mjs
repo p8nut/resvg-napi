@@ -319,6 +319,12 @@ test('a projection reaches borrowed nodes, and an enum of them is a { kind, valu
   assert.equal(scene.find('c').kind, 'dot');
   assert.equal(scene.find('c').value.at().x, 3);
   assert.equal(scene.find('nothing'), null);
+  // A table of `Arc`s is stepped through: each element a projection.
+  const [x] = scene.marks();
+  assert.ok(x instanceof toy.toy.Dot);
+  assert.deepEqual([x.name(), x.at().x], ['x', 9]);
+  // Not reached as an `Item`: not an argument where one is expected.
+  assert.throws(() => toy.toy.count({ kind: 'dot', value: x }), { code: 'InvalidArg' });
 });
 
 test('a projection re-resolves on each call and keeps its owner alive', async () => {

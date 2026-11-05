@@ -160,10 +160,12 @@ export declare namespace toy {
   export class Scene {
     /**
      * `root` holding the dot `a`, the layer `inner` (dots `b` and `c`, and
-     * the empty layer `empty`), and the dot `d`.
+     * the empty layer `empty`), and the dot `d`; and the mark `x`.
      */
     static demo(): toy.Scene
     root(): toy.Layer
+    /** The shared dots: the mark `x`. */
+    marks(): Array<toy.Dot>
     /** The first item called `name`, depth first. */
     find(name: string): toy.ItemLayer | toy.ItemDot | null
     /** The class name, for `Object.prototype.toString`. */

@@ -314,12 +314,18 @@ pub const GEN: Config = Config {
     // `usvg.Path`, `usvg.Image` and `usvg.Text` hold the tree and the way back
     // to their node, and `usvg.Node` is a `{ kind, value }` union of them.
     // `tree.root()`, `group.children()` and `tree.nodeById()` hand them out.
+    // The definitions owning content are reached the same way, from the
+    // tree's tables or from what refers to them (`group.clipPath()`), and
+    // their `root()` is a group of the same tree.
     projections: &[
         ("usvg", "Node"),
         ("usvg", "Group"),
         ("usvg", "Path"),
         ("usvg", "Image"),
         ("usvg", "Text"),
+        ("usvg", "ClipPath"),
+        ("usvg", "Mask"),
+        ("usvg", "Pattern"),
     ],
 };
 

@@ -269,14 +269,12 @@ hold a borrow, so `Config::projections` lists these types and
   projected class. The value remembers the enum it was reached through, so an
   argument `&Enum` takes the object back (`<enum>_from_js`). A value not
   reached as a variant, or of another class than `kind` says, throws.
-- **A method returning `&T`, `Option<&T>` or `&[T]`** of a projected struct
-  or union, on a projected class or on a class behind an `Arc` (the owner),
-  is a step: the projection calls the method again on each use. Its
-  arguments move into the step, so they must be values (a string, a number).
-- **`Option<&T>` of a type an owner keeps as `Arc<T>`** (a `&self` method
-  returning `&[Arc<T>]`) is found in that table by identity, through the
-  projection's owner, and is that `Arc`'s handle class. `null` when the
-  owner is not of that class.
+- **A method returning `&T`, `Option<&T>`, `&[T]` or `&[Arc<T>]`** of a
+  projected struct or union, on a projected class or on a class behind an
+  `Arc` (the owner), is a step: the projection calls the method again on
+  each use, and goes through the `Arc` of a table's element. Its arguments
+  move into the step, so they must be values (a string, a number). A type
+  reached both ways (from a table and from what refers to it) is one class.
 
 `Option<()>` returns `true` or `null` (`boolean | null` in the `.d.ts`): the
 value says whether the call did anything.
@@ -284,8 +282,13 @@ value says whether the call did anything.
 The root lists `usvg::Node` and the four node types: `tree.root()` is a
 `usvg.Group`, `group.children()` and `tree.nodeById(id)` hand out
 `usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText`, and
-`resvg.renderNode(node, transform, pixmap)` takes one back. The toy tests the
-rules on its `Scene`, including that a node outlives its owner's JS object.
+`resvg.renderNode(node, transform, pixmap)` takes one back. It lists the
+definitions that own content too, `ClipPath`, `Mask` and `Pattern`: from the
+tree's tables (`tree.clipPaths()`) or from what refers to them
+(`group.clipPath()`, `clipPath.clipPath()`, `mask.mask()`), and their
+`root()` is a `usvg.Group` of the same tree. The toy tests the rules on its
+`Scene` (a tree of `Layer`s and `Dot`s, and a table of `Arc<Dot>`),
+including that a node outlives its owner's JS object.
 
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen

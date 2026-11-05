@@ -411,11 +411,13 @@ pub fn paint(view: &mut CanvasView<'_>, at: Vec2, color: Color) -> Result<u32, P
 #[derive(Debug)]
 pub struct Scene {
     root: Layer,
+    /// Dots shared by name, a table of `Arc`s beside the tree.
+    marks: Vec<Arc<Dot>>,
 }
 
 impl Scene {
     /// `root` holding the dot `a`, the layer `inner` (dots `b` and `c`, and
-    /// the empty layer `empty`), and the dot `d`.
+    /// the empty layer `empty`), and the dot `d`; and the mark `x`.
     pub fn demo() -> Arc<Scene> {
         let dot = |name: &str, x: f32| {
             Item::Dot(Dot {
@@ -441,11 +443,20 @@ impl Scene {
                     dot("d", 4.0),
                 ],
             },
+            marks: vec![Arc::new(Dot {
+                name: "x".into(),
+                at: Vec2::new(9.0, 9.0),
+            })],
         })
     }
 
     pub fn root(&self) -> &Layer {
         &self.root
+    }
+
+    /// The shared dots: the mark `x`.
+    pub fn marks(&self) -> &[Arc<Dot>] {
+        &self.marks
     }
 
     /// The first item called `name`, depth first.

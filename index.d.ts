@@ -2429,7 +2429,14 @@ export declare namespace tiny_skia {
 }
 
 export declare namespace usvg {
-  /** Read-only handle on a `usvg::ClipPath`. */
+  /**
+   * A clip-path element.
+   *
+   * `clipPath` element in SVG.
+   *
+   * A `usvg::ClipPath` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
   export class ClipPath {
     /**
      * Element's ID.
@@ -2443,7 +2450,15 @@ export declare namespace usvg {
      *
      * `transform` in SVG.
      */
-    transform(): Matrix
+    transform(): tiny_skia.Transform
+    /**
+     * Additional clip path.
+     *
+     * `clip-path` in SVG.
+     */
+    clipPath(): usvg.ClipPath | null
+    /** Clip path children. */
+    root(): usvg.Group
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
@@ -2741,7 +2756,14 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgLinearGradient = LinearGradient
-  /** Read-only handle on a `usvg::Mask`. */
+  /**
+   * A mask element.
+   *
+   * `mask` element in SVG.
+   *
+   * A `usvg::Mask` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
   export class Mask {
     /**
      * Element's ID.
@@ -2762,6 +2784,18 @@ export declare namespace usvg {
      * `mask-type` in SVG.
      */
     kind(): usvg.MaskType
+    /**
+     * Additional mask.
+     *
+     * `mask` in SVG.
+     */
+    mask(): usvg.Mask | null
+    /**
+     * Mask children.
+     *
+     * A mask can have no children, in which case the whole element should be masked out.
+     */
+    root(): usvg.Group
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
@@ -2845,7 +2879,14 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgPath = Path
-  /** Read-only handle on a `usvg::Pattern`. */
+  /**
+   * A pattern element.
+   *
+   * `pattern` element in SVG.
+   *
+   * A `usvg::Pattern` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
   export class Pattern {
     /**
      * Element's ID.
@@ -2859,13 +2900,15 @@ export declare namespace usvg {
      *
      * `patternTransform` in SVG.
      */
-    transform(): Matrix
+    transform(): tiny_skia.Transform
     /**
      * Pattern rectangle.
      *
      * `x`, `y`, `width` and `height` in SVG.
      */
     rect(): BBox
+    /** Pattern children. */
+    root(): usvg.Group
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }

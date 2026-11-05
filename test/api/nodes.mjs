@@ -73,23 +73,62 @@ test('bounding boxes, transforms and the inner group\'s filter extent', () => {
   assert.equal(blurred.nodeById('wrap').value.filtersBoundingBox().width, 48);
 });
 
-test('clip path, mask and filters are the tree\'s own definitions', () => {
+test('clip path, mask and pattern: projections too, their content a group', () => {
   const tree = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40">
-    <defs><clipPath id="cp"><rect width="30" height="40"/></clipPath>
-          <mask id="mk"><rect width="40" height="40" fill="white"/></mask></defs>
+    <defs><clipPath id="cp"><rect id="cpr" width="30" height="40"/></clipPath>
+          <clipPath id="outer" clip-path="url(#cp)"><circle cx="20" cy="20" r="10"/></clipPath>
+          <mask id="mk"><rect id="mkr" width="40" height="40" fill="white"/></mask>
+          <pattern id="pt" width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle id="dot" cx="5" cy="5" r="3" fill="black"/></pattern></defs>
     <g id="a" clip-path="url(#cp)"><rect width="60" height="40" fill="red"/></g>
     <g id="b" mask="url(#mk)"><rect width="60" height="40" fill="blue"/></g>
+    <g id="c" clip-path="url(#outer)"><rect width="60" height="40" fill="url(#pt)"/></g>
     <rect id="plain" width="10" height="10"/>
   </svg>`);
+  // Reached from the group that refers to it: a step, like `children()`.
   const a = tree.nodeById('a').value;
-  assert.ok(a.clipPath() instanceof usvg.ClipPath);
-  assert.equal(a.clipPath().id(), 'cp');
+  const cp = a.clipPath();
+  assert.ok(cp instanceof usvg.ClipPath);
+  assert.equal(cp.id(), 'cp');
+  assert.ok(cp.transform() instanceof tiny_skia.Transform);
   assert.equal(a.mask(), null);
-  const b = tree.nodeById('b').value;
-  assert.equal(b.mask().id(), 'mk');
-  assert.equal(b.mask().kind(), 'luminance');
-  assert.deepEqual(tree.clipPaths().map((c) => c.id()), ['cp']);
+  const content = cp.root();
+  assert.ok(content instanceof usvg.Group);
+  assert.deepEqual(ids(content.children()), [['path', 'cpr']]);
+  // A clip path's own clip path, and a mask's content.
+  const outer = tree.nodeById('c').value.clipPath();
+  assert.equal(outer.id(), 'outer');
+  assert.equal(outer.clipPath().id(), 'cp');
+  assert.deepEqual(ids(outer.clipPath().root().children()), [['path', 'cpr']]);
+  const mk = tree.nodeById('b').value.mask();
+  assert.equal(mk.id(), 'mk');
+  assert.equal(mk.kind(), 'luminance');
+  assert.equal(mk.mask(), null);
+  assert.deepEqual(ids(mk.root().children()), [['path', 'mkr']]);
+  // From the tree's tables: the same class, one per element of the table.
+  assert.deepEqual(tree.clipPaths().map((c) => c.id()).sort(), ['cp', 'outer']);
+  const cpFromTable = tree.clipPaths().find((c) => c.id() === 'cp');
+  assert.ok(cpFromTable instanceof usvg.ClipPath);
+  assert.deepEqual(ids(cpFromTable.root().children()), [['path', 'cpr']]);
+  assert.deepEqual(ids(tree.masks()[0].root().children()), [['path', 'mkr']]);
+  const [pt] = tree.patterns();
+  assert.ok(pt instanceof usvg.Pattern);
+  assert.equal(pt.id(), 'pt');
+  assert.deepEqual(ids(pt.root().children()), [['path', 'dot']]);
   assert.equal(tree.nodeById('plain').kind, 'path');
+});
+
+test('a definition keeps its tree alive too', async () => {
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc');
+  const cp = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+    <clipPath id="cp"><rect id="r" width="5" height="5"/></clipPath>
+    <rect width="10" height="10" clip-path="url(#cp)"/></svg>`).clipPaths()[0];
+  for (let i = 0; i < 3; i++) {
+    gc();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.deepEqual(ids(cp.root().children()), [['path', 'r']]);
 });
 
 test('a text node: its chunks, its layout, and its outlines as a group', () => {

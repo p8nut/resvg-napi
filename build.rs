@@ -594,10 +594,16 @@ fn main() {
                 .filter(|_| src.root_str.contains("::"))
                 .unwrap_or(&t);
             // A class `GEN.classes` lists is `napi_gen::class`'s, below.
+            // So is a projection (`GEN.projections`), by its full key: a
+            // module's type of the same name is another one.
             let listed = GEN
                 .classes
                 .iter()
-                .any(|(r, n)| *r == src.root_str && *n == bare(key));
+                .any(|(r, n)| *r == src.root_str && *n == bare(key))
+                || GEN
+                    .projections
+                    .iter()
+                    .any(|(r, n)| *r == src.root_str && *n == key);
             let (code, skipped, _) = if listed {
                 Default::default()
             } else {

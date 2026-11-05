@@ -769,7 +769,7 @@ impl ToyScene {
 #[napi(namespace = "toy")]
 impl ToyScene {
     #[doc = " `root` holding the dot `a`, the layer `inner` (dots `b` and `c`, and"]
-    #[doc = " the empty layer `empty`), and the dot `d`."]
+    #[doc = " the empty layer `empty`), and the dot `d`; and the mark `x`."]
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn demo() -> Result<Self, String> {
@@ -787,6 +787,20 @@ impl ToyScene {
                     .then(move |__s| Some(__s.root()))
                     .expect("a borrow resolves"),
             )
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " The shared dots: the mark `x`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn marks(&self) -> Result<Vec<ToyDot>, String> {
+        let __self = &self.inner;
+        napi_support::contained("Scene::marks", || {
+            let __b = napi_support::Projection::of(self.inner.clone());
+            (0..__b.get().marks().len())
+                .filter_map(|__i| __b.then(move |__s| __s.marks().get(__i).map(|__a| &**__a)))
+                .map(ToyDot::__proj)
+                .collect()
         })
         .map_err(napi_support::coded)
     }

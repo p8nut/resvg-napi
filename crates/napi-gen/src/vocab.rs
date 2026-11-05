@@ -73,8 +73,8 @@ pub enum Js {
     // `[u8; 4]`: an OpenType axis tag, four ASCII bytes -- `b"wght"`. A string
     // on the JS side, which is how every font tool spells it.
     Tag4,
-    // `tiny_skia_path::Path`: outside usvg, and a verb/point stream rather than
-    // a struct, so the template flattens it into segments.
+    // `Config::path_data_types`: a verb/point stream rather than a struct, so
+    // the template flattens it into segments.
     PathData,
     // An upstream enum carrying payloads, emitted as a discriminated union.
     PayloadEnum(String),
@@ -93,7 +93,7 @@ pub enum Payload {
     Fields(Vec<(String, String)>),
 }
 
-/// One upstream enum whose variants carry payloads. usvg has sixteen; a rule
+/// One upstream enum whose variants carry payloads. A crate may have dozens; a rule
 /// cannot invent their JS shape, but it can apply one convention to all of
 /// them, which is what this describes: a discriminated union, tagged `type`,
 /// one struct per payload variant plus one shared struct for the unit ones.
@@ -104,9 +104,9 @@ pub enum Payload {
 pub struct PayloadEnum {
     /// Variant name and what it carries.
     pub variants: Vec<(String, Payload)>,
-    /// The Rust path its crate is reached by, `usvg` or `usvg::fontdb`. Carried
-    /// on the type because the emitter used to assume usvg, which is true of
-    /// every payload enum today and stops being true at the third crate.
+    /// The Rust path its crate is reached by, `toy` or a re-export such as
+    /// `a::b`. Carried on the type because the emitter used to assume the
+    /// first crate, which stops being true at the next one.
     pub root: String,
 }
 
@@ -194,7 +194,7 @@ impl PayloadEnum {
     }
 
     /// The first payload that stops the union being built, and why. Reported
-    /// rather than silently dropped: a usvg upgrade adding a mappable payload
+    /// rather than silently dropped: an upstream upgrade adding a mappable payload
     /// should show up as a union appearing, not as a mystery.
     ///
     /// The generator's match is the authority on *how*; this answers
@@ -215,7 +215,7 @@ impl PayloadEnum {
                 };
             }
             // A payload that is itself a payload enum would recurse through
-            // `classify`; not a shape usvg uses.
+            // `classify`; not a shape any wrapped crate uses yet.
             if vocab.payload.contains_key(&vocab.resolve(p)) {
                 return Err("it is itself a payload enum".into());
             }
@@ -287,8 +287,8 @@ impl PayloadEnum {
     }
 }
 
-/// Structs shaped like a 2D affine transform: exactly the six `f32` fields
-/// tiny-skia spells `sx kx ky sy tx ty`, and nothing else.
+/// Structs shaped like a 2D affine transform: exactly the `f32` fields
+/// `Config::matrix_fields` names (`sx kx ky sy tx ty`, say), and nothing else.
 ///
 /// This used to be `"Transform" => Js::Matrix`, an arm keyed on a bare name --
 /// and a bare name stops meaning one type the moment a second crate is parsed.
@@ -407,7 +407,7 @@ pub fn payload_shape(
 /// so in the report beats guessing.
 pub fn payload_enums(
     files: &[syn::File],
-    // The module these files contribute to, and the names usvg defines twice.
+    // The module these files contribute to, and the names upstream defines twice.
     // `filter::Kind::Image(Image)` means `filter::Image`, and nothing in the
     // type string says so -- the variant is written unqualified because it is
     // in the same module.
@@ -553,7 +553,7 @@ pub struct Vocab {
 impl Vocab {
     /// `Opacity` -> `NormalizedF32` -> ... until it stops being an alias.
     pub fn resolve(&self, ty: &str) -> String {
-        // `crate::FontVariation` and `FontVariation` are the same type: usvg
+        // `crate::FontVariation` and `FontVariation` are the same type: upstream
         // spells some of its own members with the prefix and the rest without,
         // and nothing downstream cares which.
         //
@@ -766,11 +766,11 @@ pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
 
 /// Every type named by a field of a public struct.
 ///
-/// `returned_types` finds what methods hand back, which is how usvg's enums get
-/// discovered -- they are all behind accessors. fontdb's are not:
-/// `FaceInfo.style` is a plain public field, so `Style` was never in the wanted
-/// set and the enum pass skipped it, leaving object discovery to report it as
-/// "not a public struct" and drop the field.
+/// `returned_types` finds what methods hand back, which is how enums behind
+/// accessors get discovered. An enum held by a plain public field is not:
+/// `FaceInfo.style` never put `Style` in the wanted set, so the enum pass
+/// skipped it, leaving object discovery to report it as "not a public struct"
+/// and drop the field.
 pub fn field_types(files: &[syn::File]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
@@ -808,8 +808,8 @@ pub fn returned_types(files: &[syn::File]) -> BTreeSet<String> {
     out
 }
 
-/// Length of a `static NAME: &[T] = &[...]` array. usvg indexes `POW_VEC` with
-/// the precision fields *unchecked*, so the bound has to come from upstream
+/// Length of a `static NAME: &[T] = &[...]` array. Upstream may index such a
+/// table with an option field *unchecked*, so the bound has to come from upstream
 /// rather than from a magic number here.
 pub fn static_array_len(files: &[syn::File], name: &str) -> usize {
     let s = files
@@ -864,7 +864,7 @@ pub fn docs(attrs: &[syn::Attribute]) -> Vec<TokenStream> {
         .collect()
 }
 
-/// `usvg::filter::EdgeMode` or `usvg::BlendMode`, as appropriate.
+/// `toy::Shape`, or `root::module::Name` for a type a module exports.
 pub fn upstream_path(
     name: &str,
     modules: &BTreeMap<String, String>,
@@ -891,9 +891,9 @@ pub enum Arg {
     Str,
     PathStr,
     Bytes,
-    // fontdb's `ID` is an opaque slotmap key with no JS form. A `FontFace`
-    // carries the `FaceInfo` it came from, so it can stand in for the key.
-    Face,
+    // `Config::arg_standin`: an opaque key with no JS form, handed over as
+    // the class instance that carries it.
+    Standin,
 }
 
 /// `impl Deref for X { type Target = Y }` -> Y. Upstream uses it as inheritance
@@ -936,8 +936,8 @@ pub fn bare(key: &str) -> &str {
 /// went through here, so an object called `FaceInfo` would have been emitted
 /// under that name. It only worked because FaceInfo maps partially.
 ///
-/// A key can be module-qualified. usvg defines `Image` twice -- `tree/filter.rs`
-/// and `tree/mod.rs` -- so the two cannot share a bare key without the path
+/// A key can be module-qualified. A crate may define `Image` twice -- in
+/// `filter.rs` and in `mod.rs` -- and the two cannot share a bare key without the path
 /// resolving to one and the members to the other.
 pub fn data_ident(ty: &str) -> proc_macro2::Ident {
     if let Some((module, name)) = ty.rsplit_once("::") {
@@ -949,7 +949,7 @@ pub fn data_ident(ty: &str) -> proc_macro2::Ident {
 
 /// JS name for a mapped enum.
 ///
-/// `Style` alone says nothing next to usvg's own `FontStyle`, and the two would
+/// `Style` alone says nothing next to another crate's `FontStyle`, and the two would
 /// sit side by side in the exports with identical variants: one is what a text
 /// run asked for, the other what a loaded face is. Renamed for the same reason
 /// `FaceInfo` is emitted as `FontFace`.
@@ -957,10 +957,10 @@ pub fn enum_ident(name: &str) -> proc_macro2::Ident {
     format_ident!("{}", renamed(config().enum_renames, name))
 }
 
-/// JS class name for an Arc-held usvg definition: `filter::Filter` -> `Filter`.
+/// JS class name for an Arc-held upstream type: `filter::Filter` -> `Filter`.
 pub fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
     let last = ty.rsplit("::").next().unwrap_or(ty);
-    // `fontdb::Database` already has a hand-written class.
+    // `Config::hand_wrapped`: a type with a hand-written class keeps its name.
     let name = config()
         .hand_wrapped
         .iter()
@@ -1000,7 +1000,7 @@ pub fn result_inner(ty: &Type) -> Option<Type> {
 }
 
 /// `render_png` -> `renderPng`, the name napi gives it in JS. An all-caps
-/// name is an acronym: usvg's `ImageKind::PNG` is `png`.
+/// name is an acronym: `ImageKind::PNG` is `png`.
 pub fn lower_camel(s: &str) -> String {
     s.to_case(Case::Camel)
 }

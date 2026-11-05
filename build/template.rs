@@ -33,6 +33,31 @@ pub struct Fragments<'a> {
     pub write_assigns: Vec<&'a TokenStream>,
 }
 
+/// What a definition owning a content group (`root() -> &Group`, see
+/// `config::GEN.content_view`) adds to its generated class: it becomes a
+/// `HasRoot` the node view can walk, and gets `children()`.
+pub fn content_view(path: &TokenStream, name: &proc_macro2::Ident) -> TokenStream {
+    quote! {
+        impl HasRoot for #path {
+            fn group(&self) -> &usvg::Group {
+                self.root()
+            }
+        }
+
+        #[napi]
+        impl #name {
+            #[doc = " Children of this definition's content group."]
+            #[napi]
+            pub fn children(&self) -> Vec<SvgNode> {
+                let base = NodeBase::Def(self.inner.clone());
+                (0..self.inner.root().children().len())
+                    .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
+                    .collect()
+            }
+        }
+    }
+}
+
 /// The hand-written half of the binding: everything the passes cannot derive.
 ///
 /// Called twice. Once with empty method lists, so `template_fns` can read the

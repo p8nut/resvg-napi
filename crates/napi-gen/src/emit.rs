@@ -98,6 +98,16 @@ pub fn js_conv(
         quote!(&#a)
     };
     let saturating = quote!(u32::try_from(#a).unwrap_or(u32::MAX));
+    // The template's own names for the domain shapes.
+    let shapes = &config().shapes;
+    let [rect, size, matrix, segment, segments] = [
+        shapes.rect,
+        shapes.size,
+        shapes.matrix,
+        shapes.path.0,
+        shapes.path.1,
+    ]
+    .map(|n| format_ident!("{n}"));
     Some(match (js, site) {
         (Js::Bool, _) => plain(quote!(bool), d),
         (Js::I32, _) => plain(quote!(i32), d),
@@ -113,12 +123,12 @@ pub fn js_conv(
         (Js::IntNewtype(_), Carried) => return None,
         (Js::IntNewtype(_), _) => plain(quote!(u32), quote!(u32::from(#a.0))),
         (Js::Bbox, Carried) => return None,
-        (Js::Bbox, _) => plain(quote!(BBox), quote!(BBox::from(#a))),
-        (Js::OptBbox, Method) => plain(quote!(Option<BBox>), quote!(#a.map(BBox::from))),
+        (Js::Bbox, _) => plain(quote!(#rect), quote!(#rect::from(#a))),
+        (Js::OptBbox, Method) => plain(quote!(Option<#rect>), quote!(#a.map(#rect::from))),
         (Js::Size, Carried) => return None,
-        (Js::Size, _) => plain(quote!(Dimensions), quote!(Dimensions::from(#a))),
+        (Js::Size, _) => plain(quote!(#size), quote!(#size::from(#a))),
         (Js::Matrix, Carried) => return None,
-        (Js::Matrix, _) => plain(quote!(Matrix), quote!(Matrix::from(#a))),
+        (Js::Matrix, _) => plain(quote!(#matrix), quote!(#matrix::from(#a))),
         (Js::F32List, Getter | Field) => plain(
             quote!(Vec<f64>),
             quote!(#a.iter().map(|v| f64::from(*v)).collect()),
@@ -171,9 +181,7 @@ pub fn js_conv(
             quote!(String),
             quote!(String::from_utf8_lossy(&#a).into_owned()),
         ),
-        (Js::PathData, Getter | Field) => {
-            plain(quote!(Vec<PathSegment>), quote!(path_segments(#a)))
-        }
+        (Js::PathData, Getter | Field) => plain(quote!(Vec<#segment>), quote!(#segments(#a))),
         (Js::Object(t), Getter | Field) => {
             let o = data_ident(t);
             reaching(quote!(#o), quote!(#o::from(#by_ref)), t)
@@ -247,7 +255,7 @@ pub fn payload_enum_code(
     modules: &BTreeMap<String, String>,
 ) -> std::result::Result<TokenStream, String> {
     // The crate the enum came from, recorded when it was found rather than
-    // assumed here: every payload enum is usvg's today, which is exactly the
+    // assumed here: one crate may define every payload enum today, which is the
     // kind of fact that stops being true without anything saying so.
     let root: TokenStream = info.root.parse().expect("a crate path");
     let up = upstream_path(name, modules, &root);
@@ -315,15 +323,19 @@ pub fn payload_enum_code(
             // discriminant is a getter with a literal return type.
             Payload::Value(ty) if matches!(vocab.classify(ty), Some(Js::Bytes)) => {
                 let doc = format!(" `{name}::{n}`. The bytes are the document's own.");
-                let bytes_doc = " The encoded bytes, exactly as the document supplied them: \
-usvg does not decode them, and neither does this.";
-                // The payload's own type, not `Vec<u8>`: usvg holds these behind
-                // an `Arc`, and copying out of it here would deep-copy the whole
-                // encoded image before anyone asked for it. Cloning the `Arc` is
-                // a refcount bump, and the one unavoidable copy happens in the
-                // getter, when the JS `Buffer` is actually built.
-                // Qualified: the generated file imports the napi prelude and usvg,
-                // not `std::sync`, and the rest of it spells `Arc` out in full.
+                let bytes_doc = format!(
+                    " The encoded bytes, exactly as the document supplied them: \
+{} does not decode them, and neither does this.",
+                    info.root
+                );
+                // The payload's own type, not `Vec<u8>`: upstream may hold these
+                // behind an `Arc`, and copying out of it here would deep-copy the
+                // whole encoded payload before anyone asked for it. Cloning the
+                // `Arc` is a refcount bump, and the one unavoidable copy happens
+                // in the getter, when the JS `Buffer` is actually built.
+                // Qualified: the generated file imports the napi prelude and the
+                // wrapped crates, not `std::sync`, and the rest of it spells
+                // `Arc` out in full.
                 let raw_src = ty.replace("Arc<", "std::sync::Arc<");
                 let raw_ty: syn::Type = syn::parse_str(&raw_src)
                     .unwrap_or_else(|e| panic!("{name}::{n} carries {ty}, unparseable: {e}"));
@@ -415,8 +427,8 @@ usvg does not decode them, and neither does this.";
 }
 
 /// Maps one flat config struct to `#[napi(object)]` fields plus the code that
-/// writes them back onto the real Rust struct. Used for both `usvg::Options`
-/// and `usvg::WriteOptions`.
+/// writes them back onto the real Rust struct. Used for every option struct
+/// the binding maps, such as the toy crate's `Options`.
 pub fn map_struct(
     files: &[syn::File],
     ty: &str,
@@ -447,7 +459,7 @@ pub fn map_struct(
                 quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v); } },
             )),
             Some(Js::U8) => {
-                // A `*_precision` field indexes usvg's POW_VEC without a bounds
+                // A `Config::clamp` field indexes an upstream table without a bounds
                 // check, so clamp it to that table's length. Any other u8 just
                 // saturates instead of wrapping.
                 //
@@ -513,6 +525,8 @@ pub fn map_struct(
             }
             // Size is opaque with a fallible constructor: flatten to a pair.
             Some(Js::Size) => {
+                let size_new: syn::Path =
+                    syn::parse_str(config().size_new).expect("a Config::size_new path");
                 let w = format_ident!("{}_width", name);
                 let h = format_ident!("{}_height", name);
                 out.push(Field {
@@ -522,7 +536,7 @@ pub fn map_struct(
                     },
                     assign: quote! {
                         if let (Some(w), Some(h)) = (self.#w, self.#h)
-                            && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
+                            && let Some(s) = #size_new(to_f32(w), to_f32(h))
                         {
                             o.#ident = s;
                         }
@@ -584,9 +598,9 @@ pub fn map_enums(
     files: &[syn::File],
     wanted: &BTreeSet<String>,
     modules: &BTreeMap<String, String>,
-    // Where the upstream type lives: `usvg` for its own enums, `usvg::fontdb`
-    // for the ones fontdb defines. Hardcoding `usvg` meant fontdb's enums could
-    // never be mapped, which is why `FaceInfo.style` was missing.
+    // Where the upstream type lives: the crate's own path for its enums, the
+    // re-export path for a crate reached through another (`a::b`). Hardcoding
+    // the first crate's path meant the second's enums could never be mapped.
     root: &TokenStream,
 ) -> (BTreeSet<String>, TokenStream, Vec<(String, String)>) {
     let mut names = BTreeSet::new();
@@ -658,7 +672,7 @@ pub struct Member {
 /// rather than of this API -- so it is answered wherever a member is emitted,
 /// not at the one call site that noticed it first.
 ///
-/// `usvg::layout::Span` carries three `Option<Path>` fields, and they shipped
+/// A struct with an `Option<Path>` field, `Path` being an upstream type, ships
 /// declared as `string` while holding a whole `Path` object.
 ///
 /// Only the names an upstream crate could define for itself are listed. A
@@ -811,8 +825,8 @@ pub fn data_members(
     // This used to take accessors when there were any and fall back to public
     // fields only when there were none, which made the choice a whole-type
     // switch: a single new `pub fn` upstream flipped a type off its fields and
-    // deleted every one of them. Adding `fn is_black(&self) -> bool` to
-    // `usvg::Color` replaced `red`, `green` and `blue` with `isBlack` -- no
+    // deleted every one of them. Adding `fn is_black(&self) -> bool` to a
+    // `Color` replaced `red`, `green` and `blue` with `isBlack` -- no
     // report line, no dropped member, the completeness assert satisfied because
     // nothing had been dropped. It just emitted a different type.
     //
@@ -1036,42 +1050,28 @@ pub fn wrapper_class(
     if methods.is_empty() {
         return (TokenStream::new(), skipped, reached);
     }
-    // A def that owns a content group gets a node view over it, derived from the
-    // presence of `root() -> &Group`.
-    let owns_group = inherent_impls(files, bare(ty)).any(|imp| {
-        imp.items.iter().any(|it| match it {
-            ImplItem::Fn(f) => {
-                is_pub(&f.vis)
-                    && f.sig.ident == "root"
-                    && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "&Group")
-            }
-            _ => false,
-        })
-    });
-    let content = if owns_group {
-        quote! {
-            impl HasRoot for #path {
-                fn group(&self) -> &usvg::Group {
-                    self.root()
-                }
-            }
-
-            #[napi]
-            impl #name {
-                #[doc = " Children of this definition's content group."]
-                #[napi]
-                pub fn children(&self) -> Vec<SvgNode> {
-                    let base = NodeBase::Def(self.inner.clone());
-                    (0..self.inner.root().children().len())
-                        .map(|i| SvgNode { doc: self.doc(), base: base.clone(), path: vec![i] })
-                        .collect()
-                }
-            }
+    // A handle that owns content gets the template's view over it, derived
+    // from the presence of the accessor `Config::content_view` names.
+    let content = match &config().content_view {
+        Some(view)
+            if inherent_impls(files, bare(ty)).any(|imp| {
+                imp.items.iter().any(|it| match it {
+                    ImplItem::Fn(f) => {
+                        is_pub(&f.vis)
+                            && f.sig.ident == view.accessor.0
+                            && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == view.accessor.1)
+                    }
+                    _ => false,
+                })
+            }) =>
+        {
+            (view.emit)(&path, &name)
         }
-    } else {
-        TokenStream::new()
+        _ => TokenStream::new(),
     };
-    let doc = format!(" Read-only handle on a `usvg::{ty}`.");
+    // The crate path as the generated file spells it, not as quote! does.
+    let crate_path = root.to_string().replace(' ', "");
+    let doc = format!(" Read-only handle on a `{crate_path}::{ty}`.");
     let code = quote! {
         #[doc = #doc]
         #[napi]
@@ -1122,7 +1122,8 @@ pub struct MethodPass<'a> {
 
 /// Wraps every `pub fn` of `impl <ty>` whose whole signature is transposable.
 /// `receiver` is the expression the call hangs off, so the same pass serves
-/// `fontdb::Database`, `usvg::Tree` and the root `usvg::Group`.
+/// a handle's `self.inner`, a borrow such as `self.inner.root()`, or a value a
+/// prologue looked up.
 pub fn map_methods(
     m: &MethodPass,
     vocab: &Vocab,
@@ -1164,8 +1165,8 @@ pub fn map_methods(
                 continue;
             }
             // Upstream may gate this method on a feature this crate does not
-            // build everywhere. Its twins in the same impl (fontdb's
-            // load_font_file, one per memmap setting) count together.
+            // build everywhere. Its twins in the same impl (one method written
+            // once per setting of a feature) count together.
             let gated = crate::cfg::Pred::Any(
                 imp.items
                     .iter()
@@ -1229,7 +1230,7 @@ pub fn map_methods(
                     match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
-                        _ if ty == config().arg_standin.0 => Some(Arg::Face),
+                        _ if ty == config().arg_standin.0 => Some(Arg::Standin),
                         _ => None,
                     }
                 };
@@ -1273,7 +1274,7 @@ pub fn map_methods(
                 .iter()
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat: Uint8Array),
-                    Arg::Face => {
+                    Arg::Standin => {
                         let standin = format_ident!("{}", config().arg_standin.1);
                         quote!(#pat: &#standin)
                     }
@@ -1287,14 +1288,16 @@ pub fn map_methods(
                     _ => quote!(#pat),
                 })
                 .collect();
-            // fontdb IDs are slotmap keys: another database's face can name a
-            // slot here, and `removeFace` would delete it. Resolved before the
-            // call, not inside it: a `DerefMut` receiver (FontDatabase's
-            // copy-on-write) cannot be borrowed again in its own arguments.
+            // A stand-in is resolved against the receiver: a key into a slot
+            // map, say, where another map's key could name a live slot here.
+            // Resolved before the call, not inside it: a `DerefMut` receiver
+            // (a copy-on-write handle) cannot be borrowed again in its own
+            // arguments.
+            let resolve = format_ident!("{}", config().arg_standin.2);
             let lets: Vec<TokenStream> = args
                 .iter()
-                .filter(|(_, kind)| matches!(kind, Arg::Face))
-                .map(|(pat, _)| quote!(let #pat = #pat.id_in(&#receiver);))
+                .filter(|(_, kind)| matches!(kind, Arg::Standin))
+                .map(|(pat, _)| quote!(let #pat = #pat.#resolve(&#receiver);))
                 .collect();
             if readonly && mutable {
                 skipped.push(Skip::new(&name, None, Reason::NeedsMut));
@@ -1757,8 +1760,8 @@ pub fn template_returns(code: &TokenStream) -> BTreeSet<String> {
         }
         for it in &imp.items {
             if let ImplItem::Fn(f) = it {
-                // Private helpers are not API: `SvgNode::node` returning
-                // `&usvg::Node` must not make Node a data candidate.
+                // Private helpers are not API: one returning a borrowed
+                // upstream node must not make the node a data candidate.
                 if !is_pub(&f.vis) {
                     continue;
                 }

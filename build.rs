@@ -561,7 +561,11 @@ fn main() {
         }
         for s in skipped {
             // `root()` is served by the generated `children()` view above.
-            if s.name == "root" {
+            if GEN
+                .content_view
+                .as_ref()
+                .is_some_and(|v| s.name == v.accessor.0)
+            {
                 report!(
                     "{}::{t} method covered by the content view: {s}",
                     src.root_str

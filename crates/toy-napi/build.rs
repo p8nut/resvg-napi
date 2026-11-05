@@ -77,6 +77,23 @@ const GEN: Config = Config {
         ("toy", "paint"),
         ("toy", "count"),
         ("toy", "visit"),
+        ("toy", "spin"),
+    ],
+    // Async twins, one of each shape: a static that throws
+    // (`Canvas.fromTextAsync`), free functions taking a view of an owned
+    // class (`paintAsync`, which leases the canvas), a union
+    // (`countAsync`) and numbers (`spinAsync`, slow enough to queue
+    // behind), and methods on each holding that crosses differently: an
+    // owned receiver leased for `&mut` (`fillAsync`), a copy-on-write one
+    // leased (`pushAsync`) and an `Arc` cloned (`joinedAsync`).
+    asynchronous: &[
+        ("toy", "Canvas::from_text"),
+        ("toy", "Canvas::fill"),
+        ("toy", "Tally::push"),
+        ("toy", "Tally::joined"),
+        ("toy", "paint"),
+        ("toy", "count"),
+        ("toy", "spin"),
     ],
     // `paint` writes through a `CanvasView`, which JS hands over as the
     // `Canvas` it borrows.

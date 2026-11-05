@@ -802,6 +802,13 @@ export declare namespace fontdb {
      */
     loadFontsDir(dir: string): void
     /**
+     * `loadFontsDir` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `loadFontsDir` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    loadFontsDirAsync(dir: string, signal?: AbortSignal | undefined | null): Promise<void>
+    /**
      * Attempts to load system fonts.
      *
      * Supports Windows, Linux and macOS.
@@ -814,6 +821,13 @@ export declare namespace fontdb {
      * be added manually.
      */
     loadSystemFonts(): void
+    /**
+     * `loadSystemFonts` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `loadSystemFonts` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    loadSystemFontsAsync(signal?: AbortSignal | undefined | null): Promise<void>
     /** Returns `true` if the `Database` contains no font faces. */
     isEmpty(): boolean
     /**
@@ -844,6 +858,7 @@ export declare namespace fontdb {
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
      * holds it.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -891,6 +906,13 @@ export declare namespace resvg {
    */
   export function render(tree: usvg.Tree, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): void
   /**
+   * `render` on a worker thread. The arguments are read now, the call runs
+   * off the main thread, and the promise resolves with its result or rejects
+   * as `render` throws. `signal` drops the call while it is still queued.
+   * Until it settles, `pixmap` is in use: any other use throws `Leased`.
+   */
+  export function renderAsync(tree: usvg.Tree, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap, signal?: AbortSignal | undefined | null): Promise<void>
+  /**
    * Renders a node onto the pixmap.
    *
    * `transform` will be used as a root transform.
@@ -903,6 +925,13 @@ export declare namespace resvg {
    * The produced content is in the sRGB color space.
    */
   export function renderNode(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): boolean | null
+  /**
+   * `renderNode` on a worker thread. The arguments are read now, the call runs
+   * off the main thread, and the promise resolves with its result or rejects
+   * as `renderNode` throws. `signal` drops the call while it is still queued.
+   * Until it settles, `pixmap` is in use: any other use throws `Leased`.
+   */
+  export function renderNodeAsync(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap, signal?: AbortSignal | undefined | null): Promise<boolean | null>
 }
 
 export declare namespace svgtypes {
@@ -947,6 +976,7 @@ export declare namespace svgtypes {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -1051,6 +1081,7 @@ export declare namespace tiny_skia {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -1090,6 +1121,7 @@ export declare namespace tiny_skia {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -1144,6 +1176,13 @@ export declare namespace tiny_skia {
     static loadPng(path: string): tiny_skia.Pixmap
     /** Encodes pixmap into a PNG data. */
     encodePng(): Buffer
+    /**
+     * `encodePng` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `encodePng` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    encodePngAsync(signal?: AbortSignal | undefined | null): Promise<Buffer>
     /** Saves pixmap as a PNG file. */
     savePng(path: string): void
     /** Returns pixmap's width. */
@@ -1173,6 +1212,7 @@ export declare namespace tiny_skia {
     /**
      * Frees the value now, not at garbage collection: every later call throws
      * `Disposed`.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -1247,6 +1287,7 @@ export declare namespace tiny_skia {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -1292,6 +1333,7 @@ export declare namespace tiny_skia {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -1415,6 +1457,7 @@ export declare namespace tiny_skia {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -2321,6 +2364,12 @@ export declare namespace usvg {
      */
     static fromData(data: Uint8Array, opt?: usvg.Options | undefined | null): usvg.Tree
     /**
+     * `fromData` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `fromData` throws. `signal` drops the call while it is still queued.
+     */
+    static fromDataAsync(data: Uint8Array, opt?: usvg.Options | undefined | null, signal?: AbortSignal | undefined | null): Promise<usvg.Tree>
+    /**
      * Similar to the `from_data` method, except that it ignores all `image` elements linking to
      * external files, as required by the SVG specification when SVG files are loaded
      * for `<image href="..." />` tags.
@@ -2328,6 +2377,12 @@ export declare namespace usvg {
     static fromDataNested(data: Uint8Array, opt?: usvg.Options | undefined | null): usvg.Tree
     /** Parses `Tree` from an SVG string. */
     static fromStr(text: string, opt?: usvg.Options | undefined | null): usvg.Tree
+    /**
+     * `fromStr` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `fromStr` throws. `signal` drops the call while it is still queued.
+     */
+    static fromStrAsync(text: string, opt?: usvg.Options | undefined | null, signal?: AbortSignal | undefined | null): Promise<usvg.Tree>
     /**
      * Image size.
      *
@@ -2369,6 +2424,12 @@ export declare namespace usvg {
     fontdb(): fontdb.Database
     /** Writes `usvg::Tree` back to SVG. */
     toString(opt?: usvg.WriteOptions | undefined | null): string
+    /**
+     * `toString` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `toString` throws. `signal` drops the call while it is still queued.
+     */
+    toStringAsync(opt?: usvg.WriteOptions | undefined | null, signal?: AbortSignal | undefined | null): Promise<string>
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance

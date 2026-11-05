@@ -543,3 +543,13 @@ pub fn visit(item: &Item) -> Option<()> {
         _ => Some(()),
     }
 }
+
+/// Mixes `rounds` times: a call slow enough to keep a worker thread busy
+/// while another waits behind it.
+pub fn spin(rounds: u32) -> u32 {
+    let mut x: u32 = 0x9e37_79b9;
+    for i in 0..rounds {
+        x = std::hint::black_box(x.rotate_left(5) ^ i).wrapping_mul(0x0100_0193);
+    }
+    x
+}

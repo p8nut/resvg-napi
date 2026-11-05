@@ -102,7 +102,7 @@ assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
   const [ra, rs] = [await doc.renderRawAsync(), doc.renderRaw()];
   assert.deepEqual([ra.width, ra.height], [rs.width, rs.height]);
   assert.deepEqual([...ra.data], [...rs.data], 'renderRawAsync');
-  // TODO(step 9): `resvg.renderNode`'s async twin, against its sync half.
+  // The namespaced twins, `resvg.renderNodeAsync` among them: test/api/async.mjs.
 
   // 2. the work is off the event loop: a timer keeps firing during it
   let ticks = 0;
@@ -142,7 +142,7 @@ assert.deepEqual(shots.map((b) => isPng(b)), [true, true, true, true]);
     renderPngAsync: (s) => doc.renderPngAsync(null, s),
     toStringAsync: (s) => doc.toStringAsync(null, s),
     renderRawAsync: (s) => doc.renderRawAsync(null, s),
-    // TODO(step 9): `resvg.renderNode`'s async twin.
+    // The namespaced twins' entry points: test/api/async.mjs.
   };
   for (const [name, call] of Object.entries(calls)) {
     for (const s of wrong) {

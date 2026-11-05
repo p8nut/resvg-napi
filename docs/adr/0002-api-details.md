@@ -80,6 +80,11 @@ A value taken as `&mut` by an async twin, such as `Pixmap` in
 
 `Arc`-backed values, such as `Tree`, are cloned and need no lease.
 
+As built (step 9): the error's `code` is `Leased`, and `dispose()` throws
+it too, leaving the instance as it was. An owned value the call only reads
+(`Pixmap` in `encodePngAsync`) is leased as well, since it cannot be shared
+with the worker thread.
+
 ## Render-then-encode (Q29)
 
 There is no generated chain. Rendering and encoding a PNG off the main

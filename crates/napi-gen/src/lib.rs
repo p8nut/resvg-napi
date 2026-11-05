@@ -13,6 +13,7 @@
 //!            constructors, statics, `Result` errors, conversions
 //!   project  classes and unions over values borrowed from an owner
 //!   dispose  `dispose()` and `[Symbol.dispose]` for every class
+//!   twin     `*Async` twins, on a worker thread, with leases
 //!
 //! What is specific to the wrapped crates is not here: the build script fills
 //! a [`Config`] and hands it over with [`configure`] before any phase runs.
@@ -38,6 +39,7 @@ pub mod dispose;
 pub mod emit;
 pub mod project;
 pub mod sources;
+pub mod twin;
 pub mod vocab;
 
 /// What the phases need to know about the wrapped crates and do not discover
@@ -126,6 +128,16 @@ pub struct Config {
     /// on a projected class or one behind an `Arc`, hands out projections.
     /// See [`project`].
     pub projections: &'static [(&'static str, &'static str)],
+    /// The members that get an async twin, by source root and name: a
+    /// method or a static as `Type::name` (`("toy", "Canvas::fill")`), a
+    /// free function by its name (`("toy", "paint")`). The twin is
+    /// `<name>Async(...args, signal?)`, returning a promise: its arguments
+    /// are converted on the main thread, the call runs on a worker thread.
+    /// A value it takes by reference and holds by value (an owned class, a
+    /// `&mut` one) is leased to the call: see `napi_support::Slot::lease`.
+    /// Each entry must name a member of a listed class or function that has
+    /// a JS form, and a twin of it must be possible, or the build fails.
+    pub asynchronous: &'static [(&'static str, &'static str)],
 }
 
 /// "An argument `&mut <ty>` is `<class>`'s `<via>()`, borrowed for the

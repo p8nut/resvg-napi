@@ -65,8 +65,8 @@ pub fn slotted(file: &mut syn::File) {
                 #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
                 #[doc = " the symbol, for `using`. Harmless twice."]
                 #[napi]
-                pub fn dispose(&mut self) {
-                    self.#field.dispose();
+                pub fn dispose(&mut self) -> Result<(), String> {
+                    self.#field.dispose(#js)
                 }
                 #[doc = " Whether `dispose()` has been called."]
                 #[napi(getter)]

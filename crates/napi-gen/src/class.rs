@@ -104,7 +104,7 @@ pub enum Prim {
 }
 
 impl Prim {
-    fn of(ty: &Type) -> Option<Prim> {
+    pub(crate) fn of(ty: &Type) -> Option<Prim> {
         let segs = segs(ty)?;
         if segs.len() != 1 {
             return None;
@@ -124,7 +124,7 @@ impl Prim {
     }
 
     /// The type napi converts the JS value into.
-    fn js(self) -> TokenStream {
+    pub(crate) fn js(self) -> TokenStream {
         match self {
             Prim::F32 | Prim::F64 => quote!(f64),
             Prim::U8 | Prim::U16 | Prim::U32 | Prim::Usize => quote!(u32),
@@ -147,7 +147,7 @@ impl Prim {
 
     /// `e`, a JS value, as upstream: an expression that may `?` on a number
     /// that does not fit. `name` is what the error calls it.
-    fn js_in(self, e: &TokenStream, name: &str) -> TokenStream {
+    pub(crate) fn js_in(self, e: &TokenStream, name: &str) -> TokenStream {
         let narrow = |t: TokenStream| quote!(#t::try_from(#e).map_err(|_| napi_support::invalid(#name, #e))?);
         match self {
             Prim::F32 => quote!(to_f32(#e)),
@@ -202,7 +202,7 @@ pub(crate) fn deref(ty: &Type) -> (Option<bool>, &Type) {
     }
 }
 
-fn is_unit(ty: &Type) -> bool {
+pub(crate) fn is_unit(ty: &Type) -> bool {
     matches!(ty, Type::Tuple(t) if t.elems.is_empty())
 }
 
@@ -213,14 +213,14 @@ pub(crate) fn is(ty: &Type, name: &str, n: usize) -> bool {
 
 /// What a method's receiver is.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Recv {
+pub(crate) enum Recv {
     None,
     Ref,
     Mut,
     Value,
 }
 
-fn receiver(sig: &syn::Signature) -> Option<Recv> {
+pub(crate) fn receiver(sig: &syn::Signature) -> Option<Recv> {
     match sig.inputs.first() {
         Some(FnArg::Receiver(r)) => match &r.kind {
             syn::ReceiverKind::Reference(_, _, m) => {
@@ -330,13 +330,13 @@ pub(crate) struct Args {
 
 /// How a returned value becomes JS: its JS type, and the expression that
 /// converts `__v`.
-struct Ret {
-    ty: TokenStream,
-    conv: TokenStream,
+pub(crate) struct Ret {
+    pub(crate) ty: TokenStream,
+    pub(crate) conv: TokenStream,
 }
 
 /// Why a function or method was left out.
-type Why = (Reason, Option<String>);
+pub(crate) type Why = (Reason, Option<String>);
 
 impl<'a> Classes<'a> {
     /// The table of `Config::classes`, over `sources`.
@@ -605,7 +605,7 @@ impl<'a> Classes<'a> {
     /// The expression turning an error `e` of type `ty` into what is thrown:
     /// an upstream enum's variant name as `code`; `GenericFailure` for an
     /// error type no source defines.
-    fn thrown(&self, ctx: usize, ty: Option<&Type>) -> TokenStream {
+    pub(crate) fn thrown(&self, ctx: usize, ty: Option<&Type>) -> TokenStream {
         let found = ty.and_then(|ty| {
             let segs = segs(ty)?;
             let name = segs.last()?.clone();
@@ -640,7 +640,7 @@ impl<'a> Classes<'a> {
     /// whether this is the class's own constructor or factory, the only
     /// place a class with a shared name may be returned; `with_self` whether
     /// the expression may use `self` (a method, not a static).
-    fn ret(
+    pub(crate) fn ret(
         &self,
         ctx: usize,
         this: Option<usize>,
@@ -998,6 +998,8 @@ impl<'a> Classes<'a> {
         let mut methods = TokenStream::new();
         // Rust idents taken in the `#[napi] impl`.
         let mut taken: BTreeSet<String> = BTreeSet::new();
+        // The members given an async twin (`Config::asynchronous`).
+        let mut twins: Vec<String> = Vec::new();
 
         for imp in inherent_impls(files, name) {
             for it in &imp.items {
@@ -1006,22 +1008,49 @@ impl<'a> Classes<'a> {
                     continue;
                 }
                 let gate = method_gate(imp, f);
+                let member = format!("{name}::{}", f.sig.ident);
                 match self.function(
                     class.source,
                     Some(c),
                     &f.sig,
                     &f.attrs,
-                    gate,
+                    gate.clone(),
                     quote!(#[napi]),
                     vocab,
                 ) {
-                    Ok(code) => methods.extend(code),
+                    Ok(code) => {
+                        methods.extend(code);
+                        if crate::twin::listed(src.root, &member) {
+                            let twin = format!("{}_async", f.sig.ident);
+                            assert!(
+                                taken.insert(twin),
+                                "{member}: its async twin's name is taken"
+                            );
+                            methods.extend(self.twin(
+                                class.source,
+                                Some(c),
+                                &f.sig,
+                                gate,
+                                None,
+                                vocab,
+                            ));
+                            twins.push(member);
+                        }
+                    }
                     Err((reason, ty)) => {
                         taken.remove(&f.sig.ident.to_string());
                         skipped.push(Skip::new(&f.sig.ident.to_string(), ty.as_deref(), reason));
                     }
                 }
             }
+        }
+        for (r, member) in config().asynchronous {
+            assert!(
+                *r != src.root
+                    || member.split_once("::").is_none_or(|(t, _)| t != name)
+                    || twins.iter().any(|m| m == member),
+                "Config::asynchronous lists {r}::{member}, which has no JS form to make async"
+            );
         }
 
         // Conversions a Rust trait offers, one direction each (Q34).
@@ -1182,6 +1211,17 @@ impl<'a> Classes<'a> {
                 fn __take(&mut self) -> Result<#up, String> { self.inner.take(#label) }
             });
         }
+        // Lent to an async twin (`crate::twin`): what it cannot clone.
+        if matches!(
+            class.holding,
+            Holding::Value | Holding::Owned | Holding::SharedCow
+        ) {
+            helpers.extend(quote! {
+                fn __lease(&mut self) -> Result<napi_support::Lease<#held>, String> {
+                    self.inner.lease(#label)
+                }
+            });
+        }
         // A union's value also holds the projection it was reached through.
         let of = class.of.is_some().then(|| quote!(self.of = None;));
         for m in ["dispose", "disposed"] {
@@ -1202,16 +1242,24 @@ impl<'a> Classes<'a> {
             }
         };
         let using = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.\n Harmless twice.";
+        // Only a value an async twin can lease can be in use.
+        let leased = matches!(
+            class.holding,
+            Holding::Value | Holding::Owned | Holding::SharedCow
+        )
+        .then_some(" Throws `Leased` while an async call is using it.");
         let dispose_doc = what
             .lines()
+            .chain(leased)
             .chain(using.lines())
             .map(|l| quote!(#[doc = #l]));
         methods.extend(quote! {
             #(#dispose_doc)*
             #[napi]
-            pub fn dispose(&mut self) {
-                self.inner.dispose();
+            pub fn dispose(&mut self) -> Result<(), String> {
+                self.inner.dispose(#label)?;
                 #of
+                Ok(())
             }
             #[doc = " Whether `dispose()` has been called."]
             #[napi(getter)]
@@ -1270,9 +1318,20 @@ impl<'a> Classes<'a> {
             };
             let js = lower_camel(name);
             let napi = quote!(#[napi(js_name = #js, namespace = #ns)]);
-            match self.function(ctx, None, &f.sig, &f.attrs, gate, napi, vocab) {
+            let twin = crate::twin::listed(root, name);
+            match self.function(ctx, None, &f.sig, &f.attrs, gate.clone(), napi, vocab) {
                 Ok(c) => code.extend(c),
-                Err((reason, ty)) => skipped.push(Skip::new(name, ty.as_deref(), reason)),
+                Err((reason, ty)) => {
+                    assert!(
+                        !twin,
+                        "Config::asynchronous lists {root}::{name}, which has no JS form to make async"
+                    );
+                    skipped.push(Skip::new(name, ty.as_deref(), reason));
+                }
+            }
+            if twin {
+                let js = format!("{js}Async");
+                code.extend(self.twin(ctx, None, &f.sig, gate, Some((&js, ns)), vocab));
             }
         }
         (code, skipped)

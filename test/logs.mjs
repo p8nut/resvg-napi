@@ -111,6 +111,10 @@ takeLogs();
   draw(patterned.patterns()[0].root().children()[0]);
   const fromDef = takeLogs();
   assert.equal(fromDef.filter((l) => l.includes('Failed to decode a PNG image')).length, 1, fromDef.join('\n'));
-  // TODO(step 9): an async renderNode twin, and its logs.
+  // Its async twin draws on a worker thread, which reports there too.
+  takeLogs();
+  await resvg.renderNodeAsync(sprite.nodeById('icon'), tiny_skia.Transform.identity(), new tiny_skia.Pixmap(20, 20));
+  const fromWorker = takeLogs();
+  assert.equal(fromWorker.filter((l) => l.includes('Failed to decode a PNG image')).length, 1, fromWorker.join('\n'));
 }
 setLogLevel('off');

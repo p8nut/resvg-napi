@@ -11,7 +11,9 @@
 //! - [`inspect`]: what `console.log` prints for a class instance.
 //! - [`Projection`]: a value borrowed out of an `Arc`-held owner, kept alive
 //!   with it.
-//! - [`Slot`]: a class's value, until a consuming call or `dispose()`.
+//! - [`Slot`]: a class's value, until a consuming call or `dispose()`, and
+//!   the [`Lease`] an async call takes of it.
+//! - [`spawn`]: an async call, on a worker thread, as a promise.
 //!
 //! No Rust tests: a test binary cannot link napi's symbols outside Node. The
 //! binding's JS suite covers each piece through the API that uses it.
@@ -139,27 +141,71 @@ pub fn disposed(class: &str) -> Thrown {
     thrown("Disposed", format!("this {class} was disposed"))
 }
 
+/// The error for an instance whose value an async call holds: a [`Lease`]
+/// taken and not back yet.
+pub fn leased(class: &str) -> Thrown {
+    thrown("Leased", format!("this {class} is in use by an async call"))
+}
+
+/// Where a [`Lease`] puts its value back: written on whichever thread the
+/// lease ends, read by its slot on the main thread.
+type Home<T> = std::sync::Arc<std::sync::Mutex<Option<T>>>;
+
 /// What a class holds its value in: the value until a call consumes it (a
 /// method taking `self` in Rust) or `dispose()` drops it. Every call after
 /// either throws, `Consumed` or `Disposed`. Dropping a shared value (an
 /// `Arc`, a [`Projection`]) drops this instance's reference only: the value
 /// lives on while anything else holds it.
+///
+/// An async call borrows the value with [`Slot::lease`]: it leaves the slot
+/// with the task, every call meanwhile throws `Leased`, and the first call
+/// after the lease ended finds it back.
 pub struct Slot<T> {
-    value: Option<T>,
+    /// A `OnceCell`, so that a `&self` call can put an ended lease's value
+    /// back: it is only ever set while empty.
+    value: std::cell::OnceCell<T>,
+    /// The last lease's home, until its value is back here.
+    lent: Option<Home<T>>,
     disposed: bool,
 }
 
 impl<T> Slot<T> {
     pub fn new(value: T) -> Self {
         Slot {
-            value: Some(value),
+            value: std::cell::OnceCell::from(value),
+            lent: None,
             disposed: false,
         }
+    }
+
+    /// Puts an ended lease's value back. Whether the slot holds a value now.
+    fn back(&self) -> bool {
+        if self.value.get().is_some() {
+            return true;
+        }
+        let Some(home) = &self.lent else {
+            return false;
+        };
+        // Held elsewhere still: by the lease, or by the call it went with,
+        // which lets go once its promise settled ([`spawn`]).
+        if std::sync::Arc::strong_count(home) > 1 {
+            return false;
+        }
+        // Poison-tolerant: a lease ends in `Drop`, which a panic may reach.
+        let v = home.lock().unwrap_or_else(|e| e.into_inner()).take();
+        v.is_some_and(|v| self.value.set(v).is_ok())
+    }
+
+    /// Whether the value is out with an async call.
+    fn out(&self) -> bool {
+        !self.back() && self.lent.is_some()
     }
 
     fn gone(&self, class: &str) -> Thrown {
         if self.disposed {
             disposed(class)
+        } else if self.out() {
+            leased(class)
         } else {
             consumed(class)
         }
@@ -167,35 +213,191 @@ impl<T> Slot<T> {
 
     /// The value, or what `class` throws without it.
     pub fn get(&self, class: &str) -> std::result::Result<&T, Thrown> {
-        match &self.value {
-            Some(v) => Ok(v),
-            None => Err(self.gone(class)),
-        }
+        self.back();
+        self.value.get().ok_or_else(|| self.gone(class))
     }
 
     /// The value to write, or what `class` throws without it.
     pub fn get_mut(&mut self, class: &str) -> std::result::Result<&mut T, Thrown> {
-        if self.value.is_none() {
+        if !self.back() {
             return Err(self.gone(class));
         }
-        Ok(self.value.as_mut().expect("checked above"))
+        self.lent = None;
+        Ok(self.value.get_mut().expect("checked above"))
     }
 
     /// The value, taken out: every later call throws `Consumed`.
     pub fn take(&mut self, class: &str) -> std::result::Result<T, Thrown> {
-        self.value.take().ok_or_else(|| self.gone(class))
+        self.get_mut(class)?;
+        Ok(self.value.take().expect("checked above"))
+    }
+
+    /// The value, lent to an async call until the [`Lease`] ends: every call
+    /// meanwhile throws `Leased`.
+    pub fn lease(&mut self, class: &str) -> std::result::Result<Lease<T>, Thrown> {
+        let value = self.take(class)?;
+        let home = Home::default();
+        self.lent = Some(home.clone());
+        Ok(Lease {
+            value: Some(value),
+            home,
+        })
     }
 
     /// Drops the value now, not at garbage collection. Harmless twice.
-    pub fn dispose(&mut self) {
-        self.value = None;
+    /// Throws `Leased` while an async call holds the value.
+    pub fn dispose(&mut self, class: &str) -> std::result::Result<(), Thrown> {
+        if !self.disposed && self.out() {
+            return Err(leased(class));
+        }
+        self.value.take();
+        self.lent = None;
         self.disposed = true;
+        Ok(())
     }
 
     /// Whether [`Slot::dispose`] ran.
     pub fn disposed(&self) -> bool {
         self.disposed
     }
+}
+
+/// A slot's value, lent to an async call by [`Slot::lease`]. It goes back
+/// to the slot when this is dropped, however the call ends: run, failed,
+/// panicked, or dropped unrun because its signal fired while it was queued.
+/// The slot takes it back only once the call lets go of its [`Lease::hold`]
+/// too, so the instance is in use until the promise settles, never less.
+pub struct Lease<T> {
+    value: Option<T>,
+    home: Home<T>,
+}
+
+/// What an async call keeps of a [`Lease`] until its promise settled.
+pub type Held = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+
+impl<T: Send + 'static> Lease<T> {
+    /// A hold on the lease's way home, for [`spawn`].
+    pub fn hold(&self) -> Held {
+        self.home.clone()
+    }
+}
+
+impl<T> std::ops::Deref for Lease<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.value
+            .as_ref()
+            .expect("a lease holds its value until dropped")
+    }
+}
+
+impl<T> std::ops::DerefMut for Lease<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.value
+            .as_mut()
+            .expect("a lease holds its value until dropped")
+    }
+}
+
+impl<T> Drop for Lease<T> {
+    fn drop(&mut self) {
+        if let Some(v) = self.value.take() {
+            *self.home.lock().unwrap_or_else(|e| e.into_inner()) = Some(v);
+        }
+    }
+}
+
+/// The worker half of an async call.
+type Run<R> = Box<dyn FnOnce() -> std::result::Result<R, Thrown> + Send>;
+
+/// An async call: `run` on a worker thread, its result made JS by `js` on
+/// the main thread.
+struct Work<R, J> {
+    run: Option<Run<R>>,
+    js: fn(R) -> std::result::Result<J, Thrown>,
+    /// The leases `run` holds, kept until the task is dropped on the main
+    /// thread, after its promise settled.
+    held: Vec<Held>,
+}
+
+impl<R: Send + 'static, J: ToNapiValue + TypeName> Task for Work<R, J> {
+    type Output = std::result::Result<R, Thrown>;
+    type JsValue = Settled<J>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        // The closure ends here, and its leases with it, but the slots wait
+        // for `held`.
+        let run = self.run.take().expect("a task computes once");
+        Ok(run())
+    }
+
+    fn resolve(&mut self, _: Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(Settled(out.and_then(self.js)))
+    }
+
+    /// Runs on the main thread once the promise settled: resolved, rejected
+    /// or aborted while queued (`run` is dropped unrun then). The leases are
+    /// back from here on, before any JS sees the settlement.
+    fn finally(self, _: Env) -> Result<()> {
+        drop(self.run);
+        drop(self.held);
+        Ok(())
+    }
+}
+
+/// What a [`Work`] resolves its promise with: the value, or a promise
+/// rejected with the [`Thrown`], which the outer one adopts. A rejection
+/// through napi would keep only a `Status` for the code.
+struct Settled<J>(std::result::Result<J, Thrown>);
+
+impl<J: TypeName> TypeName for Settled<J> {
+    fn type_name() -> &'static str {
+        J::type_name()
+    }
+
+    fn value_type() -> ValueType {
+        J::value_type()
+    }
+}
+
+impl<J: ToNapiValue> ToNapiValue for Settled<J> {
+    unsafe fn to_napi_value(env: napi::sys::napi_env, val: Self) -> Result<napi::sys::napi_value> {
+        match val.0 {
+            Ok(v) => unsafe { J::to_napi_value(env, v) },
+            Err(e) => {
+                let p = PromiseRaw::<()>::reject(&Env::from_raw(env), e)?;
+                unsafe { PromiseRaw::to_napi_value(env, p) }
+            }
+        }
+    }
+}
+
+/// An async call: `run` on a worker thread (libuv's pool, or the WASI
+/// host's), and the promise of its result, made JS by `js` on the main
+/// thread. A [`Thrown`] from either rejects with its `code` and `message`,
+/// as the sync call throws. `signal` drops the call while it is queued: it
+/// rejects with an `AbortError`, and `run` is dropped unrun, its leases
+/// with it. A call already running is not interrupted.
+///
+/// `held` are the [`Lease::hold`]s of the leases `run` captured: their
+/// slots stay in use until the promise settled, even if `run` ended (and
+/// dropped them) earlier on its thread.
+pub fn spawn<R: Send + 'static, J: ToNapiValue + TypeName>(
+    env: Env,
+    held: Vec<Held>,
+    run: impl FnOnce() -> std::result::Result<R, Thrown> + Send + 'static,
+    js: fn(R) -> std::result::Result<J, Thrown>,
+    signal: Option<Signal>,
+) -> std::result::Result<PromiseRaw<'static, J>, Thrown> {
+    let work = Work {
+        run: Some(Box::new(run)),
+        js,
+        held,
+    };
+    let task = AsyncTask::with_optional_signal(work, signal.map(|s| s.0));
+    // SAFETY: `env` is the calling function's, on the main thread.
+    let p = unsafe { AsyncTask::to_napi_value(env.raw(), task) }.map_err(coded)?;
+    Ok(PromiseRaw::new(env.raw(), p))
 }
 
 pub mod logs {

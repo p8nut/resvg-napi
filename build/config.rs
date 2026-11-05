@@ -272,6 +272,21 @@ pub const GEN: Config = Config {
         ("usvg", "Mask"),
         ("usvg", "Pattern"),
     ],
+    // `*Async` twins (ADR 0001): what is slow enough to leave the event
+    // loop. Parsing, writing back, rendering, PNG encoding and loading fonts
+    // from disk. A render leases its `tiny_skia.Pixmap` (Q28): it is in use
+    // until the promise settles. No render-then-encode chain (Q29): two
+    // round trips, which the helpers chain.
+    asynchronous: &[
+        ("usvg", "Tree::from_data"),
+        ("usvg", "Tree::from_str"),
+        ("usvg", "Tree::to_string"),
+        ("resvg", "render"),
+        ("resvg", "render_node"),
+        ("tiny_skia", "Pixmap::encode_png"),
+        ("usvg::fontdb", "Database::load_system_fonts"),
+        ("usvg::fontdb", "Database::load_fonts_dir"),
+    ],
 };
 
 /// Crates parsed only for the classes and functions `GEN` lists, never for

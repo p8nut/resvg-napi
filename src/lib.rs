@@ -3310,6 +3310,39 @@ pub fn resvg_render(
     .map_err(napi_support::coded)?;
     Ok(())
 }
+#[doc = " `render` on a worker thread. The arguments are read now, the call runs"]
+#[doc = " off the main thread, and the promise resolves with its result or rejects"]
+#[doc = " as `render` throws. `signal` drops the call while it is still queued."]
+#[doc = " Until it settles, `pixmap` is in use: any other use throws `Leased`."]
+#[napi(
+    js_name = "renderAsync",
+    namespace = "resvg",
+    ts_return_type = "Promise<void>"
+)]
+#[allow(clippy::redundant_closure)]
+pub fn resvg_render_async(
+    tree: &UsvgTree,
+    transform: &TinySkiaTransform,
+    pixmap: &mut TinySkiaPixmap,
+    env: Env,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
+) -> Result<PromiseRaw<'static, ()>, String> {
+    let __tree = tree.__ref()?.clone();
+    let __transform = *transform.__ref()?;
+    let mut __pixmap = pixmap.__lease()?;
+    napi_support::spawn(
+        env,
+        vec![__pixmap.hold()],
+        move || {
+            napi_support::contained("render", || {
+                resvg::render(&__tree, __transform, &mut (*__pixmap).as_mut())
+            })
+            .map_err(napi_support::coded)
+        },
+        |__v| Ok(__v),
+        signal,
+    )
+}
 #[doc = " Renders a node onto the pixmap."]
 #[doc = ""]
 #[doc = " `transform` will be used as a root transform."]
@@ -3337,6 +3370,40 @@ pub fn resvg_render_node(
     .map_err(napi_support::coded)?;
     Ok(__v.map(|__v| true))
 }
+#[doc = " `renderNode` on a worker thread. The arguments are read now, the call runs"]
+#[doc = " off the main thread, and the promise resolves with its result or rejects"]
+#[doc = " as `renderNode` throws. `signal` drops the call while it is still queued."]
+#[doc = " Until it settles, `pixmap` is in use: any other use throws `Leased`."]
+#[napi(
+    js_name = "renderNodeAsync",
+    namespace = "resvg",
+    ts_return_type = "Promise<boolean | null>"
+)]
+#[allow(clippy::redundant_closure)]
+pub fn resvg_render_node_async(
+    #[napi(ts_arg_type = "usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText")]
+    node: Object,
+    transform: &TinySkiaTransform,
+    pixmap: &mut TinySkiaPixmap,
+    env: Env,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
+) -> Result<PromiseRaw<'static, Option<bool>>, String> {
+    let __node = usvg_node_from_js(&node)?;
+    let __transform = *transform.__ref()?;
+    let mut __pixmap = pixmap.__lease()?;
+    napi_support::spawn(
+        env,
+        vec![__pixmap.hold()],
+        move || {
+            napi_support::contained("render_node", || {
+                resvg::render_node(__node.get(), __transform, &mut (*__pixmap).as_mut())
+            })
+            .map_err(napi_support::coded)
+        },
+        |__v| Ok(__v.map(|_| true)),
+        signal,
+    )
+}
 impl SvgtypesColor {
     fn __from(inner: svgtypes::Color) -> Self {
         Self {
@@ -3348,6 +3415,9 @@ impl SvgtypesColor {
     }
     fn __mut(&mut self) -> Result<&mut svgtypes::Color, String> {
         self.inner.get_mut("Color")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<svgtypes::Color>, String> {
+        self.inner.lease("Color")
     }
 }
 #[napi(namespace = "svgtypes")]
@@ -3514,11 +3584,13 @@ impl SvgtypesColor {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Color")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -3540,6 +3612,9 @@ impl TinySkiaPixmap {
     }
     fn __take(&mut self) -> Result<tiny_skia::Pixmap, String> {
         self.inner.take("Pixmap")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::Pixmap>, String> {
+        self.inner.lease("Pixmap")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -3621,6 +3696,32 @@ impl TinySkiaPixmap {
             .map_err(|e| napi_support::thrown("GenericFailure", e))?;
         Ok(__v.into())
     }
+    #[doc = " `encodePng` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `encodePng` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn encode_png_async(
+        &mut self,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, Buffer>, String> {
+        let __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Pixmap::encode_png", || __self.encode_png())
+                    .map_err(napi_support::coded)?
+                    .map_err(|e| napi_support::thrown("GenericFailure", e))
+            },
+            |__v| Ok(__v.into()),
+            signal,
+        )
+    }
     #[doc = " Saves pixmap as a PNG file."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -3695,11 +3796,13 @@ impl TinySkiaPixmap {
     }
     #[doc = " Frees the value now, not at garbage collection: every later call throws"]
     #[doc = " `Disposed`."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Pixmap")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -3718,6 +3821,9 @@ impl TinySkiaColor {
     }
     fn __mut(&mut self) -> Result<&mut tiny_skia::Color, String> {
         self.inner.get_mut("Color")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::Color>, String> {
+        self.inner.lease("Color")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -3858,11 +3964,13 @@ impl TinySkiaColor {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Color")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -3881,6 +3989,9 @@ impl TinySkiaIntSize {
     }
     fn __mut(&mut self) -> Result<&mut tiny_skia::IntSize, String> {
         self.inner.get_mut("IntSize")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::IntSize>, String> {
+        self.inner.lease("IntSize")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -3966,11 +4077,13 @@ impl TinySkiaIntSize {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("IntSize")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -3989,6 +4102,9 @@ impl TinySkiaTransform {
     }
     fn __mut(&mut self) -> Result<&mut tiny_skia::Transform, String> {
         self.inner.get_mut("Transform")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::Transform>, String> {
+        self.inner.lease("Transform")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -4405,11 +4521,13 @@ impl TinySkiaTransform {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Transform")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -4428,6 +4546,9 @@ impl TinySkiaRect {
     }
     fn __mut(&mut self) -> Result<&mut tiny_skia::Rect, String> {
         self.inner.get_mut("Rect")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::Rect>, String> {
+        self.inner.lease("Rect")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -4613,11 +4734,13 @@ impl TinySkiaRect {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Rect")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -4636,6 +4759,9 @@ impl TinySkiaSize {
     }
     fn __mut(&mut self) -> Result<&mut tiny_skia::Size, String> {
         self.inner.get_mut("Size")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<tiny_skia::Size>, String> {
+        self.inner.lease("Size")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -4757,11 +4883,13 @@ impl TinySkiaSize {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Size")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -5543,6 +5671,45 @@ impl UsvgTree {
                 })?;
         Ok(UsvgTree::__from(__v))
     }
+    #[doc = " `fromData` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `fromData` throws. `signal` drops the call while it is still queued."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_data_async(
+        data: Uint8Array,
+        opt: Option<UsvgOptions>,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, UsvgTree>, String> {
+        let __data = data.to_vec();
+        let __opt = opt.unwrap_or_default().to_upstream()?;
+        napi_support::spawn(
+            env,
+            vec![],
+            move || {
+                napi_support::contained("Tree::from_data", || {
+                    <usvg::Tree>::from_data(&__data, &__opt)
+                })
+                .map_err(napi_support::coded)?
+                .map_err(|e| {
+                    let code = match &e {
+                        usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
+                        usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
+                        usvg::Error::MalformedGZip => "MalformedGZip",
+                        usvg::Error::ElementsLimitReached => "ElementsLimitReached",
+                        usvg::Error::InvalidSize => "InvalidSize",
+                        usvg::Error::ParsingFailed(..) => "ParsingFailed",
+                    };
+                    napi_support::thrown(code, &e)
+                })
+            },
+            |__v| Ok(UsvgTree::__from(__v)),
+            signal,
+        )
+    }
     #[doc = " Similar to the `from_data` method, except that it ignores all `image` elements linking to"]
     #[doc = " external files, as required by the SVG specification when SVG files are loaded"]
     #[doc = " for `<image href=\"...\" />` tags."]
@@ -5587,6 +5754,42 @@ impl UsvgTree {
                     napi_support::thrown(code, &e)
                 })?;
         Ok(UsvgTree::__from(__v))
+    }
+    #[doc = " `fromStr` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `fromStr` throws. `signal` drops the call while it is still queued."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_str_async(
+        text: String,
+        opt: Option<UsvgOptions>,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, UsvgTree>, String> {
+        let __opt = opt.unwrap_or_default().to_upstream()?;
+        napi_support::spawn(
+            env,
+            vec![],
+            move || {
+                napi_support::contained("Tree::from_str", || <usvg::Tree>::from_str(&text, &__opt))
+                    .map_err(napi_support::coded)?
+                    .map_err(|e| {
+                        let code = match &e {
+                            usvg::Error::NotAnUtf8Str => "NotAnUtf8Str",
+                            usvg::Error::SvgzFeatureNotEnabled => "SvgzFeatureNotEnabled",
+                            usvg::Error::MalformedGZip => "MalformedGZip",
+                            usvg::Error::ElementsLimitReached => "ElementsLimitReached",
+                            usvg::Error::InvalidSize => "InvalidSize",
+                            usvg::Error::ParsingFailed(..) => "ParsingFailed",
+                        };
+                        napi_support::thrown(code, &e)
+                    })
+            },
+            |__v| Ok(UsvgTree::__from(__v)),
+            signal,
+        )
     }
     #[doc = " Image size."]
     #[doc = ""]
@@ -5750,14 +5953,41 @@ impl UsvgTree {
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+    #[doc = " `toString` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `toString` throws. `signal` drops the call while it is still queued."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn to_string_async(
+        &self,
+        opt: Option<UsvgWriteOptions>,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, String>, String> {
+        let __opt = opt.unwrap_or_default().to_upstream()?;
+        let __self = self.__ref()?.clone();
+        napi_support::spawn(
+            env,
+            vec![],
+            move || {
+                napi_support::contained("Tree::to_string", || __self.to_string(&__opt))
+                    .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
+    }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
     #[doc = " holds it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Tree")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6041,9 +6271,10 @@ impl UsvgGroup {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Group")?;
         self.of = None;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6221,9 +6452,10 @@ impl UsvgPath {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Path")?;
         self.of = None;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6365,9 +6597,10 @@ impl UsvgImage {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Image")?;
         self.of = None;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6594,9 +6827,10 @@ impl UsvgText {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Text")?;
         self.of = None;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6682,8 +6916,9 @@ impl UsvgClipPath {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("ClipPath")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6781,8 +7016,9 @@ impl UsvgMask {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Mask")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -6865,8 +7101,9 @@ impl UsvgPattern {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Pattern")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8122,6 +8359,11 @@ impl FontdbDatabase {
     fn __mut(&mut self) -> Result<&mut std::sync::Arc<usvg::fontdb::Database>, String> {
         self.inner.get_mut("Database")
     }
+    fn __lease(
+        &mut self,
+    ) -> Result<napi_support::Lease<std::sync::Arc<usvg::fontdb::Database>>, String> {
+        self.inner.lease("Database")
+    }
 }
 #[napi(namespace = "fontdb")]
 impl FontdbDatabase {
@@ -8182,6 +8424,34 @@ impl FontdbDatabase {
             .map_err(napi_support::coded)?;
         Ok(())
     }
+    #[doc = " `loadFontsDir` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `loadFontsDir` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi(ts_return_type = "Promise<void>")]
+    #[allow(clippy::redundant_closure)]
+    pub fn load_fonts_dir_async(
+        &mut self,
+        dir: String,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, ()>, String> {
+        let mut __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Database::load_fonts_dir", || {
+                    std::sync::Arc::make_mut(&mut *__self).load_fonts_dir(dir)
+                })
+                .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
+    }
     #[doc = " Attempts to load system fonts."]
     #[doc = ""]
     #[doc = " Supports Windows, Linux and macOS."]
@@ -8199,6 +8469,33 @@ impl FontdbDatabase {
         napi_support::contained("Database::load_system_fonts", || __self.load_system_fonts())
             .map_err(napi_support::coded)?;
         Ok(())
+    }
+    #[doc = " `loadSystemFonts` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `loadSystemFonts` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi(ts_return_type = "Promise<void>")]
+    #[allow(clippy::redundant_closure)]
+    pub fn load_system_fonts_async(
+        &mut self,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, ()>, String> {
+        let mut __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Database::load_system_fonts", || {
+                    std::sync::Arc::make_mut(&mut *__self).load_system_fonts()
+                })
+                .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
     }
     #[doc = " Returns `true` if the `Database` contains no font faces."]
     #[napi]
@@ -8294,11 +8591,13 @@ impl FontdbDatabase {
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
     #[doc = " holds it."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Database")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8481,8 +8780,8 @@ impl UsvgFilter {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Filter")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8496,8 +8795,8 @@ impl UsvgRadialGradient {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("RadialGradient")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8511,8 +8810,8 @@ impl UsvgLinearGradient {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("LinearGradient")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8526,8 +8825,8 @@ impl UsvgFont {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Font")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8541,8 +8840,8 @@ impl UsvgPositionedGlyph {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("PositionedGlyph")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8556,8 +8855,8 @@ impl UsvgSpan {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Span")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8571,8 +8870,8 @@ impl UsvgTextChunk {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("TextChunk")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8586,8 +8885,8 @@ impl UsvgTextSpan {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("TextSpan")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8601,8 +8900,8 @@ impl UsvgImageKindJpeg {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.raw.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.raw.dispose("ImageKindJpeg")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8616,8 +8915,8 @@ impl UsvgImageKindPng {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.raw.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.raw.dispose("ImageKindPng")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8631,8 +8930,8 @@ impl UsvgImageKindGif {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.raw.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.raw.dispose("ImageKindGif")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8646,8 +8945,8 @@ impl UsvgImageKindWebp {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.raw.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.raw.dispose("ImageKindWebp")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8661,8 +8960,8 @@ impl FontdbFaceInfo {
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("FaceInfo")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]

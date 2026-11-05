@@ -164,10 +164,9 @@ went:
 No new-API form yet, so dropped with the old surface: what an `feImage`
 draws (`Filter.imageChildren`), the document an `<image>` embeds
 (`svgChildren`), which face drew a glyph (`faceOf`, `PositionedGlyph.font`)
-and a span's font families (`Font.families`). The async node render waits for
-step 9's async twins (`renderNodePngAsync` has a `TODO(step 9)` in the
-tests); `renderNodePng`'s `background` and sizing come back with the helpers
-(step 11).
+and a span's font families (`Font.families`). The async node render came
+back with step 9 (`resvg.renderNodeAsync`); `renderNodePng`'s `background`
+and sizing come back with the helpers (step 11).
 
 Step 8 gave every class of the namespaced surface `dispose()`, `disposed`
 and `[Symbol.dispose]` (CONTRIBUTING, "`dispose()` and `using`";
@@ -197,6 +196,43 @@ and `[Symbol.dispose]` (CONTRIBUTING, "`dispose()` and `using`";
 - `to_upstream` (option objects) throws a string code now, so a disposed
   provider (`{ fontdb: db }`) throws `Disposed`, not `GenericFailure`.
 
+Step 9 added `Config::asynchronous` and `napi_gen::twin` (CONTRIBUTING,
+"Async twins"; `test/api/async.mjs`): `usvg.Tree.fromDataAsync`,
+`fromStrAsync` and `toStringAsync`, `resvg.renderAsync` and
+`renderNodeAsync`, `tiny_skia.Pixmap.encodePngAsync`, and
+`fontdb.Database.loadSystemFontsAsync` and `loadFontsDirAsync`. The flat
+`Resvg`'s twins stay until step 13. What it found:
+
+- A lease (Q28) is the slot's value taken out, behind a `Lease` that puts
+  it back when dropped. The code is `Leased`, distinct from `Disposed` and
+  `Consumed`, and `dispose()` throws it too: the value is in use, and the
+  instance stays as it was. The value comes back when the task lets go of
+  it on the main thread (napi's `Task::finally`), after resolving,
+  rejecting or an abort while queued, never on the worker thread at the end
+  of the call: a fast call finished before the next line of JS would
+  otherwise make "in use" depend on timing. An `&T` of an owned class
+  (`encodePngAsync`'s pixmap) is leased too: the worker reads it.
+- napi's `Task` rejects with a `Status`, never a code of the binding's:
+  the twin resolves with a promise rejected with the `Thrown` instead,
+  which the outer promise adopts (`Settled`). The trick the flat
+  `Resvg.parseAsync` used by hand, generic now.
+- No `Task` type per twin: one `Work` in `napi-support` holds the call as a
+  closure over its owned arguments, and its result type comes from the
+  function's return (`PromiseRaw<'static, T>`), so napi writes the
+  `.d.ts` (`Promise<usvg.Tree>`) without a type the generator spells out.
+  `()` and `Option<()>` are written out (`Promise<void>`, `Promise<boolean |
+  null>`): napi says `Promise<undefined>`.
+- An argument error (a wrong class, a disposed or leased instance) throws
+  at the call, as napi's own conversions do; only the call's own errors
+  reject. So does a `signal` that is not an `AbortSignal` or is already
+  aborted, before anything is leased.
+- `dispose()` returns `Result` now, on every class (the `.d.ts` keeps
+  `dispose(): void`), and its doc says it throws `Leased` on the classes an
+  async call can lease.
+- The toy gained `spin`, a slow function with nothing to borrow, for a call
+  to queue behind deterministically; the root queues behind a slow render
+  on one worker thread, as `test/async.mjs` does.
+
 ## Status
 
 - [x] 1
@@ -209,7 +245,7 @@ and `[Symbol.dispose]` (CONTRIBUTING, "`dispose()` and `using`";
 - [x] 7
 - [x] 7b
 - [x] 8
-- [ ] 9
+- [x] 9
 - [ ] 10
 - [ ] 11
 - [ ] 12

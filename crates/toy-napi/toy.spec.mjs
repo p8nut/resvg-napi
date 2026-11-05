@@ -45,7 +45,8 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
     'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
-    'Scene', 'Tally', 'Vec2', 'count', 'paint', 'report', 'share', 'shared', 'visit',
+    'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync', 'report', 'share', 'shared',
+    'spin', 'spinAsync', 'visit',
   ]);
   assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
@@ -416,4 +417,135 @@ test('a disposed projection lets go of its owner, and of its union', () => {
   throwsCoded(() => scene.root(), 'Disposed', 'this Scene was disposed');
   assert.equal(a.value.name(), 'a');
   assert.equal(toy.toy.count(a), 1);
+});
+
+// Async twins (`GEN.asynchronous`): the call on a worker thread, its result
+// or its error as the sync call gives them, and a lease on what it borrows.
+async function rejectsCoded(promise, code, message) {
+  await assert.rejects(promise, (e) => {
+    assert.ok(e instanceof Error);
+    assert.equal(e.code, code);
+    if (message instanceof RegExp) assert.match(e.message, message);
+    else assert.equal(e.message, message);
+    return true;
+  });
+}
+
+/** Rounds of `spin` that keep a worker thread busy for about `ms`. */
+function roundsFor(ms) {
+  const { spin } = toy.toy;
+  let n = 1 << 16;
+  for (;;) {
+    const t = performance.now();
+    spin(n);
+    if (performance.now() - t > 20) return Math.min(2 ** 32 - 1, Math.ceil((n * ms) / (performance.now() - t)));
+    n *= 2;
+  }
+}
+
+test('an async twin resolves with what the sync call returns', async () => {
+  const { Canvas, Color, Vec2, Tally, Scene, paint, paintAsync, count, countAsync, spin, spinAsync } = toy.toy;
+  // A static: the class, built on the main thread from what the worker made.
+  const c = await Canvas.fromTextAsync('3x2');
+  assert.ok(c instanceof Canvas);
+  assert.deepEqual([c.width(), c.height()], [3, 2]);
+  // A free function writing through a view of an owned class.
+  assert.equal(await paintAsync(c, new Vec2(1, 1), Color.fromRgb(9, 0, 0)), 4);
+  const twin = new Canvas(3, 2);
+  paint(twin, new Vec2(1, 1), Color.fromRgb(9, 0, 0));
+  assert.deepEqual([...c.data()], [...twin.data()]);
+  // A method writing its owned receiver, and one on each shared holding.
+  assert.equal(await c.fillAsync(Color.fromRgb(5, 0, 0)), undefined);
+  assert.deepEqual([...c.data()], [5, 5, 5, 5, 5, 5]);
+  const t = new Tally();
+  await t.pushAsync('a');
+  await t.pushAsync('b');
+  assert.equal(await t.joinedAsync(), 'a,b');
+  assert.equal(t.joined(), 'a,b');
+  // A union argument, and plain numbers.
+  const item = Scene.demo().find('inner');
+  assert.equal(await countAsync(item), count(item));
+  assert.equal(await spinAsync(1000), spin(1000));
+});
+
+test('an async twin rejects with the code and message the sync call throws', async () => {
+  const { Canvas, Color, Vec2, paintAsync } = toy.toy;
+  await rejectsCoded(Canvas.fromTextAsync(''), 'Empty', 'nothing to parse');
+  await rejectsCoded(Canvas.fromTextAsync('3xy'), 'BadNumber', 'not a number: "y"');
+  const c = new Canvas(2, 2);
+  await rejectsCoded(paintAsync(c, new Vec2(5, 0), Color.fromRgb(1, 1, 1)), 'OutOfBounds', '5,0 is off the canvas');
+  // A failed call gives its lease back too.
+  assert.equal(c.width(), 2);
+});
+
+test('what an async twin borrows by value is leased: in use until it settles', async () => {
+  const { Canvas, Color, Vec2, Tally, paint, paintAsync, share } = toy.toy;
+  const c = new Canvas(2, 2);
+  const pending = c.fillAsync(Color.fromRgb(3, 0, 0));
+  const inUse = 'this Canvas is in use by an async call';
+  throwsCoded(() => c.width(), 'Leased', inUse);
+  throwsCoded(() => paint(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Leased', inUse);
+  // A second twin cannot take it either: an argument error throws at the call.
+  throwsCoded(() => paintAsync(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Leased', inUse);
+  // dispose() refuses: the value is still in use. Nothing changed.
+  throwsCoded(() => c.dispose(), 'Leased', inUse);
+  assert.equal(c.disposed, false);
+  await pending;
+  assert.deepEqual([...c.data()], [3, 3, 3, 3]);
+  c.dispose();
+  assert.equal(c.disposed, true);
+  throwsCoded(() => c.width(), 'Disposed', 'this Canvas was disposed');
+
+  // A copy-on-write handle is leased too: its `&mut` call writes the value
+  // it holds, and another handle on the same value keeps reading it.
+  const t = new Tally();
+  t.push('a');
+  const other = share(t);
+  const pushed = t.pushAsync('b');
+  throwsCoded(() => t.len(), 'Leased', 'this Tally is in use by an async call');
+  assert.equal(other.joined(), 'a');
+  await pushed;
+  assert.equal(t.joined(), 'a,b');
+  assert.equal(other.joined(), 'a');
+  // An `Arc` read is cloned, not leased.
+  const read = t.joinedAsync();
+  assert.equal(t.len(), 2);
+  assert.equal(await read, 'a,b');
+});
+
+test('an AbortSignal drops a queued twin, and its lease comes back', async () => {
+  const { Canvas, Color, Vec2, paintAsync, spinAsync } = toy.toy;
+  // Every worker thread busy, so the next call waits in the queue.
+  const threads = Number(process.env.UV_THREADPOOL_SIZE) || 4;
+  const rounds = roundsFor(150);
+  const blockers = Array.from({ length: threads }, () => spinAsync(rounds));
+  const c = new Canvas(2, 2);
+  const ac = new AbortController();
+  const queued = paintAsync(c, new Vec2(0, 0), Color.fromRgb(9, 0, 0), ac.signal);
+  throwsCoded(() => c.width(), 'Leased', /in use by an async call/);
+  ac.abort();
+  await assert.rejects(queued, (e) => e.name === 'AbortError');
+  // The call never ran, and the canvas is back.
+  assert.deepEqual([...c.data()], [0, 0, 0, 0]);
+  assert.equal(c.width(), 2);
+  await Promise.all(blockers);
+
+  // A signal already aborted is refused before anything is leased.
+  const gone = new AbortController();
+  gone.abort();
+  assert.throws(() => paintAsync(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1), gone.signal), /already aborted/);
+  assert.equal(c.width(), 2);
+  // And a signal that is not an AbortSignal.
+  assert.throws(() => spinAsync(1, {}), /signal must be an AbortSignal/);
+  assert.throws(() => spinAsync(1, c), /signal must be an AbortSignal/);
+});
+
+test('an async twin runs off the main thread', async () => {
+  const { spinAsync } = toy.toy;
+  const rounds = roundsFor(100);
+  let ticks = 0;
+  const timer = setInterval(() => { ticks += 1; }, 1);
+  await spinAsync(rounds);
+  clearInterval(timer);
+  assert.ok(ticks > 0, `the event loop kept turning (${ticks} ticks)`);
 });

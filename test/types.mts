@@ -181,3 +181,19 @@ new fontdb.Database() satisfies Disposable;
 svgtypes.Color.fromStr('red') satisfies Disposable;
 const gone: boolean = tiny_skia.Transform.identity().disposed;
 void gone;
+
+// 13. the async twins: a promise of what the sync call returns, `signal` last.
+async function renderNsAsync(bytes: Uint8Array, signal: AbortSignal): Promise<Buffer> {
+  const db = new fontdb.Database();
+  const loaded: void = await db.loadFontsDirAsync('fonts', signal);
+  const tree: usvg.Tree = await usvg.Tree.fromDataAsync(bytes, { fontdb: db }, signal);
+  const pixmap = new tiny_skia.Pixmap(10, 10);
+  const drawn: void = await resvg.renderAsync(tree, tiny_skia.Transform.identity(), pixmap);
+  const node: boolean | null = await resvg.renderNodeAsync(tree.root().children()[0], tiny_skia.Transform.identity(), pixmap);
+  const text: string = await tree.toStringAsync({ indent: 2 }, signal);
+  // @ts-expect-error a signal is an `AbortSignal`
+  await tree.toStringAsync(null, {});
+  void [loaded, drawn, node, text];
+  return pixmap.encodePngAsync(signal);
+}
+void renderNsAsync;

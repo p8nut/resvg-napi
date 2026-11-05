@@ -375,8 +375,9 @@ impl ToyCounter {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Counter")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -399,6 +400,9 @@ impl ToyTally {
     fn __mut(&mut self) -> Result<&mut std::sync::Arc<toy::Tally>, String> {
         self.inner.get_mut("Tally")
     }
+    fn __lease(&mut self) -> Result<napi_support::Lease<std::sync::Arc<toy::Tally>>, String> {
+        self.inner.lease("Tally")
+    }
 }
 #[napi(namespace = "toy")]
 impl ToyTally {
@@ -416,6 +420,34 @@ impl ToyTally {
         napi_support::contained("Tally::push", || __self.push(name))
             .map_err(napi_support::coded)?;
         Ok(())
+    }
+    #[doc = " `push` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `push` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi(ts_return_type = "Promise<void>")]
+    #[allow(clippy::redundant_closure)]
+    pub fn push_async(
+        &mut self,
+        name: String,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, ()>, String> {
+        let mut __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Tally::push", || {
+                    std::sync::Arc::make_mut(&mut *__self).push(name)
+                })
+                .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
     }
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -448,14 +480,40 @@ impl ToyTally {
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+    #[doc = " `joined` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `joined` throws. `signal` drops the call while it is still queued."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn joined_async(
+        &self,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, String>, String> {
+        let __self = self.__ref()?.clone();
+        napi_support::spawn(
+            env,
+            vec![],
+            move || {
+                napi_support::contained("Tally::joined", || __self.joined())
+                    .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
+    }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
     #[doc = " holds it."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Tally")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -474,6 +532,9 @@ impl ToyVec2 {
     }
     fn __mut(&mut self) -> Result<&mut toy::Vec2, String> {
         self.inner.get_mut("Vec2")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy::Vec2>, String> {
+        self.inner.lease("Vec2")
     }
 }
 #[napi(namespace = "toy")]
@@ -599,11 +660,13 @@ impl ToyVec2 {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Vec2")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -622,6 +685,9 @@ impl ToyColor {
     }
     fn __mut(&mut self) -> Result<&mut toy::Color, String> {
         self.inner.get_mut("Color")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy::Color>, String> {
+        self.inner.lease("Color")
     }
 }
 #[napi(namespace = "toy")]
@@ -663,11 +729,13 @@ impl ToyColor {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Color")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -689,6 +757,9 @@ impl ToyCanvas {
     }
     fn __take(&mut self) -> Result<toy::Canvas, String> {
         self.inner.take("Canvas")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy::Canvas>, String> {
+        self.inner.lease("Canvas")
     }
 }
 #[napi(namespace = "toy")]
@@ -723,6 +794,37 @@ impl ToyCanvas {
             })?;
         Ok(ToyCanvas::__from(__v))
     }
+    #[doc = " `fromText` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `fromText` throws. `signal` drops the call while it is still queued."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_text_async(
+        text: String,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, ToyCanvas>, String> {
+        napi_support::spawn(
+            env,
+            vec![],
+            move || {
+                napi_support::contained("Canvas::from_text", || <toy::Canvas>::from_text(&text))
+                    .map_err(napi_support::coded)?
+                    .map_err(|e| {
+                        let code = match &e {
+                            toy::ParseError::Empty => "Empty",
+                            toy::ParseError::BadNumber(..) => "BadNumber",
+                            toy::ParseError::Missing { .. } => "Missing",
+                        };
+                        napi_support::thrown(code, &e)
+                    })
+            },
+            |__v| Ok(ToyCanvas::__from(__v)),
+            signal,
+        )
+    }
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn width(&self) -> Result<u32, String> {
@@ -749,6 +851,33 @@ impl ToyCanvas {
             .map_err(napi_support::coded)?;
         Ok(())
     }
+    #[doc = " `fill` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `fill` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi(ts_return_type = "Promise<void>")]
+    #[allow(clippy::redundant_closure)]
+    pub fn fill_async(
+        &mut self,
+        color: &ToyColor,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, ()>, String> {
+        let __color = *color.__ref()?;
+        let mut __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Canvas::fill", || __self.fill(__color))
+                    .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
+    }
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn data(&self) -> Result<Buffer, String> {
@@ -768,11 +897,13 @@ impl ToyCanvas {
     }
     #[doc = " Frees the value now, not at garbage collection: every later call throws"]
     #[doc = " `Disposed`."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Canvas")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -851,8 +982,9 @@ impl ToyScene {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Scene")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -925,9 +1057,10 @@ impl ToyLayer {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Layer")?;
         self.of = None;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -984,9 +1117,10 @@ impl ToyDot {
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Dot")?;
         self.of = None;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -1022,6 +1156,41 @@ pub fn toy_paint(view: &mut ToyCanvas, at: &ToyVec2, color: &ToyColor) -> Result
         })?;
     Ok(__v)
 }
+#[doc = " `paint` on a worker thread. The arguments are read now, the call runs"]
+#[doc = " off the main thread, and the promise resolves with its result or rejects"]
+#[doc = " as `paint` throws. `signal` drops the call while it is still queued."]
+#[doc = " Until it settles, `view` is in use: any other use throws `Leased`."]
+#[napi(js_name = "paintAsync", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_paint_async(
+    view: &mut ToyCanvas,
+    at: &ToyVec2,
+    color: &ToyColor,
+    env: Env,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
+) -> Result<PromiseRaw<'static, u32>, String> {
+    let mut __view = view.__lease()?;
+    let __at = *at.__ref()?;
+    let __color = *color.__ref()?;
+    napi_support::spawn(
+        env,
+        vec![__view.hold()],
+        move || {
+            napi_support::contained("paint", || {
+                toy::paint(&mut (*__view).as_view(), __at, __color)
+            })
+            .map_err(napi_support::coded)?
+            .map_err(|e| {
+                let code = match &e {
+                    toy::PaintError::OutOfBounds(..) => "OutOfBounds",
+                };
+                napi_support::thrown(code, &e)
+            })
+        },
+        |__v| Ok(__v),
+        signal,
+    )
+}
 #[doc = " How many dots `item` holds, itself included."]
 #[napi(js_name = "count", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
@@ -1033,6 +1202,28 @@ pub fn toy_count(
         .map_err(napi_support::coded)?;
     Ok(__v)
 }
+#[doc = " `count` on a worker thread. The arguments are read now, the call runs"]
+#[doc = " off the main thread, and the promise resolves with its result or rejects"]
+#[doc = " as `count` throws. `signal` drops the call while it is still queued."]
+#[napi(js_name = "countAsync", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_count_async(
+    #[napi(ts_arg_type = "toy.ItemLayer | toy.ItemDot")] item: Object,
+    env: Env,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
+) -> Result<PromiseRaw<'static, u32>, String> {
+    let __item = toy_item_from_js(&item)?;
+    napi_support::spawn(
+        env,
+        vec![],
+        move || {
+            napi_support::contained("count", || toy::count(__item.get()))
+                .map_err(napi_support::coded)
+        },
+        |__v| Ok(__v),
+        signal,
+    )
+}
 #[doc = " `None` for an empty layer: nothing to visit."]
 #[napi(js_name = "visit", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
@@ -1043,6 +1234,32 @@ pub fn toy_visit(
     let __v = napi_support::contained("visit", || toy::visit(__item.get()))
         .map_err(napi_support::coded)?;
     Ok(__v.map(|__v| true))
+}
+#[doc = " Mixes `rounds` times: a call slow enough to keep a worker thread busy"]
+#[doc = " while another waits behind it."]
+#[napi(js_name = "spin", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_spin(rounds: u32) -> Result<u32, String> {
+    let __v = napi_support::contained("spin", || toy::spin(rounds)).map_err(napi_support::coded)?;
+    Ok(__v)
+}
+#[doc = " `spin` on a worker thread. The arguments are read now, the call runs"]
+#[doc = " off the main thread, and the promise resolves with its result or rejects"]
+#[doc = " as `spin` throws. `signal` drops the call while it is still queued."]
+#[napi(js_name = "spinAsync", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_spin_async(
+    rounds: u32,
+    env: Env,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
+) -> Result<PromiseRaw<'static, u32>, String> {
+    napi_support::spawn(
+        env,
+        vec![],
+        move || napi_support::contained("spin", || toy::spin(rounds)).map_err(napi_support::coded),
+        |__v| Ok(__v),
+        signal,
+    )
 }
 fn toy_item_to_js(p: napi_support::Projection<toy::Item>) -> Either<ToyItemLayer, ToyItemDot> {
     match p.get() {
@@ -1117,6 +1334,9 @@ impl AltColor {
     }
     fn __mut(&mut self) -> Result<&mut toy::alt::Color, String> {
         self.inner.get_mut("Color")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy::alt::Color>, String> {
+        self.inner.lease("Color")
     }
 }
 #[napi(namespace = "alt")]
@@ -1216,11 +1436,13 @@ impl AltColor {
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
     #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
     #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
     #[doc = " Harmless twice."]
     #[napi]
-    pub fn dispose(&mut self) {
-        self.inner.dispose();
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Color")?;
+        Ok(())
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]

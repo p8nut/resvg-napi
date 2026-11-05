@@ -88,6 +88,7 @@ export declare namespace alt {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -118,16 +119,30 @@ export declare namespace toy {
     constructor(width: number, height: number)
     /** From `"<width>x<height>"`. */
     static fromText(text: string): toy.Canvas
+    /**
+     * `fromText` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `fromText` throws. `signal` drops the call while it is still queued.
+     */
+    static fromTextAsync(text: string, signal?: AbortSignal | undefined | null): Promise<toy.Canvas>
     width(): number
     height(): number
     /** Sets every byte to the colour's red channel. */
     fill(color: toy.Color): void
+    /**
+     * `fill` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `fill` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    fillAsync(color: toy.Color, signal?: AbortSignal | undefined | null): Promise<void>
     data(): Buffer
     /** The bytes, the canvas consumed. */
     intoData(): Buffer
     /**
      * Frees the value now, not at garbage collection: every later call throws
      * `Disposed`.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -152,6 +167,7 @@ export declare namespace toy {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -275,14 +291,28 @@ export declare namespace toy {
   export class Tally {
     constructor()
     push(name: string): void
+    /**
+     * `push` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `push` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    pushAsync(name: string, signal?: AbortSignal | undefined | null): Promise<void>
     clear(): void
     len(): number
     isEmpty(): boolean
     joined(): string
     /**
+     * `joined` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `joined` throws. `signal` drops the call while it is still queued.
+     */
+    joinedAsync(signal?: AbortSignal | undefined | null): Promise<string>
+    /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
      * holds it.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -323,6 +353,7 @@ export declare namespace toy {
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
      */
@@ -335,6 +366,12 @@ export declare namespace toy {
   export type ToyVec2 = Vec2
   /** How many dots `item` holds, itself included. */
   export function count(item: toy.ItemLayer | toy.ItemDot): number
+  /**
+   * `count` on a worker thread. The arguments are read now, the call runs
+   * off the main thread, and the promise resolves with its result or rejects
+   * as `count` throws. `signal` drops the call while it is still queued.
+   */
+  export function countAsync(item: toy.ItemLayer | toy.ItemDot, signal?: AbortSignal | undefined | null): Promise<number>
   /** Which way a counter counts. */
   export const enum Direction {
     Up = 'up',
@@ -369,6 +406,13 @@ export declare namespace toy {
    * index.
    */
   export function paint(view: toy.Canvas, at: toy.Vec2, color: toy.Color): number
+  /**
+   * `paint` on a worker thread. The arguments are read now, the call runs
+   * off the main thread, and the promise resolves with its result or rejects
+   * as `paint` throws. `signal` drops the call while it is still queued.
+   * Until it settles, `view` is in use: any other use throws `Leased`.
+   */
+  export function paintAsync(view: toy.Canvas, at: toy.Vec2, color: toy.Color, signal?: AbortSignal | undefined | null): Promise<number>
   /** The `code` a thrown `toy::PaintError` carries: the variant's name. The message is its `Display`. */
   export const enum PaintErrorCode {
     OutOfBounds = 'OutOfBounds',
@@ -419,6 +463,17 @@ export declare namespace toy {
   export function share(t: toy.Tally): toy.Tally
   /** Whether two handles still share one value. */
   export function shared(a: toy.Tally, b: toy.Tally): boolean
+  /**
+   * Mixes `rounds` times: a call slow enough to keep a worker thread busy
+   * while another waits behind it.
+   */
+  export function spin(rounds: number): number
+  /**
+   * `spin` on a worker thread. The arguments are read now, the call runs
+   * off the main thread, and the promise resolves with its result or rejects
+   * as `spin` throws. `signal` drops the call while it is still queued.
+   */
+  export function spinAsync(rounds: number, signal?: AbortSignal | undefined | null): Promise<number>
   /** A `Vec2`'s public fields, as a plain object. */
   export interface Vec2Object {
     x: number

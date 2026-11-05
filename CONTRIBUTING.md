@@ -32,6 +32,7 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/class.rs` | the classes and free functions of the namespaced surface: constructors, statics, `Result` errors, owned and shared values, conversions |
 | `crates/napi-gen/src/project.rs` | the projections: classes over values borrowed from an owner, and `{ kind, value }` unions of them |
 | `crates/napi-gen/src/dispose.rs` | `dispose()` for the classes `class.rs` does not make, `[Symbol.dispose]` set at load, and the `.d.ts` header declaring it |
+| `crates/napi-gen/src/twin.rs` | the `*Async` twins `Config::asynchronous` lists: arguments made owned on the main thread, the call on a worker thread, leases |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
 | `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
@@ -42,7 +43,9 @@ What the template needs that has nothing to do with resvg lives in its own
 crate, `crates/napi-support`: `contained` (a panic becomes a JS error), the
 bounded `log` collector, capped file and gzip reads, the checked
 `AbortSignal`, `Projection` (a value borrowed from an `Arc`-held owner,
-below) and `Slot` (a class's value until a consuming call or `dispose()`). It knows no upstream type, so a binding of another library can
+below), `Slot` (a class's value until a consuming call or `dispose()`, and
+the `Lease` an async call takes of it) and `spawn` (an async call on a worker
+thread, as a promise). It knows no upstream type, so a binding of another library can
 take it as is; the template only calls into it and keeps the `#[napi]` surface.
 
 ### The generic boundary
@@ -57,7 +60,8 @@ template's names for the domain shapes (`shapes`), the size constructor
 option-object hooks (`index_bounded`,
 `option_objects`, `providers`, `converters`, below), and the class and
 function allowlists (`classes`, `functions`, `views`, below), and the types
-borrowed from an owner (`projections`, below). A comment that
+borrowed from an owner (`projections`, below), and the members given an async
+twin (`asynchronous`, below). A comment that
 needs an example uses the toy crate's names, or none.
 
 `crates/toy` and `crates/toy-napi` show that this holds. `toy` is a tiny
@@ -69,7 +73,8 @@ of each kind `napi_gen::class` makes (below): a plain-data `Vec2` with
 borrowed view, two `Color`s in two modules, an error enum per fallible
 function, the free functions `report` and `paint`, and a `Scene` whose
 `Layer`s and `Dot`s are only ever borrowed from it, with an enum `Item` of
-the two and the free functions `count` and `visit` that take one.
+the two and the free functions `count` and `visit` that take one, and
+`spin`, slow on purpose, for the async twins to queue behind.
 `toy-napi` binds it
 with the same generator, through its own `Config` and a template a few lines
 long in its `build.rs`. Its `src/lib.rs`, `index.d.ts` and `dts-header.d.ts` are committed and
@@ -333,6 +338,69 @@ tree's tables (`tree.clipPaths()`) or from what refers to them
 `Scene` (a tree of `Layer`s and `Dot`s, and a table of `Arc<Dot>`),
 including that a node outlives its owner's JS object.
 
+### Async twins
+
+`Config::asynchronous` lists the members that get an async twin, by source
+root and name: `("usvg", "Tree::from_data")` for a static or a method,
+`("resvg", "render")` for a free function. `napi_gen::twin` writes
+`<name>Async(...args, signal?)` beside the sync member, returning a promise
+([ADR 0001](docs/adr/0001-thin-generic-wrapper.md); [ADR 0002, Q23, Q28,
+Q29](docs/adr/0002-api-details.md)). The root lists parsing
+(`usvg.Tree.fromDataAsync`, `fromStrAsync`), writing back (`toStringAsync`),
+rendering (`resvg.renderAsync`, `renderNodeAsync`), encoding
+(`tiny_skia.Pixmap.encodePngAsync`) and loading fonts
+(`fontdb.Database.loadSystemFontsAsync`, `loadFontsDirAsync`). There is no
+render-then-encode chain (Q29): two round trips, which the helpers chain.
+
+- **Arguments are read on the main thread**, into values a worker thread can
+  own: bytes and strings are copied, an option object becomes its upstream
+  struct, a class behind an `Arc` or a projection is cloned (`usvg.Tree`, a
+  `usvg.Node`), a `Copy` class copied (`tiny_skia.Transform`). An argument
+  error (a wrong class, a disposed instance) throws at the call, as napi's
+  own conversions do.
+- **The call runs on the worker thread**, panics contained, through
+  `napi_support::spawn` (napi's `AsyncTask`, so libuv's pool natively and
+  the WASI host's under WASI). The result is made JS on the main thread. A
+  `Result` error rejects with the `code` and `message` the sync member
+  throws: the promise resolves with a promise rejected with that error,
+  which it adopts, because napi's own rejection keeps only a `Status` for
+  the code.
+- **A leased value** (Q28): a class held by value and borrowed (`&T` of an
+  owned class, `&mut T` of any, a `&mut` view such as the pixmap
+  `resvg.render` draws on) cannot be copied or shared, so it goes with the
+  call. `napi_support::Slot::lease` takes it out of the slot; until the
+  promise settles, every use of the instance throws an `Error` whose `code`
+  is `Leased` (`this Pixmap is in use by an async call`), and so does
+  `dispose()`, which leaves the instance as it was. The value comes back
+  however the call ends: resolved, rejected, or dropped unrun because its
+  signal fired while it was queued. The `Lease` puts it back when dropped,
+  and the slot takes it once the task let go of its hold, which napi does
+  on the main thread after settling (`Task::finally`): the instance is
+  usable again from the first line after the `await`, never earlier, so a
+  fast call cannot slip past a check. A copy-on-write class (`fontdb.Database`
+  loading fonts) is leased the same way: its `Arc` goes with the call, and
+  other handles on the same value keep reading theirs.
+- **`signal`** is checked before anything is read (`napi_support::Signal`):
+  not an `AbortSignal`, or already aborted, it throws. Aborting drops a call
+  still queued, which rejects with an `AbortError` and never runs; a call
+  already running finishes, as `Task::compute` cannot be interrupted.
+  `test/api/async.mjs`, like `test/async.mjs`, runs with
+  `UV_THREADPOOL_SIZE=1` (the WASI loader reads it too) and a slow render in
+  front, so the call it aborts is queued.
+- A listed member that cannot have a twin fails the build, with the reason:
+  a constructor (list a factory), a return that borrows from the receiver,
+  an argument with no owned form, a class with a shared name returned
+  (napi builds it from the sync factory's constructor only). Its
+  `.d.ts` is napi's, from the return type (`Promise<usvg.Tree>`), with
+  `Promise<void>` and `Promise<boolean | null>` written out for `()` and
+  `Option<()>`.
+
+The toy has one of each: a static that throws (`Canvas.fromTextAsync`),
+free functions taking a leased view (`paintAsync`), a union (`countAsync`)
+and numbers (`spinAsync`, slow on purpose, to queue behind), and methods
+leasing an owned receiver (`fillAsync`), leasing a copy-on-write one
+(`pushAsync`) and cloning an `Arc` (`joinedAsync`).
+
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen
 report says which member and why.
@@ -359,8 +427,9 @@ shows up there or as a diff in the committed output. Additions need no edit: a
 new `Options` field or enum variant appears in the bindings, and in TypeScript,
 on its own.
 
-Async is derived too. A method that belongs on a worker thread is marked once,
-where it is defined:
+Async is derived too. On the namespaced surface, by `Config::asynchronous`
+(see "Async twins" above). On the flat one, until step 13, a method that
+belongs on a worker thread is marked once, where it is defined:
 
 ```rust
 #[async_twin(render_png_async, Buffer)]

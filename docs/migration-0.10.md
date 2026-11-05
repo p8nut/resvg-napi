@@ -35,7 +35,7 @@ Tick a step off here when it is merged.
 ## Status
 
 - [x] 1
-- [ ] 2
+- [x] 2
 - [ ] 3
 - [ ] 4
 - [ ] 5

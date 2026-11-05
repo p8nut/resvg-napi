@@ -7,15 +7,33 @@ use std::{env, fs, path::PathBuf, process::Command};
 use napi_gen::emit::*;
 use napi_gen::sources::{ModTree, parse_crate};
 use napi_gen::vocab::Vocab;
-use napi_gen::{Config, Shapes};
+use napi_gen::{Config, Converter, Provider, Shapes};
 use quote::quote;
 
 /// The toy has no transform, size, box, path data or font tag, no feature
 /// gates and no data or enum to rename: most answers are empty.
 const GEN: Config = Config {
     log_env: "TOY_NAPI_CODEGEN_LOG",
-    // No u8 option field, so no table to clamp an index to.
-    clamp: ("_index", "TABLE"),
+    // `ReportOptions::style_index` indexes `STYLES` unchecked.
+    index_bounded: &[("_index", "STYLES")],
+    // `ReportOptions` becomes `toy.ReportOptions`. `Counter` has no
+    // `Default`, so it is refused (a class with a constructor instead).
+    option_objects: &["ReportOptions", "Counter"],
+    // `ReportOptions::base` is supplied by a `toy.Tally`.
+    providers: &[Provider {
+        ty: "Arc<Tally>",
+        class: "Tally",
+        provide: "v.inner.clone()",
+        doc: "A `toy.Tally`. Left out: an empty one.",
+    }],
+    // `ReportOptions::width` is a payload enum: `width_from_js` below reads
+    // a number or `'auto'`.
+    converters: &[Converter {
+        ty: "Width",
+        js: "Either<u32, String>",
+        ts: "number | 'auto'",
+        convert: "width_from_js",
+    }],
     matrix_fields: &[],
     size_types: &[],
     rect_types: &[],
@@ -73,7 +91,9 @@ fn main() {
         !point.is_empty() && skipped.is_empty(),
         "Point maps completely"
     );
-    let (fields, skipped, _) = map_struct(&files, "Options", &vocab, 0);
+    let bounds = index_bounds(&files);
+    assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
+    let (fields, skipped, _) = map_struct(&files, "Options", &vocab, &bounds);
     assert!(skipped.is_empty(), "every Options field maps");
     let (counter, skipped, _) =
         wrapper_class(&files, "Counter", &vocab, modules, &root, Surface::Flat);
@@ -96,6 +116,28 @@ fn main() {
     let skipped: Vec<_> = skipped.iter().map(ToString::to_string).collect();
     assert_eq!(skipped, ["new (no receiver)"], "Tally's methods all map");
 
+    // The option objects: `ReportOptions` with every field optional over
+    // `Default`, `base` taken from a `toy.Tally` (a provider), `width`
+    // through `width_from_js` (a converter), `style_index` clamped to
+    // `STYLES`. `finish` is a function pointer, with no JS form and no
+    // provider: left out, it keeps its default. `Counter` has no `Default`.
+    let mut options = quote!();
+    for name in GEN.option_objects {
+        match option_object(&files, name, &vocab, modules, &root, &bounds) {
+            Some(obj) => {
+                let skipped: Vec<_> = obj.skipped.iter().map(ToString::to_string).collect();
+                assert_eq!(
+                    skipped,
+                    ["finish: fn(String)->String (no provider: keeps the default)"],
+                    "{name}: only the function pointer is left out"
+                );
+                assert_eq!(obj.bounded, 1, "{name}: style_index is clamped");
+                options.extend(obj.code);
+            }
+            None => assert_eq!(*name, "Counter", "{name} has Default"),
+        }
+    }
+
     let decls = fields.iter().map(|f| &f.decl);
     let assigns = fields.iter().map(|f| &f.assign);
     let flat = quote! {
@@ -108,6 +150,17 @@ fn main() {
 
         fn to_f32(v: f64) -> f32 {
             v as f32
+        }
+
+        #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
+        fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
+            match v {
+                Either::A(n) => u8::try_from(*n)
+                    .map(toy::Width::Fixed)
+                    .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+                Either::B(s) if s == "auto" => Ok(toy::Width::Auto),
+                Either::B(s) => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+            }
         }
 
         #enum_code
@@ -143,7 +196,10 @@ fn main() {
     // `LegacyCounter` (`GEN.legacy_prefix`), so `toy.Counter` is copied with
     // the rest.
     let surfaces = namespaced(
-        &[("toy", quote! { #enum_code #point #ns_counter #tally })],
+        &[(
+            "toy",
+            quote! { #enum_code #point #ns_counter #tally #options },
+        )],
         &flat,
     );
     assert_eq!(
@@ -174,6 +230,13 @@ fn main() {
         #[napi(js_name = "shared", namespace = "toy")]
         pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> bool {
             std::sync::Arc::ptr_eq(&a.inner, &b.inner)
+        }
+
+        #[doc = " `toy::report`: what `ReportOptions::to_upstream` made of `options`."]
+        #[napi(js_name = "report", namespace = "toy")]
+        pub fn toy_report(tally: &ToyTally, options: Option<ToyReportOptions>) -> Result<String> {
+            let o = options.unwrap_or_default().to_upstream()?;
+            Ok(toy::report(&tally.inner, &o))
         }
     };
     let file: syn::File = syn::parse2(code).expect("the toy template is valid Rust");

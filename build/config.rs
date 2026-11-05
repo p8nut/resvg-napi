@@ -6,10 +6,10 @@
 //! says why it exists. Wrapping another crate starts by rewriting this file.
 //!
 //! That includes the crates themselves and their roots (`UPSTREAM`), the
-//! wrapped impl blocks (`PASSES`), the clamp, and the upstream spellings of
+//! wrapped impl blocks (`PASSES`), the index bounds, and the upstream spellings of
 //! the template's domain shapes.
 
-use napi_gen::{Config, ContentView, Shapes};
+use napi_gen::{Config, ContentView, Converter, Provider, Shapes};
 
 /// One crate the binding wraps.
 pub struct Upstream {
@@ -166,7 +166,34 @@ pub const GEN: Config = Config {
     // An option field indexing an upstream table without a bounds check, by its
     // name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
     // table's length; the build fails if the suffix matches nothing.
-    clamp: ("_precision", "POW_VEC"),
+    index_bounded: &[("_precision", "POW_VEC")],
+    // The option structs mirrored as plain objects, `usvg.Options` and
+    // `usvg.WriteOptions` (ADR 0002, Q15): every field optional, the rest from
+    // usvg's `Default` -- an empty font database, Times New Roman, the default
+    // resolvers. The raw API follows Rust (Q10, Q27).
+    option_objects: &[PARSE_OPTIONS, WRITE_OPTIONS],
+    // Option fields with no JS form, supplied by a class instance (Q26, Q27).
+    // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
+    // copied. The resolvers (`ImageHrefResolver`, `FontResolver`) get their
+    // provider classes with the `guard` module in step 10 of the migration;
+    // until then the fields are left out and usvg's default resolvers apply.
+    providers: &[Provider {
+        ty: "Arc<fontdb::Database>",
+        class: "Database",
+        provide: "v.inner.clone()",
+        doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
+              Left out, the database is empty, as in Rust: text then renders\n\
+              nothing. Load fonts into a `fontdb.Database` and pass it here.",
+    }],
+    // `WriteOptions::indent` and `attributes_indent` are xmlwriter's `Indent`,
+    // a payload enum of a crate the generator does not parse: the template's
+    // `indent_from_js` reads a number of spaces, `'tabs'` or `'none'`.
+    converters: &[Converter {
+        ty: "Indent",
+        js: "Either<u32, String>",
+        ts: "number | 'tabs' | 'none'",
+        convert: "indent_from_js",
+    }],
     // A struct with these fields is a transform (tiny-skia's), mapped to `Matrix`.
     matrix_fields: &["sx", "kx", "ky", "sy", "tx", "ty"],
     // Upstream type spellings for the template's domain shapes.

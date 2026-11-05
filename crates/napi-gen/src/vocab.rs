@@ -495,6 +495,9 @@ pub enum Reason {
     HandWired,
     /// An options field with no JS form.
     Dropped,
+    /// An option object's field with no JS form and no `Config::providers`
+    /// entry: left out, so it keeps the `Default` value.
+    Unprovided,
     NoReceiver,
     ConsumesSelf,
     Arg,
@@ -521,6 +524,7 @@ impl std::fmt::Display for Skip {
             Reason::UnionWithClasses => write!(f, "{n}: {t} (a union with class variants)"),
             Reason::HandWired => write!(f, "{n}: {t} (handled manually by the template)"),
             Reason::Dropped => write!(f, "{n}: {t} (dropped)"),
+            Reason::Unprovided => write!(f, "{n}: {t} (no provider: keeps the default)"),
             Reason::NoReceiver => write!(f, "{n} (no receiver)"),
             Reason::ConsumesSelf => write!(f, "{n} (consumes self)"),
             Reason::Arg => write!(f, "{n} (arg: {t})"),

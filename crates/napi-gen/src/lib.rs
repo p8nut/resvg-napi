@@ -39,9 +39,22 @@ pub mod vocab;
 pub struct Config {
     /// The env var that turns [`report!`] on.
     pub log_env: &'static str,
-    /// An option field indexing an upstream table without a bounds check, by
-    /// its name suffix, and the table. Clamped to the table's length.
-    pub clamp: (&'static str, &'static str),
+    /// Index-bounded fields: a `u8` option field indexing an upstream table
+    /// without a bounds check, by its name suffix, and the `static` table it
+    /// indexes. Clamped to the table's last index (see [`emit::index_bounds`]).
+    pub index_bounded: &'static [(&'static str, &'static str)],
+    /// Upstream option structs mirrored as plain objects on the namespaced
+    /// surface ([`emit::option_object`]): every field optional, and what is
+    /// left out keeps the struct's `Default`. A struct listed without
+    /// `Default` is reported and left out.
+    pub option_objects: &'static [&'static str],
+    /// Option fields of a type with no JS form, supplied by a class instance
+    /// instead (a database, a resolver).
+    pub providers: &'static [Provider],
+    /// Option fields of a type the generator cannot read (a payload enum of
+    /// a crate it does not parse), converted from a JS value by a template
+    /// function instead.
+    pub converters: &'static [Converter],
     /// A struct with these fields is a transform, mapped to `Shapes::matrix`.
     pub matrix_fields: &'static [&'static str],
     /// Upstream type spellings for the template's domain shapes.
@@ -105,6 +118,37 @@ pub struct Shapes {
     /// What a `path_data_types` value becomes: the segment type, and the
     /// template function that returns a `Vec` of them.
     pub path: (&'static str, &'static str),
+}
+
+/// "An option field of type `ty` is supplied by an instance of `class`
+/// providing it." On an option object the field takes the instance, and
+/// `provide` makes the field's value out of it.
+pub struct Provider {
+    /// The field's upstream type, as the generator spells it (no spaces):
+    /// `Arc<toy::Tally>`.
+    pub ty: &'static str,
+    /// The class's Rust ident in the generated code. A namespaced class is
+    /// named as before [`emit::namespaced`] prefixes it, by its upstream name
+    /// (`Tally`); a class the template writes, by its own ident.
+    pub class: &'static str,
+    /// A Rust expression of `v`, a `&` to the instance, giving the value.
+    pub provide: &'static str,
+    /// A paragraph added to the field's doc comment: what leaving it out
+    /// means, say. Empty for none.
+    pub doc: &'static str,
+}
+
+/// "An option field of type `ty` takes the JS type `js`, converted by the
+/// template function `convert`": `fn(&js, field_js_name: &str) -> Result<ty>`.
+pub struct Converter {
+    /// The field's upstream type, as the generator spells it.
+    pub ty: &'static str,
+    /// The Rust type napi converts the JS value into.
+    pub js: &'static str,
+    /// Its TypeScript spelling.
+    pub ts: &'static str,
+    /// The template function, by name.
+    pub convert: &'static str,
 }
 
 /// A handle whose upstream type has `pub fn <accessor.0>(&self) -> <accessor.1>`

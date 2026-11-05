@@ -2591,6 +2591,114 @@ export declare namespace usvg {
     dx: number
     dy: number
   }
+  /**
+   * Processing options.
+   *
+   * Every field is optional: one left out keeps the `Default` value.
+   */
+  export interface Options {
+    /**
+     * Directory that will be used during relative paths resolving.
+     *
+     * Expected to be the same as the directory that contains the SVG file,
+     * but can be set to any.
+     *
+     * Default: `None`
+     */
+    resourcesDir?: string
+    /**
+     * Target DPI.
+     *
+     * Impacts units conversion.
+     *
+     * Default: 96.0
+     */
+    dpi?: number
+    /**
+     * A default font family.
+     *
+     * Will be used when no `font-family` attribute is set in the SVG.
+     *
+     * Default: Times New Roman
+     */
+    fontFamily?: string
+    /**
+     * A default font size.
+     *
+     * Will be used when no `font-size` attribute is set in the SVG.
+     *
+     * Default: 12
+     */
+    fontSize?: number
+    /**
+     * A list of languages.
+     *
+     * Will be used to resolve a `systemLanguage` conditional attribute.
+     *
+     * Format: en, en-US.
+     *
+     * Default: `[en]`
+     */
+    languages?: Array<string>
+    /**
+     * Specifies the default shape rendering method.
+     *
+     * Will be used when an SVG element's `shape-rendering` property is set to `auto`.
+     *
+     * Default: GeometricPrecision
+     */
+    shapeRendering?: usvg.ShapeRendering
+    /**
+     * Specifies the default text rendering method.
+     *
+     * Will be used when an SVG element's `text-rendering` property is set to `auto`.
+     *
+     * Default: OptimizeLegibility
+     */
+    textRendering?: usvg.TextRendering
+    /**
+     * Specifies the default image rendering method.
+     *
+     * Will be used when an SVG element's `image-rendering` property is set to `auto`.
+     *
+     * Default: OptimizeQuality
+     */
+    imageRendering?: usvg.ImageRendering
+    /**
+     * Default viewport size to assume if there is no `viewBox` attribute and
+     * the `width` or `height` attributes are relative.
+     *
+     * Default: `(100, 100)`
+     */
+    defaultSizeWidth?: number
+    /**
+     * Default viewport size to assume if there is no `viewBox` attribute and
+     * the `width` or `height` attributes are relative.
+     *
+     * Default: `(100, 100)`
+     */
+    defaultSizeHeight?: number
+    /**
+     * A database of fonts usable by text.
+     *
+     * This is a base database. If a custom `font_resolver` is specified,
+     * additional fonts can be loaded during parsing. Those will be added to a
+     * copy of this database. The full database containing all fonts referenced
+     * in a `Tree` becomes available as [`Tree::fontdb`](crate::Tree::fontdb)
+     * after parsing. If no fonts were loaded dynamically, that database will
+     * be the same as this one.
+     *
+     * A `fontdb.Database`, shared with the parse rather than copied.
+     * Left out, the database is empty, as in Rust: text then renders
+     * nothing. Load fonts into a `fontdb.Database` and pass it here.
+     */
+    fontdb?: fontdb.Database
+    /**
+     * A CSS stylesheet that should be injected into the SVG. Can be used to overwrite
+     * certain attributes.
+     */
+    styleSheet?: string
+  }
   /** `Paint::Color`. */
   export interface PaintColor {
     /** Discriminant. Narrow on this. */
@@ -2778,6 +2886,108 @@ export declare namespace usvg {
   }
   /** A turbulence kind for the `feTurbulence` filter. */
   export type TurbulenceKind = 'fractalNoise' | 'turbulence'
+  /**
+   * XML writing options.
+   *
+   * Every field is optional: one left out keeps the `Default` value.
+   */
+  export interface WriteOptions {
+    /** Used to add a custom prefix to each element ID during writing. */
+    idPrefix?: string
+    /**
+     * Do not convert text into paths.
+     *
+     * Default: false
+     */
+    preserveText?: boolean
+    /**
+     * Set the coordinates numeric precision.
+     *
+     * Smaller precision can lead to a malformed output in some cases.
+     *
+     * Default: 8
+     */
+    coordinatesPrecision?: number
+    /**
+     * Set the transform values numeric precision.
+     *
+     * Smaller precision can lead to a malformed output in some cases.
+     *
+     * Default: 8
+     */
+    transformsPrecision?: number
+    /**
+     * Use single quote marks instead of double quote.
+     *
+     * # Examples
+     *
+     * Before:
+     *
+     * ```text
+     * <rect fill="red"/>
+     * ```
+     *
+     * After:
+     *
+     * ```text
+     * <rect fill='red'/>
+     * ```
+     *
+     * Default: disabled
+     */
+    useSingleQuote?: boolean
+    /**
+     * Set XML nodes indention.
+     *
+     * # Examples
+     *
+     * `Indent::None`
+     * Before:
+     *
+     * ```text
+     * <svg>
+     *     <rect fill="red"/>
+     * </svg>
+     * ```
+     *
+     * After:
+     *
+     * ```text
+     * <svg><rect fill="red"/></svg>
+     * ```
+     *
+     * Default: 4 spaces
+     */
+    indent?: number | 'tabs' | 'none'
+    /**
+     * Set XML attributes indention.
+     *
+     * # Examples
+     *
+     * `Indent::Spaces(2)`
+     *
+     * Before:
+     *
+     * ```text
+     * <svg>
+     *     <rect fill="red" stroke="black"/>
+     * </svg>
+     * ```
+     *
+     * After:
+     *
+     * ```text
+     * <svg>
+     *     <rect
+     *       fill="red"
+     *       stroke="black"/>
+     * </svg>
+     * ```
+     *
+     * Default: `None`
+     */
+    attributesIndent?: number | 'tabs' | 'none'
+  }
   /** A writing mode. */
   export type WritingMode = 'leftToRight' | 'topToBottom'
 }

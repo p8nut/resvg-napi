@@ -67,6 +67,37 @@ export declare namespace toy {
     x: number
     y: number
   }
+  /** `toy::report`: what `ReportOptions::to_upstream` made of `options`. */
+  export function report(tally: toy.Tally, options?: toy.ReportOptions | undefined | null): string
+  /**
+   * How [`report`] writes its line.
+   *
+   * Every field is optional: one left out keeps the `Default` value.
+   */
+  export interface ReportOptions {
+    /**
+     * What the line starts with.
+     *
+     * Default: `tally`
+     */
+    title?: string
+    /**
+     * Which of [`STYLES`] to use. Indexed without a bounds check.
+     *
+     * Default: 0
+     */
+    styleIndex?: number
+    /**
+     * Names counted before the tally's own.
+     *
+     * Default: none
+     *
+     * A `toy.Tally`. Left out: an empty one.
+     */
+    base?: toy.Tally
+    /** Default: [`Width::Auto`] */
+    width?: number | 'auto'
+  }
   /** A second handle on the same `Tally`: shared until one of them writes. */
   export function share(t: toy.Tally): toy.Tally
   /** Whether two handles still share one value. */

@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType};
 
 use crate::config;
-use crate::sources::{derives, inherent_impls, is_pub, self_ident};
+use crate::sources::{derives, has_default, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
 pub struct Field {
@@ -426,14 +426,31 @@ pub fn payload_enum_code(
     Ok(items)
 }
 
+/// `Config::index_bounded`, each suffix with the highest index its table
+/// allows, read off the upstream `static` in `files`. A table that is gone
+/// fails the build.
+pub fn index_bounds(files: &[syn::File]) -> Vec<(&'static str, u32)> {
+    config()
+        .index_bounded
+        .iter()
+        .map(|(suffix, table)| {
+            // N entries: the highest usable index is N - 1.
+            let max = u32::try_from(static_array_len(files, table) - 1)
+                .expect("an index-bounded table that fits u32");
+            (*suffix, max)
+        })
+        .collect()
+}
+
 /// Maps one flat config struct to `#[napi(object)]` fields plus the code that
 /// writes them back onto the real Rust struct. Used for every option struct
-/// the binding maps, such as the toy crate's `Options`.
+/// the binding maps, such as the toy crate's `Options`. `bounds` is
+/// [`index_bounds`]; the count returned is how many fields it matched.
 pub fn map_struct(
     files: &[syn::File],
     ty: &str,
     vocab: &Vocab,
-    precision_max: u32,
+    bounds: &[(&str, u32)],
 ) -> (Vec<Field>, Vec<Skip>, usize) {
     let named = struct_fields(files, ty);
 
@@ -448,10 +465,178 @@ pub fn map_struct(
         let ident = f.ident.clone().unwrap();
         let name = ident.to_string();
         let ty = ty_str(&f.ty);
-        let doc = docs(&f.attrs);
 
-        // Every field becomes optional so JS can pass a partial object.
-        let mapped = match vocab.classify(&ty) {
+        if let Some(m) = map_field(f, vocab, bounds, &mut clamped) {
+            out.push(m);
+            continue;
+        }
+
+        // --- not transposable as data. These are wired by the emitter
+        // template instead (opaque class, resolver hooks, xmlwriter's
+        // `Indent`); the rest is dropped.
+        if config().hand_wired_fields.contains(&name.as_str()) {
+            skipped.push(Skip::new(&name, Some(&ty), Reason::HandWired));
+        } else {
+            skipped.push(Skip::new(&name, Some(&ty), Reason::Dropped));
+        }
+    }
+
+    (out, skipped, clamped)
+}
+
+/// What [`option_object`] makes of an upstream option struct.
+pub struct OptionObject {
+    /// The `#[napi(object, object_to_js = false)]` struct and its
+    /// `to_upstream`, named as upstream for [`namespaced`] to prefix.
+    pub code: TokenStream,
+    /// Fields left out, with the reason: they keep the `Default` value.
+    pub skipped: Vec<Skip>,
+    /// How many fields the index bounds matched.
+    pub bounded: usize,
+}
+
+/// An upstream option struct with `Default`, as an input-only plain object
+/// of the namespaced surface (ADR 0001, "Option structs are plain objects").
+///
+/// Every field is optional. `to_upstream(&self) -> Result<Upstream>` starts
+/// from `Default::default()` and overrides only what JS provided, so a field
+/// left out keeps upstream's default, whatever it is. A field maps as a
+/// [`map_struct`] field does, or through `Config::providers` (a class
+/// instance supplies it) or `Config::converters` (a template function
+/// converts it); one with none of these is left out and keeps its default.
+///
+/// `None` when the struct has no `Default`, or a type parameter: a struct
+/// without `Default` becomes a class with a constructor instead (ADR 0001),
+/// which this does not emit. Lifetime parameters become `'static`.
+pub fn option_object(
+    files: &[syn::File],
+    ty: &str,
+    vocab: &Vocab,
+    modules: &BTreeMap<String, String>,
+    root: &TokenStream,
+    bounds: &[(&str, u32)],
+) -> Option<OptionObject> {
+    // A listed struct that is gone is upstream moving, not a struct without
+    // `Default`: loud, like `struct_fields`.
+    let st = files
+        .iter()
+        .flat_map(|f| &f.items)
+        .find_map(|i| match i {
+            Item::Struct(s) if s.ident == ty && is_pub(&s.vis) => Some(s),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("upstream: option object `pub struct {ty}` not found"));
+    if !has_default(files, ty) || st.generics.type_params().next().is_some() {
+        return None;
+    }
+    let lifetimes = st.generics.lifetimes().map(|_| quote!('static));
+    let upstream = upstream_path(ty, modules, root);
+    let upstream = quote!(#upstream<#(#lifetimes),*>);
+    let name = format_ident!("{ty}");
+    let struct_doc = docs(&st.attrs);
+
+    let mut decls = Vec::new();
+    let mut assigns = Vec::new();
+    let mut skipped = Vec::new();
+    let mut bounded = 0usize;
+    // A provided field holds the instance for the call: `ClassInstance`
+    // borrows it from the JS object, and that needs a lifetime.
+    let mut borrows = false;
+    let Fields::Named(named) = &st.fields else {
+        return None;
+    };
+    for f in &named.named {
+        if !is_pub(&f.vis) {
+            continue;
+        }
+        let ident = f.ident.clone().unwrap();
+        let name = ident.to_string();
+        let fty = ty_str(&f.ty);
+        let doc = docs(&f.attrs);
+        if let Some(p) = config().providers.iter().find(|p| p.ty == fty) {
+            let class = format_ident!("{}", p.class);
+            let provide: syn::Expr =
+                syn::parse_str(p.provide).expect("a Config::providers expression");
+            borrows = true;
+            let extra: Vec<TokenStream> = if p.doc.is_empty() {
+                Vec::new()
+            } else {
+                std::iter::once(String::new())
+                    .chain(p.doc.lines().map(|l| format!(" {l}")))
+                    .map(|l| quote!(#[doc = #l]))
+                    .collect()
+            };
+            decls.push(
+                quote! { #(#doc)* #(#extra)* pub #ident: Option<ClassInstance<'a, #class>>, },
+            );
+            assigns.push(
+                quote! { if let Some(v) = &self.#ident { let v = &**v; o.#ident = #provide; } },
+            );
+            continue;
+        }
+        if let Some(c) = config().converters.iter().find(|c| c.ty == fty) {
+            let js: syn::Type = syn::parse_str(c.js).expect("a Config::converters type");
+            let convert = format_ident!("{}", c.convert);
+            let (ts, label) = (c.ts, lower_camel(&name));
+            decls.push(quote! { #(#doc)* #[napi(ts_type = #ts)] pub #ident: Option<#js>, });
+            assigns.push(
+                quote! { if let Some(v) = &self.#ident { o.#ident = #convert(v, #label)?; } },
+            );
+            continue;
+        }
+        match map_field(f, vocab, bounds, &mut bounded) {
+            Some(m) => {
+                decls.push(m.decl);
+                assigns.push(m.assign);
+            }
+            None => skipped.push(Skip::new(&name, Some(&fty), Reason::Unprovided)),
+        }
+    }
+    let (generics, anon) = if borrows {
+        (quote!(<'a>), quote!(<'_>))
+    } else {
+        (TokenStream::new(), TokenStream::new())
+    };
+    let code = quote! {
+        #(#struct_doc)*
+        #[doc = ""]
+        #[doc = " Every field is optional: one left out keeps the `Default` value."]
+        #[napi(object, object_to_js = false)]
+        #[derive(Default)]
+        pub struct #name #generics {
+            #(#decls)*
+        }
+
+        impl #name #anon {
+            #[doc = " The upstream value: `Default`, with what JS provided on top."]
+            fn to_upstream(&self) -> Result<#upstream> {
+                let mut o = <#upstream>::default();
+                #(#assigns)*
+                Ok(o)
+            }
+        }
+    };
+    Some(OptionObject {
+        code,
+        skipped,
+        bounded,
+    })
+}
+
+/// One option field as a [`map_struct`] field, or `None` when its type has
+/// no JS form here. Every field becomes optional so JS can pass a partial
+/// object, and is written back only when JS provided it.
+fn map_field(
+    f: &syn::Field,
+    vocab: &Vocab,
+    bounds: &[(&str, u32)],
+    clamped: &mut usize,
+) -> Option<Field> {
+    let ident = f.ident.clone()?;
+    let name = ident.to_string();
+    let ty = ty_str(&f.ty);
+    let doc = docs(&f.attrs);
+    match vocab.classify(&ty) {
             Some(Js::F32) => Some(field(
                 &ident,
                 &doc,
@@ -459,9 +644,9 @@ pub fn map_struct(
                 quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v); } },
             )),
             Some(Js::U8) => {
-                // A `Config::clamp` field indexes an upstream table without a bounds
-                // check, so clamp it to that table's length. Any other u8 just
-                // saturates instead of wrapping.
+                // A `Config::index_bounded` field indexes an upstream table
+                // without a bounds check, so clamp it to that table's last
+                // index. Any other u8 just saturates instead of wrapping.
                 //
                 // The suffix is how the field is recognised, and a rename
                 // upstream would silently fall through to u8::MAX -- which is an
@@ -470,11 +655,12 @@ pub fn map_struct(
                 // panic unwinding out of an `extern "C"` callback, so a process
                 // abort rather than a JS exception. The caller counts what this
                 // matched and fails the build when it matches nothing.
-                let max = if name.ends_with(config().clamp.0) {
-                    clamped += 1;
-                    precision_max
-                } else {
-                    u32::from(u8::MAX)
+                let max = match bounds.iter().find(|(suffix, _)| name.ends_with(suffix)) {
+                    Some((_, max)) => {
+                        *clamped += 1;
+                        *max
+                    }
+                    None => u32::from(u8::MAX),
                 };
                 Some(field(
                     &ident,
@@ -499,13 +685,13 @@ pub fn map_struct(
                 &ident,
                 &doc,
                 quote!(String),
-                quote! { o.#ident = self.#ident.clone(); },
+                quote! { if let Some(v) = &self.#ident { o.#ident = Some(v.clone()); } },
             )),
             Some(Js::OptPath) => Some(field(
                 &ident,
                 &doc,
                 quote!(String),
-                quote! { o.#ident = self.#ident.as_deref().map(std::path::PathBuf::from); },
+                quote! { if let Some(v) = &self.#ident { o.#ident = Some(std::path::PathBuf::from(v)); } },
             )),
             Some(Js::StrList) => Some(field(
                 &ident,
@@ -529,7 +715,7 @@ pub fn map_struct(
                     syn::parse_str(config().size_new).expect("a Config::size_new path");
                 let w = format_ident!("{}_width", name);
                 let h = format_ident!("{}_height", name);
-                out.push(Field {
+                Some(Field {
                     decl: quote! {
                         #(#doc)* pub #w: Option<f64>,
                         #(#doc)* pub #h: Option<f64>,
@@ -541,8 +727,7 @@ pub fn map_struct(
                             o.#ident = s;
                         }
                     },
-                });
-                continue;
+                })
             }
             // Class instances and nested objects belong on methods, not in a
             // flat config object.
@@ -574,24 +759,7 @@ pub fn map_struct(
             | Some(Js::OptObject(_))
             | Some(Js::OptValue(_))
             | None => None,
-        };
-
-        if let Some(m) = mapped {
-            out.push(m);
-            continue;
-        }
-
-        // --- not transposable as data. These are wired by the emitter
-        // template instead (opaque class, resolver hooks, xmlwriter's
-        // `Indent`); the rest is dropped.
-        if config().hand_wired_fields.contains(&name.as_str()) {
-            skipped.push(Skip::new(&name, Some(&ty), Reason::HandWired));
-        } else {
-            skipped.push(Skip::new(&name, Some(&ty), Reason::Dropped));
-        }
     }
-
-    (out, skipped, clamped)
 }
 
 pub fn map_enums(

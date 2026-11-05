@@ -8,6 +8,16 @@ pub struct Doc;
 fn to_f32(v: f64) -> f32 {
     v as f32
 }
+#[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
+fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
+    match v {
+        Either::A(n) => u8::try_from(*n)
+            .map(toy::Width::Fixed)
+            .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+        Either::B(s) if s == "auto" => Ok(toy::Width::Auto),
+        Either::B(s) => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+    }
+}
 #[doc = " Which way a counter counts."]
 #[napi(string_enum = "camelCase")]
 #[derive(Copy, Clone)]
@@ -137,6 +147,35 @@ pub struct ToyTally {
     inner: std::sync::Arc<toy::Tally>,
     doc: Doc,
 }
+#[doc = " How [`report`] writes its line."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(
+    object,
+    object_to_js = false,
+    js_name = "ReportOptions",
+    namespace = "toy"
+)]
+#[derive(Default)]
+pub struct ToyReportOptions<'a> {
+    #[doc = " What the line starts with."]
+    #[doc = ""]
+    #[doc = " Default: `tally`"]
+    pub title: Option<String>,
+    #[doc = " Which of [`STYLES`] to use. Indexed without a bounds check."]
+    #[doc = ""]
+    #[doc = " Default: 0"]
+    pub style_index: Option<u32>,
+    #[doc = " Names counted before the tally's own."]
+    #[doc = ""]
+    #[doc = " Default: none"]
+    #[doc = ""]
+    #[doc = " A `toy.Tally`. Left out: an empty one."]
+    pub base: Option<ClassInstance<'a, ToyTally>>,
+    #[doc = " Default: [`Width::Auto`]"]
+    #[napi(ts_type = "number | 'auto'")]
+    pub width: Option<Either<u32, String>>,
+}
 impl From<ToyDirection> for toy::Direction {
     fn from(v: ToyDirection) -> Self {
         match v {
@@ -219,6 +258,26 @@ impl ToyTally {
         self.inner.joined().to_string()
     }
 }
+impl ToyReportOptions<'_> {
+    #[doc = " The upstream value: `Default`, with what JS provided on top."]
+    fn to_upstream(&self) -> Result<toy::ReportOptions> {
+        let mut o = <toy::ReportOptions>::default();
+        if let Some(v) = &self.title {
+            o.title = v.clone();
+        }
+        if let Some(v) = self.style_index {
+            o.style_index = u8::try_from(v.min(2u32)).unwrap_or(u8::MAX);
+        }
+        if let Some(v) = &self.base {
+            let v = &**v;
+            o.base = v.inner.clone();
+        }
+        if let Some(v) = &self.width {
+            o.width = width_from_js(v, "width")?;
+        }
+        Ok(o)
+    }
+}
 #[doc = " A new, empty `toy.Tally`."]
 #[napi(js_name = "tally", namespace = "toy")]
 pub fn toy_tally() -> ToyTally {
@@ -233,6 +292,12 @@ pub fn toy_share(t: &ToyTally) -> ToyTally {
 #[napi(js_name = "shared", namespace = "toy")]
 pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> bool {
     std::sync::Arc::ptr_eq(&a.inner, &b.inner)
+}
+#[doc = " `toy::report`: what `ReportOptions::to_upstream` made of `options`."]
+#[napi(js_name = "report", namespace = "toy")]
+pub fn toy_report(tally: &ToyTally, options: Option<ToyReportOptions>) -> Result<String> {
+    let o = options.unwrap_or_default().to_upstream()?;
+    Ok(toy::report(&tally.inner, &o))
 }
 #[napi]
 impl LegacyCounter {

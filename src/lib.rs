@@ -900,7 +900,9 @@ fn default_fontdb() -> std::sync::Arc<usvg::fontdb::Database> {
 impl RenderOptions {
     fn to_usvg(&self, fonts: std::sync::Arc<usvg::fontdb::Database>) -> usvg::Options<'static> {
         let mut o = usvg::Options::default();
-        o.resources_dir = self.resources_dir.as_deref().map(std::path::PathBuf::from);
+        if let Some(v) = &self.resources_dir {
+            o.resources_dir = Some(std::path::PathBuf::from(v));
+        }
         if let Some(v) = self.dpi {
             o.dpi = to_f32(v);
         }
@@ -927,7 +929,9 @@ impl RenderOptions {
         {
             o.default_size = s;
         }
-        o.style_sheet = self.style_sheet.clone();
+        if let Some(v) = &self.style_sheet {
+            o.style_sheet = Some(v.clone());
+        }
         o.fontdb = fonts;
         o
     }
@@ -1441,7 +1445,9 @@ pub struct WriteOptions {
 impl WriteOptions {
     fn to_usvg(&self) -> Result<usvg::WriteOptions> {
         let mut o = usvg::WriteOptions::default();
-        o.id_prefix = self.id_prefix.clone();
+        if let Some(v) = &self.id_prefix {
+            o.id_prefix = Some(v.clone());
+        }
         if let Some(v) = self.preserve_text {
             o.preserve_text = v;
         }
@@ -1471,10 +1477,17 @@ fn indent(
 ) -> Result<usvg::Indent> {
     match v {
         None => Ok(fallback),
-        Some(Either::A(n)) => u8::try_from(*n)
+        Some(v) => indent_from_js(v, name),
+    }
+}
+#[doc = " A number of spaces (0-255), `'tabs'` or `'none'` as a `usvg::Indent`:"]
+#[doc = " `config::GEN.converters`, for `usvg.WriteOptions` too."]
+fn indent_from_js(v: &Either<u32, String>, name: &str) -> Result<usvg::Indent> {
+    match v {
+        Either::A(n) => u8::try_from(*n)
             .map(usvg::Indent::Spaces)
             .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
-        Some(Either::B(s)) => match s.as_str() {
+        Either::B(s) => match s.as_str() {
             "tabs" => Ok(usvg::Indent::Tabs),
             "none" => Ok(usvg::Indent::None),
             _ => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
@@ -5602,6 +5615,193 @@ pub enum UsvgWritingMode {
     LeftToRight,
     TopToBottom,
 }
+#[doc = " Handle on a `usvg::fontdb::Database`, copied on the first write while shared."]
+#[napi(js_name = "Database", namespace = "fontdb")]
+pub struct FontdbDatabase {
+    inner: std::sync::Arc<usvg::fontdb::Database>,
+    doc: Doc,
+}
+#[doc = " Processing options."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(object, object_to_js = false, js_name = "Options", namespace = "usvg")]
+#[derive(Default)]
+pub struct UsvgOptions<'a> {
+    #[doc = " Directory that will be used during relative paths resolving."]
+    #[doc = ""]
+    #[doc = " Expected to be the same as the directory that contains the SVG file,"]
+    #[doc = " but can be set to any."]
+    #[doc = ""]
+    #[doc = " Default: `None`"]
+    pub resources_dir: Option<String>,
+    #[doc = " Target DPI."]
+    #[doc = ""]
+    #[doc = " Impacts units conversion."]
+    #[doc = ""]
+    #[doc = " Default: 96.0"]
+    pub dpi: Option<f64>,
+    #[doc = " A default font family."]
+    #[doc = ""]
+    #[doc = " Will be used when no `font-family` attribute is set in the SVG."]
+    #[doc = ""]
+    #[doc = " Default: Times New Roman"]
+    pub font_family: Option<String>,
+    #[doc = " A default font size."]
+    #[doc = ""]
+    #[doc = " Will be used when no `font-size` attribute is set in the SVG."]
+    #[doc = ""]
+    #[doc = " Default: 12"]
+    pub font_size: Option<f64>,
+    #[doc = " A list of languages."]
+    #[doc = ""]
+    #[doc = " Will be used to resolve a `systemLanguage` conditional attribute."]
+    #[doc = ""]
+    #[doc = " Format: en, en-US."]
+    #[doc = ""]
+    #[doc = " Default: `[en]`"]
+    pub languages: Option<Vec<String>>,
+    #[doc = " Specifies the default shape rendering method."]
+    #[doc = ""]
+    #[doc = " Will be used when an SVG element's `shape-rendering` property is set to `auto`."]
+    #[doc = ""]
+    #[doc = " Default: GeometricPrecision"]
+    pub shape_rendering: Option<UsvgShapeRendering>,
+    #[doc = " Specifies the default text rendering method."]
+    #[doc = ""]
+    #[doc = " Will be used when an SVG element's `text-rendering` property is set to `auto`."]
+    #[doc = ""]
+    #[doc = " Default: OptimizeLegibility"]
+    pub text_rendering: Option<UsvgTextRendering>,
+    #[doc = " Specifies the default image rendering method."]
+    #[doc = ""]
+    #[doc = " Will be used when an SVG element's `image-rendering` property is set to `auto`."]
+    #[doc = ""]
+    #[doc = " Default: OptimizeQuality"]
+    pub image_rendering: Option<UsvgImageRendering>,
+    #[doc = " Default viewport size to assume if there is no `viewBox` attribute and"]
+    #[doc = " the `width` or `height` attributes are relative."]
+    #[doc = ""]
+    #[doc = " Default: `(100, 100)`"]
+    pub default_size_width: Option<f64>,
+    #[doc = " Default viewport size to assume if there is no `viewBox` attribute and"]
+    #[doc = " the `width` or `height` attributes are relative."]
+    #[doc = ""]
+    #[doc = " Default: `(100, 100)`"]
+    pub default_size_height: Option<f64>,
+    #[doc = " A database of fonts usable by text."]
+    #[doc = ""]
+    #[doc = " This is a base database. If a custom `font_resolver` is specified,"]
+    #[doc = " additional fonts can be loaded during parsing. Those will be added to a"]
+    #[doc = " copy of this database. The full database containing all fonts referenced"]
+    #[doc = " in a `Tree` becomes available as [`Tree::fontdb`](crate::Tree::fontdb)"]
+    #[doc = " after parsing. If no fonts were loaded dynamically, that database will"]
+    #[doc = " be the same as this one."]
+    #[doc = ""]
+    #[doc = " A `fontdb.Database`, shared with the parse rather than copied."]
+    #[doc = " Left out, the database is empty, as in Rust: text then renders"]
+    #[doc = " nothing. Load fonts into a `fontdb.Database` and pass it here."]
+    pub fontdb: Option<ClassInstance<'a, FontdbDatabase>>,
+    #[doc = " A CSS stylesheet that should be injected into the SVG. Can be used to overwrite"]
+    #[doc = " certain attributes."]
+    pub style_sheet: Option<String>,
+}
+#[doc = " XML writing options."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(
+    object,
+    object_to_js = false,
+    js_name = "WriteOptions",
+    namespace = "usvg"
+)]
+#[derive(Default)]
+pub struct UsvgWriteOptions {
+    #[doc = " Used to add a custom prefix to each element ID during writing."]
+    pub id_prefix: Option<String>,
+    #[doc = " Do not convert text into paths."]
+    #[doc = ""]
+    #[doc = " Default: false"]
+    pub preserve_text: Option<bool>,
+    #[doc = " Set the coordinates numeric precision."]
+    #[doc = ""]
+    #[doc = " Smaller precision can lead to a malformed output in some cases."]
+    #[doc = ""]
+    #[doc = " Default: 8"]
+    pub coordinates_precision: Option<u32>,
+    #[doc = " Set the transform values numeric precision."]
+    #[doc = ""]
+    #[doc = " Smaller precision can lead to a malformed output in some cases."]
+    #[doc = ""]
+    #[doc = " Default: 8"]
+    pub transforms_precision: Option<u32>,
+    #[doc = " Use single quote marks instead of double quote."]
+    #[doc = ""]
+    #[doc = " # Examples"]
+    #[doc = ""]
+    #[doc = " Before:"]
+    #[doc = ""]
+    #[doc = " ```text"]
+    #[doc = " <rect fill=\"red\"/>"]
+    #[doc = " ```"]
+    #[doc = ""]
+    #[doc = " After:"]
+    #[doc = ""]
+    #[doc = " ```text"]
+    #[doc = " <rect fill='red'/>"]
+    #[doc = " ```"]
+    #[doc = ""]
+    #[doc = " Default: disabled"]
+    pub use_single_quote: Option<bool>,
+    #[doc = " Set XML nodes indention."]
+    #[doc = ""]
+    #[doc = " # Examples"]
+    #[doc = ""]
+    #[doc = " `Indent::None`"]
+    #[doc = " Before:"]
+    #[doc = ""]
+    #[doc = " ```text"]
+    #[doc = " <svg>"]
+    #[doc = "     <rect fill=\"red\"/>"]
+    #[doc = " </svg>"]
+    #[doc = " ```"]
+    #[doc = ""]
+    #[doc = " After:"]
+    #[doc = ""]
+    #[doc = " ```text"]
+    #[doc = " <svg><rect fill=\"red\"/></svg>"]
+    #[doc = " ```"]
+    #[doc = ""]
+    #[doc = " Default: 4 spaces"]
+    #[napi(ts_type = "number | 'tabs' | 'none'")]
+    pub indent: Option<Either<u32, String>>,
+    #[doc = " Set XML attributes indention."]
+    #[doc = ""]
+    #[doc = " # Examples"]
+    #[doc = ""]
+    #[doc = " `Indent::Spaces(2)`"]
+    #[doc = ""]
+    #[doc = " Before:"]
+    #[doc = ""]
+    #[doc = " ```text"]
+    #[doc = " <svg>"]
+    #[doc = "     <rect fill=\"red\" stroke=\"black\"/>"]
+    #[doc = " </svg>"]
+    #[doc = " ```"]
+    #[doc = ""]
+    #[doc = " After:"]
+    #[doc = ""]
+    #[doc = " ```text"]
+    #[doc = " <svg>"]
+    #[doc = "     <rect"]
+    #[doc = "       fill=\"red\""]
+    #[doc = "       stroke=\"black\"/>"]
+    #[doc = " </svg>"]
+    #[doc = " ```"]
+    #[doc = ""]
+    #[doc = " Default: `None`"]
+    #[napi(ts_type = "number | 'tabs' | 'none'")]
+    pub attributes_indent: Option<Either<u32, String>>,
+}
 #[doc = " Read-only handle on a `usvg::filter::Filter`."]
 #[napi(js_name = "Filter", namespace = "usvg")]
 pub struct UsvgFilter {
@@ -6414,12 +6614,6 @@ pub enum FontdbStretch {
     ExtraExpanded,
     UltraExpanded,
 }
-#[doc = " Handle on a `usvg::fontdb::Database`, copied on the first write while shared."]
-#[napi(js_name = "Database", namespace = "fontdb")]
-pub struct FontdbDatabase {
-    inner: std::sync::Arc<usvg::fontdb::Database>,
-    doc: Doc,
-}
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
@@ -6906,6 +7100,77 @@ impl From<usvg::WritingMode> for UsvgWritingMode {
             <usvg::WritingMode>::LeftToRight => UsvgWritingMode::LeftToRight,
             <usvg::WritingMode>::TopToBottom => UsvgWritingMode::TopToBottom,
         }
+    }
+}
+impl UsvgOptions<'_> {
+    #[doc = " The upstream value: `Default`, with what JS provided on top."]
+    fn to_upstream(&self) -> Result<usvg::Options<'static>> {
+        let mut o = <usvg::Options<'static>>::default();
+        if let Some(v) = &self.resources_dir {
+            o.resources_dir = Some(std::path::PathBuf::from(v));
+        }
+        if let Some(v) = self.dpi {
+            o.dpi = to_f32(v);
+        }
+        if let Some(v) = &self.font_family {
+            o.font_family = v.clone();
+        }
+        if let Some(v) = self.font_size {
+            o.font_size = to_f32(v);
+        }
+        if let Some(v) = &self.languages {
+            o.languages = v.clone();
+        }
+        if let Some(v) = self.shape_rendering {
+            o.shape_rendering = v.into();
+        }
+        if let Some(v) = self.text_rendering {
+            o.text_rendering = v.into();
+        }
+        if let Some(v) = self.image_rendering {
+            o.image_rendering = v.into();
+        }
+        if let (Some(w), Some(h)) = (self.default_size_width, self.default_size_height)
+            && let Some(s) = usvg::Size::from_wh(to_f32(w), to_f32(h))
+        {
+            o.default_size = s;
+        }
+        if let Some(v) = &self.fontdb {
+            let v = &**v;
+            o.fontdb = v.inner.clone();
+        }
+        if let Some(v) = &self.style_sheet {
+            o.style_sheet = Some(v.clone());
+        }
+        Ok(o)
+    }
+}
+impl UsvgWriteOptions {
+    #[doc = " The upstream value: `Default`, with what JS provided on top."]
+    fn to_upstream(&self) -> Result<usvg::WriteOptions> {
+        let mut o = <usvg::WriteOptions>::default();
+        if let Some(v) = &self.id_prefix {
+            o.id_prefix = Some(v.clone());
+        }
+        if let Some(v) = self.preserve_text {
+            o.preserve_text = v;
+        }
+        if let Some(v) = self.coordinates_precision {
+            o.coordinates_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
+        }
+        if let Some(v) = self.transforms_precision {
+            o.transforms_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
+        }
+        if let Some(v) = self.use_single_quote {
+            o.use_single_quote = v;
+        }
+        if let Some(v) = &self.indent {
+            o.indent = indent_from_js(v, "indent")?;
+        }
+        if let Some(v) = &self.attributes_indent {
+            o.attributes_indent = indent_from_js(v, "attributesIndent")?;
+        }
+        Ok(o)
     }
 }
 impl UsvgFilter {
@@ -9318,6 +9583,35 @@ impl Resvg {
         "Resvg".to_string()
     }
 }
+#[napi(namespace = "fontdb")]
+impl FontdbDatabase {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Database",
+            &[],
+            &["isEmpty", "len"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Database".to_string()
+    }
+}
 #[napi(namespace = "usvg")]
 impl UsvgFilter {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
@@ -9863,35 +10157,6 @@ impl UsvgImageKindWebp {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "ImageKindWebp".to_string()
-    }
-}
-#[napi(namespace = "fontdb")]
-impl FontdbDatabase {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Database",
-            &[],
-            &["isEmpty", "len"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Database".to_string()
     }
 }
 #[napi(namespace = "fontdb")]

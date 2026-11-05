@@ -106,3 +106,70 @@ impl Tally {
         self.names.join(",")
     }
 }
+
+/// The styles a report can take, indexed by [`ReportOptions::style_index`].
+pub static STYLES: &[&str] = &["plain", "loud", "quiet"];
+
+/// How wide a report line is.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Width {
+    /// As long as it needs.
+    #[default]
+    Auto,
+    /// Padded with dots to this many characters.
+    Fixed(u8),
+}
+
+/// How [`report`] writes its line.
+#[derive(Clone, Debug)]
+pub struct ReportOptions {
+    /// What the line starts with.
+    ///
+    /// Default: `tally`
+    pub title: String,
+    /// Which of [`STYLES`] to use. Indexed without a bounds check.
+    ///
+    /// Default: 0
+    pub style_index: u8,
+    /// Names counted before the tally's own.
+    ///
+    /// Default: none
+    pub base: Arc<Tally>,
+    /// Default: [`Width::Auto`]
+    pub width: Width,
+    /// Applied to the finished line.
+    ///
+    /// Default: unchanged
+    pub finish: fn(String) -> String,
+}
+
+impl Default for ReportOptions {
+    fn default() -> Self {
+        ReportOptions {
+            title: "tally".into(),
+            style_index: 0,
+            base: Arc::new(Tally::default()),
+            width: Width::Auto,
+            finish: |s| s,
+        }
+    }
+}
+
+/// One line about `tally`: `title[style]: base names,tally names`.
+pub fn report(tally: &Tally, options: &ReportOptions) -> String {
+    let names: Vec<&str> = options
+        .base
+        .names
+        .iter()
+        .chain(&tally.names)
+        .map(String::as_str)
+        .collect();
+    let style = STYLES[usize::from(options.style_index)];
+    let mut line = format!("{}[{style}]: {}", options.title, names.join(","));
+    if let Width::Fixed(n) = options.width {
+        while line.len() < usize::from(n) {
+            line.push('.');
+        }
+    }
+    (options.finish)(line)
+}

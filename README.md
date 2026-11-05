@@ -269,6 +269,10 @@ const { svg, adjustments, problems } = fitTextWidths(source,
 // adjustments: [{ id: 'surname', from: 200.23, to: 90, factor: 0.4495, measured: 90.0031 }]
 ```
 
+`usvg.Tree.fromStr` with default options resolves `<image href>` from any
+local path, as usvg does in Rust. Only pass trusted SVG through `render` until
+the safe resolver of the 0.10 helpers lands.
+
 The limit is read in **the document's own units**, the ones the attribute is
 written in. That matters: `width="85.6mm"` with a `viewBox` 240.94 wide makes usvg
 normalise the tree to 323.53 units, so an extent comes back 1.343× larger than

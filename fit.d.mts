@@ -61,7 +61,10 @@ export function findWidthConstraints(svg: string): WidthConstraint[]
  * Fits every `data-maxwidth` element by compressing it horizontally.
  *
  * @param svg     source, after any templating
- * @param render  `(svg) => usvg.Tree`; supply fonts and options here
+ * @param render  `(svg) => usvg.Tree`; supply fonts and options here. The raw
+ *                 `usvg.Tree.fromStr` resolves `<image href>` from any local
+ *                 path: do not pass untrusted SVG through it without a safe
+ *                 image resolver.
  */
 export function fitTextWidths(
   svg: string,

@@ -3,6 +3,7 @@
   "private": true,
   "description": "The toy crate's binding, built and tested in CI only. Never published.",
   "napi": {
-    "binaryName": "toy-napi"
+    "binaryName": "toy-napi",
+    "dtsHeaderFile": "dts-header.d.ts"
   }
 }

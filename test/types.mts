@@ -171,3 +171,13 @@ function renderNs(bytes: Uint8Array): Buffer {
   return pixmap.encodePng();
 }
 void renderNs;
+
+// 12. every class is a `Disposable`, declared through a generated header
+//     that merges `[Symbol.dispose]` into each class, under its namespace.
+new tiny_skia.Pixmap(1, 1) satisfies Disposable;
+usvg.Tree.fromStr(svg) satisfies Disposable;
+usvg.Tree.fromStr(svg).root() satisfies Disposable;
+new fontdb.Database() satisfies Disposable;
+svgtypes.Color.fromStr('red') satisfies Disposable;
+const gone: boolean = tiny_skia.Transform.identity().disposed;
+void gone;

@@ -12,6 +12,7 @@
 //!   class    classes and free functions of the namespaced surface:
 //!            constructors, statics, `Result` errors, conversions
 //!   project  classes and unions over values borrowed from an owner
+//!   dispose  `dispose()` and `[Symbol.dispose]` for every class
 //!
 //! What is specific to the wrapped crates is not here: the build script fills
 //! a [`Config`] and hands it over with [`configure`] before any phase runs.
@@ -33,6 +34,7 @@ macro_rules! report {
 
 pub mod cfg;
 pub mod class;
+pub mod dispose;
 pub mod emit;
 pub mod project;
 pub mod sources;
@@ -162,7 +164,9 @@ pub struct Provider {
     /// named as before [`emit::namespaced`] prefixes it, by its upstream name
     /// (`Tally`); a class the template writes, by its own ident.
     pub class: &'static str,
-    /// A Rust expression of `v`, a `&` to the instance, giving the value.
+    /// A Rust expression of `v`, a `&` to the instance, giving the value. It
+    /// may `?` a `Result<_, String>`: `v.__ref()?` is a generated class's
+    /// value, which throws `Disposed` once `dispose()` emptied it.
     pub provide: &'static str,
     /// A paragraph added to the field's doc comment: what leaving it out
     /// means, say. Empty for none.

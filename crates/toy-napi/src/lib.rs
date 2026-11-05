@@ -96,7 +96,7 @@ pub struct ToyPoint {
 #[doc = " A shared `toy::Tally`, copied on the first write while shared."]
 #[napi(js_name = "Tally", namespace = "toy")]
 pub struct ToyTally {
-    inner: std::sync::Arc<toy::Tally>,
+    inner: napi_support::Slot<std::sync::Arc<toy::Tally>>,
 }
 #[doc = " How [`report`] writes its line."]
 #[doc = ""]
@@ -144,7 +144,7 @@ pub struct ToyOptions {
 #[doc = " A shared, read-only `toy::Counter`."]
 #[napi(js_name = "Counter", namespace = "toy")]
 pub struct ToyCounter {
-    inner: std::sync::Arc<toy::Counter>,
+    inner: napi_support::Slot<std::sync::Arc<toy::Counter>>,
 }
 #[doc = " A vector in the plane: plain data, `Copy`, parsed from `\"x,y\"` and"]
 #[doc = " printed back the same way."]
@@ -152,7 +152,7 @@ pub struct ToyCounter {
 #[doc = " A `toy::Vec2`, held by value."]
 #[napi(js_name = "Vec2", namespace = "toy")]
 pub struct ToyVec2 {
-    inner: toy::Vec2,
+    inner: napi_support::Slot<toy::Vec2>,
 }
 #[doc = " A `Vec2`'s public fields, as a plain object."]
 #[napi(object, js_name = "Vec2Object", namespace = "toy")]
@@ -167,7 +167,7 @@ pub struct ToyVec2Object {
 #[doc = " A `toy::Color`, held by value."]
 #[napi(js_name = "Color", namespace = "toy")]
 pub struct ToyColor {
-    inner: toy::Color,
+    inner: napi_support::Slot<toy::Color>,
 }
 #[doc = " A grid of bytes, owned and written in place."]
 #[doc = ""]
@@ -175,7 +175,7 @@ pub struct ToyColor {
 #[doc = " instance spent: every later call throws."]
 #[napi(js_name = "Canvas", namespace = "toy")]
 pub struct ToyCanvas {
-    inner: Option<toy::Canvas>,
+    inner: napi_support::Slot<toy::Canvas>,
 }
 #[doc = " A tree of layers and dots, shared behind an `Arc`: its nodes are only"]
 #[doc = " ever borrowed from it, the shape a binding projects."]
@@ -183,7 +183,7 @@ pub struct ToyCanvas {
 #[doc = " A shared, read-only `toy::Scene`."]
 #[napi(js_name = "Scene", namespace = "toy")]
 pub struct ToyScene {
-    inner: std::sync::Arc<toy::Scene>,
+    inner: napi_support::Slot<std::sync::Arc<toy::Scene>>,
 }
 #[doc = " A named list of items."]
 #[doc = ""]
@@ -191,7 +191,7 @@ pub struct ToyScene {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Layer", namespace = "toy")]
 pub struct ToyLayer {
-    inner: napi_support::Projection<toy::Layer>,
+    inner: napi_support::Slot<napi_support::Projection<toy::Layer>>,
     of: Option<napi_support::Projection<toy::Item>>,
 }
 #[doc = " A named point."]
@@ -200,7 +200,7 @@ pub struct ToyLayer {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Dot", namespace = "toy")]
 pub struct ToyDot {
-    inner: napi_support::Projection<toy::Dot>,
+    inner: napi_support::Slot<napi_support::Projection<toy::Dot>>,
     of: Option<napi_support::Projection<toy::Item>>,
 }
 #[doc = " The `code` a thrown `toy::PaintError` carries: the variant's name. The message is its `Display`."]
@@ -241,7 +241,7 @@ pub struct ToyItemDot {
 #[doc = " A `toy::alt::Color`, held by value."]
 #[napi(js_name = "Color", namespace = "alt")]
 pub struct AltColor {
-    inner: toy::alt::Color,
+    inner: napi_support::Slot<toy::alt::Color>,
 }
 #[doc = " A `Color`'s public fields, as a plain object."]
 #[napi(object, js_name = "ColorObject", namespace = "alt")]
@@ -277,7 +277,7 @@ impl From<&toy::Point> for ToyPoint {
 }
 impl ToyReportOptions<'_> {
     #[doc = " The upstream value: `Default`, with what JS provided on top."]
-    fn to_upstream(&self) -> Result<toy::ReportOptions> {
+    fn to_upstream(&self) -> Result<toy::ReportOptions, String> {
         let mut o = <toy::ReportOptions>::default();
         if let Some(v) = &self.title {
             o.title = v.clone();
@@ -287,17 +287,17 @@ impl ToyReportOptions<'_> {
         }
         if let Some(v) = &self.base {
             let v = &**v;
-            o.base = v.inner.clone();
+            o.base = v.__ref()?.clone();
         }
         if let Some(v) = &self.width {
-            o.width = width_from_js(v, "width")?;
+            o.width = width_from_js(v, "width").map_err(napi_support::coded)?;
         }
         Ok(o)
     }
 }
 impl ToyOptions {
     #[doc = " The upstream value: `Default`, with what JS provided on top."]
-    fn to_upstream(&self) -> Result<toy::Options> {
+    fn to_upstream(&self) -> Result<toy::Options, String> {
         let mut o = <toy::Options>::default();
         if let Some(v) = &self.label {
             o.label = v.clone();
@@ -313,10 +313,18 @@ impl ToyOptions {
 }
 impl ToyCounter {
     fn wrap(inner: std::sync::Arc<toy::Counter>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: toy::Counter) -> Self {
         Self::wrap(std::sync::Arc::new(inner))
+    }
+    fn __ref(&self) -> Result<&std::sync::Arc<toy::Counter>, String> {
+        self.inner.get("Counter")
+    }
+    fn __mut(&mut self) -> Result<&mut std::sync::Arc<toy::Counter>, String> {
+        self.inner.get_mut("Counter")
     }
 }
 #[napi(namespace = "toy")]
@@ -324,10 +332,7 @@ impl ToyCounter {
     #[napi(constructor)]
     #[allow(clippy::redundant_closure)]
     pub fn new(options: Option<ToyOptions>) -> Result<Self, String> {
-        let __options = options
-            .unwrap_or_default()
-            .to_upstream()
-            .map_err(napi_support::coded)?;
+        let __options = options.unwrap_or_default().to_upstream()?;
         let __v = napi_support::contained("Counter::new", || <toy::Counter>::new(&__options))
             .map_err(napi_support::coded)?;
         Ok(ToyCounter::wrap(__v))
@@ -335,7 +340,7 @@ impl ToyCounter {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn label(&self) -> Result<String, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Counter::label", || __self.label())
             .map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -343,7 +348,7 @@ impl ToyCounter {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn step(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Counter::step", || __self.step())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -351,7 +356,7 @@ impl ToyCounter {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn direction(&self) -> Result<ToyDirection, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Counter::direction", || __self.direction())
             .map_err(napi_support::coded)?;
         Ok(ToyDirection::from(__v))
@@ -359,18 +364,40 @@ impl ToyCounter {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn origin(&self) -> Result<ToyPoint, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Counter::origin", || __self.origin())
             .map_err(napi_support::coded)?;
         Ok(ToyPoint::from(__v))
     }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl ToyTally {
     fn wrap(inner: std::sync::Arc<toy::Tally>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: toy::Tally) -> Self {
         Self::wrap(std::sync::Arc::new(inner))
+    }
+    fn __ref(&self) -> Result<&std::sync::Arc<toy::Tally>, String> {
+        self.inner.get("Tally")
+    }
+    fn __mut(&mut self) -> Result<&mut std::sync::Arc<toy::Tally>, String> {
+        self.inner.get_mut("Tally")
     }
 }
 #[napi(namespace = "toy")]
@@ -385,7 +412,7 @@ impl ToyTally {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn push(&mut self, name: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Tally::push", || __self.push(name))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -393,14 +420,14 @@ impl ToyTally {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn clear(&mut self) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Tally::clear", || __self.clear()).map_err(napi_support::coded)?;
         Ok(())
     }
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn len(&self) -> Result<u32, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Tally::len", || __self.len()).map_err(napi_support::coded)?;
         Ok(u32::try_from(__v).unwrap_or(u32::MAX))
@@ -408,7 +435,7 @@ impl ToyTally {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_empty(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tally::is_empty", || __self.is_empty())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -416,15 +443,37 @@ impl ToyTally {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn joined(&self) -> Result<String, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tally::joined", || __self.joined())
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl ToyVec2 {
     fn __from(inner: toy::Vec2) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy::Vec2, String> {
+        self.inner.get("Vec2")
+    }
+    fn __mut(&mut self) -> Result<&mut toy::Vec2, String> {
+        self.inner.get_mut("Vec2")
     }
 }
 #[napi(namespace = "toy")]
@@ -448,7 +497,7 @@ impl ToyVec2 {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn length(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Vec2::length", || __self.length())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -457,7 +506,7 @@ impl ToyVec2 {
     #[allow(clippy::redundant_closure)]
     pub fn scaled(&self, k: f64) -> Result<ToyVec2, String> {
         let k = to_f32(k);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Vec2::scaled", || __self.scaled(k))
             .map_err(napi_support::coded)?;
         Ok(ToyVec2::__from(__v))
@@ -465,8 +514,8 @@ impl ToyVec2 {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn plus(&self, other: &ToyVec2) -> Result<ToyVec2, String> {
-        let __other = other.inner;
-        let __self = &self.inner;
+        let __other = *other.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Vec2::plus", || __self.plus(__other))
             .map_err(napi_support::coded)?;
         Ok(ToyVec2::__from(__v))
@@ -475,7 +524,7 @@ impl ToyVec2 {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn normalized(&self) -> Result<Option<ToyVec2>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Vec2::normalized", || __self.normalized())
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| ToyVec2::__from(__v)))
@@ -485,7 +534,7 @@ impl ToyVec2 {
     pub fn translate(&mut self, dx: f64, dy: f64) -> Result<(), String> {
         let dx = to_f32(dx);
         let dy = to_f32(dy);
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Vec2::translate", || __self.translate(dx, dy))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -507,28 +556,28 @@ impl ToyVec2 {
     #[doc = " The `Vec2` as Rust's `Display` writes it."]
     #[napi]
     pub fn to_string(&self) -> Result<String, String> {
-        Ok(self.inner.to_string())
+        Ok(self.__ref()?.to_string())
     }
     #[napi(getter, js_name = "x")]
     pub fn field_x(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.x))
     }
     #[napi(setter, js_name = "x")]
     pub fn set_field_x(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.x = value;
+        self.__mut()?.x = value;
         Ok(())
     }
     #[napi(getter, js_name = "y")]
     pub fn field_y(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.y))
     }
     #[napi(setter, js_name = "y")]
     pub fn set_field_y(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.y = value;
+        self.__mut()?.y = value;
         Ok(())
     }
     #[doc = " A `Vec2` from a plain object of its fields."]
@@ -542,16 +591,37 @@ impl ToyVec2 {
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
     pub fn to_object(&self) -> Result<ToyVec2Object, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(ToyVec2Object {
             x: f64::from(__v.x),
             y: f64::from(__v.y),
         })
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl ToyColor {
     fn __from(inner: toy::Color) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy::Color, String> {
+        self.inner.get("Color")
+    }
+    fn __mut(&mut self) -> Result<&mut toy::Color, String> {
+        self.inner.get_mut("Color")
     }
 }
 #[napi(namespace = "toy")]
@@ -569,7 +639,7 @@ impl ToyColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn red(&self) -> Result<u32, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Color::red", || __self.red()).map_err(napi_support::coded)?;
         Ok(u32::from(__v))
@@ -578,7 +648,7 @@ impl ToyColor {
     #[allow(clippy::redundant_closure)]
     pub fn set_red(&mut self, r: u32) -> Result<(), String> {
         let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Color::set_red", || __self.set_red(r))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -586,30 +656,39 @@ impl ToyColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_gray(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Color::is_gray", || __self.is_gray())
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl ToyCanvas {
     fn __from(inner: toy::Canvas) -> Self {
-        Self { inner: Some(inner) }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __ref(&self) -> Result<&toy::Canvas, String> {
-        self.inner
-            .as_ref()
-            .ok_or_else(|| napi_support::consumed("Canvas"))
+        self.inner.get("Canvas")
     }
     fn __mut(&mut self) -> Result<&mut toy::Canvas, String> {
-        self.inner
-            .as_mut()
-            .ok_or_else(|| napi_support::consumed("Canvas"))
+        self.inner.get_mut("Canvas")
     }
     fn __take(&mut self) -> Result<toy::Canvas, String> {
-        self.inner
-            .take()
-            .ok_or_else(|| napi_support::consumed("Canvas"))
+        self.inner.take("Canvas")
     }
 }
 #[napi(namespace = "toy")]
@@ -664,7 +743,7 @@ impl ToyCanvas {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn fill(&mut self, color: &ToyColor) -> Result<(), String> {
-        let __color = color.inner;
+        let __color = *color.__ref()?;
         let __self = self.__mut()?;
         napi_support::contained("Canvas::fill", || __self.fill(__color))
             .map_err(napi_support::coded)?;
@@ -687,13 +766,34 @@ impl ToyCanvas {
             .map_err(napi_support::coded)?;
         Ok(__v.into())
     }
+    #[doc = " Frees the value now, not at garbage collection: every later call throws"]
+    #[doc = " `Disposed`."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl ToyScene {
     fn wrap(inner: std::sync::Arc<toy::Scene>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: toy::Scene) -> Self {
         Self::wrap(std::sync::Arc::new(inner))
+    }
+    fn __ref(&self) -> Result<&std::sync::Arc<toy::Scene>, String> {
+        self.inner.get("Scene")
+    }
+    fn __mut(&mut self) -> Result<&mut std::sync::Arc<toy::Scene>, String> {
+        self.inner.get_mut("Scene")
     }
 }
 #[napi(namespace = "toy")]
@@ -710,11 +810,11 @@ impl ToyScene {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn root(&self) -> Result<ToyLayer, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Scene::root", || {
             ToyLayer::__proj(
-                napi_support::Projection::of(self.inner.clone())
-                    .then(move |__s| Some(__s.root()))
+                __b.then(move |__s| Some(__s.root()))
                     .expect("a borrow resolves"),
             )
         })
@@ -724,9 +824,9 @@ impl ToyScene {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn marks(&self) -> Result<Vec<ToyDot>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Scene::marks", || {
-            let __b = napi_support::Projection::of(self.inner.clone());
             (0..__b.get().marks().len())
                 .filter_map(|__i| __b.then(move |__s| __s.marks().get(__i).map(|__a| &**__a)))
                 .map(ToyDot::__proj)
@@ -738,13 +838,26 @@ impl ToyScene {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn find(&self, name: String) -> Result<Option<Either<ToyItemLayer, ToyItemDot>>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Scene::find", || {
-            napi_support::Projection::of(self.inner.clone())
-                .then(move |__s| __s.find(&name))
-                .map(toy_item_to_js)
+            __b.then(move |__s| __s.find(&name)).map(toy_item_to_js)
         })
         .map_err(napi_support::coded)
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<&toy::Layer> for ToyLayer {
@@ -754,7 +867,10 @@ impl From<&toy::Layer> for ToyLayer {
 }
 impl ToyLayer {
     fn __proj(inner: napi_support::Projection<toy::Layer>) -> Self {
-        Self { inner, of: None }
+        Self {
+            inner: napi_support::Slot::new(inner),
+            of: None,
+        }
     }
     fn __from(inner: toy::Layer) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
@@ -762,13 +878,19 @@ impl ToyLayer {
     fn wrap(inner: toy::Layer) -> Self {
         Self::__from(inner)
     }
+    fn __ref(&self) -> Result<&napi_support::Projection<toy::Layer>, String> {
+        self.inner.get("Layer")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<toy::Layer>, String> {
+        self.inner.get_mut("Layer")
+    }
 }
 #[napi(namespace = "toy")]
 impl ToyLayer {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn name(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Layer::name", || __self.name())
             .map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -776,9 +898,9 @@ impl ToyLayer {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn items(&self) -> Result<Vec<Either<ToyItemLayer, ToyItemDot>>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Layer::items", || {
-            let __b = self.inner.clone();
             (0..__b.get().items().len())
                 .filter_map(|__i| __b.then(move |__s| __s.items().get(__i)))
                 .map(toy_item_to_js)
@@ -790,14 +912,27 @@ impl ToyLayer {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn first(&self) -> Result<Option<Either<ToyItemLayer, ToyItemDot>>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Layer::first", || {
-            self.inner
-                .clone()
-                .then(move |__s| __s.first())
-                .map(toy_item_to_js)
+            __b.then(move |__s| __s.first()).map(toy_item_to_js)
         })
         .map_err(napi_support::coded)
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+        self.of = None;
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<&toy::Dot> for ToyDot {
@@ -807,7 +942,10 @@ impl From<&toy::Dot> for ToyDot {
 }
 impl ToyDot {
     fn __proj(inner: napi_support::Projection<toy::Dot>) -> Self {
-        Self { inner, of: None }
+        Self {
+            inner: napi_support::Slot::new(inner),
+            of: None,
+        }
     }
     fn __from(inner: toy::Dot) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
@@ -815,13 +953,19 @@ impl ToyDot {
     fn wrap(inner: toy::Dot) -> Self {
         Self::__from(inner)
     }
+    fn __ref(&self) -> Result<&napi_support::Projection<toy::Dot>, String> {
+        self.inner.get("Dot")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<toy::Dot>, String> {
+        self.inner.get_mut("Dot")
+    }
 }
 #[napi(namespace = "toy")]
 impl ToyDot {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn name(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Dot::name", || __self.name()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -829,21 +973,33 @@ impl ToyDot {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn at(&self) -> Result<ToyVec2, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Dot::at", || __self.at()).map_err(napi_support::coded)?;
         Ok(ToyVec2::__from(__v))
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+        self.of = None;
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 #[doc = " One line about `tally`: `title[style]: base names,tally names`."]
 #[napi(js_name = "report", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
 pub fn toy_report(tally: &ToyTally, options: Option<ToyReportOptions>) -> Result<String, String> {
-    let __tally = &tally.inner;
-    let __options = options
-        .unwrap_or_default()
-        .to_upstream()
-        .map_err(napi_support::coded)?;
+    let __tally = tally.__ref()?;
+    let __options = options.unwrap_or_default().to_upstream()?;
     let __v = napi_support::contained("report", || toy::report(__tally, &__options))
         .map_err(napi_support::coded)?;
     Ok(__v)
@@ -854,8 +1010,8 @@ pub fn toy_report(tally: &ToyTally, options: Option<ToyReportOptions>) -> Result
 #[allow(clippy::redundant_closure)]
 pub fn toy_paint(view: &mut ToyCanvas, at: &ToyVec2, color: &ToyColor) -> Result<u32, String> {
     let mut __view = view.__mut()?.as_view();
-    let __at = at.inner;
-    let __color = color.inner;
+    let __at = *at.__ref()?;
+    let __color = *color.__ref()?;
     let __v = napi_support::contained("paint", || toy::paint(&mut __view, __at, __color))
         .map_err(napi_support::coded)?
         .map_err(|e| {
@@ -893,24 +1049,26 @@ fn toy_item_to_js(p: napi_support::Projection<toy::Item>) -> Either<ToyItemLayer
         toy::Item::Layer(_) => Either::A(ToyItemLayer {
             kind: "layer".to_string(),
             value: ToyLayer {
-                inner: p
-                    .then(|__e| match __e {
+                inner: napi_support::Slot::new(
+                    p.then(|__e| match __e {
                         toy::Item::Layer(__v) => Some(&**__v),
                         _ => None,
                     })
                     .expect("the variant matched"),
+                ),
                 of: Some(p.clone()),
             },
         }),
         toy::Item::Dot(_) => Either::B(ToyItemDot {
             kind: "dot".to_string(),
             value: ToyDot {
-                inner: p
-                    .then(|__e| match __e {
+                inner: napi_support::Slot::new(
+                    p.then(|__e| match __e {
                         toy::Item::Dot(__v) => Some(__v),
                         _ => None,
                     })
                     .expect("the variant matched"),
+                ),
                 of: Some(p.clone()),
             },
         }),
@@ -922,16 +1080,20 @@ fn toy_item_from_js(o: &Object) -> Result<napi_support::Projection<toy::Item>, S
         .get_named_property_unchecked("kind")
         .map_err(napi_support::coded)?;
     let of = match kind.as_str() {
-        "layer" => o
-            .get_named_property_unchecked::<ClassInstance<ToyLayer>>("value")
-            .map_err(napi_support::coded)?
-            .of
-            .clone(),
-        "dot" => o
-            .get_named_property_unchecked::<ClassInstance<ToyDot>>("value")
-            .map_err(napi_support::coded)?
-            .of
-            .clone(),
+        "layer" => {
+            let __c = o
+                .get_named_property_unchecked::<ClassInstance<ToyLayer>>("value")
+                .map_err(napi_support::coded)?;
+            __c.__ref()?;
+            __c.of.clone()
+        }
+        "dot" => {
+            let __c = o
+                .get_named_property_unchecked::<ClassInstance<ToyDot>>("value")
+                .map_err(napi_support::coded)?;
+            __c.__ref()?;
+            __c.of.clone()
+        }
         _ => None,
     };
     of.ok_or_else(|| {
@@ -946,7 +1108,15 @@ fn toy_item_from_js(o: &Object) -> Result<napi_support::Projection<toy::Item>, S
 }
 impl AltColor {
     fn __from(inner: toy::alt::Color) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy::alt::Color, String> {
+        self.inner.get("Color")
+    }
+    fn __mut(&mut self) -> Result<&mut toy::alt::Color, String> {
+        self.inner.get_mut("Color")
     }
 }
 #[napi(namespace = "alt")]
@@ -993,35 +1163,35 @@ impl AltColor {
     }
     #[napi(getter, js_name = "red")]
     pub fn field_red(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.red))
     }
     #[napi(setter, js_name = "red")]
     pub fn set_field_red(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("red", value))?;
-        self.inner.red = value;
+        self.__mut()?.red = value;
         Ok(())
     }
     #[napi(getter, js_name = "green")]
     pub fn field_green(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.green))
     }
     #[napi(setter, js_name = "green")]
     pub fn set_field_green(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("green", value))?;
-        self.inner.green = value;
+        self.__mut()?.green = value;
         Ok(())
     }
     #[napi(getter, js_name = "blue")]
     pub fn field_blue(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.blue))
     }
     #[napi(setter, js_name = "blue")]
     pub fn set_field_blue(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("blue", value))?;
-        self.inner.blue = value;
+        self.__mut()?.blue = value;
         Ok(())
     }
     #[doc = " A `Color` from a plain object of its fields."]
@@ -1037,12 +1207,25 @@ impl AltColor {
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
     pub fn to_object(&self) -> Result<AltColorObject, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(AltColorObject {
             red: u32::from(__v.red),
             green: u32::from(__v.green),
             blue: u32::from(__v.blue),
         })
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 #[doc = " A new `toy.Counter`, built from the flat `Options`."]
@@ -1056,13 +1239,46 @@ pub fn counter(options: Option<Options>) -> ToyCounter {
 }
 #[doc = " A second handle on the same `Tally`: shared until one of them writes."]
 #[napi(js_name = "share", namespace = "toy")]
-pub fn toy_share(t: &ToyTally) -> ToyTally {
-    ToyTally::wrap(t.inner.clone())
+pub fn toy_share(t: &ToyTally) -> Result<ToyTally, String> {
+    Ok(ToyTally::wrap(t.__ref()?.clone()))
 }
 #[doc = " Whether two handles still share one value."]
 #[napi(js_name = "shared", namespace = "toy")]
-pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> bool {
-    std::sync::Arc::ptr_eq(&a.inner, &b.inner)
+pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> Result<bool, String> {
+    Ok(std::sync::Arc::ptr_eq(a.__ref()?, b.__ref()?))
+}
+#[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
+#[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
+#[doc = " the whole module without it. The `.d.ts` header declares it."]
+#[napi(module_exports)]
+pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+    let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
+    let key: Unknown = symbol.get_named_property("dispose")?;
+    if key.get_type()? != ValueType::Symbol {
+        return Ok(());
+    }
+    let classes: &[(Option<&str>, &str)] = &[
+        (Some("alt"), "Color"),
+        (Some("toy"), "Canvas"),
+        (Some("toy"), "Color"),
+        (Some("toy"), "Counter"),
+        (Some("toy"), "Dot"),
+        (Some("toy"), "Layer"),
+        (Some("toy"), "Scene"),
+        (Some("toy"), "Tally"),
+        (Some("toy"), "Vec2"),
+    ];
+    for (ns, name) in classes {
+        let scope: Object = match ns {
+            Some(ns) => exports.get_named_property_unchecked(ns)?,
+            None => exports,
+        };
+        let class: Object = scope.get_named_property_unchecked(name)?;
+        let mut proto: Object = class.get_named_property_unchecked("prototype")?;
+        let dispose: Unknown = proto.get_named_property("dispose")?;
+        proto.set_property(key, dispose)?;
+    }
+    Ok(())
 }
 #[napi(namespace = "toy")]
 impl ToyTally {
@@ -1080,7 +1296,7 @@ impl ToyTally {
             &env,
             &this,
             "Tally",
-            &[],
+            &["disposed"],
             &["len", "isEmpty", "joined"],
             depth,
             options,
@@ -1109,7 +1325,7 @@ impl ToyCounter {
             &env,
             &this,
             "Counter",
-            &[],
+            &["disposed"],
             &["label", "step", "direction"],
             depth,
             options,
@@ -1138,7 +1354,7 @@ impl ToyVec2 {
             &env,
             &this,
             "Vec2",
-            &["x", "y"],
+            &["x", "y", "disposed"],
             &["length", "toString"],
             depth,
             options,
@@ -1167,7 +1383,7 @@ impl ToyColor {
             &env,
             &this,
             "Color",
-            &[],
+            &["disposed"],
             &["red", "isGray"],
             depth,
             options,
@@ -1196,7 +1412,7 @@ impl ToyCanvas {
             &env,
             &this,
             "Canvas",
-            &[],
+            &["disposed"],
             &["width", "height"],
             depth,
             options,
@@ -1221,7 +1437,16 @@ impl ToyScene {
         options: Object,
         inspect: Function<FnArgs<(Object, Object)>, String>,
     ) -> Result<String> {
-        napi_support::inspect(&env, &this, "Scene", &[], &[], depth, options, inspect)
+        napi_support::inspect(
+            &env,
+            &this,
+            "Scene",
+            &["disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
     }
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
@@ -1245,7 +1470,7 @@ impl ToyLayer {
             &env,
             &this,
             "Layer",
-            &[],
+            &["disposed"],
             &["name"],
             depth,
             options,
@@ -1270,7 +1495,16 @@ impl ToyDot {
         options: Object,
         inspect: Function<FnArgs<(Object, Object)>, String>,
     ) -> Result<String> {
-        napi_support::inspect(&env, &this, "Dot", &[], &["name"], depth, options, inspect)
+        napi_support::inspect(
+            &env,
+            &this,
+            "Dot",
+            &["disposed"],
+            &["name"],
+            depth,
+            options,
+            inspect,
+        )
     }
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
@@ -1294,7 +1528,7 @@ impl AltColor {
             &env,
             &this,
             "Color",
-            &["red", "green", "blue"],
+            &["red", "green", "blue", "disposed"],
             &[],
             depth,
             options,

@@ -1035,22 +1035,6 @@ pub fn template(
             }
         }
 
-        #[doc = " `Resvg.prototype[Symbol.dispose]`, only where the runtime has the"]
-        #[doc = " symbol: napi's `well_known_symbol` fails the whole module without it"]
-        #[doc = " (iOS Safari, as of 2026). The type is declared by `napi.dtsHeader`."]
-        #[napi(module_exports)]
-        pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
-            let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
-            let key: Unknown = symbol.get_named_property("dispose")?;
-            if key.get_type()? != ValueType::Symbol {
-                return Ok(());
-            }
-            let class: Object = exports.get_named_property_unchecked("Resvg")?;
-            let mut proto: Object = class.get_named_property_unchecked("prototype")?;
-            let dispose: Unknown = proto.get_named_property("dispose")?;
-            proto.set_property(key, dispose)
-        }
-
         #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
         fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
             contained("PNG encoder", || pixmap.encode_png())?

@@ -161,8 +161,9 @@ impl Classes<'_> {
 
     /// A method of a class of holding `h` returning `out` (`optional` when
     /// it was an `Option`): when `out` borrows a projected class or union,
-    /// its JS type and value, made by a step from the receiver. `None` when
-    /// it borrows neither.
+    /// its JS type, the statement binding the receiver's projection `__b`
+    /// (it may throw `Disposed`), and the value, made by a step from `__b`.
+    /// `None` when it borrows neither.
     pub(crate) fn projected(
         &self,
         h: Holding,
@@ -171,7 +172,7 @@ impl Classes<'_> {
         out: &Type,
         optional: bool,
         a: &Args,
-    ) -> Option<Result<(TokenStream, TokenStream), Reason>> {
+    ) -> Option<Result<(TokenStream, TokenStream, TokenStream), Reason>> {
         let (r, inner) = deref(out);
         if r != Some(false) {
             return None;
@@ -196,9 +197,9 @@ impl Classes<'_> {
             (self.union_ty(u), quote!(#f))
         };
         let base = match h {
-            Holding::Projected => quote!(self.inner.clone()),
+            Holding::Projected => quote!(self.__ref()?.clone()),
             Holding::Shared | Holding::SharedCow => {
-                quote!(napi_support::Projection::of(self.inner.clone()))
+                quote!(napi_support::Projection::of(self.__ref()?.clone()))
             }
             Holding::Value | Holding::Owned => return Some(Err(Reason::Returns)),
         };
@@ -208,9 +209,9 @@ impl Classes<'_> {
             return Some(Err(Reason::Arg));
         }
         let fwd = &a.fwd;
-        Some(Ok(if list {
+        let bind = quote!(let __b = #base;);
+        let (ty, value) = if list {
             let value = quote!({
-                let __b = #base;
                 (0..__b.get().#m().len())
                     .filter_map(|__i| __b.then(move |__s| __s.#m().get(__i) #through))
                     .map(#conv)
@@ -220,12 +221,13 @@ impl Classes<'_> {
         } else if optional {
             (
                 quote!(Option<#ty>),
-                quote!(#base.then(move |__s| __s.#m(#(#fwd),*) #through).map(#conv)),
+                quote!(__b.then(move |__s| __s.#m(#(#fwd),*) #through).map(#conv)),
             )
         } else {
-            let p = quote!(#base.then(move |__s| Some(__s.#m(#(#fwd),*)) #through).expect("a borrow resolves"));
+            let p = quote!(__b.then(move |__s| Some(__s.#m(#(#fwd),*)) #through).expect("a borrow resolves"));
             (ty, quote!(#conv(#p)))
-        }))
+        };
+        Some(Ok((ty, bind, value)))
     }
 
     /// A projected class's struct and helpers: `__proj` from a projection,
@@ -252,11 +254,13 @@ impl Classes<'_> {
             }
         });
         let def = quote! {
-            pub struct #id { inner: napi_support::Projection<#up> #of }
+            pub struct #id { inner: napi_support::Slot<napi_support::Projection<#up>> #of }
             #from
         };
         let helpers = quote! {
-            fn __proj(inner: napi_support::Projection<#up>) -> Self { Self { inner #of_none } }
+            fn __proj(inner: napi_support::Projection<#up>) -> Self {
+                Self { inner: napi_support::Slot::new(inner) #of_none }
+            }
             fn __from(inner: #up) -> Self { Self::__proj(napi_support::Projection::owned(inner)) }
             fn wrap(inner: #up) -> Self { Self::__from(inner) }
         };
@@ -298,14 +302,20 @@ impl Classes<'_> {
                         #e::#v(_) => #either::#letter(#obj {
                             kind: #kind.to_string(),
                             value: #class {
-                                inner: p.then(|__e| match __e { #e::#v(__v) => Some(#unboxed), _ => None })
-                                    .expect("the variant matched"),
+                                inner: napi_support::Slot::new(
+                                    p.then(|__e| match __e { #e::#v(__v) => Some(#unboxed), _ => None })
+                                        .expect("the variant matched"),
+                                ),
                                 of: Some(p.clone()),
                             },
                         }),
                     });
                     from_arms.push(quote! {
-                        #kind => o.get_named_property_unchecked::<ClassInstance<#class>>("value").map_err(napi_support::coded)?.of.clone(),
+                        #kind => {
+                            let __c = o.get_named_property_unchecked::<ClassInstance<#class>>("value").map_err(napi_support::coded)?;
+                            __c.__ref()?;
+                            __c.of.clone()
+                        }
                     });
                 }
                 let why = format!("not a value reached as a variant of {}", un.name);

@@ -11,6 +11,7 @@
 //! - [`inspect`]: what `console.log` prints for a class instance.
 //! - [`Projection`]: a value borrowed out of an `Arc`-held owner, kept alive
 //!   with it.
+//! - [`Slot`]: a class's value, until a consuming call or `dispose()`.
 //!
 //! No Rust tests: a test binary cannot link napi's symbols outside Node. The
 //! binding's JS suite covers each piece through the API that uses it.
@@ -131,6 +132,70 @@ pub fn consumed(class: &str) -> Thrown {
         "Consumed",
         format!("this {class} was consumed by an earlier call"),
     )
+}
+
+/// The error for an instance `dispose()` emptied.
+pub fn disposed(class: &str) -> Thrown {
+    thrown("Disposed", format!("this {class} was disposed"))
+}
+
+/// What a class holds its value in: the value until a call consumes it (a
+/// method taking `self` in Rust) or `dispose()` drops it. Every call after
+/// either throws, `Consumed` or `Disposed`. Dropping a shared value (an
+/// `Arc`, a [`Projection`]) drops this instance's reference only: the value
+/// lives on while anything else holds it.
+pub struct Slot<T> {
+    value: Option<T>,
+    disposed: bool,
+}
+
+impl<T> Slot<T> {
+    pub fn new(value: T) -> Self {
+        Slot {
+            value: Some(value),
+            disposed: false,
+        }
+    }
+
+    fn gone(&self, class: &str) -> Thrown {
+        if self.disposed {
+            disposed(class)
+        } else {
+            consumed(class)
+        }
+    }
+
+    /// The value, or what `class` throws without it.
+    pub fn get(&self, class: &str) -> std::result::Result<&T, Thrown> {
+        match &self.value {
+            Some(v) => Ok(v),
+            None => Err(self.gone(class)),
+        }
+    }
+
+    /// The value to write, or what `class` throws without it.
+    pub fn get_mut(&mut self, class: &str) -> std::result::Result<&mut T, Thrown> {
+        if self.value.is_none() {
+            return Err(self.gone(class));
+        }
+        Ok(self.value.as_mut().expect("checked above"))
+    }
+
+    /// The value, taken out: every later call throws `Consumed`.
+    pub fn take(&mut self, class: &str) -> std::result::Result<T, Thrown> {
+        self.value.take().ok_or_else(|| self.gone(class))
+    }
+
+    /// Drops the value now, not at garbage collection. Harmless twice.
+    pub fn dispose(&mut self) {
+        self.value = None;
+        self.disposed = true;
+    }
+
+    /// Whether [`Slot::dispose`] ran.
+    pub fn disposed(&self) -> bool {
+        self.disposed
+    }
 }
 
 pub mod logs {

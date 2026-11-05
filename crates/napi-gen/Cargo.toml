@@ -11,6 +11,6 @@ publish = false
 # The version napi-derive-backend already pulls in: napi names JS members
 # with it, so the generator spelling them the same way is the point.
 convert_case = "0.12.0"
-syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
+syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing", "visit-mut"] }
 quote = "1.0.35"
 proc-macro2 = "1.0.91"

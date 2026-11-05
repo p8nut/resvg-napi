@@ -539,13 +539,11 @@ impl<'a> Classes<'a> {
             let id = self.ident(c);
             use Holding::*;
             let fwd = match (r, self.classes[c].holding) {
-                (None, Value) => quote!(#pat.inner),
-                (Some(false), Value | Shared | SharedCow) => quote!(&#pat.inner),
-                (Some(false), Projected) => quote!(#pat.inner.get()),
-                (Some(false), Owned) => quote!(#pat.__ref()?),
-                (Some(true), Value) => quote!(&mut #pat.inner),
-                (Some(true), Owned) => quote!(#pat.__mut()?),
-                (Some(true), SharedCow) => quote!(std::sync::Arc::make_mut(&mut #pat.inner)),
+                (None, Value) => quote!(*#pat.__ref()?),
+                (Some(false), Value | Owned | Shared | SharedCow) => quote!(#pat.__ref()?),
+                (Some(false), Projected) => quote!(#pat.__ref()?.get()),
+                (Some(true), Value | Owned) => quote!(#pat.__mut()?),
+                (Some(true), SharedCow) => quote!(std::sync::Arc::make_mut(#pat.__mut()?)),
                 _ => return None,
             };
             let param = if r == Some(true) {
@@ -574,9 +572,8 @@ impl<'a> Classes<'a> {
             let c = self.class_of(ctx, this, &fake)?;
             let (id, via) = (self.ident(c), format_ident!("{}", v.via));
             let from = match self.classes[c].holding {
-                Holding::Owned => quote!(#pat.__mut()?),
-                Holding::Value => quote!(&mut #pat.inner),
-                Holding::SharedCow => quote!(std::sync::Arc::make_mut(&mut #pat.inner)),
+                Holding::Owned | Holding::Value => quote!(#pat.__mut()?),
+                Holding::SharedCow => quote!(std::sync::Arc::make_mut(#pat.__mut()?)),
                 Holding::Shared | Holding::Projected => return None,
             };
             let tmp = format_ident!("__{pat}");
@@ -597,7 +594,7 @@ impl<'a> Classes<'a> {
             return Some((
                 quote!(#pat: Option<#o>),
                 Some(quote! {
-                    let #tmp = #pat.unwrap_or_default().to_upstream().map_err(napi_support::coded)?;
+                    let #tmp = #pat.unwrap_or_default().to_upstream()?;
                 }),
                 quote!(&#tmp),
             ));
@@ -772,29 +769,21 @@ impl<'a> Classes<'a> {
         // The receiver, resolved before the call.
         let me = match (recv, holding) {
             (Recv::None, _) => None,
-            (Recv::Ref, Some(Holding::Value | Holding::Shared | Holding::SharedCow)) => {
-                Some((quote!(&self), quote!(let __self = &self.inner;)))
-            }
-            (Recv::Ref, Some(Holding::Owned)) => {
-                Some((quote!(&self), quote!(let __self = self.__ref()?;)))
-            }
             (Recv::Ref, Some(Holding::Projected)) => {
-                Some((quote!(&self), quote!(let __self = self.inner.get();)))
+                Some((quote!(&self), quote!(let __self = self.__ref()?.get();)))
             }
-            (Recv::Mut, Some(Holding::Value)) => {
-                Some((quote!(&mut self), quote!(let __self = &mut self.inner;)))
-            }
-            (Recv::Mut, Some(Holding::Owned)) => {
+            (Recv::Ref, Some(_)) => Some((quote!(&self), quote!(let __self = self.__ref()?;))),
+            (Recv::Mut, Some(Holding::Value | Holding::Owned)) => {
                 Some((quote!(&mut self), quote!(let __self = self.__mut()?;)))
             }
             (Recv::Mut, Some(Holding::SharedCow)) => Some((
                 quote!(&mut self),
-                quote!(let __self = std::sync::Arc::make_mut(&mut self.inner);),
+                quote!(let __self = std::sync::Arc::make_mut(self.__mut()?);),
             )),
             (Recv::Mut, _) => return skip(Reason::NeedsMut, None),
             // A copy: the class keeps its own.
             (Recv::Value, Some(Holding::Value)) => {
-                Some((quote!(&self), quote!(let __self = self.inner;)))
+                Some((quote!(&self), quote!(let __self = *self.__ref()?;)))
             }
             // Taken out: the class is spent.
             (Recv::Value, Some(Holding::Owned)) => {
@@ -864,11 +853,12 @@ impl<'a> Classes<'a> {
         };
         let (body, ret_ty) = match projected {
             Some(p) => {
-                let (ty, value) = p.map_err(|r| (r, Some(ty_str(&out))))?;
+                let (ty, bind, value) = p.map_err(|r| (r, Some(ty_str(&out))))?;
                 let pre = &a.pre;
                 let body = quote! {
                     #(#pre)*
                     #self_pre
+                    #bind
                     napi_support::contained(#label, || #value).map_err(napi_support::coded)
                 };
                 (body, ty)
@@ -1041,18 +1031,9 @@ impl<'a> Classes<'a> {
             quote!(#[napi])
         };
         // The value: a reference to it, and the place itself.
-        let (read, place, place_mut) = match class.holding {
-            Holding::Owned => (
-                quote!(self.__ref()?),
-                quote!(self.__ref()?),
-                quote!(self.__mut()?),
-            ),
-            Holding::Projected => (
-                quote!(self.inner.get()),
-                quote!(self.inner.get()),
-                quote!(self.inner.get()),
-            ),
-            _ => (quote!(&self.inner), quote!(self.inner), quote!(self.inner)),
+        let (read, place_mut) = match class.holding {
+            Holding::Projected => (quote!(self.__ref()?.get()), quote!(self.__ref()?.get())),
+            _ => (quote!(self.__ref()?), quote!(self.__mut()?)),
         };
         if let Some(imp) = trait_impl(files, name, "FromStr")
             && taken.insert("from_str".into())
@@ -1081,7 +1062,7 @@ impl<'a> Classes<'a> {
                 #[doc = #doc]
                 #[napi]
                 pub fn to_string(&self) -> Result<String, String> {
-                    Ok(#place.to_string())
+                    Ok(#read.to_string())
                 }
             });
         }
@@ -1167,38 +1148,77 @@ impl<'a> Classes<'a> {
         for line in note.lines() {
             doc.push(quote!(#[doc = #line]));
         }
-        let consumed = name.as_str();
-        let (def, helpers) = match class.holding {
-            Holding::Value => (
-                quote!(pub struct #id { inner: #up }),
+        // Every holding sits in a `napi_support::Slot`: `dispose()` empties
+        // it, as a method taking `self` does, and every call after throws.
+        let label = name.as_str();
+        let (held, def, from) = match class.holding {
+            Holding::Value | Holding::Owned => (
+                up.clone(),
+                quote!(pub struct #id { inner: napi_support::Slot<#up> }),
                 quote! {
-                    fn __from(inner: #up) -> Self { Self { inner } }
-                },
-            ),
-            Holding::Owned => (
-                quote!(pub struct #id { inner: Option<#up> }),
-                quote! {
-                    fn __from(inner: #up) -> Self { Self { inner: Some(inner) } }
-                    fn __ref(&self) -> Result<&#up, String> {
-                        self.inner.as_ref().ok_or_else(|| napi_support::consumed(#consumed))
-                    }
-                    fn __mut(&mut self) -> Result<&mut #up, String> {
-                        self.inner.as_mut().ok_or_else(|| napi_support::consumed(#consumed))
-                    }
-                    fn __take(&mut self) -> Result<#up, String> {
-                        self.inner.take().ok_or_else(|| napi_support::consumed(#consumed))
-                    }
+                    fn __from(inner: #up) -> Self { Self { inner: napi_support::Slot::new(inner) } }
                 },
             ),
             Holding::Shared | Holding::SharedCow => (
-                quote!(pub struct #id { inner: std::sync::Arc<#up> }),
+                quote!(std::sync::Arc<#up>),
+                quote!(pub struct #id { inner: napi_support::Slot<std::sync::Arc<#up>> }),
                 quote! {
-                    fn wrap(inner: std::sync::Arc<#up>) -> Self { Self { inner } }
+                    fn wrap(inner: std::sync::Arc<#up>) -> Self { Self { inner: napi_support::Slot::new(inner) } }
                     fn __from(inner: #up) -> Self { Self::wrap(std::sync::Arc::new(inner)) }
                 },
             ),
-            Holding::Projected => self.projected_class(c, &up),
+            Holding::Projected => {
+                let (def, from) = self.projected_class(c, &up);
+                (quote!(napi_support::Projection<#up>), def, from)
+            }
         };
+        let mut helpers = quote! {
+            #from
+            fn __ref(&self) -> Result<&#held, String> { self.inner.get(#label) }
+            fn __mut(&mut self) -> Result<&mut #held, String> { self.inner.get_mut(#label) }
+        };
+        if class.holding == Holding::Owned {
+            helpers.extend(quote! {
+                fn __take(&mut self) -> Result<#up, String> { self.inner.take(#label) }
+            });
+        }
+        // A union's value also holds the projection it was reached through.
+        let of = class.of.is_some().then(|| quote!(self.of = None;));
+        for m in ["dispose", "disposed"] {
+            assert!(
+                taken.insert(m.to_string()),
+                "{name}: `{m}` is the generated dispose()"
+            );
+        }
+        let what = match class.holding {
+            Holding::Value => {
+                " Ends this instance: every later call throws `Disposed`. It holds a copy,\n so nothing is freed: this is for uniformity."
+            }
+            Holding::Owned => {
+                " Frees the value now, not at garbage collection: every later call throws\n `Disposed`."
+            }
+            Holding::Shared | Holding::SharedCow | Holding::Projected => {
+                " Drops this instance's reference now, not at garbage collection: every\n later call throws `Disposed`. The value lives on while another instance\n holds it."
+            }
+        };
+        let using = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.\n Harmless twice.";
+        let dispose_doc = what
+            .lines()
+            .chain(using.lines())
+            .map(|l| quote!(#[doc = #l]));
+        methods.extend(quote! {
+            #(#dispose_doc)*
+            #[napi]
+            pub fn dispose(&mut self) {
+                self.inner.dispose();
+                #of
+            }
+            #[doc = " Whether `dispose()` has been called."]
+            #[napi(getter)]
+            pub fn disposed(&self) -> bool {
+                self.inner.disposed()
+            }
+        });
         let code = quote! {
             #(#doc)*
             #[napi]

@@ -1619,21 +1619,6 @@ impl Resvg {
         self.logs.scope(|| draw(&self.tree, &p))
     }
 }
-#[doc = " `Resvg.prototype[Symbol.dispose]`, only where the runtime has the"]
-#[doc = " symbol: napi's `well_known_symbol` fails the whole module without it"]
-#[doc = " (iOS Safari, as of 2026). The type is declared by `napi.dtsHeader`."]
-#[napi(module_exports)]
-pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
-    let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
-    let key: Unknown = symbol.get_named_property("dispose")?;
-    if key.get_type()? != ValueType::Symbol {
-        return Ok(());
-    }
-    let class: Object = exports.get_named_property_unchecked("Resvg")?;
-    let mut proto: Object = class.get_named_property_unchecked("prototype")?;
-    let dispose: Unknown = proto.get_named_property("dispose")?;
-    proto.set_property(key, dispose)
-}
 #[doc = " PNG-encodes a rendered pixmap, inside `contained` like the render."]
 fn encode_png(pixmap: &tiny_skia::Pixmap) -> Result<Vec<u8>> {
     contained("PNG encoder", || pixmap.encode_png())?
@@ -1814,7 +1799,7 @@ pub fn render_async(
 #[doc = " A `svgtypes::Color`, held by value."]
 #[napi(js_name = "Color", namespace = "svgtypes")]
 pub struct SvgtypesColor {
-    inner: svgtypes::Color,
+    inner: napi_support::Slot<svgtypes::Color>,
 }
 #[doc = " A `Color`'s public fields, as a plain object."]
 #[napi(object, js_name = "ColorObject", namespace = "svgtypes")]
@@ -1844,7 +1829,7 @@ pub enum SvgtypesErrorCode {
 #[doc = " instance spent: every later call throws."]
 #[napi(js_name = "Pixmap", namespace = "tiny_skia")]
 pub struct TinySkiaPixmap {
-    inner: Option<tiny_skia::Pixmap>,
+    inner: napi_support::Slot<tiny_skia::Pixmap>,
 }
 #[doc = " An RGBA color value, holding four floating point components."]
 #[doc = ""]
@@ -1855,7 +1840,7 @@ pub struct TinySkiaPixmap {
 #[doc = " A `tiny_skia::Color`, held by value."]
 #[napi(js_name = "Color", namespace = "tiny_skia")]
 pub struct TinySkiaColor {
-    inner: tiny_skia::Color,
+    inner: napi_support::Slot<tiny_skia::Color>,
 }
 #[doc = " An integer size."]
 #[doc = ""]
@@ -1866,7 +1851,7 @@ pub struct TinySkiaColor {
 #[doc = " A `tiny_skia::IntSize`, held by value."]
 #[napi(js_name = "IntSize", namespace = "tiny_skia")]
 pub struct TinySkiaIntSize {
-    inner: tiny_skia::IntSize,
+    inner: napi_support::Slot<tiny_skia::IntSize>,
 }
 #[doc = " An affine transformation matrix."]
 #[doc = ""]
@@ -1877,7 +1862,7 @@ pub struct TinySkiaIntSize {
 #[doc = " A `tiny_skia::Transform`, held by value."]
 #[napi(js_name = "Transform", namespace = "tiny_skia")]
 pub struct TinySkiaTransform {
-    inner: tiny_skia::Transform,
+    inner: napi_support::Slot<tiny_skia::Transform>,
 }
 #[doc = " A `Transform`'s public fields, as a plain object."]
 #[napi(object, js_name = "TransformObject", namespace = "tiny_skia")]
@@ -1904,7 +1889,7 @@ pub struct TinySkiaTransformObject {
 #[doc = " A `tiny_skia::Rect`, held by value."]
 #[napi(js_name = "Rect", namespace = "tiny_skia")]
 pub struct TinySkiaRect {
-    inner: tiny_skia::Rect,
+    inner: napi_support::Slot<tiny_skia::Rect>,
 }
 #[doc = " A size."]
 #[doc = ""]
@@ -1915,7 +1900,7 @@ pub struct TinySkiaRect {
 #[doc = " A `tiny_skia::Size`, held by value."]
 #[napi(js_name = "Size", namespace = "tiny_skia")]
 pub struct TinySkiaSize {
-    inner: tiny_skia::Size,
+    inner: napi_support::Slot<tiny_skia::Size>,
 }
 #[doc = " A color interpolation mode."]
 #[doc = ""]
@@ -2214,7 +2199,7 @@ pub enum UsvgWritingMode {
 #[doc = " A shared `usvg::fontdb::Database`, copied on the first write while shared."]
 #[napi(js_name = "Database", namespace = "fontdb")]
 pub struct FontdbDatabase {
-    inner: std::sync::Arc<usvg::fontdb::Database>,
+    inner: napi_support::Slot<std::sync::Arc<usvg::fontdb::Database>>,
 }
 #[doc = " Processing options."]
 #[doc = ""]
@@ -2400,24 +2385,24 @@ pub struct UsvgWriteOptions {
 #[doc = " Read-only handle on a `usvg::filter::Filter`."]
 #[napi(js_name = "Filter", namespace = "usvg")]
 pub struct UsvgFilter {
-    inner: std::sync::Arc<usvg::filter::Filter>,
+    inner: napi_support::Slot<std::sync::Arc<usvg::filter::Filter>>,
 }
 #[doc = " Read-only handle on a `usvg::RadialGradient`."]
 #[napi(js_name = "RadialGradient", namespace = "usvg")]
 pub struct UsvgRadialGradient {
-    inner: std::sync::Arc<usvg::RadialGradient>,
+    inner: napi_support::Slot<std::sync::Arc<usvg::RadialGradient>>,
 }
 #[doc = " Read-only handle on a `usvg::LinearGradient`."]
 #[napi(js_name = "LinearGradient", namespace = "usvg")]
 pub struct UsvgLinearGradient {
-    inner: std::sync::Arc<usvg::LinearGradient>,
+    inner: napi_support::Slot<std::sync::Arc<usvg::LinearGradient>>,
 }
 #[doc = " A nodes tree container."]
 #[doc = ""]
 #[doc = " A shared, read-only `usvg::Tree`."]
 #[napi(js_name = "Tree", namespace = "usvg")]
 pub struct UsvgTree {
-    inner: std::sync::Arc<usvg::Tree>,
+    inner: napi_support::Slot<std::sync::Arc<usvg::Tree>>,
 }
 #[doc = " A group container."]
 #[doc = ""]
@@ -2430,7 +2415,7 @@ pub struct UsvgTree {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Group", namespace = "usvg")]
 pub struct UsvgGroup {
-    inner: napi_support::Projection<usvg::Group>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Group>>,
     of: Option<napi_support::Projection<usvg::Node>>,
 }
 #[doc = " A path element."]
@@ -2439,7 +2424,7 @@ pub struct UsvgGroup {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Path", namespace = "usvg")]
 pub struct UsvgPath {
-    inner: napi_support::Projection<usvg::Path>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Path>>,
     of: Option<napi_support::Projection<usvg::Node>>,
 }
 #[doc = " A raster image element."]
@@ -2450,7 +2435,7 @@ pub struct UsvgPath {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Image", namespace = "usvg")]
 pub struct UsvgImage {
-    inner: napi_support::Projection<usvg::Image>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Image>>,
     of: Option<napi_support::Projection<usvg::Node>>,
 }
 #[doc = " A text element."]
@@ -2461,7 +2446,7 @@ pub struct UsvgImage {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Text", namespace = "usvg")]
 pub struct UsvgText {
-    inner: napi_support::Projection<usvg::Text>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Text>>,
     of: Option<napi_support::Projection<usvg::Node>>,
 }
 #[doc = " A clip-path element."]
@@ -2472,7 +2457,7 @@ pub struct UsvgText {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "ClipPath", namespace = "usvg")]
 pub struct UsvgClipPath {
-    inner: napi_support::Projection<usvg::ClipPath>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::ClipPath>>,
 }
 #[doc = " A mask element."]
 #[doc = ""]
@@ -2482,7 +2467,7 @@ pub struct UsvgClipPath {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Mask", namespace = "usvg")]
 pub struct UsvgMask {
-    inner: napi_support::Projection<usvg::Mask>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Mask>>,
 }
 #[doc = " A pattern element."]
 #[doc = ""]
@@ -2492,7 +2477,7 @@ pub struct UsvgMask {
 #[doc = " alive. Each call finds it there again."]
 #[napi(js_name = "Pattern", namespace = "usvg")]
 pub struct UsvgPattern {
-    inner: napi_support::Projection<usvg::Pattern>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Pattern>>,
 }
 #[doc = " The `code` a thrown `usvg::Error` carries: the variant's name. The message is its `Display`."]
 #[napi(string_enum, js_name = "ErrorCode", namespace = "usvg")]
@@ -2909,7 +2894,7 @@ pub struct UsvgFlood {
 #[doc = " Read-only view of a `Font`."]
 #[napi(js_name = "Font", namespace = "usvg")]
 pub struct UsvgFont {
-    inner: usvg::Font,
+    inner: napi_support::Slot<usvg::Font>,
 }
 #[doc = " Plain view of a `FontVariation`."]
 #[napi(object, js_name = "FontVariation", namespace = "usvg")]
@@ -2952,7 +2937,7 @@ pub struct UsvgOffset {
 #[doc = " Read-only view of a `PositionedGlyph`."]
 #[napi(js_name = "PositionedGlyph", namespace = "usvg")]
 pub struct UsvgPositionedGlyph {
-    inner: usvg::layout::PositionedGlyph,
+    inner: napi_support::Slot<usvg::layout::PositionedGlyph>,
 }
 #[doc = " `Kind::Blend`."]
 #[napi(object, js_name = "KindBlend", namespace = "usvg")]
@@ -3165,7 +3150,7 @@ pub struct UsvgPrimitive {
 #[doc = " Read-only view of a `Span`."]
 #[napi(js_name = "Span", namespace = "usvg")]
 pub struct UsvgSpan {
-    inner: usvg::layout::Span,
+    inner: napi_support::Slot<usvg::layout::Span>,
 }
 #[doc = " Plain view of a `Stop`."]
 #[napi(object, js_name = "Stop", namespace = "usvg")]
@@ -3192,7 +3177,7 @@ pub struct UsvgStroke {
 #[doc = " Read-only view of a `TextChunk`."]
 #[napi(js_name = "TextChunk", namespace = "usvg")]
 pub struct UsvgTextChunk {
-    inner: usvg::TextChunk,
+    inner: napi_support::Slot<usvg::TextChunk>,
 }
 #[doc = " Plain view of a `TextDecorationStyle`."]
 #[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
@@ -3212,7 +3197,7 @@ pub struct UsvgTextDecoration {
 #[doc = " Read-only view of a `TextSpan`."]
 #[napi(js_name = "TextSpan", namespace = "usvg")]
 pub struct UsvgTextSpan {
-    inner: usvg::TextSpan,
+    inner: napi_support::Slot<usvg::TextSpan>,
 }
 #[doc = " The payload-free variants of `BaselineShift`."]
 #[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
@@ -3234,22 +3219,22 @@ pub struct UsvgBaselineShiftNumber {
 #[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
 #[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
 pub struct UsvgImageKindJpeg {
-    raw: std::sync::Arc<Vec<u8>>,
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
 #[doc = " `ImageKind::PNG`. The bytes are the document's own."]
 #[napi(js_name = "ImageKindPng", namespace = "usvg")]
 pub struct UsvgImageKindPng {
-    raw: std::sync::Arc<Vec<u8>>,
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
 #[doc = " `ImageKind::GIF`. The bytes are the document's own."]
 #[napi(js_name = "ImageKindGif", namespace = "usvg")]
 pub struct UsvgImageKindGif {
-    raw: std::sync::Arc<Vec<u8>>,
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
 #[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
 #[napi(js_name = "ImageKindWebp", namespace = "usvg")]
 pub struct UsvgImageKindWebp {
-    raw: std::sync::Arc<Vec<u8>>,
+    raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
 #[doc = " `ImageKind::SVG`."]
 #[napi(object, js_name = "ImageKindSvg", namespace = "usvg")]
@@ -3301,7 +3286,7 @@ pub enum FontdbStretch {
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
-    inner: usvg::fontdb::FaceInfo,
+    inner: napi_support::Slot<usvg::fontdb::FaceInfo>,
 }
 #[doc = " Renders a tree onto the pixmap."]
 #[doc = ""]
@@ -3316,8 +3301,8 @@ pub fn resvg_render(
     transform: &TinySkiaTransform,
     pixmap: &mut TinySkiaPixmap,
 ) -> Result<(), String> {
-    let __tree = &tree.inner;
-    let __transform = transform.inner;
+    let __tree = tree.__ref()?;
+    let __transform = *transform.__ref()?;
     let mut __pixmap = pixmap.__mut()?.as_mut();
     napi_support::contained("render", || {
         resvg::render(__tree, __transform, &mut __pixmap)
@@ -3344,7 +3329,7 @@ pub fn resvg_render_node(
     pixmap: &mut TinySkiaPixmap,
 ) -> Result<Option<bool>, String> {
     let __node = usvg_node_from_js(&node)?;
-    let __transform = transform.inner;
+    let __transform = *transform.__ref()?;
     let mut __pixmap = pixmap.__mut()?.as_mut();
     let __v = napi_support::contained("render_node", || {
         resvg::render_node(__node.get(), __transform, &mut __pixmap)
@@ -3354,7 +3339,15 @@ pub fn resvg_render_node(
 }
 impl SvgtypesColor {
     fn __from(inner: svgtypes::Color) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&svgtypes::Color, String> {
+        self.inner.get("Color")
+    }
+    fn __mut(&mut self) -> Result<&mut svgtypes::Color, String> {
+        self.inner.get_mut("Color")
     }
 }
 #[napi(namespace = "svgtypes")]
@@ -3454,46 +3447,46 @@ impl SvgtypesColor {
     }
     #[napi(getter, js_name = "red")]
     pub fn field_red(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.red))
     }
     #[napi(setter, js_name = "red")]
     pub fn set_field_red(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("red", value))?;
-        self.inner.red = value;
+        self.__mut()?.red = value;
         Ok(())
     }
     #[napi(getter, js_name = "green")]
     pub fn field_green(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.green))
     }
     #[napi(setter, js_name = "green")]
     pub fn set_field_green(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("green", value))?;
-        self.inner.green = value;
+        self.__mut()?.green = value;
         Ok(())
     }
     #[napi(getter, js_name = "blue")]
     pub fn field_blue(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.blue))
     }
     #[napi(setter, js_name = "blue")]
     pub fn set_field_blue(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("blue", value))?;
-        self.inner.blue = value;
+        self.__mut()?.blue = value;
         Ok(())
     }
     #[napi(getter, js_name = "alpha")]
     pub fn field_alpha(&self) -> Result<u32, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(u32::from(__v.alpha))
     }
     #[napi(setter, js_name = "alpha")]
     pub fn set_field_alpha(&mut self, value: u32) -> Result<(), String> {
         let value = u8::try_from(value).map_err(|_| napi_support::invalid("alpha", value))?;
-        self.inner.alpha = value;
+        self.__mut()?.alpha = value;
         Ok(())
     }
     #[doc = " A `Color` from a plain object of its fields."]
@@ -3511,7 +3504,7 @@ impl SvgtypesColor {
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
     pub fn to_object(&self) -> Result<SvgtypesColorObject, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(SvgtypesColorObject {
             red: u32::from(__v.red),
             green: u32::from(__v.green),
@@ -3519,25 +3512,34 @@ impl SvgtypesColor {
             alpha: u32::from(__v.alpha),
         })
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl TinySkiaPixmap {
     fn __from(inner: tiny_skia::Pixmap) -> Self {
-        Self { inner: Some(inner) }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __ref(&self) -> Result<&tiny_skia::Pixmap, String> {
-        self.inner
-            .as_ref()
-            .ok_or_else(|| napi_support::consumed("Pixmap"))
+        self.inner.get("Pixmap")
     }
     fn __mut(&mut self) -> Result<&mut tiny_skia::Pixmap, String> {
-        self.inner
-            .as_mut()
-            .ok_or_else(|| napi_support::consumed("Pixmap"))
+        self.inner.get_mut("Pixmap")
     }
     fn __take(&mut self) -> Result<tiny_skia::Pixmap, String> {
-        self.inner
-            .take()
-            .ok_or_else(|| napi_support::consumed("Pixmap"))
+        self.inner.take("Pixmap")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -3575,7 +3577,7 @@ impl TinySkiaPixmap {
         data: Uint8Array,
         size: &TinySkiaIntSize,
     ) -> Result<Option<TinySkiaPixmap>, String> {
-        let __size = size.inner;
+        let __size = *size.__ref()?;
         let __v = napi_support::contained("Pixmap::from_vec", || {
             <tiny_skia::Pixmap>::from_vec(data.to_vec(), __size)
         })
@@ -3651,7 +3653,7 @@ impl TinySkiaPixmap {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn fill(&mut self, color: &TinySkiaColor) -> Result<(), String> {
-        let __color = color.inner;
+        let __color = *color.__ref()?;
         let __self = self.__mut()?;
         napi_support::contained("Pixmap::fill", || __self.fill(__color))
             .map_err(napi_support::coded)?;
@@ -3691,10 +3693,31 @@ impl TinySkiaPixmap {
                 .map_err(napi_support::coded)?;
         Ok(__v.into())
     }
+    #[doc = " Frees the value now, not at garbage collection: every later call throws"]
+    #[doc = " `Disposed`."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl TinySkiaColor {
     fn __from(inner: tiny_skia::Color) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::Color, String> {
+        self.inner.get("Color")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::Color, String> {
+        self.inner.get_mut("Color")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -3721,7 +3744,7 @@ impl TinySkiaColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn red(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Color::red", || __self.red()).map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -3732,7 +3755,7 @@ impl TinySkiaColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn green(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Color::green", || __self.green())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -3743,7 +3766,7 @@ impl TinySkiaColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn blue(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Color::blue", || __self.blue())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -3754,7 +3777,7 @@ impl TinySkiaColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn alpha(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Color::alpha", || __self.alpha())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -3766,7 +3789,7 @@ impl TinySkiaColor {
     #[allow(clippy::redundant_closure)]
     pub fn set_red(&mut self, c: f64) -> Result<(), String> {
         let c = to_f32(c);
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Color::set_red", || __self.set_red(c))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -3778,7 +3801,7 @@ impl TinySkiaColor {
     #[allow(clippy::redundant_closure)]
     pub fn set_green(&mut self, c: f64) -> Result<(), String> {
         let c = to_f32(c);
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Color::set_green", || __self.set_green(c))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -3790,7 +3813,7 @@ impl TinySkiaColor {
     #[allow(clippy::redundant_closure)]
     pub fn set_blue(&mut self, c: f64) -> Result<(), String> {
         let c = to_f32(c);
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Color::set_blue", || __self.set_blue(c))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -3802,7 +3825,7 @@ impl TinySkiaColor {
     #[allow(clippy::redundant_closure)]
     pub fn set_alpha(&mut self, c: f64) -> Result<(), String> {
         let c = to_f32(c);
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Color::set_alpha", || __self.set_alpha(c))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -3817,7 +3840,7 @@ impl TinySkiaColor {
     #[allow(clippy::redundant_closure)]
     pub fn apply_opacity(&mut self, opacity: f64) -> Result<(), String> {
         let opacity = to_f32(opacity);
-        let __self = &mut self.inner;
+        let __self = self.__mut()?;
         napi_support::contained("Color::apply_opacity", || __self.apply_opacity(opacity))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -3828,15 +3851,36 @@ impl TinySkiaColor {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_opaque(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Color::is_opaque", || __self.is_opaque())
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl TinySkiaIntSize {
     fn __from(inner: tiny_skia::IntSize) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::IntSize, String> {
+        self.inner.get("IntSize")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::IntSize, String> {
+        self.inner.get_mut("IntSize")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -3855,7 +3899,7 @@ impl TinySkiaIntSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn width(&self) -> Result<u32, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::width", || __self.width())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -3864,7 +3908,7 @@ impl TinySkiaIntSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn height(&self) -> Result<u32, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::height", || __self.height())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -3874,7 +3918,7 @@ impl TinySkiaIntSize {
     #[allow(clippy::redundant_closure)]
     pub fn scale_by(&self, factor: f64) -> Result<Option<TinySkiaIntSize>, String> {
         let factor = to_f32(factor);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::scale_by", || __self.scale_by(factor))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaIntSize::__from(__v)))
@@ -3883,8 +3927,8 @@ impl TinySkiaIntSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn scale_to(&self, to: &TinySkiaIntSize) -> Result<TinySkiaIntSize, String> {
-        let __to = to.inner;
-        let __self = &self.inner;
+        let __to = *to.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::scale_to", || __self.scale_to(__to))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaIntSize::__from(__v))
@@ -3893,7 +3937,7 @@ impl TinySkiaIntSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn scale_to_width(&self, new_width: u32) -> Result<Option<TinySkiaIntSize>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::scale_to_width", || {
             __self.scale_to_width(new_width)
         })
@@ -3904,7 +3948,7 @@ impl TinySkiaIntSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn scale_to_height(&self, new_height: u32) -> Result<Option<TinySkiaIntSize>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::scale_to_height", || {
             __self.scale_to_height(new_height)
         })
@@ -3915,15 +3959,36 @@ impl TinySkiaIntSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn to_size(&self) -> Result<TinySkiaSize, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::to_size", || __self.to_size())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl TinySkiaTransform {
     fn __from(inner: tiny_skia::Transform) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::Transform, String> {
+        self.inner.get("Transform")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::Transform, String> {
+        self.inner.get_mut("Transform")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -4022,7 +4087,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_finite(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_finite", || __self.is_finite())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4031,7 +4096,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_valid(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_valid", || __self.is_valid())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4040,7 +4105,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_identity(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_identity", || __self.is_identity())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4049,7 +4114,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_scale(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_scale", || __self.is_scale())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4058,7 +4123,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_skew(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_skew", || __self.is_skew())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4067,7 +4132,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_translate(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_translate", || __self.is_translate())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4076,7 +4141,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_scale_translate(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::is_scale_translate", || {
             __self.is_scale_translate()
         })
@@ -4087,7 +4152,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_scale(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::has_scale", || __self.has_scale())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4096,7 +4161,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_skew(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::has_skew", || __self.has_skew())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4105,7 +4170,7 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_translate(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::has_translate", || __self.has_translate())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4116,7 +4181,7 @@ impl TinySkiaTransform {
     pub fn pre_scale(&self, sx: f64, sy: f64) -> Result<TinySkiaTransform, String> {
         let sx = to_f32(sx);
         let sy = to_f32(sy);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::pre_scale", || __self.pre_scale(sx, sy))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -4127,7 +4192,7 @@ impl TinySkiaTransform {
     pub fn post_scale(&self, sx: f64, sy: f64) -> Result<TinySkiaTransform, String> {
         let sx = to_f32(sx);
         let sy = to_f32(sy);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::post_scale", || __self.post_scale(sx, sy))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -4138,7 +4203,7 @@ impl TinySkiaTransform {
     pub fn pre_translate(&self, tx: f64, ty: f64) -> Result<TinySkiaTransform, String> {
         let tx = to_f32(tx);
         let ty = to_f32(ty);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Transform::pre_translate", || __self.pre_translate(tx, ty))
                 .map_err(napi_support::coded)?;
@@ -4150,7 +4215,7 @@ impl TinySkiaTransform {
     pub fn post_translate(&self, tx: f64, ty: f64) -> Result<TinySkiaTransform, String> {
         let tx = to_f32(tx);
         let ty = to_f32(ty);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::post_translate", || {
             __self.post_translate(tx, ty)
         })
@@ -4164,7 +4229,7 @@ impl TinySkiaTransform {
     #[allow(clippy::redundant_closure)]
     pub fn pre_rotate(&self, angle: f64) -> Result<TinySkiaTransform, String> {
         let angle = to_f32(angle);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::pre_rotate", || __self.pre_rotate(angle))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -4176,7 +4241,7 @@ impl TinySkiaTransform {
     #[allow(clippy::redundant_closure)]
     pub fn post_rotate(&self, angle: f64) -> Result<TinySkiaTransform, String> {
         let angle = to_f32(angle);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::post_rotate", || __self.post_rotate(angle))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -4190,7 +4255,7 @@ impl TinySkiaTransform {
         let angle = to_f32(angle);
         let tx = to_f32(tx);
         let ty = to_f32(ty);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::pre_rotate_at", || {
             __self.pre_rotate_at(angle, tx, ty)
         })
@@ -4211,7 +4276,7 @@ impl TinySkiaTransform {
         let angle = to_f32(angle);
         let tx = to_f32(tx);
         let ty = to_f32(ty);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::post_rotate_at", || {
             __self.post_rotate_at(angle, tx, ty)
         })
@@ -4222,8 +4287,8 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn pre_concat(&self, other: &TinySkiaTransform) -> Result<TinySkiaTransform, String> {
-        let __other = other.inner;
-        let __self = &self.inner;
+        let __other = *other.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::pre_concat", || __self.pre_concat(__other))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -4232,8 +4297,8 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn post_concat(&self, other: &TinySkiaTransform) -> Result<TinySkiaTransform, String> {
-        let __other = other.inner;
-        let __self = &self.inner;
+        let __other = *other.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::post_concat", || __self.post_concat(__other))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -4242,75 +4307,75 @@ impl TinySkiaTransform {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn invert(&self) -> Result<Option<TinySkiaTransform>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Transform::invert", || __self.invert())
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaTransform::__from(__v)))
     }
     #[napi(getter, js_name = "sx")]
     pub fn field_sx(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.sx))
     }
     #[napi(setter, js_name = "sx")]
     pub fn set_field_sx(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.sx = value;
+        self.__mut()?.sx = value;
         Ok(())
     }
     #[napi(getter, js_name = "kx")]
     pub fn field_kx(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.kx))
     }
     #[napi(setter, js_name = "kx")]
     pub fn set_field_kx(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.kx = value;
+        self.__mut()?.kx = value;
         Ok(())
     }
     #[napi(getter, js_name = "ky")]
     pub fn field_ky(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.ky))
     }
     #[napi(setter, js_name = "ky")]
     pub fn set_field_ky(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.ky = value;
+        self.__mut()?.ky = value;
         Ok(())
     }
     #[napi(getter, js_name = "sy")]
     pub fn field_sy(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.sy))
     }
     #[napi(setter, js_name = "sy")]
     pub fn set_field_sy(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.sy = value;
+        self.__mut()?.sy = value;
         Ok(())
     }
     #[napi(getter, js_name = "tx")]
     pub fn field_tx(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.tx))
     }
     #[napi(setter, js_name = "tx")]
     pub fn set_field_tx(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.tx = value;
+        self.__mut()?.tx = value;
         Ok(())
     }
     #[napi(getter, js_name = "ty")]
     pub fn field_ty(&self) -> Result<f64, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(f64::from(__v.ty))
     }
     #[napi(setter, js_name = "ty")]
     pub fn set_field_ty(&mut self, value: f64) -> Result<(), String> {
         let value = to_f32(value);
-        self.inner.ty = value;
+        self.__mut()?.ty = value;
         Ok(())
     }
     #[doc = " A `Transform` from a plain object of its fields."]
@@ -4328,7 +4393,7 @@ impl TinySkiaTransform {
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
     pub fn to_object(&self) -> Result<TinySkiaTransformObject, String> {
-        let __v = &self.inner;
+        let __v = self.__ref()?;
         Ok(TinySkiaTransformObject {
             sx: f64::from(__v.sx),
             kx: f64::from(__v.kx),
@@ -4338,10 +4403,31 @@ impl TinySkiaTransform {
             ty: f64::from(__v.ty),
         })
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl TinySkiaRect {
     fn __from(inner: tiny_skia::Rect) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::Rect, String> {
+        self.inner.get("Rect")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::Rect, String> {
+        self.inner.get_mut("Rect")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -4383,7 +4469,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn left(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Rect::left", || __self.left()).map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4392,7 +4478,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn top(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Rect::top", || __self.top()).map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4401,7 +4487,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn right(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::right", || __self.right())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4410,7 +4496,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn bottom(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::bottom", || __self.bottom())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4419,7 +4505,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn x(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::x", || __self.x()).map_err(napi_support::coded)?;
         Ok(f64::from(__v))
     }
@@ -4427,7 +4513,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn y(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::y", || __self.y()).map_err(napi_support::coded)?;
         Ok(f64::from(__v))
     }
@@ -4435,7 +4521,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn width(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::width", || __self.width())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4444,7 +4530,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn height(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::height", || __self.height())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4453,7 +4539,7 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_empty(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::is_empty", || __self.is_empty())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -4464,8 +4550,8 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn intersect(&self, other: &TinySkiaRect) -> Result<Option<TinySkiaRect>, String> {
-        let __other = &other.inner;
-        let __self = &self.inner;
+        let __other = other.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::intersect", || __self.intersect(__other))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
@@ -4476,8 +4562,8 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn join(&self, other: &TinySkiaRect) -> Result<Option<TinySkiaRect>, String> {
-        let __other = &other.inner;
-        let __self = &self.inner;
+        let __other = other.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::join", || __self.join(__other))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
@@ -4488,7 +4574,7 @@ impl TinySkiaRect {
     pub fn inset(&self, dx: f64, dy: f64) -> Result<Option<TinySkiaRect>, String> {
         let dx = to_f32(dx);
         let dy = to_f32(dy);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::inset", || __self.inset(dx, dy))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
@@ -4499,7 +4585,7 @@ impl TinySkiaRect {
     pub fn outset(&self, dx: f64, dy: f64) -> Result<Option<TinySkiaRect>, String> {
         let dx = to_f32(dx);
         let dy = to_f32(dy);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::outset", || __self.outset(dx, dy))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
@@ -4510,8 +4596,8 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn transform(&self, ts: &TinySkiaTransform) -> Result<Option<TinySkiaRect>, String> {
-        let __ts = ts.inner;
-        let __self = &self.inner;
+        let __ts = *ts.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::transform", || __self.transform(__ts))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
@@ -4520,15 +4606,36 @@ impl TinySkiaRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn to_non_zero_rect(&self) -> Result<Option<BBox>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::to_non_zero_rect", || __self.to_non_zero_rect())
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| BBox::from(__v)))
     }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl TinySkiaSize {
     fn __from(inner: tiny_skia::Size) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&tiny_skia::Size, String> {
+        self.inner.get("Size")
+    }
+    fn __mut(&mut self) -> Result<&mut tiny_skia::Size, String> {
+        self.inner.get_mut("Size")
     }
 }
 #[napi(namespace = "tiny_skia")]
@@ -4549,7 +4656,7 @@ impl TinySkiaSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn width(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::width", || __self.width())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4558,7 +4665,7 @@ impl TinySkiaSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn height(&self) -> Result<f64, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::height", || __self.height())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v))
@@ -4567,8 +4674,8 @@ impl TinySkiaSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn scale_to(&self, to: &TinySkiaSize) -> Result<TinySkiaSize, String> {
-        let __to = to.inner;
-        let __self = &self.inner;
+        let __to = *to.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::scale_to", || __self.scale_to(__to))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
@@ -4577,8 +4684,8 @@ impl TinySkiaSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn expand_to(&self, to: &TinySkiaSize) -> Result<TinySkiaSize, String> {
-        let __to = to.inner;
-        let __self = &self.inner;
+        let __to = *to.__ref()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::expand_to", || __self.expand_to(__to))
             .map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
@@ -4588,7 +4695,7 @@ impl TinySkiaSize {
     #[allow(clippy::redundant_closure)]
     pub fn scale_by(&self, factor: f64) -> Result<Option<TinySkiaSize>, String> {
         let factor = to_f32(factor);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::scale_by", || __self.scale_by(factor))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaSize::__from(__v)))
@@ -4598,7 +4705,7 @@ impl TinySkiaSize {
     #[allow(clippy::redundant_closure)]
     pub fn scale_to_width(&self, new_width: f64) -> Result<Option<TinySkiaSize>, String> {
         let new_width = to_f32(new_width);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Size::scale_to_width", || __self.scale_to_width(new_width))
                 .map_err(napi_support::coded)?;
@@ -4609,7 +4716,7 @@ impl TinySkiaSize {
     #[allow(clippy::redundant_closure)]
     pub fn scale_to_height(&self, new_height: f64) -> Result<Option<TinySkiaSize>, String> {
         let new_height = to_f32(new_height);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::scale_to_height", || {
             __self.scale_to_height(new_height)
         })
@@ -4620,7 +4727,7 @@ impl TinySkiaSize {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn to_int_size(&self) -> Result<TinySkiaIntSize, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::to_int_size", || __self.to_int_size())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaIntSize::__from(__v))
@@ -4631,7 +4738,7 @@ impl TinySkiaSize {
     pub fn to_rect(&self, x: f64, y: f64) -> Result<Option<TinySkiaRect>, String> {
         let x = to_f32(x);
         let y = to_f32(y);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Size::to_rect", || __self.to_rect(x, y))
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
@@ -4642,11 +4749,24 @@ impl TinySkiaSize {
     pub fn to_non_zero_rect(&self, x: f64, y: f64) -> Result<BBox, String> {
         let x = to_f32(x);
         let y = to_f32(y);
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Size::to_non_zero_rect", || __self.to_non_zero_rect(x, y))
                 .map_err(napi_support::coded)?;
         Ok(BBox::from(__v))
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<UsvgColorInterpolation> for usvg::filter::ColorInterpolation {
@@ -5133,7 +5253,7 @@ impl From<usvg::WritingMode> for UsvgWritingMode {
 }
 impl UsvgOptions<'_> {
     #[doc = " The upstream value: `Default`, with what JS provided on top."]
-    fn to_upstream(&self) -> Result<usvg::Options<'static>> {
+    fn to_upstream(&self) -> Result<usvg::Options<'static>, String> {
         let mut o = <usvg::Options<'static>>::default();
         if let Some(v) = &self.resources_dir {
             o.resources_dir = Some(std::path::PathBuf::from(v));
@@ -5166,7 +5286,7 @@ impl UsvgOptions<'_> {
         }
         if let Some(v) = &self.fontdb {
             let v = &**v;
-            o.fontdb = v.inner.clone();
+            o.fontdb = v.__ref()?.clone();
         }
         if let Some(v) = &self.style_sheet {
             o.style_sheet = Some(v.clone());
@@ -5176,7 +5296,7 @@ impl UsvgOptions<'_> {
 }
 impl UsvgWriteOptions {
     #[doc = " The upstream value: `Default`, with what JS provided on top."]
-    fn to_upstream(&self) -> Result<usvg::WriteOptions> {
+    fn to_upstream(&self) -> Result<usvg::WriteOptions, String> {
         let mut o = <usvg::WriteOptions>::default();
         if let Some(v) = &self.id_prefix {
             o.id_prefix = Some(v.clone());
@@ -5194,17 +5314,20 @@ impl UsvgWriteOptions {
             o.use_single_quote = v;
         }
         if let Some(v) = &self.indent {
-            o.indent = indent_from_js(v, "indent")?;
+            o.indent = indent_from_js(v, "indent").map_err(napi_support::coded)?;
         }
         if let Some(v) = &self.attributes_indent {
-            o.attributes_indent = indent_from_js(v, "attributesIndent")?;
+            o.attributes_indent =
+                indent_from_js(v, "attributesIndent").map_err(napi_support::coded)?;
         }
         Ok(o)
     }
 }
 impl UsvgFilter {
     fn wrap(inner: std::sync::Arc<usvg::filter::Filter>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
@@ -5214,152 +5337,185 @@ impl UsvgFilter {
     #[doc = " Taken from the SVG itself."]
     #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
     #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
+    pub fn id(&self) -> Result<String, String> {
+        let __inner = self.inner.get("Filter")?;
+        Ok((*__inner).id().to_string())
     }
     #[doc = " Filter region."]
     #[doc = ""]
     #[doc = " `x`, `y`, `width` and `height` in the SVG."]
     #[napi]
-    pub fn rect(&self) -> BBox {
-        BBox::from(self.inner.rect())
+    pub fn rect(&self) -> Result<BBox, String> {
+        let __inner = self.inner.get("Filter")?;
+        Ok(BBox::from((*__inner).rect()))
     }
     #[doc = " A list of filter primitives."]
     #[napi]
-    pub fn primitives(&self) -> Vec<UsvgPrimitive> {
-        self.inner
+    pub fn primitives(&self) -> Result<Vec<UsvgPrimitive>, String> {
+        let __inner = self.inner.get("Filter")?;
+        Ok((*__inner)
             .primitives()
             .iter()
             .map(UsvgPrimitive::from)
-            .collect()
+            .collect())
     }
 }
 impl UsvgRadialGradient {
     fn wrap(inner: std::sync::Arc<usvg::RadialGradient>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgRadialGradient {
     #[doc = " `cx` coordinate."]
     #[napi]
-    pub fn cx(&self) -> f64 {
-        f64::from(self.inner.cx())
+    pub fn cx(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(f64::from((*__inner).cx()))
     }
     #[doc = " `cy` coordinate."]
     #[napi]
-    pub fn cy(&self) -> f64 {
-        f64::from(self.inner.cy())
+    pub fn cy(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(f64::from((*__inner).cy()))
     }
     #[doc = " Gradient radius."]
     #[napi]
-    pub fn r(&self) -> f64 {
-        f64::from(self.inner.r().get())
+    pub fn r(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(f64::from((*__inner).r().get()))
     }
     #[doc = " `fx` coordinate."]
     #[napi]
-    pub fn fx(&self) -> f64 {
-        f64::from(self.inner.fx())
+    pub fn fx(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(f64::from((*__inner).fx()))
     }
     #[doc = " `fy` coordinate."]
     #[napi]
-    pub fn fy(&self) -> f64 {
-        f64::from(self.inner.fy())
+    pub fn fy(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(f64::from((*__inner).fy()))
     }
     #[doc = " Focal radius."]
     #[napi]
-    pub fn fr(&self) -> f64 {
-        f64::from(self.inner.fr().get())
+    pub fn fr(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(f64::from((*__inner).fr().get()))
     }
     #[doc = " Element's ID."]
     #[doc = ""]
     #[doc = " Taken from the SVG itself."]
     #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
     #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
+    pub fn id(&self) -> Result<String, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok((*__inner).id().to_string())
     }
     #[doc = " Gradient transform."]
     #[doc = ""]
     #[doc = " `gradientTransform` in SVG."]
     #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
+    pub fn transform(&self) -> Result<Matrix, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(Matrix::from((*__inner).transform()))
     }
     #[doc = " Gradient spreading method."]
     #[doc = ""]
     #[doc = " `spreadMethod` in SVG."]
     #[napi]
-    pub fn spread_method(&self) -> UsvgSpreadMethod {
-        UsvgSpreadMethod::from(self.inner.spread_method())
+    pub fn spread_method(&self) -> Result<UsvgSpreadMethod, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok(UsvgSpreadMethod::from((*__inner).spread_method()))
     }
     #[doc = " A list of `stop` elements."]
     #[napi]
-    pub fn stops(&self) -> Vec<UsvgStop> {
-        self.inner.stops().iter().map(UsvgStop::from).collect()
+    pub fn stops(&self) -> Result<Vec<UsvgStop>, String> {
+        let __inner = self.inner.get("RadialGradient")?;
+        Ok((*__inner).stops().iter().map(UsvgStop::from).collect())
     }
 }
 impl UsvgLinearGradient {
     fn wrap(inner: std::sync::Arc<usvg::LinearGradient>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgLinearGradient {
     #[doc = " `x1` coordinate."]
     #[napi]
-    pub fn x1(&self) -> f64 {
-        f64::from(self.inner.x1())
+    pub fn x1(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok(f64::from((*__inner).x1()))
     }
     #[doc = " `y1` coordinate."]
     #[napi]
-    pub fn y1(&self) -> f64 {
-        f64::from(self.inner.y1())
+    pub fn y1(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok(f64::from((*__inner).y1()))
     }
     #[doc = " `x2` coordinate."]
     #[napi]
-    pub fn x2(&self) -> f64 {
-        f64::from(self.inner.x2())
+    pub fn x2(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok(f64::from((*__inner).x2()))
     }
     #[doc = " `y2` coordinate."]
     #[napi]
-    pub fn y2(&self) -> f64 {
-        f64::from(self.inner.y2())
+    pub fn y2(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok(f64::from((*__inner).y2()))
     }
     #[doc = " Element's ID."]
     #[doc = ""]
     #[doc = " Taken from the SVG itself."]
     #[doc = " Used only during SVG writing. `resvg` doesn't rely on this property."]
     #[napi]
-    pub fn id(&self) -> String {
-        self.inner.id().to_string()
+    pub fn id(&self) -> Result<String, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok((*__inner).id().to_string())
     }
     #[doc = " Gradient transform."]
     #[doc = ""]
     #[doc = " `gradientTransform` in SVG."]
     #[napi]
-    pub fn transform(&self) -> Matrix {
-        Matrix::from(self.inner.transform())
+    pub fn transform(&self) -> Result<Matrix, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok(Matrix::from((*__inner).transform()))
     }
     #[doc = " Gradient spreading method."]
     #[doc = ""]
     #[doc = " `spreadMethod` in SVG."]
     #[napi]
-    pub fn spread_method(&self) -> UsvgSpreadMethod {
-        UsvgSpreadMethod::from(self.inner.spread_method())
+    pub fn spread_method(&self) -> Result<UsvgSpreadMethod, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok(UsvgSpreadMethod::from((*__inner).spread_method()))
     }
     #[doc = " A list of `stop` elements."]
     #[napi]
-    pub fn stops(&self) -> Vec<UsvgStop> {
-        self.inner.stops().iter().map(UsvgStop::from).collect()
+    pub fn stops(&self) -> Result<Vec<UsvgStop>, String> {
+        let __inner = self.inner.get("LinearGradient")?;
+        Ok((*__inner).stops().iter().map(UsvgStop::from).collect())
     }
 }
 impl UsvgTree {
     fn wrap(inner: std::sync::Arc<usvg::Tree>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: usvg::Tree) -> Self {
         Self::wrap(std::sync::Arc::new(inner))
+    }
+    fn __ref(&self) -> Result<&std::sync::Arc<usvg::Tree>, String> {
+        self.inner.get("Tree")
+    }
+    fn __mut(&mut self) -> Result<&mut std::sync::Arc<usvg::Tree>, String> {
+        self.inner.get_mut("Tree")
     }
 }
 #[napi(namespace = "usvg")]
@@ -5370,10 +5526,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn from_data(data: Uint8Array, opt: Option<UsvgOptions>) -> Result<Self, String> {
-        let __opt = opt
-            .unwrap_or_default()
-            .to_upstream()
-            .map_err(napi_support::coded)?;
+        let __opt = opt.unwrap_or_default().to_upstream()?;
         let __v =
             napi_support::contained("Tree::from_data", || <usvg::Tree>::from_data(&data, &__opt))
                 .map_err(napi_support::coded)?
@@ -5396,10 +5549,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn from_data_nested(data: Uint8Array, opt: Option<UsvgOptions>) -> Result<Self, String> {
-        let __opt = opt
-            .unwrap_or_default()
-            .to_upstream()
-            .map_err(napi_support::coded)?;
+        let __opt = opt.unwrap_or_default().to_upstream()?;
         let __v = napi_support::contained("Tree::from_data_nested", || {
             <usvg::Tree>::from_data_nested(&data, &__opt)
         })
@@ -5421,10 +5571,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn from_str(text: String, opt: Option<UsvgOptions>) -> Result<Self, String> {
-        let __opt = opt
-            .unwrap_or_default()
-            .to_upstream()
-            .map_err(napi_support::coded)?;
+        let __opt = opt.unwrap_or_default().to_upstream()?;
         let __v =
             napi_support::contained("Tree::from_str", || <usvg::Tree>::from_str(&text, &__opt))
                 .map_err(napi_support::coded)?
@@ -5454,7 +5601,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn size(&self) -> Result<TinySkiaSize, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v =
             napi_support::contained("Tree::size", || __self.size()).map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
@@ -5463,11 +5610,11 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn root(&self) -> Result<UsvgGroup, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Tree::root", || {
             UsvgGroup::__proj(
-                napi_support::Projection::of(self.inner.clone())
-                    .then(move |__s| Some(__s.root()))
+                __b.then(move |__s| Some(__s.root()))
                     .expect("a borrow resolves"),
             )
         })
@@ -5483,10 +5630,10 @@ impl UsvgTree {
         id: String,
     ) -> Result<Option<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
     {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Tree::node_by_id", || {
-            napi_support::Projection::of(self.inner.clone())
-                .then(move |__s| __s.node_by_id(&id))
+            __b.then(move |__s| __s.node_by_id(&id))
                 .map(usvg_node_to_js)
         })
         .map_err(napi_support::coded)
@@ -5495,7 +5642,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_text_nodes(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::has_text_nodes", || __self.has_text_nodes())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5504,7 +5651,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_defs_nodes(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::has_defs_nodes", || __self.has_defs_nodes())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5513,7 +5660,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn linear_gradients(&self) -> Result<Vec<UsvgLinearGradient>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::linear_gradients", || __self.linear_gradients())
             .map_err(napi_support::coded)?;
         Ok(__v
@@ -5525,7 +5672,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn radial_gradients(&self) -> Result<Vec<UsvgRadialGradient>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::radial_gradients", || __self.radial_gradients())
             .map_err(napi_support::coded)?;
         Ok(__v
@@ -5537,9 +5684,9 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn patterns(&self) -> Result<Vec<UsvgPattern>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Tree::patterns", || {
-            let __b = napi_support::Projection::of(self.inner.clone());
             (0..__b.get().patterns().len())
                 .filter_map(|__i| __b.then(move |__s| __s.patterns().get(__i).map(|__a| &**__a)))
                 .map(UsvgPattern::__proj)
@@ -5551,9 +5698,9 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn clip_paths(&self) -> Result<Vec<UsvgClipPath>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Tree::clip_paths", || {
-            let __b = napi_support::Projection::of(self.inner.clone());
             (0..__b.get().clip_paths().len())
                 .filter_map(|__i| __b.then(move |__s| __s.clip_paths().get(__i).map(|__a| &**__a)))
                 .map(UsvgClipPath::__proj)
@@ -5565,9 +5712,9 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn masks(&self) -> Result<Vec<UsvgMask>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Tree::masks", || {
-            let __b = napi_support::Projection::of(self.inner.clone());
             (0..__b.get().masks().len())
                 .filter_map(|__i| __b.then(move |__s| __s.masks().get(__i).map(|__a| &**__a)))
                 .map(UsvgMask::__proj)
@@ -5579,7 +5726,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn filters(&self) -> Result<Vec<UsvgFilter>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::filters", || __self.filters())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|x| UsvgFilter::wrap(x.clone())).collect())
@@ -5588,7 +5735,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn fontdb(&self) -> Result<FontdbDatabase, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::fontdb", || __self.fontdb())
             .map_err(napi_support::coded)?;
         Ok(FontdbDatabase::wrap(std::sync::Arc::clone(__v)))
@@ -5597,14 +5744,25 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn to_string(&self, opt: Option<UsvgWriteOptions>) -> Result<String, String> {
-        let __opt = opt
-            .unwrap_or_default()
-            .to_upstream()
-            .map_err(napi_support::coded)?;
-        let __self = &self.inner;
+        let __opt = opt.unwrap_or_default().to_upstream()?;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Tree::to_string", || __self.to_string(&__opt))
             .map_err(napi_support::coded)?;
         Ok(__v)
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<&usvg::Group> for UsvgGroup {
@@ -5614,13 +5772,22 @@ impl From<&usvg::Group> for UsvgGroup {
 }
 impl UsvgGroup {
     fn __proj(inner: napi_support::Projection<usvg::Group>) -> Self {
-        Self { inner, of: None }
+        Self {
+            inner: napi_support::Slot::new(inner),
+            of: None,
+        }
     }
     fn __from(inner: usvg::Group) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::Group) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Group>, String> {
+        self.inner.get("Group")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Group>, String> {
+        self.inner.get_mut("Group")
     }
 }
 #[napi(namespace = "usvg")]
@@ -5633,7 +5800,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Group::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -5644,7 +5811,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::transform", || __self.transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -5658,7 +5825,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_transform", || __self.abs_transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -5670,7 +5837,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn opacity(&self) -> Result<f64, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::opacity", || __self.opacity())
             .map_err(napi_support::coded)?;
         Ok(f64::from(__v.get()))
@@ -5681,7 +5848,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn blend_mode(&self) -> Result<UsvgBlendMode, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::blend_mode", || __self.blend_mode())
             .map_err(napi_support::coded)?;
         Ok(UsvgBlendMode::from(__v))
@@ -5692,7 +5859,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn isolate(&self) -> Result<bool, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::isolate", || __self.isolate())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5701,11 +5868,10 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn clip_path(&self) -> Result<Option<UsvgClipPath>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Group::clip_path", || {
-            self.inner
-                .clone()
-                .then(move |__s| __s.clip_path())
+            __b.then(move |__s| __s.clip_path())
                 .map(UsvgClipPath::__proj)
         })
         .map_err(napi_support::coded)
@@ -5714,12 +5880,10 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn mask(&self) -> Result<Option<UsvgMask>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Group::mask", || {
-            self.inner
-                .clone()
-                .then(move |__s| __s.mask())
-                .map(UsvgMask::__proj)
+            __b.then(move |__s| __s.mask()).map(UsvgMask::__proj)
         })
         .map_err(napi_support::coded)
     }
@@ -5727,7 +5891,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn filters(&self) -> Result<Vec<UsvgFilter>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::filters", || __self.filters())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|x| UsvgFilter::wrap(x.clone())).collect())
@@ -5740,7 +5904,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::bounding_box", || __self.bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -5751,7 +5915,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_bounding_box", || __self.abs_bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -5762,7 +5926,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::stroke_bounding_box", || {
             __self.stroke_bounding_box()
         })
@@ -5775,7 +5939,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_stroke_bounding_box", || {
             __self.abs_stroke_bounding_box()
         })
@@ -5799,7 +5963,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn layer_bounding_box(&self) -> Result<BBox, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Group::layer_bounding_box", || __self.layer_bounding_box())
                 .map_err(napi_support::coded)?;
@@ -5809,7 +5973,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_layer_bounding_box(&self) -> Result<BBox, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_layer_bounding_box", || {
             __self.abs_layer_bounding_box()
         })
@@ -5823,9 +5987,9 @@ impl UsvgGroup {
         &self,
     ) -> Result<Vec<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
     {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Group::children", || {
-            let __b = self.inner.clone();
             (0..__b.get().children().len())
                 .filter_map(|__i| __b.then(move |__s| __s.children().get(__i)))
                 .map(usvg_node_to_js)
@@ -5837,7 +6001,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn should_isolate(&self) -> Result<bool, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::should_isolate", || __self.should_isolate())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5846,7 +6010,7 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_children(&self) -> Result<bool, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::has_children", || __self.has_children())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5864,12 +6028,27 @@ impl UsvgGroup {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn filters_bounding_box(&self) -> Result<Option<BBox>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::filters_bounding_box", || {
             __self.filters_bounding_box()
         })
         .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| BBox::from(__v)))
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+        self.of = None;
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<&usvg::Path> for UsvgPath {
@@ -5879,13 +6058,22 @@ impl From<&usvg::Path> for UsvgPath {
 }
 impl UsvgPath {
     fn __proj(inner: napi_support::Projection<usvg::Path>) -> Self {
-        Self { inner, of: None }
+        Self {
+            inner: napi_support::Slot::new(inner),
+            of: None,
+        }
     }
     fn __from(inner: usvg::Path) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::Path) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Path>, String> {
+        self.inner.get("Path")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Path>, String> {
+        self.inner.get_mut("Path")
     }
 }
 #[napi(namespace = "usvg")]
@@ -5898,7 +6086,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -5907,7 +6095,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_visible(&self) -> Result<bool, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::is_visible", || __self.is_visible())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5916,7 +6104,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn fill(&self) -> Result<Option<UsvgFill>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::fill", || __self.fill()).map_err(napi_support::coded)?;
         Ok(__v.map(|__v| UsvgFill::from(__v)))
@@ -5925,7 +6113,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn stroke(&self) -> Result<Option<UsvgStroke>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::stroke", || __self.stroke())
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| UsvgStroke::from(__v)))
@@ -5939,7 +6127,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn paint_order(&self) -> Result<UsvgPaintOrder, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::paint_order", || __self.paint_order())
             .map_err(napi_support::coded)?;
         Ok(UsvgPaintOrder::from(__v))
@@ -5950,7 +6138,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn rendering_mode(&self) -> Result<UsvgShapeRendering, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::rendering_mode", || __self.rendering_mode())
             .map_err(napi_support::coded)?;
         Ok(UsvgShapeRendering::from(__v))
@@ -5961,7 +6149,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn data(&self) -> Result<Vec<PathSegment>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::data", || __self.data()).map_err(napi_support::coded)?;
         Ok(path_segments(__v))
@@ -5975,7 +6163,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::abs_transform", || __self.abs_transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -5986,7 +6174,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::bounding_box", || __self.bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -5997,7 +6185,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::abs_bounding_box", || __self.abs_bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -6008,7 +6196,7 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::stroke_bounding_box", || __self.stroke_bounding_box())
                 .map_err(napi_support::coded)?;
@@ -6020,12 +6208,27 @@ impl UsvgPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::abs_stroke_bounding_box", || {
             __self.abs_stroke_bounding_box()
         })
         .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+        self.of = None;
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<&usvg::Image> for UsvgImage {
@@ -6035,13 +6238,22 @@ impl From<&usvg::Image> for UsvgImage {
 }
 impl UsvgImage {
     fn __proj(inner: napi_support::Projection<usvg::Image>) -> Self {
-        Self { inner, of: None }
+        Self {
+            inner: napi_support::Slot::new(inner),
+            of: None,
+        }
     }
     fn __from(inner: usvg::Image) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::Image) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Image>, String> {
+        self.inner.get("Image")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Image>, String> {
+        self.inner.get_mut("Image")
     }
 }
 #[napi(namespace = "usvg")]
@@ -6054,7 +6266,7 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Image::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -6063,7 +6275,7 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_visible(&self) -> Result<bool, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::is_visible", || __self.is_visible())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -6075,7 +6287,7 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn size(&self) -> Result<TinySkiaSize, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::size", || __self.size())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
@@ -6086,7 +6298,7 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn rendering_mode(&self) -> Result<UsvgImageRendering, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::rendering_mode", || __self.rendering_mode())
             .map_err(napi_support::coded)?;
         Ok(UsvgImageRendering::from(__v))
@@ -6106,7 +6318,7 @@ impl UsvgImage {
         >,
         String,
     > {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::kind", || __self.kind())
             .map_err(napi_support::coded)?;
         Ok(usvg_image_kind_to_js(__v))
@@ -6120,7 +6332,7 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::abs_transform", || __self.abs_transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -6131,7 +6343,7 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::bounding_box", || __self.bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -6142,10 +6354,25 @@ impl UsvgImage {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Image::abs_bounding_box", || __self.abs_bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+        self.of = None;
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 impl From<&usvg::Text> for UsvgText {
@@ -6155,13 +6382,22 @@ impl From<&usvg::Text> for UsvgText {
 }
 impl UsvgText {
     fn __proj(inner: napi_support::Projection<usvg::Text>) -> Self {
-        Self { inner, of: None }
+        Self {
+            inner: napi_support::Slot::new(inner),
+            of: None,
+        }
     }
     fn __from(inner: usvg::Text) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::Text) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Text>, String> {
+        self.inner.get("Text")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Text>, String> {
+        self.inner.get_mut("Text")
     }
 }
 #[napi(namespace = "usvg")]
@@ -6174,7 +6410,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Text::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -6185,7 +6421,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn rendering_mode(&self) -> Result<UsvgTextRendering, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::rendering_mode", || __self.rendering_mode())
             .map_err(napi_support::coded)?;
         Ok(UsvgTextRendering::from(__v))
@@ -6196,7 +6432,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn dx(&self) -> Result<Vec<f64>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Text::dx", || __self.dx()).map_err(napi_support::coded)?;
         Ok(__v.iter().map(|v| f64::from(*v)).collect())
@@ -6207,7 +6443,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn dy(&self) -> Result<Vec<f64>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Text::dy", || __self.dy()).map_err(napi_support::coded)?;
         Ok(__v.iter().map(|v| f64::from(*v)).collect())
@@ -6218,7 +6454,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn rotate(&self) -> Result<Vec<f64>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::rotate", || __self.rotate())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|v| f64::from(*v)).collect())
@@ -6227,7 +6463,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn writing_mode(&self) -> Result<UsvgWritingMode, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::writing_mode", || __self.writing_mode())
             .map_err(napi_support::coded)?;
         Ok(UsvgWritingMode::from(__v))
@@ -6236,7 +6472,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn chunks(&self) -> Result<Vec<UsvgTextChunk>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::chunks", || __self.chunks())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|x| UsvgTextChunk::wrap(x.clone())).collect())
@@ -6250,7 +6486,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::abs_transform", || __self.abs_transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -6269,7 +6505,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::bounding_box", || __self.bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -6280,7 +6516,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::abs_bounding_box", || __self.abs_bounding_box())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaRect::__from(__v))
@@ -6293,7 +6529,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Text::stroke_bounding_box", || __self.stroke_bounding_box())
                 .map_err(napi_support::coded)?;
@@ -6303,7 +6539,7 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::abs_stroke_bounding_box", || {
             __self.abs_stroke_bounding_box()
         })
@@ -6329,12 +6565,11 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn flattened(&self) -> Result<UsvgGroup, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Text::flattened", || {
             UsvgGroup::__proj(
-                self.inner
-                    .clone()
-                    .then(move |__s| Some(__s.flattened()))
+                __b.then(move |__s| Some(__s.flattened()))
                     .expect("a borrow resolves"),
             )
         })
@@ -6348,21 +6583,44 @@ impl UsvgText {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn layouted(&self) -> Result<Vec<UsvgSpan>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::layouted", || __self.layouted())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|x| UsvgSpan::wrap(x.clone())).collect())
     }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+        self.of = None;
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl UsvgClipPath {
     fn __proj(inner: napi_support::Projection<usvg::ClipPath>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: usvg::ClipPath) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::ClipPath) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::ClipPath>, String> {
+        self.inner.get("ClipPath")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::ClipPath>, String> {
+        self.inner.get_mut("ClipPath")
     }
 }
 #[napi(namespace = "usvg")]
@@ -6374,7 +6632,7 @@ impl UsvgClipPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("ClipPath::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -6385,7 +6643,7 @@ impl UsvgClipPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("ClipPath::transform", || __self.transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -6396,11 +6654,10 @@ impl UsvgClipPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn clip_path(&self) -> Result<Option<UsvgClipPath>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("ClipPath::clip_path", || {
-            self.inner
-                .clone()
-                .then(move |__s| __s.clip_path())
+            __b.then(move |__s| __s.clip_path())
                 .map(UsvgClipPath::__proj)
         })
         .map_err(napi_support::coded)
@@ -6409,27 +6666,48 @@ impl UsvgClipPath {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn root(&self) -> Result<UsvgGroup, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("ClipPath::root", || {
             UsvgGroup::__proj(
-                self.inner
-                    .clone()
-                    .then(move |__s| Some(__s.root()))
+                __b.then(move |__s| Some(__s.root()))
                     .expect("a borrow resolves"),
             )
         })
         .map_err(napi_support::coded)
     }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl UsvgMask {
     fn __proj(inner: napi_support::Projection<usvg::Mask>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: usvg::Mask) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::Mask) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Mask>, String> {
+        self.inner.get("Mask")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Mask>, String> {
+        self.inner.get_mut("Mask")
     }
 }
 #[napi(namespace = "usvg")]
@@ -6441,7 +6719,7 @@ impl UsvgMask {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Mask::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -6452,7 +6730,7 @@ impl UsvgMask {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn rect(&self) -> Result<BBox, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Mask::rect", || __self.rect()).map_err(napi_support::coded)?;
         Ok(BBox::from(__v))
@@ -6463,7 +6741,7 @@ impl UsvgMask {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn kind(&self) -> Result<UsvgMaskType, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Mask::kind", || __self.kind()).map_err(napi_support::coded)?;
         Ok(UsvgMaskType::from(__v))
@@ -6474,12 +6752,10 @@ impl UsvgMask {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn mask(&self) -> Result<Option<UsvgMask>, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Mask::mask", || {
-            self.inner
-                .clone()
-                .then(move |__s| __s.mask())
-                .map(UsvgMask::__proj)
+            __b.then(move |__s| __s.mask()).map(UsvgMask::__proj)
         })
         .map_err(napi_support::coded)
     }
@@ -6489,27 +6765,48 @@ impl UsvgMask {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn root(&self) -> Result<UsvgGroup, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Mask::root", || {
             UsvgGroup::__proj(
-                self.inner
-                    .clone()
-                    .then(move |__s| Some(__s.root()))
+                __b.then(move |__s| Some(__s.root()))
                     .expect("a borrow resolves"),
             )
         })
         .map_err(napi_support::coded)
     }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl UsvgPattern {
     fn __proj(inner: napi_support::Projection<usvg::Pattern>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: usvg::Pattern) -> Self {
         Self::__proj(napi_support::Projection::owned(inner))
     }
     fn wrap(inner: usvg::Pattern) -> Self {
         Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Pattern>, String> {
+        self.inner.get("Pattern")
+    }
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Pattern>, String> {
+        self.inner.get_mut("Pattern")
     }
 }
 #[napi(namespace = "usvg")]
@@ -6521,7 +6818,7 @@ impl UsvgPattern {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn id(&self) -> Result<String, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Pattern::id", || __self.id()).map_err(napi_support::coded)?;
         Ok(__v.to_string())
@@ -6532,7 +6829,7 @@ impl UsvgPattern {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn transform(&self) -> Result<TinySkiaTransform, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Pattern::transform", || __self.transform())
             .map_err(napi_support::coded)?;
         Ok(TinySkiaTransform::__from(__v))
@@ -6543,7 +6840,7 @@ impl UsvgPattern {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn rect(&self) -> Result<BBox, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Pattern::rect", || __self.rect())
             .map_err(napi_support::coded)?;
         Ok(BBox::from(__v))
@@ -6552,16 +6849,29 @@ impl UsvgPattern {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn root(&self) -> Result<UsvgGroup, String> {
-        let __self = self.inner.get();
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Pattern::root", || {
             UsvgGroup::__proj(
-                self.inner
-                    .clone()
-                    .then(move |__s| Some(__s.root()))
+                __b.then(move |__s| Some(__s.root()))
                     .expect("a borrow resolves"),
             )
         })
         .map_err(napi_support::coded)
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
     }
 }
 fn usvg_node_to_js(
@@ -6571,48 +6881,52 @@ fn usvg_node_to_js(
         usvg::Node::Group(_) => Either4::A(UsvgNodeGroup {
             kind: "group".to_string(),
             value: UsvgGroup {
-                inner: p
-                    .then(|__e| match __e {
+                inner: napi_support::Slot::new(
+                    p.then(|__e| match __e {
                         usvg::Node::Group(__v) => Some(&**__v),
                         _ => None,
                     })
                     .expect("the variant matched"),
+                ),
                 of: Some(p.clone()),
             },
         }),
         usvg::Node::Path(_) => Either4::B(UsvgNodePath {
             kind: "path".to_string(),
             value: UsvgPath {
-                inner: p
-                    .then(|__e| match __e {
+                inner: napi_support::Slot::new(
+                    p.then(|__e| match __e {
                         usvg::Node::Path(__v) => Some(&**__v),
                         _ => None,
                     })
                     .expect("the variant matched"),
+                ),
                 of: Some(p.clone()),
             },
         }),
         usvg::Node::Image(_) => Either4::C(UsvgNodeImage {
             kind: "image".to_string(),
             value: UsvgImage {
-                inner: p
-                    .then(|__e| match __e {
+                inner: napi_support::Slot::new(
+                    p.then(|__e| match __e {
                         usvg::Node::Image(__v) => Some(&**__v),
                         _ => None,
                     })
                     .expect("the variant matched"),
+                ),
                 of: Some(p.clone()),
             },
         }),
         usvg::Node::Text(_) => Either4::D(UsvgNodeText {
             kind: "text".to_string(),
             value: UsvgText {
-                inner: p
-                    .then(|__e| match __e {
+                inner: napi_support::Slot::new(
+                    p.then(|__e| match __e {
                         usvg::Node::Text(__v) => Some(&**__v),
                         _ => None,
                     })
                     .expect("the variant matched"),
+                ),
                 of: Some(p.clone()),
             },
         }),
@@ -6624,26 +6938,34 @@ fn usvg_node_from_js(o: &Object) -> Result<napi_support::Projection<usvg::Node>,
         .get_named_property_unchecked("kind")
         .map_err(napi_support::coded)?;
     let of = match kind.as_str() {
-        "group" => o
-            .get_named_property_unchecked::<ClassInstance<UsvgGroup>>("value")
-            .map_err(napi_support::coded)?
-            .of
-            .clone(),
-        "path" => o
-            .get_named_property_unchecked::<ClassInstance<UsvgPath>>("value")
-            .map_err(napi_support::coded)?
-            .of
-            .clone(),
-        "image" => o
-            .get_named_property_unchecked::<ClassInstance<UsvgImage>>("value")
-            .map_err(napi_support::coded)?
-            .of
-            .clone(),
-        "text" => o
-            .get_named_property_unchecked::<ClassInstance<UsvgText>>("value")
-            .map_err(napi_support::coded)?
-            .of
-            .clone(),
+        "group" => {
+            let __c = o
+                .get_named_property_unchecked::<ClassInstance<UsvgGroup>>("value")
+                .map_err(napi_support::coded)?;
+            __c.__ref()?;
+            __c.of.clone()
+        }
+        "path" => {
+            let __c = o
+                .get_named_property_unchecked::<ClassInstance<UsvgPath>>("value")
+                .map_err(napi_support::coded)?;
+            __c.__ref()?;
+            __c.of.clone()
+        }
+        "image" => {
+            let __c = o
+                .get_named_property_unchecked::<ClassInstance<UsvgImage>>("value")
+                .map_err(napi_support::coded)?;
+            __c.__ref()?;
+            __c.of.clone()
+        }
+        "text" => {
+            let __c = o
+                .get_named_property_unchecked::<ClassInstance<UsvgText>>("value")
+                .map_err(napi_support::coded)?;
+            __c.__ref()?;
+            __c.of.clone()
+        }
         _ => None,
     };
     of.ok_or_else(|| {
@@ -6787,30 +7109,44 @@ impl From<&usvg::filter::Flood> for UsvgFlood {
 }
 impl UsvgFont {
     fn wrap(inner: usvg::Font) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgFont {
     #[napi(getter)]
-    pub fn style(&self) -> UsvgFontStyle {
-        let v = &self.inner;
-        UsvgFontStyle::from(v.style())
+    pub fn style(&self) -> Result<UsvgFontStyle, String> {
+        let __inner = self.inner.get("Font")?;
+        Ok({
+            let v = __inner;
+            UsvgFontStyle::from(v.style())
+        })
     }
     #[napi(getter)]
-    pub fn stretch(&self) -> UsvgFontStretch {
-        let v = &self.inner;
-        UsvgFontStretch::from(v.stretch())
+    pub fn stretch(&self) -> Result<UsvgFontStretch, String> {
+        let __inner = self.inner.get("Font")?;
+        Ok({
+            let v = __inner;
+            UsvgFontStretch::from(v.stretch())
+        })
     }
     #[napi(getter)]
-    pub fn weight(&self) -> u32 {
-        let v = &self.inner;
-        u32::from(v.weight())
+    pub fn weight(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("Font")?;
+        Ok({
+            let v = __inner;
+            u32::from(v.weight())
+        })
     }
     #[napi(getter)]
-    pub fn variations(&self) -> Vec<UsvgFontVariation> {
-        let v = &self.inner;
-        v.variations().iter().map(UsvgFontVariation::from).collect()
+    pub fn variations(&self) -> Result<Vec<UsvgFontVariation>, String> {
+        let __inner = self.inner.get("Font")?;
+        Ok({
+            let v = __inner;
+            v.variations().iter().map(UsvgFontVariation::from).collect()
+        })
     }
 }
 impl From<&usvg::FontVariation> for UsvgFontVariation {
@@ -6867,45 +7203,68 @@ impl From<&usvg::filter::PointLight> for UsvgPointLight {
 }
 impl UsvgPositionedGlyph {
     fn wrap(inner: usvg::layout::PositionedGlyph) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgPositionedGlyph {
     #[napi(getter)]
-    pub fn font_size(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.font_size())
+    pub fn font_size(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            f64::from(v.font_size())
+        })
     }
     #[napi(getter)]
-    pub fn transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.transform())
+    pub fn transform(&self) -> Result<Matrix, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            Matrix::from(v.transform())
+        })
     }
     #[napi(getter)]
-    pub fn outline_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.outline_transform())
+    pub fn outline_transform(&self) -> Result<Matrix, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            Matrix::from(v.outline_transform())
+        })
     }
     #[napi(getter)]
-    pub fn svg_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.svg_transform())
+    pub fn svg_transform(&self) -> Result<Matrix, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            Matrix::from(v.svg_transform())
+        })
     }
     #[napi(getter)]
-    pub fn colr_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.colr_transform())
+    pub fn colr_transform(&self) -> Result<Matrix, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            Matrix::from(v.colr_transform())
+        })
     }
     #[napi(getter)]
-    pub fn id(&self) -> u32 {
-        let v = &self.inner;
-        u32::from(v.id.0)
+    pub fn id(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            u32::from(v.id.0)
+        })
     }
     #[napi(getter)]
-    pub fn text(&self) -> String {
-        let v = &self.inner;
-        v.text.clone().to_string()
+    pub fn text(&self) -> Result<String, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            v.text.clone().to_string()
+        })
     }
 }
 impl From<&usvg::filter::Primitive> for UsvgPrimitive {
@@ -6920,73 +7279,108 @@ impl From<&usvg::filter::Primitive> for UsvgPrimitive {
 }
 impl UsvgSpan {
     fn wrap(inner: usvg::layout::Span) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgSpan {
     #[napi(getter)]
-    pub fn fill(&self) -> Option<UsvgFill> {
-        let v = &self.inner;
-        v.fill.clone().map(|x| UsvgFill::from(&x))
+    pub fn fill(&self) -> Result<Option<UsvgFill>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.fill.clone().map(|x| UsvgFill::from(&x))
+        })
     }
     #[napi(getter)]
-    pub fn stroke(&self) -> Option<UsvgStroke> {
-        let v = &self.inner;
-        v.stroke.clone().map(|x| UsvgStroke::from(&x))
+    pub fn stroke(&self) -> Result<Option<UsvgStroke>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.stroke.clone().map(|x| UsvgStroke::from(&x))
+        })
     }
     #[napi(getter)]
-    pub fn paint_order(&self) -> UsvgPaintOrder {
-        let v = &self.inner;
-        UsvgPaintOrder::from(v.paint_order)
+    pub fn paint_order(&self) -> Result<UsvgPaintOrder, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            UsvgPaintOrder::from(v.paint_order)
+        })
     }
     #[napi(getter)]
-    pub fn font_size(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.font_size.get())
+    pub fn font_size(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            f64::from(v.font_size.get())
+        })
     }
     #[napi(getter)]
-    pub fn variations(&self) -> Vec<UsvgFontVariation> {
-        let v = &self.inner;
-        v.variations
-            .clone()
-            .iter()
-            .map(UsvgFontVariation::from)
-            .collect()
+    pub fn variations(&self) -> Result<Vec<UsvgFontVariation>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.variations
+                .clone()
+                .iter()
+                .map(UsvgFontVariation::from)
+                .collect()
+        })
     }
     #[napi(getter)]
-    pub fn font_optical_sizing(&self) -> UsvgFontOpticalSizing {
-        let v = &self.inner;
-        UsvgFontOpticalSizing::from(v.font_optical_sizing)
+    pub fn font_optical_sizing(&self) -> Result<UsvgFontOpticalSizing, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            UsvgFontOpticalSizing::from(v.font_optical_sizing)
+        })
     }
     #[napi(getter)]
-    pub fn visible(&self) -> bool {
-        let v = &self.inner;
-        v.visible
+    pub fn visible(&self) -> Result<bool, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.visible
+        })
     }
     #[napi(getter)]
-    pub fn positioned_glyphs(&self) -> Vec<UsvgPositionedGlyph> {
-        let v = &self.inner;
-        v.positioned_glyphs
-            .clone()
-            .iter()
-            .map(|x| UsvgPositionedGlyph::wrap(x.clone()))
-            .collect()
+    pub fn positioned_glyphs(&self) -> Result<Vec<UsvgPositionedGlyph>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.positioned_glyphs
+                .clone()
+                .iter()
+                .map(|x| UsvgPositionedGlyph::wrap(x.clone()))
+                .collect()
+        })
     }
     #[napi(getter, ts_return_type = "Path | null")]
-    pub fn underline(&self) -> Option<UsvgPath> {
-        let v = &self.inner;
-        v.underline.clone().map(|x| UsvgPath::from(&x))
+    pub fn underline(&self) -> Result<Option<UsvgPath>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.underline.clone().map(|x| UsvgPath::from(&x))
+        })
     }
     #[napi(getter, ts_return_type = "Path | null")]
-    pub fn overline(&self) -> Option<UsvgPath> {
-        let v = &self.inner;
-        v.overline.clone().map(|x| UsvgPath::from(&x))
+    pub fn overline(&self) -> Result<Option<UsvgPath>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.overline.clone().map(|x| UsvgPath::from(&x))
+        })
     }
     #[napi(getter, ts_return_type = "Path | null")]
-    pub fn line_through(&self) -> Option<UsvgPath> {
-        let v = &self.inner;
-        v.line_through.clone().map(|x| UsvgPath::from(&x))
+    pub fn line_through(&self) -> Result<Option<UsvgPath>, String> {
+        let __inner = self.inner.get("Span")?;
+        Ok({
+            let v = __inner;
+            v.line_through.clone().map(|x| UsvgPath::from(&x))
+        })
     }
 }
 impl From<&usvg::filter::SpecularLighting> for UsvgSpecularLighting {
@@ -7042,43 +7436,63 @@ impl From<&usvg::Stroke> for UsvgStroke {
 }
 impl UsvgTextChunk {
     fn wrap(inner: usvg::TextChunk) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgTextChunk {
     #[napi(getter)]
-    pub fn x(&self) -> Option<f64> {
-        let v = &self.inner;
-        v.x().map(f64::from)
+    pub fn x(&self) -> Result<Option<f64>, String> {
+        let __inner = self.inner.get("TextChunk")?;
+        Ok({
+            let v = __inner;
+            v.x().map(f64::from)
+        })
     }
     #[napi(getter)]
-    pub fn y(&self) -> Option<f64> {
-        let v = &self.inner;
-        v.y().map(f64::from)
+    pub fn y(&self) -> Result<Option<f64>, String> {
+        let __inner = self.inner.get("TextChunk")?;
+        Ok({
+            let v = __inner;
+            v.y().map(f64::from)
+        })
     }
     #[napi(getter)]
-    pub fn anchor(&self) -> UsvgTextAnchor {
-        let v = &self.inner;
-        UsvgTextAnchor::from(v.anchor())
+    pub fn anchor(&self) -> Result<UsvgTextAnchor, String> {
+        let __inner = self.inner.get("TextChunk")?;
+        Ok({
+            let v = __inner;
+            UsvgTextAnchor::from(v.anchor())
+        })
     }
     #[napi(getter)]
-    pub fn spans(&self) -> Vec<UsvgTextSpan> {
-        let v = &self.inner;
-        v.spans()
-            .iter()
-            .map(|x| UsvgTextSpan::wrap(x.clone()))
-            .collect()
+    pub fn spans(&self) -> Result<Vec<UsvgTextSpan>, String> {
+        let __inner = self.inner.get("TextChunk")?;
+        Ok({
+            let v = __inner;
+            v.spans()
+                .iter()
+                .map(|x| UsvgTextSpan::wrap(x.clone()))
+                .collect()
+        })
     }
     #[napi(getter)]
-    pub fn text_flow(&self) -> Either<UsvgTextFlowPlain, UsvgTextFlowPath> {
-        let v = &self.inner;
-        usvg_text_flow_to_js(&v.text_flow())
+    pub fn text_flow(&self) -> Result<Either<UsvgTextFlowPlain, UsvgTextFlowPath>, String> {
+        let __inner = self.inner.get("TextChunk")?;
+        Ok({
+            let v = __inner;
+            usvg_text_flow_to_js(&v.text_flow())
+        })
     }
     #[napi(getter)]
-    pub fn text(&self) -> String {
-        let v = &self.inner;
-        v.text().to_string()
+    pub fn text(&self) -> Result<String, String> {
+        let __inner = self.inner.get("TextChunk")?;
+        Ok({
+            let v = __inner;
+            v.text().to_string()
+        })
     }
 }
 impl From<&usvg::TextDecoration> for UsvgTextDecoration {
@@ -7100,108 +7514,169 @@ impl From<&usvg::TextDecorationStyle> for UsvgTextDecorationStyle {
 }
 impl UsvgTextSpan {
     fn wrap(inner: usvg::TextSpan) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgTextSpan {
     #[napi(getter)]
-    pub fn start(&self) -> u32 {
-        let v = &self.inner;
-        u32::try_from(v.start()).unwrap_or(u32::MAX)
+    pub fn start(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            u32::try_from(v.start()).unwrap_or(u32::MAX)
+        })
     }
     #[napi(getter)]
-    pub fn end(&self) -> u32 {
-        let v = &self.inner;
-        u32::try_from(v.end()).unwrap_or(u32::MAX)
+    pub fn end(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            u32::try_from(v.end()).unwrap_or(u32::MAX)
+        })
     }
     #[napi(getter)]
-    pub fn fill(&self) -> Option<UsvgFill> {
-        let v = &self.inner;
-        v.fill().map(UsvgFill::from)
+    pub fn fill(&self) -> Result<Option<UsvgFill>, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.fill().map(UsvgFill::from)
+        })
     }
     #[napi(getter)]
-    pub fn stroke(&self) -> Option<UsvgStroke> {
-        let v = &self.inner;
-        v.stroke().map(UsvgStroke::from)
+    pub fn stroke(&self) -> Result<Option<UsvgStroke>, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.stroke().map(UsvgStroke::from)
+        })
     }
     #[napi(getter)]
-    pub fn paint_order(&self) -> UsvgPaintOrder {
-        let v = &self.inner;
-        UsvgPaintOrder::from(v.paint_order())
+    pub fn paint_order(&self) -> Result<UsvgPaintOrder, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgPaintOrder::from(v.paint_order())
+        })
     }
     #[napi(getter)]
-    pub fn font(&self) -> UsvgFont {
-        let v = &self.inner;
-        UsvgFont::wrap(v.font().clone())
+    pub fn font(&self) -> Result<UsvgFont, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgFont::wrap(v.font().clone())
+        })
     }
     #[napi(getter)]
-    pub fn font_size(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.font_size().get())
+    pub fn font_size(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            f64::from(v.font_size().get())
+        })
     }
     #[napi(getter)]
-    pub fn small_caps(&self) -> bool {
-        let v = &self.inner;
-        v.small_caps()
+    pub fn small_caps(&self) -> Result<bool, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.small_caps()
+        })
     }
     #[napi(getter)]
-    pub fn apply_kerning(&self) -> bool {
-        let v = &self.inner;
-        v.apply_kerning()
+    pub fn apply_kerning(&self) -> Result<bool, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.apply_kerning()
+        })
     }
     #[napi(getter)]
-    pub fn font_optical_sizing(&self) -> UsvgFontOpticalSizing {
-        let v = &self.inner;
-        UsvgFontOpticalSizing::from(v.font_optical_sizing())
+    pub fn font_optical_sizing(&self) -> Result<UsvgFontOpticalSizing, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgFontOpticalSizing::from(v.font_optical_sizing())
+        })
     }
     #[napi(getter)]
-    pub fn decoration(&self) -> UsvgTextDecoration {
-        let v = &self.inner;
-        UsvgTextDecoration::from(v.decoration())
+    pub fn decoration(&self) -> Result<UsvgTextDecoration, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgTextDecoration::from(v.decoration())
+        })
     }
     #[napi(getter)]
-    pub fn dominant_baseline(&self) -> UsvgDominantBaseline {
-        let v = &self.inner;
-        UsvgDominantBaseline::from(v.dominant_baseline())
+    pub fn dominant_baseline(&self) -> Result<UsvgDominantBaseline, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgDominantBaseline::from(v.dominant_baseline())
+        })
     }
     #[napi(getter)]
-    pub fn alignment_baseline(&self) -> UsvgAlignmentBaseline {
-        let v = &self.inner;
-        UsvgAlignmentBaseline::from(v.alignment_baseline())
+    pub fn alignment_baseline(&self) -> Result<UsvgAlignmentBaseline, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgAlignmentBaseline::from(v.alignment_baseline())
+        })
     }
     #[napi(getter)]
-    pub fn baseline_shift(&self) -> Vec<Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>> {
-        let v = &self.inner;
-        v.baseline_shift()
-            .iter()
-            .map(usvg_baseline_shift_to_js)
-            .collect()
+    pub fn baseline_shift(
+        &self,
+    ) -> Result<Vec<Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>>, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.baseline_shift()
+                .iter()
+                .map(usvg_baseline_shift_to_js)
+                .collect()
+        })
     }
     #[napi(getter)]
-    pub fn is_visible(&self) -> bool {
-        let v = &self.inner;
-        v.is_visible()
+    pub fn is_visible(&self) -> Result<bool, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.is_visible()
+        })
     }
     #[napi(getter)]
-    pub fn letter_spacing(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.letter_spacing())
+    pub fn letter_spacing(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            f64::from(v.letter_spacing())
+        })
     }
     #[napi(getter)]
-    pub fn word_spacing(&self) -> f64 {
-        let v = &self.inner;
-        f64::from(v.word_spacing())
+    pub fn word_spacing(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            f64::from(v.word_spacing())
+        })
     }
     #[napi(getter)]
-    pub fn text_length(&self) -> Option<f64> {
-        let v = &self.inner;
-        v.text_length().map(f64::from)
+    pub fn text_length(&self) -> Result<Option<f64>, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            v.text_length().map(f64::from)
+        })
     }
     #[napi(getter)]
-    pub fn length_adjust(&self) -> UsvgLengthAdjust {
-        let v = &self.inner;
-        UsvgLengthAdjust::from(v.length_adjust())
+    pub fn length_adjust(&self) -> Result<UsvgLengthAdjust, String> {
+        let __inner = self.inner.get("TextSpan")?;
+        Ok({
+            let v = __inner;
+            UsvgLengthAdjust::from(v.length_adjust())
+        })
     }
 }
 impl From<&usvg::filter::Tile> for UsvgTile {
@@ -7305,52 +7780,60 @@ fn usvg_composite_operator_to_js(
 impl UsvgImageKindJpeg {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'jpeg'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "jpeg"
+    pub fn kind_tag(&self) -> Result<&'static str, String> {
+        self.raw.get("ImageKindJpeg")?;
+        Ok("jpeg")
     }
     #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
     #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
+    pub fn bytes(&self) -> Result<Buffer, String> {
+        let __raw = self.raw.get("ImageKindJpeg")?;
+        Ok((*__raw).as_slice().into())
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgImageKindPng {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'png'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "png"
+    pub fn kind_tag(&self) -> Result<&'static str, String> {
+        self.raw.get("ImageKindPng")?;
+        Ok("png")
     }
     #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
     #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
+    pub fn bytes(&self) -> Result<Buffer, String> {
+        let __raw = self.raw.get("ImageKindPng")?;
+        Ok((*__raw).as_slice().into())
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgImageKindGif {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'gif'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "gif"
+    pub fn kind_tag(&self) -> Result<&'static str, String> {
+        self.raw.get("ImageKindGif")?;
+        Ok("gif")
     }
     #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
     #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
+    pub fn bytes(&self) -> Result<Buffer, String> {
+        let __raw = self.raw.get("ImageKindGif")?;
+        Ok((*__raw).as_slice().into())
     }
 }
 #[napi(namespace = "usvg")]
 impl UsvgImageKindWebp {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(getter, js_name = "type", ts_return_type = "'webp'")]
-    pub fn kind_tag(&self) -> &'static str {
-        "webp"
+    pub fn kind_tag(&self) -> Result<&'static str, String> {
+        self.raw.get("ImageKindWebp")?;
+        Ok("webp")
     }
     #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
     #[napi(getter)]
-    pub fn bytes(&self) -> Buffer {
-        self.raw.as_slice().into()
+    pub fn bytes(&self) -> Result<Buffer, String> {
+        let __raw = self.raw.get("ImageKindWebp")?;
+        Ok((*__raw).as_slice().into())
     }
 }
 fn usvg_image_kind_to_js(
@@ -7363,10 +7846,18 @@ fn usvg_image_kind_to_js(
     UsvgImageKindSvg,
 > {
     match v {
-        usvg::ImageKind::JPEG(v) => Either5::A(UsvgImageKindJpeg { raw: v.clone() }),
-        usvg::ImageKind::PNG(v) => Either5::B(UsvgImageKindPng { raw: v.clone() }),
-        usvg::ImageKind::GIF(v) => Either5::C(UsvgImageKindGif { raw: v.clone() }),
-        usvg::ImageKind::WEBP(v) => Either5::D(UsvgImageKindWebp { raw: v.clone() }),
+        usvg::ImageKind::JPEG(v) => Either5::A(UsvgImageKindJpeg {
+            raw: napi_support::Slot::new(v.clone()),
+        }),
+        usvg::ImageKind::PNG(v) => Either5::B(UsvgImageKindPng {
+            raw: napi_support::Slot::new(v.clone()),
+        }),
+        usvg::ImageKind::GIF(v) => Either5::C(UsvgImageKindGif {
+            raw: napi_support::Slot::new(v.clone()),
+        }),
+        usvg::ImageKind::WEBP(v) => Either5::D(UsvgImageKindWebp {
+            raw: napi_support::Slot::new(v.clone()),
+        }),
         usvg::ImageKind::SVG(_) => Either5::E(UsvgImageKindSvg {
             r#type: "svg".to_string(),
         }),
@@ -7618,10 +8109,18 @@ impl From<usvg::fontdb::Stretch> for FontdbStretch {
 }
 impl FontdbDatabase {
     fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
     fn __from(inner: usvg::fontdb::Database) -> Self {
         Self::wrap(std::sync::Arc::new(inner))
+    }
+    fn __ref(&self) -> Result<&std::sync::Arc<usvg::fontdb::Database>, String> {
+        self.inner.get("Database")
+    }
+    fn __mut(&mut self) -> Result<&mut std::sync::Arc<usvg::fontdb::Database>, String> {
+        self.inner.get_mut("Database")
     }
 }
 #[napi(namespace = "fontdb")]
@@ -7648,7 +8147,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn load_font_data(&mut self, data: Uint8Array) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::load_font_data", || {
             __self.load_font_data(data.to_vec())
         })
@@ -7661,7 +8160,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn load_font_file(&mut self, path: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::load_font_file", || __self.load_font_file(path))
             .map_err(napi_support::coded)?
             .map_err(|e| napi_support::thrown("GenericFailure", e))?;
@@ -7678,7 +8177,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn load_fonts_dir(&mut self, dir: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::load_fonts_dir", || __self.load_fonts_dir(dir))
             .map_err(napi_support::coded)?;
         Ok(())
@@ -7696,7 +8195,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn load_system_fonts(&mut self) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::load_system_fonts", || __self.load_system_fonts())
             .map_err(napi_support::coded)?;
         Ok(())
@@ -7705,7 +8204,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn is_empty(&self) -> Result<bool, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Database::is_empty", || __self.is_empty())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -7718,7 +8217,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn len(&self) -> Result<u32, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Database::len", || __self.len())
             .map_err(napi_support::coded)?;
         Ok(u32::try_from(__v).unwrap_or(u32::MAX))
@@ -7727,7 +8226,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn set_serif_family(&mut self, family: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::set_serif_family", || {
             __self.set_serif_family(family)
         })
@@ -7738,7 +8237,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn set_sans_serif_family(&mut self, family: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::set_sans_serif_family", || {
             __self.set_sans_serif_family(family)
         })
@@ -7749,7 +8248,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn set_cursive_family(&mut self, family: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::set_cursive_family", || {
             __self.set_cursive_family(family)
         })
@@ -7760,7 +8259,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn set_fantasy_family(&mut self, family: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::set_fantasy_family", || {
             __self.set_fantasy_family(family)
         })
@@ -7771,7 +8270,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn set_monospace_family(&mut self, family: String) -> Result<(), String> {
-        let __self = std::sync::Arc::make_mut(&mut self.inner);
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
         napi_support::contained("Database::set_monospace_family", || {
             __self.set_monospace_family(family)
         })
@@ -7784,7 +8283,7 @@ impl FontdbDatabase {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn faces(&self) -> Result<Vec<FontdbFaceInfo>, String> {
-        let __self = &self.inner;
+        let __self = self.__ref()?;
         let __v = napi_support::contained("Database::faces", || __self.faces())
             .map_err(napi_support::coded)?;
         Ok(__v
@@ -7792,43 +8291,77 @@ impl FontdbDatabase {
             .map(|x| FontdbFaceInfo::wrap(x.clone()))
             .collect())
     }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
 }
 impl FontdbFaceInfo {
     fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
-        Self { inner }
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
     }
 }
 #[napi(namespace = "fontdb")]
 impl FontdbFaceInfo {
     #[napi(getter)]
-    pub fn index(&self) -> u32 {
-        let v = &self.inner;
-        v.index
+    pub fn index(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            v.index
+        })
     }
     #[napi(getter)]
-    pub fn post_script_name(&self) -> String {
-        let v = &self.inner;
-        v.post_script_name.clone().to_string()
+    pub fn post_script_name(&self) -> Result<String, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            v.post_script_name.clone().to_string()
+        })
     }
     #[napi(getter)]
-    pub fn style(&self) -> FontdbStyle {
-        let v = &self.inner;
-        FontdbStyle::from(v.style)
+    pub fn style(&self) -> Result<FontdbStyle, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            FontdbStyle::from(v.style)
+        })
     }
     #[napi(getter)]
-    pub fn weight(&self) -> u32 {
-        let v = &self.inner;
-        u32::from(v.weight.0)
+    pub fn weight(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            u32::from(v.weight.0)
+        })
     }
     #[napi(getter)]
-    pub fn stretch(&self) -> FontdbStretch {
-        let v = &self.inner;
-        FontdbStretch::from(v.stretch)
+    pub fn stretch(&self) -> Result<FontdbStretch, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            FontdbStretch::from(v.stretch)
+        })
     }
     #[napi(getter)]
-    pub fn monospaced(&self) -> bool {
-        let v = &self.inner;
-        v.monospaced
+    pub fn monospaced(&self) -> Result<bool, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            v.monospaced
+        })
     }
 }
 #[doc = " `renderPng` on a worker thread: the work leaves the event loop, and a\n queued call is dropped when the signal fires."]
@@ -7941,6 +8474,255 @@ impl Resvg {
             )
         })())
     }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFilter {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgRadialGradient {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgLinearGradient {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFont {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPositionedGlyph {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgSpan {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTextChunk {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgTextSpan {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindJpeg {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.raw.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.raw.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindPng {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.raw.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.raw.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindGif {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.raw.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.raw.disposed()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImageKindWebp {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.raw.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.raw.disposed()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbFaceInfo {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) {
+        self.inner.dispose();
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
+#[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
+#[doc = " the whole module without it. The `.d.ts` header declares it."]
+#[napi(module_exports)]
+pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+    let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
+    let key: Unknown = symbol.get_named_property("dispose")?;
+    if key.get_type()? != ValueType::Symbol {
+        return Ok(());
+    }
+    let classes: &[(Option<&str>, &str)] = &[
+        (None, "Resvg"),
+        (Some("fontdb"), "Database"),
+        (Some("fontdb"), "FaceInfo"),
+        (Some("svgtypes"), "Color"),
+        (Some("tiny_skia"), "Color"),
+        (Some("tiny_skia"), "IntSize"),
+        (Some("tiny_skia"), "Pixmap"),
+        (Some("tiny_skia"), "Rect"),
+        (Some("tiny_skia"), "Size"),
+        (Some("tiny_skia"), "Transform"),
+        (Some("usvg"), "ClipPath"),
+        (Some("usvg"), "Filter"),
+        (Some("usvg"), "Font"),
+        (Some("usvg"), "Group"),
+        (Some("usvg"), "Image"),
+        (Some("usvg"), "ImageKindGif"),
+        (Some("usvg"), "ImageKindJpeg"),
+        (Some("usvg"), "ImageKindPng"),
+        (Some("usvg"), "ImageKindWebp"),
+        (Some("usvg"), "LinearGradient"),
+        (Some("usvg"), "Mask"),
+        (Some("usvg"), "Path"),
+        (Some("usvg"), "Pattern"),
+        (Some("usvg"), "PositionedGlyph"),
+        (Some("usvg"), "RadialGradient"),
+        (Some("usvg"), "Span"),
+        (Some("usvg"), "Text"),
+        (Some("usvg"), "TextChunk"),
+        (Some("usvg"), "TextSpan"),
+        (Some("usvg"), "Tree"),
+    ];
+    for (ns, name) in classes {
+        let scope: Object = match ns {
+            Some(ns) => exports.get_named_property_unchecked(ns)?,
+            None => exports,
+        };
+        let class: Object = scope.get_named_property_unchecked(name)?;
+        let mut proto: Object = class.get_named_property_unchecked("prototype")?;
+        let dispose: Unknown = proto.get_named_property("dispose")?;
+        proto.set_property(key, dispose)?;
+    }
+    Ok(())
 }
 #[napi]
 impl FontDatabase {
@@ -8059,7 +8841,7 @@ impl SvgtypesColor {
             &env,
             &this,
             "Color",
-            &["red", "green", "blue", "alpha"],
+            &["red", "green", "blue", "alpha", "disposed"],
             &[],
             depth,
             options,
@@ -8088,7 +8870,7 @@ impl TinySkiaPixmap {
             &env,
             &this,
             "Pixmap",
-            &[],
+            &["disposed"],
             &["width", "height"],
             depth,
             options,
@@ -8117,7 +8899,7 @@ impl TinySkiaColor {
             &env,
             &this,
             "Color",
-            &[],
+            &["disposed"],
             &["red", "green", "blue", "alpha", "isOpaque"],
             depth,
             options,
@@ -8146,7 +8928,7 @@ impl TinySkiaIntSize {
             &env,
             &this,
             "IntSize",
-            &[],
+            &["disposed"],
             &["width", "height"],
             depth,
             options,
@@ -8175,7 +8957,7 @@ impl TinySkiaTransform {
             &env,
             &this,
             "Transform",
-            &["sx", "kx", "ky", "sy", "tx", "ty"],
+            &["sx", "kx", "ky", "sy", "tx", "ty", "disposed"],
             &[
                 "isFinite",
                 "isValid",
@@ -8215,7 +8997,7 @@ impl TinySkiaRect {
             &env,
             &this,
             "Rect",
-            &[],
+            &["disposed"],
             &[
                 "left", "top", "right", "bottom", "x", "y", "width", "height", "isEmpty",
             ],
@@ -8246,7 +9028,7 @@ impl TinySkiaSize {
             &env,
             &this,
             "Size",
-            &[],
+            &["disposed"],
             &["width", "height"],
             depth,
             options,
@@ -8275,7 +9057,7 @@ impl FontdbDatabase {
             &env,
             &this,
             "Database",
-            &[],
+            &["disposed"],
             &["isEmpty", "len"],
             depth,
             options,
@@ -8300,7 +9082,16 @@ impl UsvgFilter {
         options: Object,
         inspect: Function<FnArgs<(Object, Object)>, String>,
     ) -> Result<String> {
-        napi_support::inspect(&env, &this, "Filter", &[], &["id"], depth, options, inspect)
+        napi_support::inspect(
+            &env,
+            &this,
+            "Filter",
+            &["disposed"],
+            &["id"],
+            depth,
+            options,
+            inspect,
+        )
     }
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
@@ -8324,7 +9115,7 @@ impl UsvgRadialGradient {
             &env,
             &this,
             "RadialGradient",
-            &[],
+            &["disposed"],
             &["cx", "cy", "r", "fx", "fy", "fr", "id", "spreadMethod"],
             depth,
             options,
@@ -8353,7 +9144,7 @@ impl UsvgLinearGradient {
             &env,
             &this,
             "LinearGradient",
-            &[],
+            &["disposed"],
             &["x1", "y1", "x2", "y2", "id", "spreadMethod"],
             depth,
             options,
@@ -8382,7 +9173,7 @@ impl UsvgTree {
             &env,
             &this,
             "Tree",
-            &[],
+            &["disposed"],
             &["hasTextNodes", "hasDefsNodes"],
             depth,
             options,
@@ -8411,7 +9202,7 @@ impl UsvgGroup {
             &env,
             &this,
             "Group",
-            &[],
+            &["disposed"],
             &[
                 "id",
                 "opacity",
@@ -8447,7 +9238,7 @@ impl UsvgPath {
             &env,
             &this,
             "Path",
-            &[],
+            &["disposed"],
             &["id", "isVisible", "paintOrder", "renderingMode"],
             depth,
             options,
@@ -8476,7 +9267,7 @@ impl UsvgImage {
             &env,
             &this,
             "Image",
-            &[],
+            &["disposed"],
             &["id", "isVisible", "renderingMode"],
             depth,
             options,
@@ -8505,7 +9296,7 @@ impl UsvgText {
             &env,
             &this,
             "Text",
-            &[],
+            &["disposed"],
             &["id", "renderingMode", "writingMode"],
             depth,
             options,
@@ -8534,7 +9325,7 @@ impl UsvgClipPath {
             &env,
             &this,
             "ClipPath",
-            &[],
+            &["disposed"],
             &["id"],
             depth,
             options,
@@ -8563,7 +9354,7 @@ impl UsvgMask {
             &env,
             &this,
             "Mask",
-            &[],
+            &["disposed"],
             &["id", "kind"],
             depth,
             options,
@@ -8592,7 +9383,7 @@ impl UsvgPattern {
             &env,
             &this,
             "Pattern",
-            &[],
+            &["disposed"],
             &["id"],
             depth,
             options,
@@ -8621,7 +9412,7 @@ impl UsvgFont {
             &env,
             &this,
             "Font",
-            &["style", "stretch", "weight", "variations"],
+            &["style", "stretch", "weight", "variations", "disposed"],
             &[],
             depth,
             options,
@@ -8658,6 +9449,7 @@ impl UsvgPositionedGlyph {
                 "colrTransform",
                 "id",
                 "text",
+                "disposed",
             ],
             &[],
             depth,
@@ -8699,6 +9491,7 @@ impl UsvgSpan {
                 "underline",
                 "overline",
                 "lineThrough",
+                "disposed",
             ],
             &[],
             depth,
@@ -8728,7 +9521,7 @@ impl UsvgTextChunk {
             &env,
             &this,
             "TextChunk",
-            &["x", "y", "anchor", "spans", "textFlow", "text"],
+            &["x", "y", "anchor", "spans", "textFlow", "text", "disposed"],
             &[],
             depth,
             options,
@@ -8777,6 +9570,7 @@ impl UsvgTextSpan {
                 "wordSpacing",
                 "textLength",
                 "lengthAdjust",
+                "disposed",
             ],
             &[],
             depth,
@@ -8806,7 +9600,7 @@ impl UsvgImageKindJpeg {
             &env,
             &this,
             "ImageKindJpeg",
-            &["type", "bytes"],
+            &["type", "bytes", "disposed"],
             &[],
             depth,
             options,
@@ -8835,7 +9629,7 @@ impl UsvgImageKindPng {
             &env,
             &this,
             "ImageKindPng",
-            &["type", "bytes"],
+            &["type", "bytes", "disposed"],
             &[],
             depth,
             options,
@@ -8864,7 +9658,7 @@ impl UsvgImageKindGif {
             &env,
             &this,
             "ImageKindGif",
-            &["type", "bytes"],
+            &["type", "bytes", "disposed"],
             &[],
             depth,
             options,
@@ -8893,7 +9687,7 @@ impl UsvgImageKindWebp {
             &env,
             &this,
             "ImageKindWebp",
-            &["type", "bytes"],
+            &["type", "bytes", "disposed"],
             &[],
             depth,
             options,
@@ -8929,6 +9723,7 @@ impl FontdbFaceInfo {
                 "weight",
                 "stretch",
                 "monospaced",
+                "disposed",
             ],
             &[],
             depth,

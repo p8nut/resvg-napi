@@ -169,6 +169,34 @@ step 9's async twins (`renderNodePngAsync` has a `TODO(step 9)` in the
 tests); `renderNodePng`'s `background` and sizing come back with the helpers
 (step 11).
 
+Step 8 gave every class of the namespaced surface `dispose()`, `disposed`
+and `[Symbol.dispose]` (CONTRIBUTING, "`dispose()` and `using`";
+`test/api/dispose.mjs`). What it found:
+
+- One mechanism covers every holding: `napi_support::Slot`, the owned
+  class's `Option` grown a `disposed` flag. A `Copy` class is disposable
+  too, for uniformity: nothing is freed, the slot is the flag. An `Arc` or
+  a projection drops its own reference only, so a node outlives a disposed
+  tree, and a disposed node, its `{ kind, value }` object included, is
+  refused where a `usvg.Node` is expected.
+- "Every class" is more than `class.rs` makes: the read-only views and
+  handles of the passes (`usvg.Span`, `usvg.Filter`, the gradients,
+  `fontdb.FaceInfo`, the `ImageKind*`...) are namespaced classes too.
+  `napi_gen::dispose::slotted` puts their one field in a slot on the
+  finished file, as `guard_live` does for `Resvg`, and their methods now
+  return `Result<T, String>`. The `.d.ts` does not move. The toy has no
+  such class, so only the root exercises that path.
+- The template's `module_exports` hook `alias_dispose` (`Resvg` only)
+  became a generated one over every class with a
+  `dispose()`, flat `Resvg` included, whose hand-written `dispose()` stays
+  until step 13. The hand-written `dtsHeader` in `package.json` became the
+  generated `dts-header.d.ts` (`dtsHeaderFile`).
+- The `.d.ts` header writes each interface on several lines: the api-diff
+  script reads a one-line `interface X { .. }` as a statement, not as a
+  merge into the class, and called the change breaking.
+- `to_upstream` (option objects) throws a string code now, so a disposed
+  provider (`{ fontdb: db }`) throws `Disposed`, not `GenericFailure`.
+
 ## Status
 
 - [x] 1
@@ -180,7 +208,7 @@ tests); `renderNodePng`'s `background` and sizing come back with the helpers
 - [x] 6
 - [x] 7
 - [x] 7b
-- [ ] 8
+- [x] 8
 - [ ] 9
 - [ ] 10
 - [ ] 11

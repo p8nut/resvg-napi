@@ -927,8 +927,16 @@ fn main() {
         let mut file: syn::File =
             syn::parse2(quote! { #file #ceremony }).expect("the async twins are valid Rust");
         guard_live(&mut file, "Resvg", &["dispose", "disposed"]);
+        // `dispose()` on every class, and `[Symbol.dispose]` with its
+        // declaration (napi's `dtsHeaderFile`).
+        napi_gen::dispose::slotted(&mut file);
+        let (alias, dts_header) = napi_gen::dispose::aliases(&file);
+        write_if_changed(
+            &PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join(DTS_HEADER),
+            &dts_header,
+        );
         let inspect = inspect_members(&file);
-        code = quote! { #file #inspect };
+        code = quote! { #file #alias #inspect };
     }
 
     let header = format!(
@@ -1047,6 +1055,17 @@ fn prune(code: TokenStream, generated: &[&TokenStream], also: &[&TokenStream]) -
         .filter(|(_, k)| *k)
         .map(|(i, _)| i);
     quote!(#(#kept)*)
+}
+
+/// The `.d.ts` header napi writes first (`napi.dtsHeaderFile` in
+/// `package.json`): generated, committed, drift-checked.
+const DTS_HEADER: &str = "dts-header.d.ts";
+
+/// Writes only on change: a touched mtime re-triggers the build.
+fn write_if_changed(path: &Path, text: &str) {
+    if fs::read_to_string(path).ok().as_deref() != Some(text) {
+        fs::write(path, text).unwrap();
+    }
 }
 
 fn rustfmt(path: &Path) {

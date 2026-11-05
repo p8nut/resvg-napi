@@ -502,7 +502,7 @@ pub struct OptionObject {
 /// An upstream option struct with `Default`, as an input-only plain object
 /// of the namespaced surface (ADR 0001, "Option structs are plain objects").
 ///
-/// Every field is optional. `to_upstream(&self) -> Result<Upstream>` starts
+/// Every field is optional. `to_upstream(&self) -> Result<Upstream, String>` starts
 /// from `Default::default()` and overrides only what JS provided, so a field
 /// left out keeps upstream's default, whatever it is. A field maps as a
 /// [`map_struct`] field does, or through `Config::providers` (a class
@@ -584,7 +584,7 @@ pub fn option_object(
             let (ts, label) = (c.ts, lower_camel(&name));
             decls.push(quote! { #(#doc)* #[napi(ts_type = #ts)] pub #ident: Option<#js>, });
             assigns.push(
-                quote! { if let Some(v) = &self.#ident { o.#ident = #convert(v, #label)?; } },
+                quote! { if let Some(v) = &self.#ident { o.#ident = #convert(v, #label).map_err(napi_support::coded)?; } },
             );
             continue;
         }
@@ -613,7 +613,7 @@ pub fn option_object(
 
         impl #name #anon {
             #[doc = " The upstream value: `Default`, with what JS provided on top."]
-            fn to_upstream(&self) -> Result<#upstream> {
+            fn to_upstream(&self) -> Result<#upstream, String> {
                 let mut o = <#upstream>::default();
                 #(#assigns)*
                 Ok(o)
@@ -1541,7 +1541,7 @@ pub fn method_gate(imp: &syn::ItemImpl, f: &syn::ImplItemFn) -> Option<(TokenStr
 /// The keys of an item's `#[napi(..)]`, with their string values:
 /// `#[napi(getter, js_name = "type")]` is `{getter: None, js_name: "type"}`.
 /// None without a `#[napi]`; a bare one has no keys.
-fn napi_args(attrs: &[syn::Attribute]) -> Option<BTreeMap<String, Option<String>>> {
+pub(crate) fn napi_args(attrs: &[syn::Attribute]) -> Option<BTreeMap<String, Option<String>>> {
     let attr = attrs.iter().find(|a| a.path().is_ident("napi"))?;
     let mut out = BTreeMap::new();
     if matches!(attr.meta, syn::Meta::List(_)) {
@@ -2165,7 +2165,7 @@ pub struct Surfaces {
 
 /// A `#[napi]` struct that is a class, not an object: its Rust ident, its JS
 /// name and its namespace.
-fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<String>)> {
+pub(crate) fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<String>)> {
     let Item::Struct(s) = item else { return None };
     let mut args = napi_args(&s.attrs)?;
     if ["object", "transparent", "array"]

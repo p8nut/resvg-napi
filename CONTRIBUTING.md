@@ -31,6 +31,7 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand |
 | `crates/napi-gen/src/class.rs` | the classes and free functions of the namespaced surface: constructors, statics, `Result` errors, owned and shared values, conversions |
 | `crates/napi-gen/src/project.rs` | the projections: classes over values borrowed from an owner, and `{ kind, value }` unions of them |
+| `crates/napi-gen/src/dispose.rs` | `dispose()` for the classes `class.rs` does not make, `[Symbol.dispose]` set at load, and the `.d.ts` header declaring it |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
 | `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
@@ -40,8 +41,8 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 What the template needs that has nothing to do with resvg lives in its own
 crate, `crates/napi-support`: `contained` (a panic becomes a JS error), the
 bounded `log` collector, capped file and gzip reads, the checked
-`AbortSignal`, and `Projection` (a value borrowed from an `Arc`-held owner,
-below). It knows no upstream type, so a binding of another library can
+`AbortSignal`, `Projection` (a value borrowed from an `Arc`-held owner,
+below) and `Slot` (a class's value until a consuming call or `dispose()`). It knows no upstream type, so a binding of another library can
 take it as is; the template only calls into it and keeps the `#[napi]` surface.
 
 ### The generic boundary
@@ -71,7 +72,7 @@ function, the free functions `report` and `paint`, and a `Scene` whose
 the two and the free functions `count` and `visit` that take one.
 `toy-napi` binds it
 with the same generator, through its own `Config` and a template a few lines
-long in its `build.rs`. Its `src/lib.rs` and `index.d.ts` are committed and
+long in its `build.rs`. Its `src/lib.rs`, `index.d.ts` and `dts-header.d.ts` are committed and
 drift-checked like the root's. The linux-gnu CI job builds it and runs its
 tests:
 
@@ -211,8 +212,8 @@ Q34):
   `&mut self` methods and no `Clone`, owned until that method takes it, after
   which every call throws `Consumed`; a `Clone` type with `&mut self` methods
   behind an `Arc`, copied on write (`fontdb.Database`); anything else behind a
-  read-only `Arc`. Step 8 of the migration builds `dispose()` on the owned
-  slot.
+  read-only `Arc`. Whatever it is, it sits in a `napi_support::Slot`, which
+  `dispose()` empties (below).
 - **Arguments**: numbers, booleans, strings and bytes; a listed class, by
   value (`Copy`), `&` or `&mut` as its holding allows; an option object; and a
   **view** (`Config::views`): `&mut V` that a class's method returns for the
@@ -239,6 +240,56 @@ reported. `namespaced` lets those names through (`Classes::shared_names`).
 The Rust items stay apart because `namespaced` keys them by namespace: a name
 means its own namespace's item first, then the one other namespace's that
 defines it.
+
+### `dispose()` and `using`
+
+Every class of the namespaced surface has `dispose()` and a `disposed`
+getter ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md), "These stay
+generic"). After `dispose()` every other member throws an `Error` whose
+`code` is `Disposed`, and so does passing the instance as an argument or as
+an option object's provider field. A second `dispose()` does nothing.
+
+- **One mechanism for every holding**: the value sits in a
+  `napi_support::Slot`, the `Option` a consuming method already emptied
+  (`Consumed`), and `dispose()` empties it too (`Disposed`, which wins over
+  `Consumed`). By holding: an owned value (`tiny_skia.Pixmap`) is freed
+  there and then; an `Arc` (`usvg.Tree`, `fontdb.Database`) or a projection
+  (`usvg.Group`, the `value` of a `usvg.Node`) drops this instance's
+  reference, and the owner lives on while another instance holds it, a
+  node reached from a disposed tree included; a `Copy` value
+  (`tiny_skia.Transform`) has nothing to free, and is disposable for
+  uniformity: the slot is its flag.
+- `class.rs` makes the slot and `dispose()` of the classes it emits.
+  `napi_gen::dispose::slotted` does the same afterwards for the others,
+  the read-only views and handles of the passes (`usvg.Span`,
+  `usvg.LinearGradient`, `fontdb.FaceInfo`...): such a class has one field,
+  which it puts in a slot, and each `#[napi]` method takes the value from
+  the slot first and returns `Result<T, String>` (napi unwraps it: the
+  `.d.ts` does not move). The flat surface keeps its own: `Resvg`'s
+  hand-written `dispose()` stays until step 13.
+- **`[Symbol.dispose]`** is set when the module loads, to the prototype's
+  `dispose`, on every class with one, flat `Resvg` included
+  (`napi_gen::dispose::aliases`, a `#[napi(module_exports)]` hook). Only
+  where the runtime has the symbol: napi's `well_known_symbol` would fail
+  the whole module without it (Node before 20.4, iOS Safari as of 2026), so
+  it is never declared to napi. `test/api/dispose.mjs` loads the module
+  with a `Symbol` that lacks it.
+- **The type**: napi declares no `[Symbol.dispose]`, so the build writes
+  `dts-header.d.ts`, which `package.json` names as napi's `dtsHeaderFile`:
+  napi copies it to the top of `index.d.ts`. It merges an interface into
+  every class, under its namespace:
+
+  ```ts
+  export declare namespace usvg {
+    export interface Tree {
+      [Symbol.dispose](): void
+    }
+  }
+  ```
+
+  so `new tiny_skia.Pixmap(1, 1) satisfies Disposable` (`test/types.mts`).
+  It is generated and committed like `index.d.ts`, and CI fails on a diff.
+- `util.inspect` of a disposed instance prints `Name { disposed: true }`.
 
 ### Projections
 
@@ -397,7 +448,8 @@ cannot turn unrelated pull requests red.
 CI runs the lint on `x86_64-unknown-linux-gnu` only -- the toolchain is warm
 there and nothing here is target-specific enough to lint thirteen times -- and
 regenerates the committed bindings to fail on any diff: `src/lib.rs`,
-`index.js`, `index.d.ts`, `browser.js` and the five WASI shims.
+`index.js`, `index.d.ts` and its `dts-header.d.ts`, `browser.js` and the five
+WASI shims.
 
 It does not build all thirteen targets on a pull request. It builds
 `x86_64-unknown-linux-gnu`, which everything above runs on, and

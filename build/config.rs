@@ -135,7 +135,7 @@ pub const GEN: Config = Config {
     providers: &[Provider {
         ty: "Arc<fontdb::Database>",
         class: "Database",
-        provide: "v.inner.clone()",
+        provide: "v.__ref()?.clone()",
         doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
               Left out, the database is empty, as in Rust: text then renders\n\
               nothing. Load fonts into a `fontdb.Database` and pass it here.",

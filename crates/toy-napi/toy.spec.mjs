@@ -357,3 +357,63 @@ test('a union argument takes the { kind, value } object a projection handed out'
   // The class is checked: a dot is not a layer.
   assert.throws(() => toy.toy.count({ kind: 'layer', value: a.value }));
 });
+
+// `dispose()` on every class, whatever it holds: after it every member throws
+// `Disposed`, and `[Symbol.dispose]` is the same function where the runtime
+// has the symbol, so `using` calls it.
+test('dispose() ends an instance of each holding, and `using` calls it', () => {
+  const { Vec2, Canvas, Tally, Scene, Color, paint, share, shared } = toy.toy;
+  const holdings = {
+    value: [new Vec2(1, 2), (v) => v.length()],
+    owned: [new Canvas(2, 2), (c) => c.width()],
+    shared: [toy.counter(), (c) => c.label()],
+    cow: [new Tally(), (t) => t.len()],
+    projected: [Scene.demo().root(), (l) => l.name()],
+  };
+  for (const [holding, [it, call]] of Object.entries(holdings)) {
+    const proto = Object.getPrototypeOf(it);
+    assert.equal(proto[Symbol.dispose], Symbol.dispose && proto.dispose, holding);
+    assert.equal(it.disposed, false, holding);
+    call(it);
+    (Symbol.dispose ? it[Symbol.dispose] : it.dispose).call(it);
+    assert.equal(it.disposed, true, holding);
+    throwsCoded(() => call(it), 'Disposed', `this ${it.constructor.name} was disposed`);
+    assert.equal(inspect(it), `${it.constructor.name} { disposed: true }`, holding);
+    it.dispose();
+  }
+  // As an argument too, and after Consumed: the later call wins.
+  const c = new Canvas(2, 2);
+  c.intoData();
+  c.dispose();
+  throwsCoded(() => paint(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Disposed', /disposed/);
+  const v = new Vec2(0, 0);
+  v.dispose();
+  throwsCoded(() => new Vec2(1, 1).plus(v), 'Disposed', /disposed/);
+  // A provider field reads the instance: a disposed one throws.
+  const t = new Tally();
+  const gone = new Tally();
+  gone.dispose();
+  throwsCoded(() => toy.toy.report(t, { base: gone }), 'Disposed', /disposed/);
+  // A handle drops its own reference: another handle keeps the value.
+  const a = new Tally();
+  a.push('x');
+  const b = share(a);
+  assert.equal(shared(a, b), true);
+  a.dispose();
+  assert.equal(b.joined(), 'x');
+});
+
+test('a disposed projection lets go of its owner, and of its union', () => {
+  const scene = toy.toy.Scene.demo();
+  const [a, inner] = scene.root().items();
+  inner.value.dispose();
+  throwsCoded(() => toy.toy.count(inner), 'Disposed', 'this Layer was disposed');
+  // The scene and its other nodes live on.
+  assert.equal(toy.toy.count(a), 1);
+  assert.equal(scene.find('inner').value.name(), 'inner');
+  // The owner disposed: its projections keep their own reference.
+  scene.dispose();
+  throwsCoded(() => scene.root(), 'Disposed', 'this Scene was disposed');
+  assert.equal(a.value.name(), 'a');
+  assert.equal(toy.toy.count(a), 1);
+});

@@ -1,0 +1,8 @@
+[package]
+name = "toy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0 OR MIT"
+description = "A tiny library for napi-gen to wrap: proof that the generator needs nothing of resvg"
+publish = false

@@ -2,6 +2,7 @@
 
 - Status: accepted, 2026-11-05. Implemented by the 0.10.0 migration.
 - Replaces: the hand-written `Resvg` class API of 0.1–0.9.
+- Refined by: [ADR 0002](0002-api-details.md). Plan: [`docs/migration-0.10.md`](../migration-0.10.md).
 
 ## Context
 

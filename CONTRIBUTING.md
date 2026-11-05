@@ -7,7 +7,9 @@ what writes it.
 Where the project is heading is recorded as decisions in [`docs/adr/`](docs/adr/).
 [ADR 0001](docs/adr/0001-thin-generic-wrapper.md) makes the API a direct
 mirror of the Rust crates, with JS helpers beside it and a generator kept
-generic. Check new work against it.
+generic, and [ADR 0002](docs/adr/0002-api-details.md) settles the details.
+Check new work against them. The steps to 0.10.0 are in
+[`docs/migration-0.10.md`](docs/migration-0.10.md).
 
 ## How the bindings are generated
 

@@ -1,4 +1,9 @@
-// Vendored: https://github.com/gzuidhof/coi-serviceworker (MIT), unmodified.
+// Vendored, unmodified: https://github.com/gzuidhof/coi-serviceworker (MIT),
+// coi-serviceworker.js at commit 509a799daa6583b83b2a70b4dd1898c7e5a902dd
+// (2023-12-06, the file's latest upstream revision). Its banner below still
+// says v0.1.7, but it is newer than npm's coi-serviceworker@0.1.7: the
+// coepDegrade / reload-once logic landed after that release, so npm's copy
+// would behave differently.
 //
 // The wasm is built for wasm32-wasip1-threads, so it asks for a shared
 // WebAssembly.Memory -- SharedArrayBuffer, which needs cross-origin isolation,

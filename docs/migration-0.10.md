@@ -21,6 +21,7 @@ Tick a step off here when it is merged.
 | 2 | Generic boundary: remove the resvg names from `napi-gen` and `napi-support` (pass labels, domain shapes and the node view become config hooks), add the CI grep, and add a toy crate built and tested in CI. | over-parametrised hooks |
 | 3 | `index.d.ts` diff classifier and `breaking-api` label, in a `pull_request_target` workflow that never runs PR code. `resvg.yml` applies the label itself. | workflow security |
 | 4 | One namespace per crate as a second surface (`usvg.*`, `fontdb.*`). `fontdb.Database` becomes a generic `Arc` class with `make_mut` for `&mut` methods. Rust names are mirrored. | binary size roughly doubles until PR 13 |
+| 4b | Flat classes named like a namespaced one are renamed `Legacy*` (`ClipPath` becomes `LegacyClipPath`), by a `Config::legacy_prefix` the generator applies to the flat surface, so the 17 usvg classes join `usvg.*` (decision Q36). The `Legacy*` classes go with the flat surface in step 13. Labelled `breaking-api`. | renames on the flat surface |
 | 5 | Option structs as plain objects with `Default`, plus field providers for fields with no JS form. Start with a spike on the `fontdb` field. | `fontdb` field |
 | 6 | Factories, free functions and `Result` errors. Owned and consuming classes. `resvg`, `tiny-skia` (allowlist: `Pixmap`, `Color`, `IntSize`, `Transform`, `Rect`, `Size`) and `svgtypes` (`Color`) become sources. `FromStr` gives `fromStr`, `Display` gives `toString`, and plain-data classes get `fromObject`/`toObject`. | allowlist creep |
 | 7 | Generic projections over borrowed values: `tree.root()`, `group.children()` returning `usvg.Node` unions, `resvg.renderNode`. | highest: stop and decide if the generic step path passes about 300 lines |
@@ -34,13 +35,12 @@ Tick a step off here when it is merged.
 
 Step 4 found a limit of napi (3.16): it keeps one constructor per JS class
 name, whatever the namespace. A namespaced class with the same name as a flat
-class would break both, so the generator leaves it out (CONTRIBUTING, "The
-namespaced surface"). Until step 13, or a napi that keys classes by namespace,
-`usvg.*` has its data types, enums and unions, and none of its classes.
-`fontdb.Database` and `fontdb.FaceInfo` have names of their own and are in.
-`usvg.Tree` is free (the flat class is `Resvg`), but step 7 needs classes that
-collide (`ClipPath`, `Mask`, `Pattern`, the gradients, `Text`, `Image`), so it
-must either rename the flat classes or wait for that fix.
+class would break both, so step 4 left out every usvg class (`ClipPath`,
+`Mask`, `Pattern`, the gradients, `Text`, `Image`...), which step 7 needs.
+Step 4b settles it (decision Q36): the flat copy gives way and is renamed
+`Legacy*`, and `usvg.*` gets the upstream name (CONTRIBUTING, "The namespaced
+surface"). `fontdb.Database`, `fontdb.FaceInfo` and `usvg.Tree` had names of
+their own already.
 
 ## Status
 
@@ -48,6 +48,7 @@ must either rename the flat classes or wait for that fix.
 - [x] 2
 - [x] 3
 - [x] 4
+- [x] 4b
 - [ ] 5
 - [ ] 6
 - [ ] 7

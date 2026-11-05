@@ -190,7 +190,7 @@ pub const GEN: Config = Config {
     // ID arrives as the `FontFace` it names, resolved by `id_in`. fontdb IDs are
     // slotmap keys, so another database's face could name a slot here, and
     // `removeFace` would delete it.
-    arg_standin: ("ID", "FontFace", "id_in"),
+    arg_standin: Some(("ID", "FontFace", "id_in")),
     // A definition owning a content group (`root() -> &Group`: a pattern, a
     // mask, a clip path) gets the node view over it.
     content_view: Some(ContentView {

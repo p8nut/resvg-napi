@@ -60,7 +60,7 @@ pub struct Config {
     /// An argument type JS hands over as a class instance instead: (the
     /// upstream type, the class, and the class's method that resolves it
     /// against the receiver before the call).
-    pub arg_standin: (&'static str, &'static str, &'static str),
+    pub arg_standin: Option<(&'static str, &'static str, &'static str)>,
     /// What a handle owning content adds to its class, when the template has
     /// such a view.
     pub content_view: Option<ContentView>,

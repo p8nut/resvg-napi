@@ -1145,6 +1145,10 @@ pub fn map_methods(
     let mut code = TokenStream::new();
     let mut skipped = Vec::new();
     let mut twins = BTreeSet::new();
+    // `Config::arg_standin`: the class JS hands over, and its resolver.
+    let standin = config()
+        .arg_standin
+        .map(|(_, class, resolve)| (format_ident!("{class}"), format_ident!("{resolve}")));
 
     for imp in inherent_impls(files, ty) {
         for it in &imp.items {
@@ -1230,7 +1234,7 @@ pub fn map_methods(
                     match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
-                        _ if ty == config().arg_standin.0 => Some(Arg::Standin),
+                        _ if config().arg_standin.is_some_and(|s| ty == s.0) => Some(Arg::Standin),
                         _ => None,
                     }
                 };
@@ -1275,8 +1279,8 @@ pub fn map_methods(
                 .map(|(pat, kind)| match kind {
                     Arg::Bytes => quote!(#pat: Uint8Array),
                     Arg::Standin => {
-                        let standin = format_ident!("{}", config().arg_standin.1);
-                        quote!(#pat: &#standin)
+                        let (class, _) = standin.as_ref().expect("a stand-in is configured");
+                        quote!(#pat: &#class)
                     }
                     _ => quote!(#pat: String),
                 })
@@ -1293,11 +1297,13 @@ pub fn map_methods(
             // Resolved before the call, not inside it: a `DerefMut` receiver
             // (a copy-on-write handle) cannot be borrowed again in its own
             // arguments.
-            let resolve = format_ident!("{}", config().arg_standin.2);
             let lets: Vec<TokenStream> = args
                 .iter()
                 .filter(|(_, kind)| matches!(kind, Arg::Standin))
-                .map(|(pat, _)| quote!(let #pat = #pat.#resolve(&#receiver);))
+                .map(|(pat, _)| {
+                    let (_, resolve) = standin.as_ref().expect("a stand-in is configured");
+                    quote!(let #pat = #pat.#resolve(&#receiver);)
+                })
                 .collect();
             if readonly && mutable {
                 skipped.push(Skip::new(&name, None, Reason::NeedsMut));

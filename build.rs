@@ -842,7 +842,7 @@ fn main() {
         // napi keeps one constructor per JS class name: a flat class with
         // the name of a namespaced one is renamed (`GEN.legacy_prefix`)
         // until the flat surface goes.
-        let surfaces = namespaced(&parts, &code);
+        let surfaces = namespaced(&parts, &code, &BTreeSet::new());
         for line in surfaces.report {
             report!("{line}");
         }

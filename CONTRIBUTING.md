@@ -29,6 +29,7 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version the workspace's `Cargo.lock` names |
 | `crates/napi-gen/src/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand |
+| `crates/napi-gen/src/class.rs` | the classes and free functions of the namespaced surface: constructors, statics, `Result` errors, owned and shared values, conversions |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
 | `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
@@ -51,14 +52,19 @@ resvg is a `napi_gen::Config` field that `build/config.rs` fills: the
 template's names for the domain shapes (`shapes`), the size constructor
 (`size_new`), the argument stand-in and its resolver (`arg_standin`), and the
 node view a definition owning a content group gets (`content_view`, whose code
-is in `template.rs`), and the option-object hooks (`index_bounded`,
-`option_objects`, `providers`, `converters`, below). A comment that needs an
-example uses the toy crate's names, or none.
+is in `template.rs`), the option-object hooks (`index_bounded`,
+`option_objects`, `providers`, `converters`, below), and the class and
+function allowlists (`classes`, `functions`, `views`, below). A comment that
+needs an example uses the toy crate's names, or none.
 
 `crates/toy` and `crates/toy-napi` show that this holds. `toy` is a tiny
 library: an `Arc`-held `Counter` with a few `&self` methods, an `Options`
-struct with `Default`, a unit enum, a plain `Point`, a `Clone` `Tally`, and a
-`ReportOptions` struct with a field of each option-object kind. `toy-napi` binds it
+struct with `Default`, a unit enum, a plain `Point`, a `Clone` `Tally`, a
+`ReportOptions` struct with a field of each option-object kind, and one class
+of each kind `napi_gen::class` makes (below): a plain-data `Vec2` with
+`FromStr` and `Display`, an owned `Canvas` with a consuming method and a
+borrowed view, two `Color`s in two modules, an error enum per fallible
+function, and the free functions `report` and `paint`. `toy-napi` binds it
 with the same generator, through its own `Config` and a template a few lines
 long in its `build.rs`. Its `src/lib.rs` and `index.d.ts` are committed and
 drift-checked like the root's. The linux-gnu CI job builds it and runs its
@@ -172,12 +178,66 @@ field maps as the flat options' fields do, or through one of three hooks:
   read off the table by `emit::index_bounds`, on the flat and the namespaced
   options alike, and the build fails when the suffix matches nothing.
 
-Nothing namespaced takes an option object yet (`usvg.Tree.fromData` comes with
-step 6), so `test/api/options.mjs` checks their shape in `index.d.ts`, and the
-toy tests the conversion: `toy.report(tally, options)` hands
-`ReportOptions::to_upstream` to the toy crate, and the test checks that omitted
-fields equal `Default`, that the provider field takes only a `toy.Tally`, the
-converter and the clamp.
+An argument `&O` of a listed option struct takes the object, optional: left
+out, it is `O::default()`. The toy tests the conversion through
+`toy.report(tally, options)`, its generated free function: omitted fields
+equal `Default`, the provider field takes only a `toy.Tally`, the converter,
+and the clamp.
+
+### Classes and free functions
+
+`napi_gen::class` mirrors the types `Config::classes` lists as classes of the
+namespaced surface, and the functions `Config::functions` lists as functions
+of their source's namespace. Both are allowlists by source root and name:
+nothing becomes a class or a function on its own. A class gets every
+associated function and method whose signature maps, with Rust's names in
+camelCase ([ADR 0002](docs/adr/0002-api-details.md), Q21, Q23, Q24, Q31,
+Q34):
+
+- **`new` is the constructor**, and throws when Rust returns `None` (a JS
+  `new` cannot return `null`, Q24) or `Err`. Every other associated function
+  is a static. `Option<T>` is `T | null`.
+- **A `Result<T, E>` throws** an `Error` whose `code` is the variant's name
+  when `E` is an enum of a source, and whose `message` is `E`'s `Display`,
+  unchanged (Q23). Each such enum gets a string enum of its codes,
+  `<E>Code`, in its own namespace. An error type no source defines (`std::io::Error`)
+  throws with the code `GenericFailure`. Every generated function returns
+  `Result<T, String>`, napi's `Result` with a string code
+  (`napi_support::Thrown`); a number that does not fit the upstream integer
+  throws `InvalidArg` instead of wrapping.
+- **How a class holds its value is read off the type** (`class::Holding`): a
+  `Copy` type by value; a type with a method that consumes `self`, or with
+  `&mut self` methods and no `Clone`, owned until that method takes it, after
+  which every call throws `Consumed`; a `Clone` type with `&mut self` methods
+  behind an `Arc`, copied on write (`fontdb.Database`); anything else behind a
+  read-only `Arc`. Step 8 of the migration builds `dispose()` on the owned
+  slot.
+- **Arguments**: numbers, booleans, strings and bytes; a listed class, by
+  value (`Copy`), `&` or `&mut` as its holding allows; an option object; and a
+  **view** (`Config::views`): `&mut V` that a class's method returns for the
+  call, so `paint(view: &mut CanvasView)` takes the `Canvas` and calls
+  `as_view()` on it. A generic `P: AsRef<Path>` or `S: Into<String>` is a
+  string.
+- **Conversions** come from Rust's traits, one direction each and with
+  nothing reported when the other is missing (Q34): `FromStr` gives a static
+  `fromStr(s)` that throws, `Display` gives `toString()`. A class whose fields
+  are all public and of a number, boolean or string type is **plain data**:
+  it gets a getter and a setter per field, and `fromObject(obj)` and
+  `toObject()` over a `<Name>Object` interface, always both (Q31).
+- Panics are contained (`napi_support::contained`), and `unsafe fn`s are left
+  out.
+
+Two namespaces may each have a class of one name (`toy.Color` and
+`alt.Color`, `tiny_skia.Color` and `svgtypes.Color`). napi builds an instance
+it returns from the constructor registered under the class's JS name, and it
+keeps one per name, so such a class (`Class::shared_name`) is only ever
+returned by its own constructor and its factories (`#[napi(factory)]`, which
+build from the class they are called on). Anything else that would return
+one, `toy::Color::checked`'s `Option<Self>` for instance, is left out and
+reported. `namespaced` lets those names through (`Classes::shared_names`).
+The Rust items stay apart because `namespaced` keys them by namespace: a name
+means its own namespace's item first, then the one other namespace's that
+defines it.
 
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen

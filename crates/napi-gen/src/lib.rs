@@ -9,6 +9,8 @@
 //!            `Deref` chains, payload enums, naming
 //!   emit     turning those answers into tokens napi can expand
 //!   cfg      which upstream methods exist on which target
+//!   class    classes and free functions of the namespaced surface:
+//!            constructors, statics, `Result` errors, conversions
 //!
 //! What is specific to the wrapped crates is not here: the build script fills
 //! a [`Config`] and hands it over with [`configure`] before any phase runs.
@@ -29,6 +31,7 @@ macro_rules! report {
 }
 
 pub mod cfg;
+pub mod class;
 pub mod emit;
 pub mod sources;
 pub mod vocab;
@@ -104,6 +107,32 @@ pub struct Config {
     /// keeps one constructor per class name, so the two cannot share it;
     /// `None` leaves the copy out instead. See [`emit::namespaced`].
     pub legacy_prefix: Option<&'static str>,
+    /// Upstream types mirrored as classes of the namespaced surface by
+    /// [`class::Classes`], by source root and name (`("toy", "Canvas")`):
+    /// associated functions become the constructor (`new`) and statics,
+    /// `FromStr` and `Display` become `fromStr` and `toString`, and a struct
+    /// whose fields are all public and convertible gets `fromObject` and
+    /// `toObject`. How a class holds its value is read off the type (see
+    /// [`class::Holding`]). An allowlist: a type is a class only when listed.
+    pub classes: &'static [(&'static str, &'static str)],
+    /// Free functions mirrored into their source's namespace, by source root
+    /// and name (`("toy", "paint")`). An allowlist, like `classes`.
+    pub functions: &'static [(&'static str, &'static str)],
+    /// Borrowed views: an argument `&mut V` is obtained from an instance of a
+    /// class by one of its methods, for the call (`CanvasView` from a
+    /// `Canvas` by `as_view`).
+    pub views: &'static [View],
+}
+
+/// "An argument `&mut <ty>` is `<class>`'s `<via>()`, borrowed for the
+/// call." JS passes the class instance.
+pub struct View {
+    /// The view type, by name (`CanvasView`).
+    pub ty: &'static str,
+    /// The class it is borrowed from, by upstream name (`Canvas`).
+    pub class: &'static str,
+    /// The class's `&mut self` method that returns the view (`as_view`).
+    pub via: &'static str,
 }
 
 /// The template types the domain shapes become. Each has a `From` impl for

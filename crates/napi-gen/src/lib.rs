@@ -42,7 +42,7 @@ pub struct Config {
     /// An option field indexing an upstream table without a bounds check, by
     /// its name suffix, and the table. Clamped to the table's length.
     pub clamp: (&'static str, &'static str),
-    /// A struct with these fields is a transform, mapped to `Matrix`.
+    /// A struct with these fields is a transform, mapped to `Shapes::matrix`.
     pub matrix_fields: &'static [&'static str],
     /// Upstream type spellings for the template's domain shapes.
     pub size_types: &'static [&'static str],
@@ -50,9 +50,20 @@ pub struct Config {
     pub opt_rect_types: &'static [&'static str],
     pub path_data_types: &'static [&'static str],
     pub tag4_types: &'static [&'static str],
+    /// What the template calls those shapes: the types generated code
+    /// converts them into.
+    pub shapes: Shapes,
+    /// The upstream size type's fallible `(width, height)` constructor, as a
+    /// path from the generated file. An option field of that type is
+    /// flattened into a `*_width`/`*_height` pair and rebuilt through it.
+    pub size_new: &'static str,
     /// An argument type JS hands over as a class instance instead: (the
-    /// upstream type, the class).
-    pub arg_standin: (&'static str, &'static str),
+    /// upstream type, the class, and the class's method that resolves it
+    /// against the receiver before the call).
+    pub arg_standin: Option<(&'static str, &'static str, &'static str)>,
+    /// What a handle owning content adds to its class, when the template has
+    /// such a view.
+    pub content_view: Option<ContentView>,
     /// Option fields the template wires by hand; every other unmappable field
     /// is dropped.
     pub hand_wired_fields: &'static [&'static str],
@@ -70,6 +81,28 @@ pub struct Config {
     /// each is for the binding crate: `"true"` (always built) or a cfg it is
     /// built under. A gate listed nowhere fails the build.
     pub features: &'static [(&'static str, &'static str)],
+}
+
+/// The template types the domain shapes become. Each has a `From` impl for
+/// every upstream spelling [`Config`] lists for it.
+pub struct Shapes {
+    /// What a `rect_types` or `opt_rect_types` value becomes.
+    pub rect: &'static str,
+    /// What a `size_types` value becomes.
+    pub size: &'static str,
+    /// What a struct with the `matrix_fields` becomes.
+    pub matrix: &'static str,
+    /// What a `path_data_types` value becomes: the segment type, and the
+    /// template function that returns a `Vec` of them.
+    pub path: (&'static str, &'static str),
+}
+
+/// A handle whose upstream type has `pub fn <accessor.0>(&self) -> <accessor.1>`
+/// owns content, and its class gets what `emit` writes, given the handle's
+/// upstream path and the class.
+pub struct ContentView {
+    pub accessor: (&'static str, &'static str),
+    pub emit: fn(&proc_macro2::TokenStream, &proc_macro2::Ident) -> proc_macro2::TokenStream,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();

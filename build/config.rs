@@ -9,7 +9,7 @@
 //! wrapped impl blocks (`PASSES`), the clamp, and the upstream spellings of
 //! the template's domain shapes.
 
-use napi_gen::Config;
+use napi_gen::{Config, ContentView, Shapes};
 
 /// One crate the binding wraps.
 pub struct Upstream {
@@ -175,9 +175,28 @@ pub const GEN: Config = Config {
     opt_rect_types: &["Option<NonZeroRect>"],
     path_data_types: &["tiny_skia_path::Path", "&tiny_skia_path::Path"],
     tag4_types: &["[u8;4]", "&[u8;4]"],
+    // The template's types for those shapes, each with a `From` per spelling.
+    shapes: Shapes {
+        rect: "BBox",
+        size: "Dimensions",
+        matrix: "Matrix",
+        path: ("PathSegment", "path_segments"),
+    },
+    // `Options::default_size` is flattened into a width/height pair, rebuilt
+    // through this. It refuses a zero or negative side, and the field keeps its
+    // default then.
+    size_new: "usvg::Size::from_wh",
     // An argument type JS hands over as a class instance instead: a fontdb face
-    // ID arrives as the `FontFace` it names, resolved by `id_in`.
-    arg_standin: ("ID", "FontFace"),
+    // ID arrives as the `FontFace` it names, resolved by `id_in`. fontdb IDs are
+    // slotmap keys, so another database's face could name a slot here, and
+    // `removeFace` would delete it.
+    arg_standin: Some(("ID", "FontFace", "id_in")),
+    // A definition owning a content group (`root() -> &Group`: a pattern, a
+    // mask, a clip path) gets the node view over it.
+    content_view: Some(ContentView {
+        accessor: ("root", "&Group"),
+        emit: crate::template::content_view,
+    }),
     // Option fields the template wires by hand (opaque class, resolver hooks,
     // xmlwriter's `Indent`); every other unmappable field is dropped.
     hand_wired_fields: &[

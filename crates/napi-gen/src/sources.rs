@@ -231,7 +231,7 @@ pub fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
 ///
 /// ponytail: file modules only. An inline `mod x { .. }` is not followed, and
 /// neither is `#[path]`; no crate parsed here uses either. Re-exports of other crates
-/// (`pub use fontdb;`) are left out, as before.
+/// (`pub use other_crate;`) are left out, as before.
 pub struct ModTree {
     /// Public type name -> the namespace it is reachable at (`""` the root,
     /// `"filter"`). Root wins when a type is reachable at both.
@@ -242,7 +242,7 @@ pub struct ModTree {
     /// (file, type name) for every `pub` type no export reaches.
     pub private: BTreeSet<(PathBuf, String)>,
     /// (file, type name) -> the name an export gives it, when it differs:
-    /// fontdb's `pub use ttf_parser::Width as Stretch`.
+    /// `pub use other_crate::Width as Stretch`.
     pub renamed: BTreeMap<(PathBuf, String), String>,
 }
 
@@ -420,7 +420,7 @@ impl ModTree {
                             renames.insert((def.clone(), ty.clone()), name.clone());
                         }
                         // The shortest namespace wins, so the root does:
-                        // `usvg::Image` is what `Image` means.
+                        // `root::Image` is what `Image` means.
                         let better = |old: &String| old.len() > ns.len();
                         if paths.get(&name).is_none_or(better) {
                             paths.insert(name.clone(), ns.clone());
@@ -491,7 +491,7 @@ impl ModTree {
     ) -> Vec<(PathBuf, syn::File)> {
         // An `impl` of a type no export reaches is no API either, and its
         // signatures would otherwise make what they mention look wanted:
-        // ttf_parser's `Name::language()` pulled fontdb's `Language` in.
+        // a dependency's `Name::language()` pulled the crate's `Language` in.
         let hidden: BTreeSet<&str> = self
             .private
             .iter()

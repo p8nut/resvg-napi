@@ -31,7 +31,7 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
-| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs` |
+| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
 | `build/template.rs` | **the API decisions, written by hand.** The only file here not describing upstream |
 | `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
 
@@ -40,6 +40,38 @@ crate, `crates/napi-support`: `contained` (a panic becomes a JS error), the
 bounded `log` collector, capped file and gzip reads, and the checked
 `AbortSignal`. It knows no upstream type, so a binding of another library can
 take it as is; the template only calls into it and keeps the `#[napi]` surface.
+
+### The generic boundary
+
+`crates/napi-gen` and `crates/napi-support` name no wrapped crate: no `usvg`,
+`resvg`, `fontdb`, `tiny_skia`, `tiny-skia` or `svgtypes`, as whole words, in
+code or in comments ([ADR 0002, Q35](docs/adr/0002-api-details.md)). CI greps
+for them and fails on a match. Whatever the generator has to know about
+resvg is a `napi_gen::Config` field that `build/config.rs` fills: the
+template's names for the domain shapes (`shapes`), the size constructor
+(`size_new`), the argument stand-in and its resolver (`arg_standin`), and the
+node view a definition owning a content group gets (`content_view`, whose code
+is in `template.rs`). A comment that needs an example uses the toy crate's
+names, or none.
+
+`crates/toy` and `crates/toy-napi` show that this holds. `toy` is a tiny
+library: an `Arc`-held `Counter` with a few `&self` methods, an `Options`
+struct with `Default`, a unit enum and a plain `Point`. `toy-napi` binds it
+with the same generator, through its own `Config` and a template a few lines
+long in its `build.rs`. Its `src/lib.rs` and `index.d.ts` are committed and
+drift-checked like the root's. The linux-gnu CI job builds it and runs its
+tests:
+
+```bash
+npx napi build --cwd crates/toy-napi --platform --no-js
+node --test crates/toy-napi/toy.spec.mjs
+```
+
+The test is a `.spec.mjs` beside the crate rather than in a `test/` directory,
+for the same reason the scripts' tests are: the root's `node --test` would
+pick it up. Neither toy crate is published, and neither is in the npm tarball
+or the third-party notices. If a change to the generator breaks the toy, the
+change is resvg-shaped. Fix the generator, not the toy.
 
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen

@@ -71,4 +71,6 @@ lto = true
 strip = "symbols"
 
 [workspace]
-members = ["crates/napi-support", "crates/napi-gen"]
+# toy and toy-napi: a tiny crate and its generated binding, built and tested in
+# CI to prove napi-gen needs nothing of resvg. Never published.
+members = ["crates/napi-support", "crates/napi-gen", "crates/toy", "crates/toy-napi"]

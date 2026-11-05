@@ -42,6 +42,33 @@ Step 4b settles it (decision Q36): the flat copy gives way and is renamed
 surface"). `fontdb.Database`, `fontdb.FaceInfo` and `usvg.Tree` had names of
 their own already.
 
+Step 5 started with a spike on the `fontdb` field (ADR 0002, Q27): can a
+plain options object hold a class instance? It can, under napi 3.16.1 and
+napi-derive 3.7.0, natively and under WASI. An input-only
+`#[napi(object, object_to_js = false)]` struct takes a field
+`Option<ClassInstance<'a, C>>` (the struct gets the lifetime) or
+`Option<&'static C>`; the `.d.ts` names the class with its namespace
+(`fontdb?: fontdb.Database`). napi checks the instance on the way in: another
+class's instance or a plain object throws, by type tag natively and by the
+class recorded at wrap time on WASI. A `&'a C` field does not compile: napi-derive
+renames only the lifetimes of generic arguments. So `usvg.Options.fontdb` takes
+a `fontdb.Database` (as `ClassInstance`), and no trailing argument is needed:
+step 6's `usvg.Tree.fromData(data, options)` keeps the Rust signature. The
+same mechanism serves the resolvers' provider classes in step 10
+(`Config::providers`). Nothing namespaced takes the options yet, and
+`fontdb.Database` has no constructor yet, so the root's runtime test of the
+field waits for step 6; the toy tests the mechanism (`toy.report`).
+
+Step 5 left out:
+
+- `usvg.Options.imageHrefResolver` and `fontResolver`: no provider until the
+  `guard` classes of step 10. usvg's default resolvers apply.
+- `defaultSize` stays flattened into `defaultSizeWidth` / `defaultSizeHeight`,
+  as on the flat options, until `tiny_skia.Size` exists (step 6).
+- `indent` and `attributesIndent` take `number | 'tabs' | 'none'` through a
+  converter, not a generated union: `Indent` is xmlwriter's, which the
+  generator does not parse, and payload enums are output-only so far.
+
 ## Status
 
 - [x] 1
@@ -49,7 +76,7 @@ their own already.
 - [x] 3
 - [x] 4
 - [x] 4b
-- [ ] 5
+- [x] 5
 - [ ] 6
 - [ ] 7
 - [ ] 8

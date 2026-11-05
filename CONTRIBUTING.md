@@ -51,12 +51,14 @@ resvg is a `napi_gen::Config` field that `build/config.rs` fills: the
 template's names for the domain shapes (`shapes`), the size constructor
 (`size_new`), the argument stand-in and its resolver (`arg_standin`), and the
 node view a definition owning a content group gets (`content_view`, whose code
-is in `template.rs`). A comment that needs an example uses the toy crate's
-names, or none.
+is in `template.rs`), and the option-object hooks (`index_bounded`,
+`option_objects`, `providers`, `converters`, below). A comment that needs an
+example uses the toy crate's names, or none.
 
 `crates/toy` and `crates/toy-napi` show that this holds. `toy` is a tiny
 library: an `Arc`-held `Counter` with a few `&self` methods, an `Options`
-struct with `Default`, a unit enum and a plain `Point`. `toy-napi` binds it
+struct with `Default`, a unit enum, a plain `Point`, a `Clone` `Tally`, and a
+`ReportOptions` struct with a field of each option-object kind. `toy-napi` binds it
 with the same generator, through its own `Config` and a template a few lines
 long in its `build.rs`. Its `src/lib.rs` and `index.d.ts` are committed and
 drift-checked like the root's. The linux-gnu CI job builds it and runs its
@@ -133,6 +135,49 @@ copy-on-write. `toy.Counter` is namespaced beside a flat `LegacyCounter`, and
 the test checks that instances of the flat one still work.
 `test/api/namespaces.mjs` checks the root's namespaces against `index.d.ts`:
 every class and enum it declares exists at runtime under its Rust name.
+
+### Option objects
+
+An upstream option struct is a plain object on the namespaced surface
+([ADR 0001](docs/adr/0001-thin-generic-wrapper.md)): `usvg.Options`,
+`usvg.WriteOptions`. `Config::option_objects` lists the structs, and
+`napi_gen::emit::option_object` makes each one an input-only
+`#[napi(object, object_to_js = false)]` with every field optional, plus a
+`to_upstream(&self) -> Result<Upstream>` that starts from upstream's
+`Default` and overrides only the fields JS provided. A field left out, or
+`undefined`, keeps the default, whatever upstream says it is: for `usvg.Options`
+that is an empty font database, Times New Roman and the default resolvers, as in
+Rust (ADR 0002, Q27). A listed struct without `Default` is reported and left
+out: it is to become a class with a constructor (step 6 of the migration). A
+field maps as the flat options' fields do, or through one of three hooks:
+
+- **Providers** (`Config::providers`): "a field of type `T` is supplied by an
+  instance of class `C` providing it". The field takes the instance as a
+  `ClassInstance<'a, C>`, so the object gets a lifetime, and the provider's
+  expression makes the value out of it. `Options::fontdb` takes a
+  `fontdb.Database` and shares its `Arc`. napi checks the class: another
+  class's instance, or a plain object, throws (natively by type tag, on WASI by
+  the class recorded at wrap time). The resolvers (ADR 0002, Q26) get their
+  provider classes in step 10; until then a field with no JS form and no
+  provider is left out of the type and keeps its default, and the report lists
+  it as `no provider`.
+- **Converters** (`Config::converters`): "a field of type `T` takes the JS
+  type `J`, converted by the template function `f`". For a type the generator
+  cannot read, such as xmlwriter's `Indent`, a payload enum of a crate it does not
+  parse: `indent: number | 'tabs' | 'none'`, read by `indent_from_js`, which
+  the flat `WriteOptions` uses too. A bad value throws.
+- **Index-bounded fields** (`Config::index_bounded`): a `u8` field indexing an
+  upstream `static` table without a bounds check, by its name suffix and the
+  table (`*_precision` and `POW_VEC`). It is clamped to the table's last index,
+  read off the table by `emit::index_bounds`, on the flat and the namespaced
+  options alike, and the build fails when the suffix matches nothing.
+
+Nothing namespaced takes an option object yet (`usvg.Tree.fromData` comes with
+step 6), so `test/api/options.mjs` checks their shape in `index.d.ts`, and the
+toy tests the conversion: `toy.report(tally, options)` hands
+`ReportOptions::to_upstream` to the toy crate, and the test checks that omitted
+fields equal `Default`, that the provider field takes only a `toy.Tally`, the
+converter and the clamp.
 
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen

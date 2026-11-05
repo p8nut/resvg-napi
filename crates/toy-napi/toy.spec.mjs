@@ -40,3 +40,40 @@ test('util.inspect prints the cheap methods under the class name', () => {
   assert.equal(Object.prototype.toString.call(c), '[object Counter]');
   assert.match(inspect(c), /^Counter \{.*label: 'counter'.*\}$/s);
 });
+
+test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
+  const ns = toy.toy;
+  assert.deepEqual(Object.keys(ns).sort(), ['Direction', 'Tally', 'share', 'shared', 'tally']);
+  assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
+  assert.notEqual(ns.Direction, toy.Direction, 'an enum object of its own');
+  // napi keeps one constructor per class name, so the flat `Counter` keeps
+  // `toy.Counter` out; had both been registered, one would hand out the
+  // other's instances.
+  assert.equal(ns.Counter, undefined);
+  assert.ok(toy.counter() instanceof toy.Counter);
+  const t = ns.tally();
+  assert.ok(t instanceof ns.Tally);
+  assert.equal(t.constructor.name, 'Tally');
+  assert.equal(Object.prototype.toString.call(t), '[object Tally]');
+  assert.match(inspect(t), /^Tally \{.*isEmpty: true.*\}$/s);
+});
+
+test('a Clone handle gets its &mut methods through Arc::make_mut', () => {
+  const a = toy.toy.tally();
+  assert.equal(a.isEmpty(), true);
+  a.push('x');
+  a.push('y');
+  assert.equal(a.len(), 2);
+  assert.equal(a.joined(), 'x,y');
+  // Shared until one side writes: the write copies, and the other side
+  // keeps what it saw.
+  const b = toy.toy.share(a);
+  assert.equal(toy.toy.shared(a, b), true);
+  b.push('z');
+  assert.equal(toy.toy.shared(a, b), false);
+  assert.equal(a.joined(), 'x,y');
+  assert.equal(b.joined(), 'x,y,z');
+  a.clear();
+  assert.equal(a.len(), 0);
+  assert.equal(b.len(), 3);
+});

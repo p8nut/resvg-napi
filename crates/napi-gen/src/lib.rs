@@ -81,6 +81,11 @@ pub struct Config {
     /// each is for the binding crate: `"true"` (always built) or a cfg it is
     /// built under. A gate listed nowhere fails the build.
     pub features: &'static [(&'static str, &'static str)],
+    /// The second surface: the JS namespace each upstream source's types are
+    /// mirrored into, keyed by the source's root path (`("toy", "toy")`). A
+    /// type goes in the namespace of the source that defines it; a source
+    /// listed nowhere gets none. See [`emit::namespaced`] for the naming rule.
+    pub namespaces: &'static [(&'static str, &'static str)],
 }
 
 /// The template types the domain shapes become. Each has a `From` impl for
@@ -120,6 +125,15 @@ pub fn config() -> &'static Config {
     CONFIG
         .get()
         .expect("napi_gen::configure must run before the generator does")
+}
+
+/// The namespace [`Config::namespaces`] gives the source reached by `root`.
+pub fn namespace_of(root: &str) -> Option<&'static str> {
+    config()
+        .namespaces
+        .iter()
+        .find(|(r, _)| *r == root)
+        .map(|(_, ns)| *ns)
 }
 
 /// `name` through a rename table, or unchanged.

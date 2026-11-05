@@ -332,9 +332,16 @@ fn main() {
     // that used them. Driven by the list so a third crate is a push.
     let mut enums = TokenStream::new();
     let mut enum_names: BTreeSet<String> = BTreeSet::new();
+    // The second surface, by the root of the source that defines each item:
+    // `napi_gen::emit::namespaced` copies it under that source's namespace.
+    let mut mirrored: BTreeMap<&str, TokenStream> = BTreeMap::new();
     for src in &sources {
         let (names, code, rejected) = map_enums(&src.files, &referenced, modules, &src.root);
         enum_names.extend(names);
+        mirrored
+            .entry(src.root_str)
+            .or_default()
+            .extend(code.clone());
         enums.extend(code);
         for (name, why) in rejected {
             report!("payload enum {name} not mapped: {why}");
@@ -543,6 +550,36 @@ fn main() {
         if !done.insert(t.clone()) {
             continue;
         }
+        // The second surface's class, before the first surface's exceptions:
+        // a reserved name is the template's, and a hand-wrapped type has a
+        // class of the template's, but neither is in a namespace. A key
+        // spelled through the crate that re-exports the type
+        // (`<crate>::Type`) is taken relative to the defining one.
+        {
+            let src = defines(&t).unwrap_or(&sources[0]);
+            let key = src
+                .root_str
+                .rsplit("::")
+                .next()
+                .and_then(|last| t.strip_prefix(&format!("{last}::")))
+                .filter(|_| src.root_str.contains("::"))
+                .unwrap_or(&t);
+            let (code, skipped, _) = wrapper_class(
+                &src.files,
+                key,
+                &vocab,
+                modules,
+                &src.root,
+                Surface::Namespaced,
+            );
+            for s in skipped {
+                report!(
+                    "{}::{key} method not in the namespaced class: {s}",
+                    src.root_str
+                );
+            }
+            mirrored.entry(src.root_str).or_default().extend(code);
+        }
         let name = wrapper_ident(&t).to_string();
         if RESERVED.contains(&name.as_str()) {
             report!("handle {t} skipped: name {name} is taken");
@@ -553,7 +590,8 @@ fn main() {
             continue;
         }
         let src = defines(&t).unwrap_or(&sources[0]);
-        let (code, skipped, reached) = wrapper_class(&src.files, &t, &vocab, modules, &src.root);
+        let (code, skipped, reached) =
+            wrapper_class(&src.files, &t, &vocab, modules, &src.root, Surface::Flat);
         if code.is_empty() {
             report!("handle {t} skipped: nothing mappable on it");
         } else {
@@ -607,10 +645,12 @@ fn main() {
                 files: source_files(p.source),
                 ty: p.ty,
                 receiver: &receiver,
+                receiver_mut: None,
                 skip: p.skip,
                 prologue: prologue.as_ref(),
                 readonly: false,
                 optional: p.optional,
+                standin: true,
             },
             &vocab,
             names,
@@ -625,6 +665,17 @@ fn main() {
     // registry only ever holds what a pass, the template or another data type
     // reached, so there is nothing to prune.
     let mut object_code: TokenStream = object_parts.values().cloned().collect();
+    for (t, code) in &object_parts {
+        let root = object_root[t].to_string().replace(' ', "");
+        let src = sources
+            .iter()
+            .find(|s| s.root_str == root)
+            .expect("a data type's root is a source's");
+        mirrored
+            .entry(src.root_str)
+            .or_default()
+            .extend(code.clone());
+    }
 
     // The unions for the payload enums. Generated last, because a payload may
     // be one of the data types settled just above.
@@ -636,6 +687,20 @@ fn main() {
         }
         match payload_enum_code(name, info, &vocab, modules) {
             Ok(code) => {
+                // In the namespace of the source defining the enum. One only
+                // mined for vocabulary is another crate's, re-exported: it
+                // waits for that crate's own namespace.
+                match sources.iter().find(|s| {
+                    s.files.iter().flat_map(|f| &f.items).any(
+                        |i| matches!(i, Item::Enum(e) if e.ident == bare(name) && is_pub(&e.vis)),
+                    )
+                }) {
+                    Some(src) => mirrored
+                        .entry(src.root_str)
+                        .or_default()
+                        .extend(code.clone()),
+                    None => report!("payload enum {name} not namespaced: no source defines it"),
+                }
                 object_code.extend(code);
                 unions.push(name.clone());
             }
@@ -735,6 +800,24 @@ fn main() {
         group_methods,
         node_methods,
     );
+    // The second surface, one namespace per source (`GEN.namespaces`).
+    {
+        let parts: Vec<(&str, TokenStream)> = mirrored
+            .into_iter()
+            .map(|(root, code)| {
+                let ns = napi_gen::namespace_of(root)
+                    .unwrap_or_else(|| panic!("no GEN.namespaces entry for {root}"));
+                (ns, code)
+            })
+            .collect();
+        // napi keeps one constructor per JS class name: a class the first
+        // surface already has under that name stays out until it goes.
+        let (mirror, left_out) = namespaced(&parts, &class_names(&code));
+        for why in left_out {
+            report!("not namespaced: {why}");
+        }
+        code.extend(mirror);
+    }
 
     // Async twins: the template marks a Send-safe core, the rule writes the
     // ceremony. The marker is stripped on the way out -- rustc has never heard

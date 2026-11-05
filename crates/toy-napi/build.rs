@@ -39,6 +39,7 @@ const GEN: Config = Config {
     data_renames: &[],
     enum_renames: &[],
     features: &[],
+    namespaces: &[("toy", "toy")],
 };
 
 fn main() {
@@ -72,13 +73,30 @@ fn main() {
     );
     let (fields, skipped, _) = map_struct(&files, "Options", &vocab, 0);
     assert!(skipped.is_empty(), "every Options field maps");
-    let (counter, skipped, _) = wrapper_class(&files, "Counter", &vocab, modules, &root);
+    let (counter, skipped, _) =
+        wrapper_class(&files, "Counter", &vocab, modules, &root, Surface::Flat);
     let skipped: Vec<_> = skipped.iter().map(ToString::to_string).collect();
     assert_eq!(skipped, ["new (no receiver)"], "Counter's methods all map");
 
+    // The second surface, under `toy.*`: the same items again, plus `Tally`,
+    // which derives Clone and so gets its `&mut self` methods through
+    // `Arc::make_mut`.
+    let (ns_counter, _, _) = wrapper_class(
+        &files,
+        "Counter",
+        &vocab,
+        modules,
+        &root,
+        Surface::Namespaced,
+    );
+    let (tally, skipped, _) =
+        wrapper_class(&files, "Tally", &vocab, modules, &root, Surface::Namespaced);
+    let skipped: Vec<_> = skipped.iter().map(ToString::to_string).collect();
+    assert_eq!(skipped, ["new (no receiver)"], "Tally's methods all map");
+
     let decls = fields.iter().map(|f| &f.decl);
     let assigns = fields.iter().map(|f| &f.assign);
-    let code = quote! {
+    let flat = quote! {
         use napi::bindgen_prelude::*;
         use napi_derive::napi;
 
@@ -116,6 +134,42 @@ fn main() {
                 options.apply(&mut o);
             }
             Counter::wrap(toy::Counter::new(&o), Doc)
+        }
+    };
+    // `Counter` is a class of the first surface already, and napi keeps one
+    // constructor per class name: `toy.Counter` has to wait for the flat one
+    // to go. The rest is copied.
+    let (mirrored, left_out) = namespaced(
+        &[("toy", quote! { #enum_code #point #ns_counter #tally })],
+        &class_names(&flat),
+    );
+    assert_eq!(
+        left_out,
+        ["toy.Counter: a class named Counter exists already"],
+        "only the colliding class is left out"
+    );
+    let code = quote! {
+        #flat
+        #mirrored
+
+        // Hand-written factories until the generator emits them. The
+        // namespaced items are named by the prefix rule: `ToyTally`, `toy_tally`.
+        #[doc = " A new, empty `toy.Tally`."]
+        #[napi(js_name = "tally", namespace = "toy")]
+        pub fn toy_tally() -> ToyTally {
+            ToyTally::wrap(toy::Tally::new(), Doc)
+        }
+
+        #[doc = " A second handle on the same `Tally`: shared until one of them writes."]
+        #[napi(js_name = "share", namespace = "toy")]
+        pub fn toy_share(t: &ToyTally) -> ToyTally {
+            ToyTally::wrap(t.inner.clone(), Doc)
+        }
+
+        #[doc = " Whether two handles still share one value."]
+        #[napi(js_name = "shared", namespace = "toy")]
+        pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> bool {
+            std::sync::Arc::ptr_eq(&a.inner, &b.inner)
         }
     };
     let file: syn::File = syn::parse2(code).expect("the toy template is valid Rust");

@@ -142,6 +142,29 @@ pub fn inherent_impls<'a>(
         })
 }
 
+/// Whether the public struct `ty` derives `tr` (`Clone`, say). Only the
+/// derive is read: a hand-written impl is not looked for.
+pub fn derives(files: &[syn::File], ty: &str, tr: &str) -> bool {
+    files
+        .iter()
+        .flat_map(|f| &f.items)
+        .filter_map(|i| match i {
+            Item::Struct(s) if s.ident == ty && is_pub(&s.vis) => Some(&s.attrs),
+            _ => None,
+        })
+        .flatten()
+        .filter(|a| a.path().is_ident("derive"))
+        .any(|a| {
+            let mut hit = false;
+            // A derive list is paths: `Clone`, `std::clone::Clone`.
+            let _ = a.parse_nested_meta(|m| {
+                hit |= m.path.segments.last().is_some_and(|s| s.ident == tr);
+                Ok(())
+            });
+            hit
+        })
+}
+
 /// Renames a kept item to the name the crate root exports it under, so what is
 /// parsed downstream is what a caller of the crate can actually write.
 fn rename(item: &mut Item, from: &str, to: &str) {

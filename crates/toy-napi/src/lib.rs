@@ -111,6 +111,96 @@ pub fn counter(options: Option<Options>) -> Counter {
     }
     Counter::wrap(toy::Counter::new(&o), Doc)
 }
+#[doc = " Which way a counter counts."]
+#[napi(string_enum = "camelCase", js_name = "Direction", namespace = "toy")]
+#[derive(Copy, Clone)]
+pub enum ToyDirection {
+    Up,
+    Down,
+}
+#[doc = " Plain view of a `Point`."]
+#[napi(object, js_name = "Point", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyPoint {
+    pub x: f64,
+    pub y: f64,
+}
+#[doc = " Handle on a `toy::Tally`, copied on the first write while shared."]
+#[napi(js_name = "Tally", namespace = "toy")]
+pub struct ToyTally {
+    inner: std::sync::Arc<toy::Tally>,
+    doc: Doc,
+}
+impl From<ToyDirection> for toy::Direction {
+    fn from(v: ToyDirection) -> Self {
+        match v {
+            ToyDirection::Up => <toy::Direction>::Up,
+            ToyDirection::Down => <toy::Direction>::Down,
+        }
+    }
+}
+impl From<toy::Direction> for ToyDirection {
+    fn from(v: toy::Direction) -> Self {
+        match v {
+            <toy::Direction>::Up => ToyDirection::Up,
+            <toy::Direction>::Down => ToyDirection::Down,
+        }
+    }
+}
+impl From<&toy::Point> for ToyPoint {
+    fn from(v: &toy::Point) -> Self {
+        Self {
+            x: f64::from(v.x),
+            y: f64::from(v.y),
+        }
+    }
+}
+impl ToyTally {
+    fn wrap(inner: std::sync::Arc<toy::Tally>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyTally {
+    #[napi]
+    pub fn push(&mut self, name: String) {
+        std::sync::Arc::make_mut(&mut self.inner).push(name)
+    }
+    #[napi]
+    pub fn clear(&mut self) {
+        std::sync::Arc::make_mut(&mut self.inner).clear()
+    }
+    #[napi]
+    pub fn len(&self) -> u32 {
+        u32::try_from(self.inner.len()).unwrap_or(u32::MAX)
+    }
+    #[napi]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+    #[napi]
+    pub fn joined(&self) -> String {
+        self.inner.joined().to_string()
+    }
+}
+#[doc = " A new, empty `toy.Tally`."]
+#[napi(js_name = "tally", namespace = "toy")]
+pub fn toy_tally() -> ToyTally {
+    ToyTally::wrap(toy::Tally::new(), Doc)
+}
+#[doc = " A second handle on the same `Tally`: shared until one of them writes."]
+#[napi(js_name = "share", namespace = "toy")]
+pub fn toy_share(t: &ToyTally) -> ToyTally {
+    ToyTally::wrap(t.inner.clone(), Doc)
+}
+#[doc = " Whether two handles still share one value."]
+#[napi(js_name = "shared", namespace = "toy")]
+pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> bool {
+    std::sync::Arc::ptr_eq(&a.inner, &b.inner)
+}
 #[napi]
 impl Counter {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
@@ -138,5 +228,34 @@ impl Counter {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Counter".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyTally {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Tally",
+            &[],
+            &["len", "isEmpty", "joined"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Tally".to_string()
     }
 }

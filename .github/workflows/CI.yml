@@ -92,7 +92,8 @@ jobs:
       # red here means: raise them in the same pull request as the lock.
       - name: napi minimums match Cargo.lock
         run: |
-          for spec in napi:Cargo.toml napi-derive:Cargo.toml napi:crates/napi-support/Cargo.toml; do
+          for spec in napi:Cargo.toml napi-derive:Cargo.toml napi:crates/napi-support/Cargo.toml \
+                      napi:crates/toy-napi/Cargo.toml napi-derive:crates/toy-napi/Cargo.toml; do
             c=${spec%%:*}; f=${spec#*:}
             locked=$(awk -v n="$c" '$0 == "name = \"" n "\"" { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
             declared=$(sed -nE "s/^$c = (\{ version = )?\"([^\"]*)\".*/\2/p" "$f")
@@ -104,6 +105,16 @@ jobs:
       # rather than `.test`, which `node --test` would also pick up from
       # `npm test` on every matrix entry.
       - run: node --test "scripts/*.spec.mjs"
+      # The generic crates name no wrapped crate, comments included: whole
+      # words, case sensitive (ADR 0002, Q35). What is specific to resvg goes
+      # through napi_gen::Config, filled by build/config.rs; crates/toy-napi
+      # proves the rest builds without it.
+      - name: napi-gen and napi-support stay generic
+        run: |
+          if git grep -nwE 'usvg|resvg|fontdb|tiny_skia|tiny-skia|svgtypes' -- crates/napi-gen crates/napi-support; then
+            echo "::error::crates/napi-gen and crates/napi-support must not name a wrapped crate (ADR 0002, Q35): move the spelling into napi_gen::Config (build/config.rs), or reword the comment with the toy crate's names"
+            exit 1
+          fi
 
   build:
     name: ${{ matrix.target }}
@@ -181,6 +192,16 @@ jobs:
             echo "::error::${{ matrix.target }} links $need; build it with --use-napi-cross"
             exit 1
           fi
+
+      # The toy crate, bound by the same generator with its own config and
+      # template: the proof that napi-gen needs nothing of resvg. Built before
+      # the drift check below, which then covers its committed src/lib.rs and
+      # index.d.ts too. Debug: nothing ships it, and it builds in seconds.
+      - name: Toy binding builds and passes
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          npx napi build --cwd crates/toy-napi --platform --no-js
+          node --test crates/toy-napi/toy.spec.mjs
 
       # The build regenerates committed files: src/lib.rs and index.d.ts from
       # the upstream sources (build.rs), index.js and browser.js, and on wasm the

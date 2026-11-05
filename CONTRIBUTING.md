@@ -30,6 +30,7 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand |
 | `crates/napi-gen/src/class.rs` | the classes and free functions of the namespaced surface: constructors, statics, `Result` errors, owned and shared values, conversions |
+| `crates/napi-gen/src/project.rs` | the projections: classes over values borrowed from an owner, and `{ kind, value }` unions of them |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
 | `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the wrapped impl blocks, renames, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
@@ -38,8 +39,9 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 
 What the template needs that has nothing to do with resvg lives in its own
 crate, `crates/napi-support`: `contained` (a panic becomes a JS error), the
-bounded `log` collector, capped file and gzip reads, and the checked
-`AbortSignal`. It knows no upstream type, so a binding of another library can
+bounded `log` collector, capped file and gzip reads, the checked
+`AbortSignal`, and `Projection` (a value borrowed from an `Arc`-held owner,
+below). It knows no upstream type, so a binding of another library can
 take it as is; the template only calls into it and keeps the `#[napi]` surface.
 
 ### The generic boundary
@@ -54,7 +56,8 @@ template's names for the domain shapes (`shapes`), the size constructor
 node view a definition owning a content group gets (`content_view`, whose code
 is in `template.rs`), the option-object hooks (`index_bounded`,
 `option_objects`, `providers`, `converters`, below), and the class and
-function allowlists (`classes`, `functions`, `views`, below). A comment that
+function allowlists (`classes`, `functions`, `views`, below), and the types
+borrowed from an owner (`projections`, below). A comment that
 needs an example uses the toy crate's names, or none.
 
 `crates/toy` and `crates/toy-napi` show that this holds. `toy` is a tiny
@@ -64,7 +67,10 @@ struct with `Default`, a unit enum, a plain `Point`, a `Clone` `Tally`, a
 of each kind `napi_gen::class` makes (below): a plain-data `Vec2` with
 `FromStr` and `Display`, an owned `Canvas` with a consuming method and a
 borrowed view, two `Color`s in two modules, an error enum per fallible
-function, and the free functions `report` and `paint`. `toy-napi` binds it
+function, the free functions `report` and `paint`, and a `Scene` whose
+`Layer`s and `Dot`s are only ever borrowed from it, with an enum `Item` of
+the two and the free functions `count` and `visit` that take one.
+`toy-napi` binds it
 with the same generator, through its own `Config` and a template a few lines
 long in its `build.rs`. Its `src/lib.rs` and `index.d.ts` are committed and
 drift-checked like the root's. The linux-gnu CI job builds it and runs its
@@ -241,6 +247,45 @@ reported. `namespaced` lets those names through (`Classes::shared_names`).
 The Rust items stay apart because `namespaced` keys them by namespace: a name
 means its own namespace's item first, then the one other namespace's that
 defines it.
+
+### Projections
+
+Some upstream values are only ever borrowed: a tree's nodes live inside the
+tree, behind `Box`es, and nothing hands out an `Arc` of one. A class cannot
+hold a borrow, so `Config::projections` lists these types and
+`napi_gen::project` mirrors them as projections
+([ADR 0002, Q22](docs/adr/0002-api-details.md)):
+
+- **A struct is a class holding a `napi_support::Projection`** (`Holding::Projected`):
+  the owner's `Arc`, type-erased, and the path from it to the value. Each call
+  finds the value again from the owner, and the instance keeps the owner
+  alive after JS dropped it. The owner is never written (a copy-on-write
+  `Arc` copies first), so a path that resolved once always does. Its `&self`
+  methods map as any class's do. A copy handed out elsewhere (`From<&T>`, a
+  value class's `wrap`) is a projection of a value of its own.
+- **An enum whose variants each carry one of those structs** (`V(Box<S>)` or
+  `V(S)`) is a union of `{ kind, value }` objects, one per variant
+  (`<Enum><Variant>`): `kind` is the variant's name in camelCase, `value` the
+  projected class. The value remembers the enum it was reached through, so an
+  argument `&Enum` takes the object back (`<enum>_from_js`). A value not
+  reached as a variant, or of another class than `kind` says, throws.
+- **A method returning `&T`, `Option<&T>` or `&[T]`** of a projected struct
+  or union, on a projected class or on a class behind an `Arc` (the owner),
+  is a step: the projection calls the method again on each use. Its
+  arguments move into the step, so they must be values (a string, a number).
+- **`Option<&T>` of a type an owner keeps as `Arc<T>`** (a `&self` method
+  returning `&[Arc<T>]`) is found in that table by identity, through the
+  projection's owner, and is that `Arc`'s handle class. `null` when the
+  owner is not of that class.
+
+`Option<()>` returns `true` or `null` (`boolean | null` in the `.d.ts`): the
+value says whether the call did anything.
+
+The root lists `usvg::Node` and the four node types: `tree.root()` is a
+`usvg.Group`, `group.children()` and `tree.nodeById(id)` hand out
+`usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText`, and
+`resvg.renderNode(node, transform, pixmap)` takes one back. The toy tests the
+rules on its `Scene`, including that a node outlives its owner's JS object.
 
 If you are adding to the API, `template.rs` is where it goes. If upstream moved
 and something stopped mapping, it is `vocab.rs` or `emit.rs`, and the codegen

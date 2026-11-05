@@ -698,12 +698,26 @@ fn main() {
             }
         })
         .collect();
+    // A wrapped crate's classes are its root module's: a module whose types
+    // are exported under its own path (`filter`) is not that source, and its
+    // `Image` is not `usvg::Image`.
+    let root_files: Vec<Vec<syn::File>> = sources
+        .iter()
+        .map(|s| {
+            s.parsed
+                .iter()
+                .filter(|(p, _)| s.tree.file_ns.get(p).is_none_or(String::is_empty))
+                .map(|(_, f)| f.clone())
+                .collect()
+        })
+        .collect();
     let classes = napi_gen::class::Classes::new(
         sources
             .iter()
-            .map(|s| napi_gen::class::Source {
+            .zip(&root_files)
+            .map(|(s, files)| napi_gen::class::Source {
                 root: s.root_str,
-                files: &s.files,
+                files,
                 modules: &s.tree.paths,
             })
             .chain(extra.iter().map(|c| napi_gen::class::Source {
@@ -736,7 +750,15 @@ fn main() {
         }
         mirrored.entry(root).or_default().extend(code);
     }
-    for (s, code) in classes.error_codes() {
+    for u in &classes.unions {
+        let root = classes.sources[u.source].root;
+        report!("{root}::{} is a union of projections", u.name);
+    }
+    for (s, code) in classes
+        .error_codes()
+        .into_iter()
+        .chain(classes.union_code())
+    {
         mirrored
             .entry(classes.sources[s].root)
             .or_default()
@@ -790,6 +812,15 @@ fn main() {
             .iter()
             .find(|s| s.root_str == root)
             .expect("a data type's root is a source's");
+        // A type `GEN.projections` lists is `napi_gen::project`'s class.
+        if GEN
+            .projections
+            .iter()
+            .any(|(r, n)| *r == src.root_str && *n == t.as_str())
+        {
+            report!("{root}::{t} is a projection, not a copy of the flat data type");
+            continue;
+        }
         mirrored
             .entry(src.root_str)
             .or_default()

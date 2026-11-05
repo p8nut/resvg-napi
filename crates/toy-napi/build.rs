@@ -73,8 +73,14 @@ const GEN: Config = Config {
         ("toy", "Color"),
         ("toy", "Canvas"),
         ("toy::alt", "Color"),
+        ("toy", "Scene"),
     ],
-    functions: &[("toy", "report"), ("toy", "paint")],
+    functions: &[
+        ("toy", "report"),
+        ("toy", "paint"),
+        ("toy", "count"),
+        ("toy", "visit"),
+    ],
     // `paint` writes through a `CanvasView`, which JS hands over as the
     // `Canvas` it borrows.
     views: &[View {
@@ -82,6 +88,9 @@ const GEN: Config = Config {
         class: "Canvas",
         via: "as_view",
     }],
+    // A `Scene`'s nodes are borrowed from it: `Layer` and `Dot` become
+    // classes holding a projection, and `Item` a union of the two.
+    projections: &[("toy", "Item"), ("toy", "Layer"), ("toy", "Dot")],
 };
 
 fn main() {
@@ -181,6 +190,9 @@ fn main() {
             Holding::Value,
             Holding::Owned,
             Holding::Value,
+            Holding::Shared,
+            Holding::Projected,
+            Holding::Projected,
         ],
         "each class holds its value as its shape asks"
     );
@@ -224,6 +236,10 @@ fn main() {
     toy_part.extend(functions);
     for (s, code) in classes.error_codes() {
         assert_eq!(classes.sources[s].root, "toy", "the errors are toy's");
+        toy_part.extend(code);
+    }
+    for (s, code) in classes.union_code() {
+        assert_eq!(classes.sources[s].root, "toy", "Item is toy's");
         toy_part.extend(code);
     }
 

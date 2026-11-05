@@ -11,6 +11,7 @@
 //!   cfg      which upstream methods exist on which target
 //!   class    classes and free functions of the namespaced surface:
 //!            constructors, statics, `Result` errors, conversions
+//!   project  classes and unions over values borrowed from an owner
 //!
 //! What is specific to the wrapped crates is not here: the build script fills
 //! a [`Config`] and hands it over with [`configure`] before any phase runs.
@@ -33,6 +34,7 @@ macro_rules! report {
 pub mod cfg;
 pub mod class;
 pub mod emit;
+pub mod project;
 pub mod sources;
 pub mod vocab;
 
@@ -122,6 +124,14 @@ pub struct Config {
     /// class by one of its methods, for the call (`CanvasView` from a
     /// `Canvas` by `as_view`).
     pub views: &'static [View],
+    /// Types only ever borrowed from an `Arc`-held owner, by source root and
+    /// name (`("toy", "Layer")`): a struct becomes a class holding a
+    /// projection (the owner and the path to the value), and an enum whose
+    /// variants each carry one of those structs a union of `{ kind, value }`
+    /// objects. A method returning `&T`, `Option<&T>` or `&[T]` of either,
+    /// on a projected class or one behind an `Arc`, hands out projections.
+    /// See [`project`].
+    pub projections: &'static [(&'static str, &'static str)],
 }
 
 /// "An argument `&mut <ty>` is `<class>`'s `<via>()`, borrowed for the

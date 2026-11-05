@@ -5958,6 +5958,51 @@ pub struct UsvgTree {
     inner: std::sync::Arc<usvg::Tree>,
     doc: Doc,
 }
+#[doc = " A group container."]
+#[doc = ""]
+#[doc = " The preprocessor will remove all groups that don't impact rendering."]
+#[doc = " Those that left is just an indicator that a new canvas should be created."]
+#[doc = ""]
+#[doc = " `g` element in SVG."]
+#[doc = ""]
+#[doc = " A `usvg::Group` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "Group", namespace = "usvg")]
+pub struct UsvgGroup {
+    inner: napi_support::Projection<usvg::Group>,
+    of: Option<napi_support::Projection<usvg::Node>>,
+}
+#[doc = " A path element."]
+#[doc = ""]
+#[doc = " A `usvg::Path` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "Path", namespace = "usvg")]
+pub struct UsvgPath {
+    inner: napi_support::Projection<usvg::Path>,
+    of: Option<napi_support::Projection<usvg::Node>>,
+}
+#[doc = " A raster image element."]
+#[doc = ""]
+#[doc = " `image` element in SVG."]
+#[doc = ""]
+#[doc = " A `usvg::Image` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "Image", namespace = "usvg")]
+pub struct UsvgImage {
+    inner: napi_support::Projection<usvg::Image>,
+    of: Option<napi_support::Projection<usvg::Node>>,
+}
+#[doc = " A text element."]
+#[doc = ""]
+#[doc = " `text` element in SVG."]
+#[doc = ""]
+#[doc = " A `usvg::Text` borrowed from what it was reached from, which it keeps"]
+#[doc = " alive. Each call finds it there again."]
+#[napi(js_name = "Text", namespace = "usvg")]
+pub struct UsvgText {
+    inner: napi_support::Projection<usvg::Text>,
+    of: Option<napi_support::Projection<usvg::Node>>,
+}
 #[doc = " The `code` a thrown `usvg::Error` carries: the variant's name. The message is its `Display`."]
 #[napi(string_enum, js_name = "ErrorCode", namespace = "usvg")]
 pub enum UsvgErrorCode {
@@ -5967,6 +6012,58 @@ pub enum UsvgErrorCode {
     ElementsLimitReached,
     InvalidSize,
     ParsingFailed,
+}
+#[doc = " `Node::Group`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "NodeGroup",
+    namespace = "usvg"
+)]
+pub struct UsvgNodeGroup {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'group'")]
+    pub kind: String,
+    pub value: UsvgGroup,
+}
+#[doc = " `Node::Path`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "NodePath",
+    namespace = "usvg"
+)]
+pub struct UsvgNodePath {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'path'")]
+    pub kind: String,
+    pub value: UsvgPath,
+}
+#[doc = " `Node::Image`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "NodeImage",
+    namespace = "usvg"
+)]
+pub struct UsvgNodeImage {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'image'")]
+    pub kind: String,
+    pub value: UsvgImage,
+}
+#[doc = " `Node::Text`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "NodeText",
+    namespace = "usvg"
+)]
+pub struct UsvgNodeText {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'text'")]
+    pub kind: String,
+    pub value: UsvgText,
 }
 #[doc = " The payload-free variants of `Input`."]
 #[napi(object, js_name = "InputPlain", namespace = "usvg")]
@@ -6339,12 +6436,6 @@ pub struct UsvgGaussianBlur {
     pub std_dev_x: f64,
     pub std_dev_y: f64,
 }
-#[doc = " Read-only view of an `Image`."]
-#[napi(js_name = "Image", namespace = "usvg")]
-pub struct UsvgImage {
-    inner: usvg::Image,
-    doc: Doc,
-}
 #[doc = " Plain view of a `Merge`."]
 #[napi(object, js_name = "Merge", namespace = "usvg")]
 #[derive(Clone)]
@@ -6367,37 +6458,6 @@ pub struct UsvgOffset {
     pub input: Either<UsvgInputPlain, UsvgInputReference>,
     pub dx: f64,
     pub dy: f64,
-}
-#[doc = " Plain view of a `Stroke`."]
-#[napi(object, js_name = "Stroke", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgStroke {
-    pub paint:
-        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
-    pub dasharray: Option<Vec<f64>>,
-    pub dashoffset: f64,
-    pub miterlimit: f64,
-    pub opacity: f64,
-    pub width: f64,
-    pub linecap: UsvgLineCap,
-    pub linejoin: UsvgLineJoin,
-}
-#[doc = " Plain view of a `Path`."]
-#[napi(object, js_name = "Path", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgPath {
-    pub id: String,
-    pub is_visible: bool,
-    pub fill: Option<UsvgFill>,
-    pub stroke: Option<UsvgStroke>,
-    pub paint_order: UsvgPaintOrder,
-    pub rendering_mode: UsvgShapeRendering,
-    pub data: Vec<PathSegment>,
-    pub abs_transform: Matrix,
-    pub bounding_box: BBox,
-    pub abs_bounding_box: BBox,
-    pub stroke_bounding_box: BBox,
-    pub abs_stroke_bounding_box: BBox,
 }
 #[doc = " Read-only view of a `PositionedGlyph`."]
 #[napi(js_name = "PositionedGlyph", namespace = "usvg")]
@@ -6627,11 +6687,19 @@ pub struct UsvgStop {
     pub color: UsvgColor,
     pub opacity: f64,
 }
-#[doc = " Read-only view of a `Text`."]
-#[napi(js_name = "Text", namespace = "usvg")]
-pub struct UsvgText {
-    inner: usvg::Text,
-    doc: Doc,
+#[doc = " Plain view of a `Stroke`."]
+#[napi(object, js_name = "Stroke", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgStroke {
+    pub paint:
+        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
+    pub dasharray: Option<Vec<f64>>,
+    pub dashoffset: f64,
+    pub miterlimit: f64,
+    pub opacity: f64,
+    pub width: f64,
+    pub linecap: UsvgLineCap,
+    pub linejoin: UsvgLineJoin,
 }
 #[doc = " Read-only view of a `TextChunk`."]
 #[napi(js_name = "TextChunk", namespace = "usvg")]
@@ -6771,6 +6839,33 @@ pub fn resvg_render(
     })
     .map_err(napi_support::coded)?;
     Ok(())
+}
+#[doc = " Renders a node onto the pixmap."]
+#[doc = ""]
+#[doc = " `transform` will be used as a root transform."]
+#[doc = " Can be used to position SVG inside the `pixmap`."]
+#[doc = ""]
+#[doc = " The expected pixmap size can be retrieved from `usvg::Node::abs_layer_bounding_box()`."]
+#[doc = ""]
+#[doc = " Returns `None` when `node` has a zero size."]
+#[doc = ""]
+#[doc = " The produced content is in the sRGB color space."]
+#[napi(js_name = "renderNode", namespace = "resvg")]
+#[allow(clippy::redundant_closure)]
+pub fn resvg_render_node(
+    #[napi(ts_arg_type = "usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText")]
+    node: Object,
+    transform: &TinySkiaTransform,
+    pixmap: &mut TinySkiaPixmap,
+) -> Result<Option<bool>, String> {
+    let __node = usvg_node_from_js(&node)?;
+    let __transform = transform.inner;
+    let mut __pixmap = pixmap.__mut()?.as_mut();
+    let __v = napi_support::contained("render_node", || {
+        resvg::render_node(__node.get(), __transform, &mut __pixmap)
+    })
+    .map_err(napi_support::coded)?;
+    Ok(__v.map(|__v| true))
 }
 impl SvgtypesColor {
     fn __from(inner: svgtypes::Color) -> Self {
@@ -9004,6 +9099,38 @@ impl UsvgTree {
             napi_support::contained("Tree::size", || __self.size()).map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
     }
+    #[doc = " The root element of the SVG tree."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn root(&self) -> Result<UsvgGroup, String> {
+        let __self = &self.inner;
+        napi_support::contained("Tree::root", || {
+            UsvgGroup::__proj(
+                napi_support::Projection::of(self.inner.clone())
+                    .then(move |__s| Some(__s.root()))
+                    .expect("a borrow resolves"),
+            )
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " Returns a renderable node by ID."]
+    #[doc = ""]
+    #[doc = " If an empty ID is provided, than this method will always return `None`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn node_by_id(
+        &self,
+        id: String,
+    ) -> Result<Option<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
+    {
+        let __self = &self.inner;
+        napi_support::contained("Tree::node_by_id", || {
+            napi_support::Projection::of(self.inner.clone())
+                .then(move |__s| __s.node_by_id(&id))
+                .map(usvg_node_to_js)
+        })
+        .map_err(napi_support::coded)
+    }
     #[doc = " Checks if the current tree has any text nodes."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -9119,6 +9246,874 @@ impl UsvgTree {
             .map_err(napi_support::coded)?;
         Ok(__v)
     }
+}
+impl From<&usvg::Group> for UsvgGroup {
+    fn from(v: &usvg::Group) -> Self {
+        Self::__from(v.clone())
+    }
+}
+impl UsvgGroup {
+    fn __proj(inner: napi_support::Projection<usvg::Group>) -> Self {
+        Self { inner, of: None }
+    }
+    fn __from(inner: usvg::Group) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::Group, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgGroup {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Isn't automatically generated."]
+    #[doc = " Can be empty."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Group::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Element's transform."]
+    #[doc = ""]
+    #[doc = " This is a relative transform. The one that is set via the `transform` attribute in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::transform", || __self.transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Element's absolute transform."]
+    #[doc = ""]
+    #[doc = " Contains all ancestors transforms including group's transform."]
+    #[doc = ""]
+    #[doc = " Note that subroots, like clipPaths, masks and patterns, have their own root transform,"]
+    #[doc = " which isn't affected by the node that references this subroot."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::abs_transform", || __self.abs_transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Group opacity."]
+    #[doc = ""]
+    #[doc = " After the group is rendered we should combine"]
+    #[doc = " it with a parent group using the specified opacity."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn opacity(&self) -> Result<f64, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::opacity", || __self.opacity())
+            .map_err(napi_support::coded)?;
+        Ok(f64::from(__v.get()))
+    }
+    #[doc = " Group blend mode."]
+    #[doc = ""]
+    #[doc = " `mix-blend-mode` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn blend_mode(&self) -> Result<UsvgBlendMode, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::blend_mode", || __self.blend_mode())
+            .map_err(napi_support::coded)?;
+        Ok(UsvgBlendMode::from(__v))
+    }
+    #[doc = " Group isolation."]
+    #[doc = ""]
+    #[doc = " `isolation` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn isolate(&self) -> Result<bool, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::isolate", || __self.isolate())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Element's clip path."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn clip_path(&self) -> Result<Option<UsvgClipPath>, String> {
+        let __self = self.inner.get();
+        napi_support::contained("Group::clip_path", || {
+            self.inner.get().clip_path().and_then(|__t| {
+                self.inner
+                    .owner::<usvg::Tree>()?
+                    .clip_paths()
+                    .iter()
+                    .find(|__d| std::ptr::eq(std::sync::Arc::as_ptr(__d), __t))
+                    .map(|__d| UsvgClipPath::wrap(__d.clone(), Doc::default()))
+            })
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " Element's mask."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn mask(&self) -> Result<Option<UsvgMask>, String> {
+        let __self = self.inner.get();
+        napi_support::contained("Group::mask", || {
+            self.inner.get().mask().and_then(|__t| {
+                self.inner
+                    .owner::<usvg::Tree>()?
+                    .masks()
+                    .iter()
+                    .find(|__d| std::ptr::eq(std::sync::Arc::as_ptr(__d), __t))
+                    .map(|__d| UsvgMask::wrap(__d.clone(), Doc::default()))
+            })
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " Element's filters."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn filters(&self) -> Result<Vec<UsvgFilter>, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::filters", || __self.filters())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgFilter::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Element's object bounding box."]
+    #[doc = ""]
+    #[doc = " `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms."]
+    #[doc = ""]
+    #[doc = " Can be set to `None` in case of an empty group."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::bounding_box", || __self.bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's bounding box in canvas coordinates."]
+    #[doc = ""]
+    #[doc = " `userSpaceOnUse` in SVG terms."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::abs_bounding_box", || __self.abs_bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's object bounding box including stroke."]
+    #[doc = ""]
+    #[doc = " Similar to `bounding_box`, but includes stroke."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::stroke_bounding_box", || {
+            __self.stroke_bounding_box()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's bounding box including stroke in user coordinates."]
+    #[doc = ""]
+    #[doc = " Similar to `abs_bounding_box`, but includes stroke."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::abs_stroke_bounding_box", || {
+            __self.abs_stroke_bounding_box()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's \"layer\" bounding box in object units."]
+    #[doc = ""]
+    #[doc = " Conceptually, this is `stroke_bounding_box` expanded and/or clipped"]
+    #[doc = " by `filters_bounding_box`, but also including all the children."]
+    #[doc = " Groups without filters are additionally clipped by their clip path."]
+    #[doc = " This is the bounding box `resvg` will later use to allocate layers/pixmaps"]
+    #[doc = " during isolated groups rendering."]
+    #[doc = ""]
+    #[doc = " Only groups have it, because only groups can have filters."]
+    #[doc = " For other nodes layer bounding box is the same as stroke bounding box."]
+    #[doc = ""]
+    #[doc = " Unlike other bounding boxes, cannot have zero size."]
+    #[doc = ""]
+    #[doc = " Returns 0x0x1x1 for empty groups."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn layer_bounding_box(&self) -> Result<BBox, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Group::layer_bounding_box", || __self.layer_bounding_box())
+                .map_err(napi_support::coded)?;
+        Ok(BBox::from(__v))
+    }
+    #[doc = " Element's \"layer\" bounding box in canvas units."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_layer_bounding_box(&self) -> Result<BBox, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::abs_layer_bounding_box", || {
+            __self.abs_layer_bounding_box()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(BBox::from(__v))
+    }
+    #[doc = " Group's children."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn children(
+        &self,
+    ) -> Result<Vec<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
+    {
+        let __self = self.inner.get();
+        napi_support::contained("Group::children", || {
+            let __b = self.inner.clone();
+            (0..__b.get().children().len())
+                .filter_map(|__i| __b.then(move |__s| __s.children().get(__i)))
+                .map(usvg_node_to_js)
+                .collect()
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " Checks if this group should be isolated during rendering."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn should_isolate(&self) -> Result<bool, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::should_isolate", || __self.should_isolate())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Returns `true` if the group has any children."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn has_children(&self) -> Result<bool, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::has_children", || __self.has_children())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Calculates a node's filter bounding box."]
+    #[doc = ""]
+    #[doc = " Filters with `objectBoundingBox` and missing or zero `bounding_box` would be ignored."]
+    #[doc = ""]
+    #[doc = " Note that a filter region can act like a clipping rectangle,"]
+    #[doc = " therefore this function can produce a bounding box smaller than `bounding_box`."]
+    #[doc = ""]
+    #[doc = " Returns `None` when then group has no filters."]
+    #[doc = ""]
+    #[doc = " This function is very fast, that's why we do not store this bbox as a `Group` field."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn filters_bounding_box(&self) -> Result<Option<BBox>, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Group::filters_bounding_box", || {
+            __self.filters_bounding_box()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| BBox::from(__v)))
+    }
+}
+impl From<&usvg::Path> for UsvgPath {
+    fn from(v: &usvg::Path) -> Self {
+        Self::__from(v.clone())
+    }
+}
+impl UsvgPath {
+    fn __proj(inner: napi_support::Projection<usvg::Path>) -> Self {
+        Self { inner, of: None }
+    }
+    fn __from(inner: usvg::Path) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::Path, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPath {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Isn't automatically generated."]
+    #[doc = " Can be empty."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Path::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Element visibility."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_visible(&self) -> Result<bool, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::is_visible", || __self.is_visible())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Fill style."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn fill(&self) -> Result<Option<UsvgFill>, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Path::fill", || __self.fill()).map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| UsvgFill::from(__v)))
+    }
+    #[doc = " Stroke style."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn stroke(&self) -> Result<Option<UsvgStroke>, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::stroke", || __self.stroke())
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| UsvgStroke::from(__v)))
+    }
+    #[doc = " Fill and stroke paint order."]
+    #[doc = ""]
+    #[doc = " Since markers will be replaced with regular nodes automatically,"]
+    #[doc = " `usvg` doesn't provide the `markers` order type. It's was already done."]
+    #[doc = ""]
+    #[doc = " `paint-order` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn paint_order(&self) -> Result<UsvgPaintOrder, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::paint_order", || __self.paint_order())
+            .map_err(napi_support::coded)?;
+        Ok(UsvgPaintOrder::from(__v))
+    }
+    #[doc = " Rendering mode."]
+    #[doc = ""]
+    #[doc = " `shape-rendering` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn rendering_mode(&self) -> Result<UsvgShapeRendering, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::rendering_mode", || __self.rendering_mode())
+            .map_err(napi_support::coded)?;
+        Ok(UsvgShapeRendering::from(__v))
+    }
+    #[doc = " Segments list."]
+    #[doc = ""]
+    #[doc = " All segments are in absolute coordinates."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn data(&self) -> Result<Vec<PathSegment>, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Path::data", || __self.data()).map_err(napi_support::coded)?;
+        Ok(path_segments(__v))
+    }
+    #[doc = " Element's absolute transform."]
+    #[doc = ""]
+    #[doc = " Contains all ancestors transforms including elements's transform."]
+    #[doc = ""]
+    #[doc = " Note that this is not the relative transform present in SVG."]
+    #[doc = " The SVG one would be set only on groups."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::abs_transform", || __self.abs_transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Element's object bounding box."]
+    #[doc = ""]
+    #[doc = " `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::bounding_box", || __self.bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's bounding box in canvas coordinates."]
+    #[doc = ""]
+    #[doc = " `userSpaceOnUse` in SVG terms."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::abs_bounding_box", || __self.abs_bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's object bounding box including stroke."]
+    #[doc = ""]
+    #[doc = " Will have the same value as `bounding_box` when path has no stroke."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Path::stroke_bounding_box", || __self.stroke_bounding_box())
+                .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's bounding box including stroke in canvas coordinates."]
+    #[doc = ""]
+    #[doc = " Will have the same value as `abs_bounding_box` when path has no stroke."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Path::abs_stroke_bounding_box", || {
+            __self.abs_stroke_bounding_box()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+}
+impl From<&usvg::Image> for UsvgImage {
+    fn from(v: &usvg::Image) -> Self {
+        Self::__from(v.clone())
+    }
+}
+impl UsvgImage {
+    fn __proj(inner: napi_support::Projection<usvg::Image>) -> Self {
+        Self { inner, of: None }
+    }
+    fn __from(inner: usvg::Image) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::Image, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImage {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Isn't automatically generated."]
+    #[doc = " Can be empty."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Image::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Element visibility."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn is_visible(&self) -> Result<bool, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::is_visible", || __self.is_visible())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " The actual image size."]
+    #[doc = ""]
+    #[doc = " This is not `width` and `height` attributes,"]
+    #[doc = " but rather the actual PNG/JPEG/GIF/SVG image size."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn size(&self) -> Result<TinySkiaSize, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::size", || __self.size())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaSize::__from(__v))
+    }
+    #[doc = " Rendering mode."]
+    #[doc = ""]
+    #[doc = " `image-rendering` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn rendering_mode(&self) -> Result<UsvgImageRendering, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::rendering_mode", || __self.rendering_mode())
+            .map_err(napi_support::coded)?;
+        Ok(UsvgImageRendering::from(__v))
+    }
+    #[doc = " Image data."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn kind(
+        &self,
+    ) -> Result<
+        Either5<
+            UsvgImageKindJpeg,
+            UsvgImageKindPng,
+            UsvgImageKindGif,
+            UsvgImageKindWebp,
+            UsvgImageKindSvg,
+        >,
+        String,
+    > {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::kind", || __self.kind())
+            .map_err(napi_support::coded)?;
+        Ok(usvg_image_kind_to_js(__v))
+    }
+    #[doc = " Element's absolute transform."]
+    #[doc = ""]
+    #[doc = " Contains all ancestors transforms including elements's transform."]
+    #[doc = ""]
+    #[doc = " Note that this is not the relative transform present in SVG."]
+    #[doc = " The SVG one would be set only on groups."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::abs_transform", || __self.abs_transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Element's object bounding box."]
+    #[doc = ""]
+    #[doc = " `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::bounding_box", || __self.bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's bounding box in canvas coordinates."]
+    #[doc = ""]
+    #[doc = " `userSpaceOnUse` in SVG terms."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Image::abs_bounding_box", || __self.abs_bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+}
+impl From<&usvg::Text> for UsvgText {
+    fn from(v: &usvg::Text) -> Self {
+        Self::__from(v.clone())
+    }
+}
+impl UsvgText {
+    fn __proj(inner: napi_support::Projection<usvg::Text>) -> Self {
+        Self { inner, of: None }
+    }
+    fn __from(inner: usvg::Text) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn wrap(inner: usvg::Text, _doc: Doc) -> Self {
+        Self::__from(inner)
+    }
+    fn doc(&self) -> Doc {
+        Doc::default()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgText {
+    #[doc = " Element's ID."]
+    #[doc = ""]
+    #[doc = " Taken from the SVG itself."]
+    #[doc = " Isn't automatically generated."]
+    #[doc = " Can be empty."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn id(&self) -> Result<String, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Text::id", || __self.id()).map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Rendering mode."]
+    #[doc = ""]
+    #[doc = " `text-rendering` in SVG."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn rendering_mode(&self) -> Result<UsvgTextRendering, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::rendering_mode", || __self.rendering_mode())
+            .map_err(napi_support::coded)?;
+        Ok(UsvgTextRendering::from(__v))
+    }
+    #[doc = " A relative X axis offsets."]
+    #[doc = ""]
+    #[doc = " One offset for each Unicode codepoint. Aka `char` in Rust."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn dx(&self) -> Result<Vec<f64>, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Text::dx", || __self.dx()).map_err(napi_support::coded)?;
+        Ok(__v.iter().map(|v| f64::from(*v)).collect())
+    }
+    #[doc = " A relative Y axis offsets."]
+    #[doc = ""]
+    #[doc = " One offset for each Unicode codepoint. Aka `char` in Rust."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn dy(&self) -> Result<Vec<f64>, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Text::dy", || __self.dy()).map_err(napi_support::coded)?;
+        Ok(__v.iter().map(|v| f64::from(*v)).collect())
+    }
+    #[doc = " A list of rotation angles."]
+    #[doc = ""]
+    #[doc = " One angle for each Unicode codepoint. Aka `char` in Rust."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn rotate(&self) -> Result<Vec<f64>, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::rotate", || __self.rotate())
+            .map_err(napi_support::coded)?;
+        Ok(__v.iter().map(|v| f64::from(*v)).collect())
+    }
+    #[doc = " A writing mode."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn writing_mode(&self) -> Result<UsvgWritingMode, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::writing_mode", || __self.writing_mode())
+            .map_err(napi_support::coded)?;
+        Ok(UsvgWritingMode::from(__v))
+    }
+    #[doc = " A list of text chunks."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn chunks(&self) -> Result<Vec<UsvgTextChunk>, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::chunks", || __self.chunks())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgTextChunk::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+    #[doc = " Element's absolute transform."]
+    #[doc = ""]
+    #[doc = " Contains all ancestors transforms including elements's transform."]
+    #[doc = ""]
+    #[doc = " Note that this is not the relative transform present in SVG."]
+    #[doc = " The SVG one would be set only on groups."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_transform(&self) -> Result<TinySkiaTransform, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::abs_transform", || __self.abs_transform())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaTransform::__from(__v))
+    }
+    #[doc = " Element's text bounding box."]
+    #[doc = ""]
+    #[doc = " Text bounding box is special in SVG and doesn't represent"]
+    #[doc = " tight bounds of the element's content."]
+    #[doc = " You can find more about it"]
+    #[doc = " [here](https://razrfalcon.github.io/notes-on-svg-parsing/text/bbox.html)."]
+    #[doc = ""]
+    #[doc = " `objectBoundingBox` in SVG terms. Meaning it isn't affected by parent transforms."]
+    #[doc = ""]
+    #[doc = " Returns `None` when the `text` build feature was disabled."]
+    #[doc = " This is because we have to perform a text layout before calculating a bounding box."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::bounding_box", || __self.bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's text bounding box in canvas coordinates."]
+    #[doc = ""]
+    #[doc = " `userSpaceOnUse` in SVG terms."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::abs_bounding_box", || __self.abs_bounding_box())
+            .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's object bounding box including stroke."]
+    #[doc = ""]
+    #[doc = " Similar to `bounding_box`, but includes stroke."]
+    #[doc = ""]
+    #[doc = " Will have the same value as `bounding_box` when path has no stroke."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v =
+            napi_support::contained("Text::stroke_bounding_box", || __self.stroke_bounding_box())
+                .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Element's bounding box including stroke in canvas coordinates."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::abs_stroke_bounding_box", || {
+            __self.abs_stroke_bounding_box()
+        })
+        .map_err(napi_support::coded)?;
+        Ok(TinySkiaRect::__from(__v))
+    }
+    #[doc = " Text converted into paths, ready to render."]
+    #[doc = ""]
+    #[doc = " Note that this is only a"]
+    #[doc = " \"best-effort\" attempt: The text will be converted into group/paths/image"]
+    #[doc = " primitives, so that they can be rendered with the existing infrastructure."]
+    #[doc = " This process is in general lossless and should lead to correct output, with"]
+    #[doc = " two notable exceptions:"]
+    #[doc = " 1. For glyphs based on the `SVG` table, only glyphs that are pure SVG 1.1/2.0"]
+    #[doc = "    are supported. Glyphs that make use of features in the OpenType specification"]
+    #[doc = "    that are not part of the original SVG specification are not supported."]
+    #[doc = " 2. For glyphs based on the `COLR` table, there are a certain number of features"]
+    #[doc = "    that are not (correctly) supported, such as conical"]
+    #[doc = "    gradients, certain gradient transforms and some blend modes. But this shouldn't"]
+    #[doc = "    cause any issues in 95% of the cases, as most of those are edge cases."]
+    #[doc = "    If the two above are not acceptable, then you will need to implement your own"]
+    #[doc = "    glyph rendering logic based on the layouted glyphs (see the `layouted` method)."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn flattened(&self) -> Result<UsvgGroup, String> {
+        let __self = self.inner.get();
+        napi_support::contained("Text::flattened", || {
+            UsvgGroup::__proj(
+                self.inner
+                    .clone()
+                    .then(move |__s| Some(__s.flattened()))
+                    .expect("a borrow resolves"),
+            )
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " The positioned glyphs and decoration spans of the text."]
+    #[doc = ""]
+    #[doc = " This should only be used if you need more low-level access"]
+    #[doc = " to the glyphs that make up the text. If you just need the"]
+    #[doc = " outlines of the text, you should use `flattened` instead."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn layouted(&self) -> Result<Vec<UsvgSpan>, String> {
+        let __self = self.inner.get();
+        let __v = napi_support::contained("Text::layouted", || __self.layouted())
+            .map_err(napi_support::coded)?;
+        Ok(__v
+            .iter()
+            .map(|x| UsvgSpan::wrap(x.clone(), self.doc()))
+            .collect())
+    }
+}
+fn usvg_node_to_js(
+    p: napi_support::Projection<usvg::Node>,
+) -> Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText> {
+    match p.get() {
+        usvg::Node::Group(_) => Either4::A(UsvgNodeGroup {
+            kind: "group".to_string(),
+            value: UsvgGroup {
+                inner: p
+                    .then(|__e| match __e {
+                        usvg::Node::Group(__v) => Some(&**__v),
+                        _ => None,
+                    })
+                    .expect("the variant matched"),
+                of: Some(p.clone()),
+            },
+        }),
+        usvg::Node::Path(_) => Either4::B(UsvgNodePath {
+            kind: "path".to_string(),
+            value: UsvgPath {
+                inner: p
+                    .then(|__e| match __e {
+                        usvg::Node::Path(__v) => Some(&**__v),
+                        _ => None,
+                    })
+                    .expect("the variant matched"),
+                of: Some(p.clone()),
+            },
+        }),
+        usvg::Node::Image(_) => Either4::C(UsvgNodeImage {
+            kind: "image".to_string(),
+            value: UsvgImage {
+                inner: p
+                    .then(|__e| match __e {
+                        usvg::Node::Image(__v) => Some(&**__v),
+                        _ => None,
+                    })
+                    .expect("the variant matched"),
+                of: Some(p.clone()),
+            },
+        }),
+        usvg::Node::Text(_) => Either4::D(UsvgNodeText {
+            kind: "text".to_string(),
+            value: UsvgText {
+                inner: p
+                    .then(|__e| match __e {
+                        usvg::Node::Text(__v) => Some(&**__v),
+                        _ => None,
+                    })
+                    .expect("the variant matched"),
+                of: Some(p.clone()),
+            },
+        }),
+    }
+}
+fn usvg_node_from_js(o: &Object) -> Result<napi_support::Projection<usvg::Node>, String> {
+    use napi::bindgen_prelude::JsObjectValue as _;
+    let kind: String = o
+        .get_named_property_unchecked("kind")
+        .map_err(napi_support::coded)?;
+    let of = match kind.as_str() {
+        "group" => o
+            .get_named_property_unchecked::<ClassInstance<UsvgGroup>>("value")
+            .map_err(napi_support::coded)?
+            .of
+            .clone(),
+        "path" => o
+            .get_named_property_unchecked::<ClassInstance<UsvgPath>>("value")
+            .map_err(napi_support::coded)?
+            .of
+            .clone(),
+        "image" => o
+            .get_named_property_unchecked::<ClassInstance<UsvgImage>>("value")
+            .map_err(napi_support::coded)?
+            .of
+            .clone(),
+        "text" => o
+            .get_named_property_unchecked::<ClassInstance<UsvgText>>("value")
+            .map_err(napi_support::coded)?
+            .of
+            .clone(),
+        _ => None,
+    };
+    of.ok_or_else(|| {
+        napi_support::thrown(
+            "InvalidArg",
+            format!(
+                "{}: kind {kind:?}",
+                "not a value reached as a variant of Node"
+            ),
+        )
+    })
 }
 impl From<&usvg::filter::Blend> for UsvgBlend {
     fn from(v: &usvg::filter::Blend) -> Self {
@@ -9297,65 +10292,6 @@ impl From<&usvg::filter::GaussianBlur> for UsvgGaussianBlur {
         }
     }
 }
-impl UsvgImage {
-    fn wrap(inner: usvg::Image, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgImage {
-    #[napi(getter)]
-    pub fn id(&self) -> String {
-        let v = &self.inner;
-        v.id().to_string()
-    }
-    #[napi(getter)]
-    pub fn is_visible(&self) -> bool {
-        let v = &self.inner;
-        v.is_visible()
-    }
-    #[napi(getter)]
-    pub fn size(&self) -> Dimensions {
-        let v = &self.inner;
-        Dimensions::from(v.size())
-    }
-    #[napi(getter)]
-    pub fn rendering_mode(&self) -> UsvgImageRendering {
-        let v = &self.inner;
-        UsvgImageRendering::from(v.rendering_mode())
-    }
-    #[napi(getter)]
-    pub fn kind(
-        &self,
-    ) -> Either5<
-        UsvgImageKindJpeg,
-        UsvgImageKindPng,
-        UsvgImageKindGif,
-        UsvgImageKindWebp,
-        UsvgImageKindSvg,
-    > {
-        let v = &self.inner;
-        usvg_image_kind_to_js(v.kind())
-    }
-    #[napi(getter)]
-    pub fn abs_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.abs_transform())
-    }
-    #[napi(getter)]
-    pub fn bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.bounding_box())
-    }
-    #[napi(getter)]
-    pub fn abs_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.abs_bounding_box())
-    }
-}
 impl From<&usvg::filter::Merge> for UsvgMerge {
     fn from(v: &usvg::filter::Merge) -> Self {
         Self {
@@ -9379,24 +10315,6 @@ impl From<&usvg::filter::Offset> for UsvgOffset {
             input: usvg_input_to_js(v.input()),
             dx: f64::from(v.dx()),
             dy: f64::from(v.dy()),
-        }
-    }
-}
-impl From<&usvg::Path> for UsvgPath {
-    fn from(v: &usvg::Path) -> Self {
-        Self {
-            id: v.id().to_string(),
-            is_visible: v.is_visible(),
-            fill: v.fill().map(UsvgFill::from),
-            stroke: v.stroke().map(UsvgStroke::from),
-            paint_order: UsvgPaintOrder::from(v.paint_order()),
-            rendering_mode: UsvgShapeRendering::from(v.rendering_mode()),
-            data: path_segments(v.data()),
-            abs_transform: Matrix::from(v.abs_transform()),
-            bounding_box: BBox::from(v.bounding_box()),
-            abs_bounding_box: BBox::from(v.abs_bounding_box()),
-            stroke_bounding_box: BBox::from(v.stroke_bounding_box()),
-            abs_stroke_bounding_box: BBox::from(v.abs_stroke_bounding_box()),
         }
     }
 }
@@ -9588,88 +10506,6 @@ impl From<&usvg::Stroke> for UsvgStroke {
             linecap: UsvgLineCap::from(v.linecap()),
             linejoin: UsvgLineJoin::from(v.linejoin()),
         }
-    }
-}
-impl UsvgText {
-    fn wrap(inner: usvg::Text, doc: Doc) -> Self {
-        Self { inner, doc }
-    }
-    fn doc(&self) -> Doc {
-        self.doc.clone()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgText {
-    #[napi(getter)]
-    pub fn id(&self) -> String {
-        let v = &self.inner;
-        v.id().to_string()
-    }
-    #[napi(getter)]
-    pub fn rendering_mode(&self) -> UsvgTextRendering {
-        let v = &self.inner;
-        UsvgTextRendering::from(v.rendering_mode())
-    }
-    #[napi(getter)]
-    pub fn dx(&self) -> Vec<f64> {
-        let v = &self.inner;
-        v.dx().iter().map(|v| f64::from(*v)).collect()
-    }
-    #[napi(getter)]
-    pub fn dy(&self) -> Vec<f64> {
-        let v = &self.inner;
-        v.dy().iter().map(|v| f64::from(*v)).collect()
-    }
-    #[napi(getter)]
-    pub fn rotate(&self) -> Vec<f64> {
-        let v = &self.inner;
-        v.rotate().iter().map(|v| f64::from(*v)).collect()
-    }
-    #[napi(getter)]
-    pub fn writing_mode(&self) -> UsvgWritingMode {
-        let v = &self.inner;
-        UsvgWritingMode::from(v.writing_mode())
-    }
-    #[napi(getter)]
-    pub fn chunks(&self) -> Vec<UsvgTextChunk> {
-        let v = &self.inner;
-        v.chunks()
-            .iter()
-            .map(|x| UsvgTextChunk::wrap(x.clone(), self.doc()))
-            .collect()
-    }
-    #[napi(getter)]
-    pub fn abs_transform(&self) -> Matrix {
-        let v = &self.inner;
-        Matrix::from(v.abs_transform())
-    }
-    #[napi(getter)]
-    pub fn bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.bounding_box())
-    }
-    #[napi(getter)]
-    pub fn abs_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.abs_bounding_box())
-    }
-    #[napi(getter)]
-    pub fn stroke_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.stroke_bounding_box())
-    }
-    #[napi(getter)]
-    pub fn abs_stroke_bounding_box(&self) -> BBox {
-        let v = &self.inner;
-        BBox::from(v.abs_stroke_bounding_box())
-    }
-    #[napi(getter)]
-    pub fn layouted(&self) -> Vec<UsvgSpan> {
-        let v = &self.inner;
-        v.layouted()
-            .iter()
-            .map(|x| UsvgSpan::wrap(x.clone(), self.doc()))
-            .collect()
     }
 }
 impl UsvgTextChunk {
@@ -11794,6 +12630,129 @@ impl UsvgTree {
     }
 }
 #[napi(namespace = "usvg")]
+impl UsvgGroup {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Group",
+            &[],
+            &[
+                "id",
+                "opacity",
+                "blendMode",
+                "isolate",
+                "shouldIsolate",
+                "hasChildren",
+            ],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Group".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgPath {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Path",
+            &[],
+            &["id", "isVisible", "paintOrder", "renderingMode"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Path".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgImage {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Image",
+            &[],
+            &["id", "isVisible", "renderingMode"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Image".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgText {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Text",
+            &[],
+            &["id", "renderingMode", "writingMode"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Text".to_string()
+    }
+}
+#[napi(namespace = "usvg")]
 impl UsvgFont {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -11820,44 +12779,6 @@ impl UsvgFont {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Font".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgImage {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Image",
-            &[
-                "id",
-                "isVisible",
-                "size",
-                "renderingMode",
-                "kind",
-                "absTransform",
-                "boundingBox",
-                "absBoundingBox",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Image".to_string()
     }
 }
 #[napi(namespace = "usvg")]
@@ -11936,49 +12857,6 @@ impl UsvgSpan {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Span".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgText {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Text",
-            &[
-                "id",
-                "renderingMode",
-                "dx",
-                "dy",
-                "rotate",
-                "writingMode",
-                "chunks",
-                "absTransform",
-                "boundingBox",
-                "absBoundingBox",
-                "strokeBoundingBox",
-                "absStrokeBoundingBox",
-                "layouted",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Text".to_string()
     }
 }
 #[napi(namespace = "usvg")]

@@ -152,11 +152,15 @@ pub fn js_conv(
             let e = quote!(#a.iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
             reaching(quote!(Vec<#c>), e, t)
         }
-        // `into_iter` covers both a slice of values and an iterator of
-        // references.
+        // `iter` for a slice, `into_iter` for an iterator of references.
         (Js::ValueList(t), Method) => {
             let c = data_ident(t);
-            let e = quote!(#a.into_iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
+            let iter = if src_ty.starts_with("&[") {
+                quote!(iter)
+            } else {
+                quote!(into_iter)
+            };
+            let e = quote!(#a.#iter().map(|x| #c::wrap(x.clone(), self.doc())).collect());
             reaching(quote!(Vec<#c>), e, t)
         }
         (Js::OptValue(t), Getter | Method) => {

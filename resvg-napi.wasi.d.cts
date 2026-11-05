@@ -1940,6 +1940,19 @@ export declare namespace resvg {
    * The produced content is in the sRGB color space.
    */
   export function render(tree: usvg.Tree, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): void
+  /**
+   * Renders a node onto the pixmap.
+   *
+   * `transform` will be used as a root transform.
+   * Can be used to position SVG inside the `pixmap`.
+   *
+   * The expected pixmap size can be retrieved from `usvg::Node::abs_layer_bounding_box()`.
+   *
+   * Returns `None` when `node` has a zero size.
+   *
+   * The produced content is in the sRGB color space.
+   */
+  export function renderNode(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): boolean | null
 }
 
 export declare namespace svgtypes {
@@ -2461,16 +2474,189 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgFont = Font
-  /** Read-only view of an `Image`. */
+  /**
+   * A group container.
+   *
+   * The preprocessor will remove all groups that don't impact rendering.
+   * Those that left is just an indicator that a new canvas should be created.
+   *
+   * `g` element in SVG.
+   *
+   * A `usvg::Group` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
+  export class Group {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Isn't automatically generated.
+     * Can be empty.
+     */
+    id(): string
+    /**
+     * Element's transform.
+     *
+     * This is a relative transform. The one that is set via the `transform` attribute in SVG.
+     */
+    transform(): tiny_skia.Transform
+    /**
+     * Element's absolute transform.
+     *
+     * Contains all ancestors transforms including group's transform.
+     *
+     * Note that subroots, like clipPaths, masks and patterns, have their own root transform,
+     * which isn't affected by the node that references this subroot.
+     */
+    absTransform(): tiny_skia.Transform
+    /**
+     * Group opacity.
+     *
+     * After the group is rendered we should combine
+     * it with a parent group using the specified opacity.
+     */
+    opacity(): number
+    /**
+     * Group blend mode.
+     *
+     * `mix-blend-mode` in SVG.
+     */
+    blendMode(): usvg.BlendMode
+    /**
+     * Group isolation.
+     *
+     * `isolation` in SVG.
+     */
+    isolate(): boolean
+    /** Element's clip path. */
+    clipPath(): usvg.ClipPath | null
+    /** Element's mask. */
+    mask(): usvg.Mask | null
+    /** Element's filters. */
+    filters(): Array<usvg.Filter>
+    /**
+     * Element's object bounding box.
+     *
+     * `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms.
+     *
+     * Can be set to `None` in case of an empty group.
+     */
+    boundingBox(): tiny_skia.Rect
+    /**
+     * Element's bounding box in canvas coordinates.
+     *
+     * `userSpaceOnUse` in SVG terms.
+     */
+    absBoundingBox(): tiny_skia.Rect
+    /**
+     * Element's object bounding box including stroke.
+     *
+     * Similar to `bounding_box`, but includes stroke.
+     */
+    strokeBoundingBox(): tiny_skia.Rect
+    /**
+     * Element's bounding box including stroke in user coordinates.
+     *
+     * Similar to `abs_bounding_box`, but includes stroke.
+     */
+    absStrokeBoundingBox(): tiny_skia.Rect
+    /**
+     * Element's "layer" bounding box in object units.
+     *
+     * Conceptually, this is `stroke_bounding_box` expanded and/or clipped
+     * by `filters_bounding_box`, but also including all the children.
+     * Groups without filters are additionally clipped by their clip path.
+     * This is the bounding box `resvg` will later use to allocate layers/pixmaps
+     * during isolated groups rendering.
+     *
+     * Only groups have it, because only groups can have filters.
+     * For other nodes layer bounding box is the same as stroke bounding box.
+     *
+     * Unlike other bounding boxes, cannot have zero size.
+     *
+     * Returns 0x0x1x1 for empty groups.
+     */
+    layerBoundingBox(): BBox
+    /** Element's "layer" bounding box in canvas units. */
+    absLayerBoundingBox(): BBox
+    /** Group's children. */
+    children(): Array<usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText>
+    /** Checks if this group should be isolated during rendering. */
+    shouldIsolate(): boolean
+    /** Returns `true` if the group has any children. */
+    hasChildren(): boolean
+    /**
+     * Calculates a node's filter bounding box.
+     *
+     * Filters with `objectBoundingBox` and missing or zero `bounding_box` would be ignored.
+     *
+     * Note that a filter region can act like a clipping rectangle,
+     * therefore this function can produce a bounding box smaller than `bounding_box`.
+     *
+     * Returns `None` when then group has no filters.
+     *
+     * This function is very fast, that's why we do not store this bbox as a `Group` field.
+     */
+    filtersBoundingBox(): BBox | null
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgGroup = Group
+  /**
+   * A raster image element.
+   *
+   * `image` element in SVG.
+   *
+   * A `usvg::Image` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
   export class Image {
-    get id(): string
-    get isVisible(): boolean
-    get size(): Dimensions
-    get renderingMode(): usvg.ImageRendering
-    get kind(): usvg.ImageKindJpeg | usvg.ImageKindPng | usvg.ImageKindGif | usvg.ImageKindWebp | usvg.ImageKindSvg
-    get absTransform(): Matrix
-    get boundingBox(): BBox
-    get absBoundingBox(): BBox
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Isn't automatically generated.
+     * Can be empty.
+     */
+    id(): string
+    /** Element visibility. */
+    isVisible(): boolean
+    /**
+     * The actual image size.
+     *
+     * This is not `width` and `height` attributes,
+     * but rather the actual PNG/JPEG/GIF/SVG image size.
+     */
+    size(): tiny_skia.Size
+    /**
+     * Rendering mode.
+     *
+     * `image-rendering` in SVG.
+     */
+    renderingMode(): usvg.ImageRendering
+    /** Image data. */
+    kind(): usvg.ImageKindJpeg | usvg.ImageKindPng | usvg.ImageKindGif | usvg.ImageKindWebp | usvg.ImageKindSvg
+    /**
+     * Element's absolute transform.
+     *
+     * Contains all ancestors transforms including elements's transform.
+     *
+     * Note that this is not the relative transform present in SVG.
+     * The SVG one would be set only on groups.
+     */
+    absTransform(): tiny_skia.Transform
+    /**
+     * Element's object bounding box.
+     *
+     * `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms.
+     */
+    boundingBox(): tiny_skia.Rect
+    /**
+     * Element's bounding box in canvas coordinates.
+     *
+     * `userSpaceOnUse` in SVG terms.
+     */
+    absBoundingBox(): tiny_skia.Rect
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
@@ -2575,6 +2761,85 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgMask = Mask
+  /**
+   * A path element.
+   *
+   * A `usvg::Path` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
+  export class Path {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Isn't automatically generated.
+     * Can be empty.
+     */
+    id(): string
+    /** Element visibility. */
+    isVisible(): boolean
+    /** Fill style. */
+    fill(): usvg.Fill | null
+    /** Stroke style. */
+    stroke(): usvg.Stroke | null
+    /**
+     * Fill and stroke paint order.
+     *
+     * Since markers will be replaced with regular nodes automatically,
+     * `usvg` doesn't provide the `markers` order type. It's was already done.
+     *
+     * `paint-order` in SVG.
+     */
+    paintOrder(): usvg.PaintOrder
+    /**
+     * Rendering mode.
+     *
+     * `shape-rendering` in SVG.
+     */
+    renderingMode(): usvg.ShapeRendering
+    /**
+     * Segments list.
+     *
+     * All segments are in absolute coordinates.
+     */
+    data(): Array<PathSegment>
+    /**
+     * Element's absolute transform.
+     *
+     * Contains all ancestors transforms including elements's transform.
+     *
+     * Note that this is not the relative transform present in SVG.
+     * The SVG one would be set only on groups.
+     */
+    absTransform(): tiny_skia.Transform
+    /**
+     * Element's object bounding box.
+     *
+     * `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms.
+     */
+    boundingBox(): tiny_skia.Rect
+    /**
+     * Element's bounding box in canvas coordinates.
+     *
+     * `userSpaceOnUse` in SVG terms.
+     */
+    absBoundingBox(): tiny_skia.Rect
+    /**
+     * Element's object bounding box including stroke.
+     *
+     * Will have the same value as `bounding_box` when path has no stroke.
+     */
+    strokeBoundingBox(): tiny_skia.Rect
+    /**
+     * Element's bounding box including stroke in canvas coordinates.
+     *
+     * Will have the same value as `abs_bounding_box` when path has no stroke.
+     */
+    absStrokeBoundingBox(): tiny_skia.Rect
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type UsvgPath = Path
   /** Read-only handle on a `usvg::Pattern`. */
   export class Pattern {
     /**
@@ -2669,21 +2934,117 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgSpan = Span
-  /** Read-only view of a `Text`. */
+  /**
+   * A text element.
+   *
+   * `text` element in SVG.
+   *
+   * A `usvg::Text` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
   export class Text {
-    get id(): string
-    get renderingMode(): usvg.TextRendering
-    get dx(): Array<number>
-    get dy(): Array<number>
-    get rotate(): Array<number>
-    get writingMode(): usvg.WritingMode
-    get chunks(): Array<usvg.TextChunk>
-    get absTransform(): Matrix
-    get boundingBox(): BBox
-    get absBoundingBox(): BBox
-    get strokeBoundingBox(): BBox
-    get absStrokeBoundingBox(): BBox
-    get layouted(): Array<usvg.Span>
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself.
+     * Isn't automatically generated.
+     * Can be empty.
+     */
+    id(): string
+    /**
+     * Rendering mode.
+     *
+     * `text-rendering` in SVG.
+     */
+    renderingMode(): usvg.TextRendering
+    /**
+     * A relative X axis offsets.
+     *
+     * One offset for each Unicode codepoint. Aka `char` in Rust.
+     */
+    dx(): Array<number>
+    /**
+     * A relative Y axis offsets.
+     *
+     * One offset for each Unicode codepoint. Aka `char` in Rust.
+     */
+    dy(): Array<number>
+    /**
+     * A list of rotation angles.
+     *
+     * One angle for each Unicode codepoint. Aka `char` in Rust.
+     */
+    rotate(): Array<number>
+    /** A writing mode. */
+    writingMode(): usvg.WritingMode
+    /** A list of text chunks. */
+    chunks(): Array<usvg.TextChunk>
+    /**
+     * Element's absolute transform.
+     *
+     * Contains all ancestors transforms including elements's transform.
+     *
+     * Note that this is not the relative transform present in SVG.
+     * The SVG one would be set only on groups.
+     */
+    absTransform(): tiny_skia.Transform
+    /**
+     * Element's text bounding box.
+     *
+     * Text bounding box is special in SVG and doesn't represent
+     * tight bounds of the element's content.
+     * You can find more about it
+     * [here](https://razrfalcon.github.io/notes-on-svg-parsing/text/bbox.html).
+     *
+     * `objectBoundingBox` in SVG terms. Meaning it isn't affected by parent transforms.
+     *
+     * Returns `None` when the `text` build feature was disabled.
+     * This is because we have to perform a text layout before calculating a bounding box.
+     */
+    boundingBox(): tiny_skia.Rect
+    /**
+     * Element's text bounding box in canvas coordinates.
+     *
+     * `userSpaceOnUse` in SVG terms.
+     */
+    absBoundingBox(): tiny_skia.Rect
+    /**
+     * Element's object bounding box including stroke.
+     *
+     * Similar to `bounding_box`, but includes stroke.
+     *
+     * Will have the same value as `bounding_box` when path has no stroke.
+     */
+    strokeBoundingBox(): tiny_skia.Rect
+    /** Element's bounding box including stroke in canvas coordinates. */
+    absStrokeBoundingBox(): tiny_skia.Rect
+    /**
+     * Text converted into paths, ready to render.
+     *
+     * Note that this is only a
+     * "best-effort" attempt: The text will be converted into group/paths/image
+     * primitives, so that they can be rendered with the existing infrastructure.
+     * This process is in general lossless and should lead to correct output, with
+     * two notable exceptions:
+     * 1. For glyphs based on the `SVG` table, only glyphs that are pure SVG 1.1/2.0
+     *    are supported. Glyphs that make use of features in the OpenType specification
+     *    that are not part of the original SVG specification are not supported.
+     * 2. For glyphs based on the `COLR` table, there are a certain number of features
+     *    that are not (correctly) supported, such as conical
+     *    gradients, certain gradient transforms and some blend modes. But this shouldn't
+     *    cause any issues in 95% of the cases, as most of those are edge cases.
+     *    If the two above are not acceptable, then you will need to implement your own
+     *    glyph rendering logic based on the layouted glyphs (see the `layouted` method).
+     */
+    flattened(): usvg.Group
+    /**
+     * The positioned glyphs and decoration spans of the text.
+     *
+     * This should only be used if you need more low-level access
+     * to the glyphs that make up the text. If you just need the
+     * outlines of the text, you should use `flattened` instead.
+     */
+    layouted(): Array<usvg.Span>
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
@@ -2758,6 +3119,14 @@ export declare namespace usvg {
      * to retrieve it instead.
      */
     size(): tiny_skia.Size
+    /** The root element of the SVG tree. */
+    root(): usvg.Group
+    /**
+     * Returns a renderable node by ID.
+     *
+     * If an empty ID is provided, than this method will always return `None`.
+     */
+    nodeById(id: string): usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText | null
     /** Checks if the current tree has any text nodes. */
     hasTextNodes(): boolean
     /** Checks if the current tree has any `defs` nodes. */
@@ -3140,6 +3509,30 @@ export declare namespace usvg {
   }
   /** A morphology operation. */
   export type MorphologyOperator = 'erode' | 'dilate'
+  /** `Node::Group`. */
+  export interface NodeGroup {
+    /** Discriminant. Narrow on this. */
+    kind: 'group'
+    value: usvg.Group
+  }
+  /** `Node::Image`. */
+  export interface NodeImage {
+    /** Discriminant. Narrow on this. */
+    kind: 'image'
+    value: usvg.Image
+  }
+  /** `Node::Path`. */
+  export interface NodePath {
+    /** Discriminant. Narrow on this. */
+    kind: 'path'
+    value: usvg.Path
+  }
+  /** `Node::Text`. */
+  export interface NodeText {
+    /** Discriminant. Narrow on this. */
+    kind: 'text'
+    value: usvg.Text
+  }
   /** Plain view of a `Offset`. */
   export interface Offset {
     input: usvg.InputPlain | usvg.InputReference
@@ -3286,21 +3679,6 @@ export declare namespace usvg {
     /** Discriminant. Narrow on this. */
     type: 'radialGradient'
     id: string
-  }
-  /** Plain view of a `Path`. */
-  export interface Path {
-    id: string
-    isVisible: boolean
-    fill?: usvg.Fill
-    stroke?: usvg.Stroke
-    paintOrder: usvg.PaintOrder
-    renderingMode: usvg.ShapeRendering
-    data: Array<PathSegment>
-    absTransform: Matrix
-    boundingBox: BBox
-    absBoundingBox: BBox
-    strokeBoundingBox: BBox
-    absStrokeBoundingBox: BBox
   }
   /** Plain view of a `PointLight`. */
   export interface PointLight {

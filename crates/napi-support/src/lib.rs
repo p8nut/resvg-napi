@@ -9,6 +9,8 @@
 //! - [`fs`]: reads of caller-named files, capped.
 //! - [`Signal`]: an `AbortSignal` argument, checked before napi converts it.
 //! - [`inspect`]: what `console.log` prints for a class instance.
+//! - [`Projection`]: a value borrowed out of an `Arc`-held owner, kept alive
+//!   with it.
 //!
 //! No Rust tests: a test binary cannot link napi's symbols outside Node. The
 //! binding's JS suite covers each piece through the API that uses it.
@@ -54,6 +56,72 @@ pub fn coded(e: Error) -> Thrown {
 /// the JS argument or field.
 pub fn invalid(name: &str, value: impl std::fmt::Display) -> Thrown {
     thrown("InvalidArg", format!("invalid {name}: {value}"))
+}
+
+/// What a projection resolves from: its owner, type-erased.
+type Owner = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+
+/// The way from an owner to a value of a projection.
+type Path<T> =
+    std::sync::Arc<dyn Fn(&(dyn std::any::Any + Send + Sync)) -> Option<&T> + Send + Sync>;
+
+/// A value borrowed out of an `Arc`-held owner: a node of a tree, a field of
+/// a field. A class cannot hold a borrow, so it holds the owner and the path
+/// to the value instead, and re-resolves the path on each call. The owner is
+/// shared, never written (a copy-on-write `Arc` copies before it writes), so a
+/// path that resolved once always does.
+pub struct Projection<T: 'static> {
+    owner: Owner,
+    path: Path<T>,
+}
+
+impl<T: 'static> Clone for Projection<T> {
+    fn clone(&self) -> Self {
+        Projection {
+            owner: self.owner.clone(),
+            path: self.path.clone(),
+        }
+    }
+}
+
+impl<T: Send + Sync + 'static> Projection<T> {
+    /// The owner itself.
+    pub fn of(owner: std::sync::Arc<T>) -> Self {
+        Projection {
+            owner,
+            path: std::sync::Arc::new(|o| o.downcast_ref::<T>()),
+        }
+    }
+
+    /// A value of its own, for a place that hands out a copy.
+    pub fn owned(value: T) -> Self {
+        Self::of(std::sync::Arc::new(value))
+    }
+}
+
+impl<T: 'static> Projection<T> {
+    /// The value, resolved from the owner.
+    pub fn get(&self) -> &T {
+        (self.path)(&*self.owner).expect("a projection resolves: its owner is never written")
+    }
+
+    /// One step further, or `None` when the step finds nothing.
+    pub fn then<U: 'static>(
+        &self,
+        step: impl Fn(&T) -> Option<&U> + Send + Sync + 'static,
+    ) -> Option<Projection<U>> {
+        let parent = self.path.clone();
+        let p = Projection {
+            owner: self.owner.clone(),
+            path: std::sync::Arc::new(move |o| parent(o).and_then(&step)),
+        };
+        (p.path)(&*p.owner).is_some().then_some(p)
+    }
+
+    /// The owner, when it is an `O`.
+    pub fn owner<O: 'static>(&self) -> Option<&O> {
+        self.owner.downcast_ref()
+    }
 }
 
 /// The error for an instance whose value an earlier call consumed (a method

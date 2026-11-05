@@ -210,7 +210,7 @@ test('fontdb.FaceInfo: a read-only class of getters', () => {
 
 test('usvg data types and unions are declared as plain types', () => {
   const { types } = declared('usvg');
-  for (const t of ['Color', 'Fill', 'Stroke', 'Path', 'Stop', 'PaintColor', 'KindBlend', 'TextDecoration']) {
+  for (const t of ['Color', 'Fill', 'Stroke', 'Stop', 'PaintColor', 'KindBlend', 'TextDecoration', 'NodeGroup']) {
     assert.ok(types.has(t), `usvg.${t} declared`);
     assert.equal(binding.usvg[t], undefined, `usvg.${t} is a type, not a value`);
   }

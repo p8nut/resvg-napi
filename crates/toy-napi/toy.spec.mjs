@@ -44,8 +44,8 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Canvas', 'Color', 'Counter', 'Direction', 'PaintErrorCode', 'ParseErrorCode', 'Tally', 'Vec2',
-    'paint', 'report', 'share', 'shared',
+    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
+    'Scene', 'Tally', 'Vec2', 'count', 'paint', 'report', 'share', 'shared', 'visit',
   ]);
   assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
@@ -295,4 +295,61 @@ test('inspect prints the cheap &self members, never a &mut or consuming one', ()
   assert.match(inspect(new toy.toy.Vec2(1, 2)), /^Vec2 \{.*x: 1.*y: 2.*length: /s);
   assert.match(inspect(new toy.toy.Canvas(2, 3)), /^Canvas \{.*width: 2.*height: 3.*\}$/s);
   assert.doesNotMatch(inspect(new toy.toy.Canvas(2, 3)), /intoData/);
+});
+
+// `Config::projections`: `Layer` and `Dot` are only ever borrowed from a
+// `Scene`, so their classes hold the scene and the way back to the value.
+const names = (items) => items.map(({ kind, value }) => `${kind}:${value.name()}`);
+
+test('a projection reaches borrowed nodes, and an enum of them is a { kind, value } union', () => {
+  const scene = toy.toy.Scene.demo();
+  const root = scene.root();
+  assert.ok(root instanceof toy.toy.Layer);
+  assert.equal(root.name(), 'root');
+  const items = root.items();
+  assert.deepEqual(names(items), ['dot:a', 'layer:inner', 'dot:d']);
+  assert.ok(items[0].value instanceof toy.toy.Dot);
+  assert.ok(items[1].value instanceof toy.toy.Layer);
+  assert.deepEqual(names(items[1].value.items()), ['dot:b', 'dot:c', 'layer:empty']);
+  // A value class out of a projection, and `Option<&T>` as `T | null`.
+  assert.equal(items[2].value.at().x, 4);
+  assert.equal(root.first().value.name(), 'a');
+  assert.equal(items[1].value.items()[2].value.first(), null);
+  // An argument moves into the step: `find(name)` runs again on each use.
+  assert.equal(scene.find('c').kind, 'dot');
+  assert.equal(scene.find('c').value.at().x, 3);
+  assert.equal(scene.find('nothing'), null);
+});
+
+test('a projection re-resolves on each call and keeps its owner alive', async () => {
+  const { setFlagsFromString } = await import('node:v8');
+  const { runInNewContext } = await import('node:vm');
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc');
+  // Nothing holds the scene but the projection.
+  const inner = toy.toy.Scene.demo().root().items()[1].value;
+  for (let i = 0; i < 3; i++) {
+    gc();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(inner.name(), 'inner');
+  assert.deepEqual(names(inner.items()), ['dot:b', 'dot:c', 'layer:empty']);
+  assert.equal(inner.items()[1].value.at().x, 3);
+});
+
+test('a union argument takes the { kind, value } object a projection handed out', () => {
+  const scene = toy.toy.Scene.demo();
+  const [a, inner, d] = scene.root().items();
+  assert.equal(toy.toy.count(a), 1);
+  assert.equal(toy.toy.count(inner), 2);
+  assert.equal(toy.toy.count(scene.find('inner')), 2);
+  // `Option<()>`: `true` when it did something, `null` when not.
+  assert.equal(toy.toy.visit(d), true);
+  assert.equal(toy.toy.visit(scene.find('empty')), null);
+  // The value must be a variant of the enum: the root layer is not one.
+  const root = { kind: 'layer', value: scene.root() };
+  assert.throws(() => toy.toy.count(root), { code: 'InvalidArg' });
+  assert.throws(() => toy.toy.count({ kind: 'pebble', value: a.value }), { code: 'InvalidArg' });
+  // The class is checked: a dot is not a layer.
+  assert.throws(() => toy.toy.count({ kind: 'layer', value: a.value }));
 });

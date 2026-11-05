@@ -124,6 +124,53 @@ export declare namespace toy {
   }
   export type ToyCounter = Counter
   /**
+   * A named point.
+   *
+   * A `toy::Dot` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
+  export class Dot {
+    name(): string
+    at(): toy.Vec2
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyDot = Dot
+  /**
+   * A named list of items.
+   *
+   * A `toy::Layer` borrowed from what it was reached from, which it keeps
+   * alive. Each call finds it there again.
+   */
+  export class Layer {
+    name(): string
+    items(): Array<toy.ItemLayer | toy.ItemDot>
+    /** The first item, if any. */
+    first(): toy.ItemLayer | toy.ItemDot | null
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyLayer = Layer
+  /**
+   * A tree of layers and dots, shared behind an `Arc`: its nodes are only
+   * ever borrowed from it, the shape a binding projects.
+   *
+   * A shared, read-only `toy::Scene`.
+   */
+  export class Scene {
+    /**
+     * `root` holding the dot `a`, the layer `inner` (dots `b` and `c`, and
+     * the empty layer `empty`), and the dot `d`.
+     */
+    static demo(): toy.Scene
+    root(): toy.Layer
+    /** The first item called `name`, depth first. */
+    find(name: string): toy.ItemLayer | toy.ItemDot | null
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyScene = Scene
+  /**
    * Names counted so far. Unlike [`Counter`] it is `Clone` and changes in
    * place, which is the shape a binding copies on write.
    *
@@ -171,10 +218,24 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyVec2 = Vec2
+  /** How many dots `item` holds, itself included. */
+  export function count(item: toy.ItemLayer | toy.ItemDot): number
   /** Which way a counter counts. */
   export const enum Direction {
     Up = 'up',
     Down = 'down',
+  }
+  /** `Item::Dot`. */
+  export interface ItemDot {
+    /** Discriminant. Narrow on this. */
+    kind: 'dot'
+    value: toy.Dot
+  }
+  /** `Item::Layer`. */
+  export interface ItemLayer {
+    /** Discriminant. Narrow on this. */
+    kind: 'layer'
+    value: toy.Layer
   }
   /**
    * How to build a [`Counter`].
@@ -248,4 +309,6 @@ export declare namespace toy {
     x: number
     y: number
   }
+  /** `None` for an empty layer: nothing to visit. */
+  export function visit(item: toy.ItemLayer | toy.ItemDot): boolean | null
 }

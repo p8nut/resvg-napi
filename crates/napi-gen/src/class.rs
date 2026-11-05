@@ -52,6 +52,9 @@ pub enum Holding {
     /// Behind an `Arc`, its `&mut self` methods through `Arc::make_mut`:
     /// a `Clone` type with `&mut self` methods and none taking `self`.
     SharedCow,
+    /// Borrowed from the value it was reached from, which it keeps alive: a
+    /// `napi_support::Projection` (`Config::projections`). Read-only.
+    Projected,
 }
 
 /// One listed class.
@@ -70,12 +73,16 @@ pub struct Class {
     /// so such a class is only ever returned by its own constructor and
     /// factories, which build from the class they are called on.
     pub shared_name: bool,
+    /// The union ([`Classes::unions`]) whose variant carries it, if any.
+    pub of: Option<usize>,
 }
 
 /// The table, and what was emitted from it.
 pub struct Classes<'a> {
     pub sources: Vec<Source<'a>>,
     pub classes: Vec<Class>,
+    /// The enums `Config::projections` lists, each a union of projections.
+    pub unions: Vec<crate::project::Union>,
     /// Error enums thrown by something emitted: (source, name). Each gets a
     /// type of its codes from [`Classes::error_codes`].
     errors: RefCell<BTreeSet<(usize, String)>>,
@@ -154,7 +161,7 @@ impl Prim {
 
 /// A type's path segments, references and lifetimes aside: `&a::B<'_>` is
 /// `[a, B]`. None for anything but a path.
-fn segs(ty: &Type) -> Option<Vec<String>> {
+pub(crate) fn segs(ty: &Type) -> Option<Vec<String>> {
     match ty {
         Type::Path(p) if p.qself.is_none() => Some(
             p.path
@@ -170,7 +177,7 @@ fn segs(ty: &Type) -> Option<Vec<String>> {
 }
 
 /// The type arguments of a path's last segment: `Result<A, B>` is `[A, B]`.
-fn args(ty: &Type) -> Vec<&Type> {
+pub(crate) fn args(ty: &Type) -> Vec<&Type> {
     let Type::Path(p) = ty else {
         return Vec::new();
     };
@@ -188,7 +195,7 @@ fn args(ty: &Type) -> Vec<&Type> {
 }
 
 /// `&T` is `(Some(false), T)`, `&mut T` `(Some(true), T)`, `T` `(None, T)`.
-fn deref(ty: &Type) -> (Option<bool>, &Type) {
+pub(crate) fn deref(ty: &Type) -> (Option<bool>, &Type) {
     match ty {
         Type::Reference(r) => (Some(r.mutability.is_some()), &r.elem),
         _ => (None, ty),
@@ -200,7 +207,7 @@ fn is_unit(ty: &Type) -> bool {
 }
 
 /// The last segment is `name`, with `n` type arguments.
-fn is(ty: &Type, name: &str, n: usize) -> bool {
+pub(crate) fn is(ty: &Type, name: &str, n: usize) -> bool {
     segs(ty).is_some_and(|s| s.last().is_some_and(|l| l == name)) && args(ty).len() == n
 }
 
@@ -227,14 +234,14 @@ fn receiver(sig: &syn::Signature) -> Option<Recv> {
     }
 }
 
-fn find_struct<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemStruct> {
+pub(crate) fn find_struct<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemStruct> {
     files.iter().flat_map(|f| &f.items).find_map(|i| match i {
         Item::Struct(s) if s.ident == name && is_pub(&s.vis) => Some(s),
         _ => None,
     })
 }
 
-fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
+pub(crate) fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
     files.iter().flat_map(|f| &f.items).find_map(|i| match i {
         Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
         _ => None,
@@ -315,10 +322,10 @@ fn plain_fields(st: &syn::ItemStruct) -> Vec<(Ident, Prim)> {
 
 /// What one generated function hands napi: its parameters, the statements
 /// before the call, and the call's arguments.
-struct Args {
-    params: Vec<TokenStream>,
-    pre: Vec<TokenStream>,
-    fwd: Vec<TokenStream>,
+pub(crate) struct Args {
+    pub(crate) params: Vec<TokenStream>,
+    pub(crate) pre: Vec<TokenStream>,
+    pub(crate) fwd: Vec<TokenStream>,
 }
 
 /// How a returned value becomes JS: its JS type, and the expression that
@@ -350,7 +357,7 @@ impl<'a> Classes<'a> {
             let holding = holding(files, name);
             let plain = match holding {
                 Holding::Value | Holding::Owned => plain_fields(st),
-                Holding::Shared | Holding::SharedCow => Vec::new(),
+                Holding::Shared | Holding::SharedCow | Holding::Projected => Vec::new(),
             };
             classes.push(Class {
                 source,
@@ -358,8 +365,10 @@ impl<'a> Classes<'a> {
                 holding,
                 plain,
                 shared_name: false,
+                of: None,
             });
         }
+        let unions = crate::project::projections(&sources, &mut classes);
         let ns = |c: &Class| namespace_of(sources[c.source].root);
         for i in 0..classes.len() {
             classes[i].shared_name = classes
@@ -369,6 +378,7 @@ impl<'a> Classes<'a> {
         Classes {
             sources,
             classes,
+            unions,
             errors: RefCell::new(BTreeSet::new()),
         }
     }
@@ -398,7 +408,12 @@ impl<'a> Classes<'a> {
     /// `has` accepts: `ctx` itself for a bare name, the source whose root
     /// ends with the qualifier for a qualified one (`alt::Color` is in
     /// `toy::alt`), and otherwise the only one that has it.
-    fn resolve(&self, ctx: usize, segs: &[String], has: impl Fn(usize) -> bool) -> Option<usize> {
+    pub(crate) fn resolve(
+        &self,
+        ctx: usize,
+        segs: &[String],
+        has: impl Fn(usize) -> bool,
+    ) -> Option<usize> {
         let (name, quals) = segs.split_last()?;
         let n = self.sources.len();
         let local = quals.is_empty() || matches!(quals, [q] if q == "crate" || q == "self");
@@ -436,7 +451,7 @@ impl<'a> Classes<'a> {
     }
 
     /// The class `ty` names from source `ctx`, `this` being `Self`.
-    fn class_of(&self, ctx: usize, this: Option<usize>, ty: &Type) -> Option<usize> {
+    pub(crate) fn class_of(&self, ctx: usize, this: Option<usize>, ty: &Type) -> Option<usize> {
         let segs = segs(ty)?;
         if segs == ["Self"] {
             return this;
@@ -447,17 +462,26 @@ impl<'a> Classes<'a> {
                 .iter()
                 .any(|c| c.source == s && c.name == *name)
         })?;
-        self.classes
+        let c = self
+            .classes
             .iter()
-            .position(|c| c.source == s && c.name == *name)
+            .position(|c| c.source == s && c.name == *name)?;
+        // A re-export reaches a class by another crate's name, but another
+        // crate's type of the same name is never a projection
+        // (`other::Path` is not a projected `Path`).
+        let quals = &segs[..segs.len() - 1];
+        let foreign = !quals.is_empty()
+            && !matches!(quals, [q] if q == "crate" || q == "self")
+            && !self.sources[s].root.ends_with(&quals.join("::"));
+        (!foreign || self.classes[c].holding != Holding::Projected).then_some(c)
     }
 
-    fn ident(&self, c: usize) -> Ident {
+    pub(crate) fn ident(&self, c: usize) -> Ident {
         format_ident!("{}", self.classes[c].name)
     }
 
     /// The upstream path of a type of source `s`.
-    fn path(&self, s: usize, name: &str) -> TokenStream {
+    pub(crate) fn path(&self, s: usize, name: &str) -> TokenStream {
         let src = &self.sources[s];
         let root: TokenStream = src.root.parse().expect("a source root that is a path");
         upstream_path(name, src.modules, &root)
@@ -517,6 +541,7 @@ impl<'a> Classes<'a> {
             let fwd = match (r, self.classes[c].holding) {
                 (None, Value) => quote!(#pat.inner),
                 (Some(false), Value | Shared | SharedCow) => quote!(&#pat.inner),
+                (Some(false), Projected) => quote!(#pat.inner.get()),
                 (Some(false), Owned) => quote!(#pat.__ref()?),
                 (Some(true), Value) => quote!(&mut #pat.inner),
                 (Some(true), Owned) => quote!(#pat.__mut()?),
@@ -531,6 +556,11 @@ impl<'a> Classes<'a> {
             // Resolved before the call: `?` cannot run inside it.
             let tmp = format_ident!("__{pat}");
             return Some((param, Some(quote!(let #tmp = #fwd;)), quote!(#tmp)));
+        }
+        if r == Some(false)
+            && let Some(u) = self.union_of(ctx, inner)
+        {
+            return Some(self.union_arg(u, pat));
         }
         let segs = segs?;
         let last = segs.last()?;
@@ -547,7 +577,7 @@ impl<'a> Classes<'a> {
                 Holding::Owned => quote!(#pat.__mut()?),
                 Holding::Value => quote!(&mut #pat.inner),
                 Holding::SharedCow => quote!(std::sync::Arc::make_mut(&mut #pat.inner)),
-                Holding::Shared => return None,
+                Holding::Shared | Holding::Projected => return None,
             };
             let tmp = format_ident!("__{pat}");
             return Some((
@@ -700,8 +730,11 @@ impl<'a> Classes<'a> {
         // the handles and data it reaches.
         if with_self {
             let t = ty_str(ty);
+            // A getter's conversion where a method has none (a payload
+            // enum, a list of numbers): the call is the same.
             if let Some(js) = vocab.classify(&t)
                 && let Some(c) = js_conv(&js, &t, vocab, &v, Site::Method)
+                    .or_else(|| js_conv(&js, &t, vocab, &v, Site::Getter))
                 && !c.is_result
             {
                 return Ok(Ret {
@@ -744,6 +777,9 @@ impl<'a> Classes<'a> {
             }
             (Recv::Ref, Some(Holding::Owned)) => {
                 Some((quote!(&self), quote!(let __self = self.__ref()?;)))
+            }
+            (Recv::Ref, Some(Holding::Projected)) => {
+                Some((quote!(&self), quote!(let __self = self.inner.get();)))
             }
             (Recv::Mut, Some(Holding::Value)) => {
                 Some((quote!(&mut self), quote!(let __self = &mut self.inner;)))
@@ -816,76 +852,105 @@ impl<'a> Classes<'a> {
         };
         let returns_this = this.is_some() && self.class_of(ctx, this, target) == this;
         let factory = recv == Recv::None && returns_this && !optional;
-        let ret = self
-            .ret(ctx, this, &out, factory || is_new, me.is_some(), vocab)
-            .map_err(|r| (r, Some(ty_str(&out))))?;
-        if is_new && !returns_this {
-            return skip(Reason::Returns, Some(ty_str(&out)));
-        }
-
         let label = match this {
             Some(c) => format!("{}::{name}", self.classes[c].name),
             None => name.clone(),
         };
-        let path = match this {
-            Some(c) => {
-                let p = self.path(self.classes[c].source, &self.classes[c].name);
-                quote!(<#p>)
+        let self_pre = me.as_ref().map(|(_, p)| p);
+        // A borrow out of a projection or an `Arc`: a projection again.
+        let projected = match (&err, holding) {
+            (None, Some(h)) if me.is_some() => self.projected(h, ctx, ident, &out, optional, &a),
+            _ => None,
+        };
+        let (body, ret_ty) = match projected {
+            Some(p) => {
+                let (ty, value) = p.map_err(|r| (r, Some(ty_str(&out))))?;
+                let pre = &a.pre;
+                let body = quote! {
+                    #(#pre)*
+                    #self_pre
+                    napi_support::contained(#label, || #value).map_err(napi_support::coded)
+                };
+                (body, ty)
             }
             None => {
-                let root: TokenStream = self.sources[ctx].root.parse().expect("a root path");
-                root
-            }
-        };
-        let call = match me {
-            Some(_) => quote!(__self.#ident),
-            None => quote!(#path::#ident),
-        };
-        let fwd = &a.fwd;
-        let pre = &a.pre;
-        let self_pre = me.as_ref().map(|(_, p)| p);
-        // A function of no argument is the closure itself.
-        let run = if me.is_none() && fwd.is_empty() {
-            call
-        } else {
-            quote!(|| #call(#(#fwd),*))
-        };
-        let mut value = quote!(napi_support::contained(#label, #run).map_err(napi_support::coded)?);
-        if let Some(e) = &err {
-            let thrown = self.thrown(ctx, e.as_ref());
-            value = quote!(#value.map_err(#thrown)?);
-        }
-        // The receiver last: a method taking `self` takes the value only
-        // once every argument converted.
-        let mut body = quote! {
-            #(#pre)*
-            #self_pre
-        };
-        let (js_ty, value) = if is_unit(&out) && !optional {
-            body.extend(quote!(#value;));
-            (&ret.ty, &quote!(()))
-        } else {
-            body.extend(quote!(let __v = #value;));
-            (&ret.ty, &ret.conv)
-        };
-        let ret_ty = if is_new {
-            if optional {
-                let why = format!("{label} returned None: no value for these arguments");
-                body.extend(quote! {
-                    let __v = __v.ok_or_else(|| napi_support::thrown("InvalidArg", #why))?;
-                });
-            }
-            body.extend(quote!(Ok(#value)));
-            quote!(Self)
-        } else if optional {
-            body.extend(quote!(Ok(__v.map(|__v| #value))));
-            quote!(Option<#js_ty>)
-        } else {
-            body.extend(quote!(Ok(#value)));
-            if factory {
-                quote!(Self)
-            } else {
-                quote!(#js_ty)
+                // `Option<()>` says whether it did anything: `true` or `null`.
+                let ret = if is_unit(&out) && optional {
+                    Ret {
+                        ty: quote!(bool),
+                        conv: quote!(true),
+                    }
+                } else {
+                    self.ret(ctx, this, &out, factory || is_new, me.is_some(), vocab)
+                        .map_err(|r| (r, Some(ty_str(&out))))?
+                };
+                if is_new && !returns_this {
+                    return skip(Reason::Returns, Some(ty_str(&out)));
+                }
+
+                let path = match this {
+                    Some(c) => {
+                        let p = self.path(self.classes[c].source, &self.classes[c].name);
+                        quote!(<#p>)
+                    }
+                    None => {
+                        let root: TokenStream =
+                            self.sources[ctx].root.parse().expect("a root path");
+                        root
+                    }
+                };
+                let call = match me {
+                    Some(_) => quote!(__self.#ident),
+                    None => quote!(#path::#ident),
+                };
+                let fwd = &a.fwd;
+                let pre = &a.pre;
+                // A function of no argument is the closure itself.
+                let run = if me.is_none() && fwd.is_empty() {
+                    call
+                } else {
+                    quote!(|| #call(#(#fwd),*))
+                };
+                let mut value =
+                    quote!(napi_support::contained(#label, #run).map_err(napi_support::coded)?);
+                if let Some(e) = &err {
+                    let thrown = self.thrown(ctx, e.as_ref());
+                    value = quote!(#value.map_err(#thrown)?);
+                }
+                // The receiver last: a method taking `self` takes the value only
+                // once every argument converted.
+                let mut body = quote! {
+                    #(#pre)*
+                    #self_pre
+                };
+                let (js_ty, value) = if is_unit(&out) && !optional {
+                    body.extend(quote!(#value;));
+                    (&ret.ty, &quote!(()))
+                } else {
+                    body.extend(quote!(let __v = #value;));
+                    (&ret.ty, &ret.conv)
+                };
+                let ret_ty = if is_new {
+                    if optional {
+                        let why = format!("{label} returned None: no value for these arguments");
+                        body.extend(quote! {
+                            let __v = __v.ok_or_else(|| napi_support::thrown("InvalidArg", #why))?;
+                        });
+                    }
+                    body.extend(quote!(Ok(#value)));
+                    quote!(Self)
+                } else if optional {
+                    body.extend(quote!(Ok(__v.map(|__v| #value))));
+                    quote!(Option<#js_ty>)
+                } else {
+                    body.extend(quote!(Ok(#value)));
+                    if factory {
+                        quote!(Self)
+                    } else {
+                        quote!(#js_ty)
+                    }
+                };
+                (body, ret_ty)
             }
         };
         let (cfg_attr, body) = match gate {
@@ -981,6 +1046,11 @@ impl<'a> Classes<'a> {
                 quote!(self.__ref()?),
                 quote!(self.__ref()?),
                 quote!(self.__mut()?),
+            ),
+            Holding::Projected => (
+                quote!(self.inner.get()),
+                quote!(self.inner.get()),
+                quote!(self.inner.get()),
             ),
             _ => (quote!(&self.inner), quote!(self.inner), quote!(self.inner)),
         };
@@ -1087,6 +1157,9 @@ impl<'a> Classes<'a> {
             Holding::SharedCow => {
                 format!(" A shared `{root}::{name}`, copied on the first write while shared.")
             }
+            Holding::Projected => format!(
+                " A `{root}::{name}` borrowed from what it was reached from, which it keeps\n alive. Each call finds it there again."
+            ),
         };
         if !doc.is_empty() {
             doc.push(quote!(#[doc = ""]));
@@ -1127,6 +1200,7 @@ impl<'a> Classes<'a> {
                     fn doc(&self) -> Doc { self.doc.clone() }
                 },
             ),
+            Holding::Projected => self.projected_class(c, &up),
         };
         let code = quote! {
             #(#doc)*

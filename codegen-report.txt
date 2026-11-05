@@ -108,25 +108,31 @@ usvg::ClipPath method not in the namespaced class: root (returns &Group)
 usvg::Group (on SvgNode) method covered by the template, not generated: children (returns &[Node])
 usvg::Group (on SvgNode) method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
 usvg::Group (on SvgNode) method covered by the template, not generated: mask (returns Option<&Mask>)
+usvg::Group is a class: Projected
 usvg::Group method covered by the template, not generated: children (returns &[Node])
 usvg::Group method covered by the template, not generated: clip_path (returns Option<&ClipPath>)
 usvg::Group method covered by the template, not generated: mask (returns Option<&Mask>)
+usvg::Image is a class: Projected
+usvg::Image is a projection, not a copy of the flat data type
 usvg::Mask method covered by the content view: root (returns &Group)
 usvg::Mask method covered by the template: mask (returns Option<&Mask>)
 usvg::Mask method not in the namespaced class: mask (returns Option<&Mask>)
 usvg::Mask method not in the namespaced class: root (returns &Group)
+usvg::Node is a union of projections
 usvg::Node method covered by clipPath / mask / filters / imageChildren / paint ids: subroots (arg: F)
 usvg::Options field not exposed: font_resolver: FontResolver<'a> (handled manually by the template)
 usvg::Options field not exposed: fontdb: Arc<fontdb::Database> (handled manually by the template)
 usvg::Options field not exposed: image_href_resolver: ImageHrefResolver<'a> (handled manually by the template)
 usvg::Options field not in the option object: font_resolver: FontResolver<'a> (no provider: keeps the default)
 usvg::Options field not in the option object: image_href_resolver: ImageHrefResolver<'a> (no provider: keeps the default)
+usvg::Path is a class: Projected
+usvg::Path is a projection, not a copy of the flat data type
 usvg::Pattern method covered by the content view: root (returns &Group)
 usvg::Pattern method not in the namespaced class: root (returns &Group)
+usvg::Text is a class: Projected
+usvg::Text is a projection, not a copy of the flat data type
 usvg::Tree is a class: Shared
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
-usvg::Tree member not in the class: node_by_id (returns &Node)
-usvg::Tree member not in the class: root (returns &Group)
 usvg::Tree method covered by the template as `children`: root (returns &Group)
 usvg::Tree method covered by the template as `new`: from_data (no receiver)
 usvg::Tree method covered by the template as `new`: from_data_nested (no receiver)

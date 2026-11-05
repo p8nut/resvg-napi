@@ -301,9 +301,8 @@ pub const GEN: Config = Config {
         ("tiny_skia", "Size"),
         ("svgtypes", "Color"),
     ],
-    // `resvg.render`. `render_node` takes a `&usvg::Node`, which waits for
-    // the node projections of step 7.
-    functions: &[("resvg", "render")],
+    // `resvg.render`, and `resvg.renderNode`, which takes a `usvg.Node`.
+    functions: &[("resvg", "render"), ("resvg", "render_node")],
     // `resvg::render` draws on a `&mut PixmapMut`: JS passes the
     // `tiny_skia.Pixmap`, borrowed with `as_mut()` for the call.
     views: &[View {
@@ -311,6 +310,17 @@ pub const GEN: Config = Config {
         class: "Pixmap",
         via: "as_mut",
     }],
+    // The tree's nodes are borrowed from it (ADR 0002, Q22): `usvg.Group`,
+    // `usvg.Path`, `usvg.Image` and `usvg.Text` hold the tree and the way back
+    // to their node, and `usvg.Node` is a `{ kind, value }` union of them.
+    // `tree.root()`, `group.children()` and `tree.nodeById()` hand them out.
+    projections: &[
+        ("usvg", "Node"),
+        ("usvg", "Group"),
+        ("usvg", "Path"),
+        ("usvg", "Image"),
+        ("usvg", "Text"),
+    ],
 };
 
 /// Crates parsed only for the classes and functions `GEN` lists, never for

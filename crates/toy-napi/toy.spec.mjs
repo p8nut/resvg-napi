@@ -14,7 +14,7 @@ const toy = createRequire(dir)(`./${binary}`);
 
 test('a handle class wraps the Arc and maps its &self methods', () => {
   const c = toy.counter();
-  assert.ok(c instanceof toy.Counter);
+  assert.ok(c instanceof toy.LegacyCounter);
   assert.equal(c.label(), 'counter');
   assert.equal(c.step(), 1);
   assert.equal(c.direction(), 'up');
@@ -37,20 +37,26 @@ test('a unit enum is a string enum, and a wrong variant throws', () => {
 
 test('util.inspect prints the cheap methods under the class name', () => {
   const c = toy.counter();
-  assert.equal(Object.prototype.toString.call(c), '[object Counter]');
-  assert.match(inspect(c), /^Counter \{.*label: 'counter'.*\}$/s);
+  assert.equal(Object.prototype.toString.call(c), '[object LegacyCounter]');
+  assert.match(inspect(c), /^LegacyCounter \{.*label: 'counter'.*\}$/s);
 });
 
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
-  assert.deepEqual(Object.keys(ns).sort(), ['Direction', 'Tally', 'share', 'shared', 'tally']);
+  assert.deepEqual(Object.keys(ns).sort(), ['Counter', 'Direction', 'Tally', 'share', 'shared', 'tally']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
   assert.notEqual(ns.Direction, toy.Direction, 'an enum object of its own');
-  // napi keeps one constructor per class name, so the flat `Counter` keeps
-  // `toy.Counter` out; had both been registered, one would hand out the
-  // other's instances.
-  assert.equal(ns.Counter, undefined);
-  assert.ok(toy.counter() instanceof toy.Counter);
+  // napi keeps one constructor per class name: had the flat `Counter` kept
+  // its name beside `toy.Counter`, one would hand out the other's instances.
+  // The flat one gives way (`legacy_prefix`), and its instances still work.
+  assert.equal(toy.Counter, undefined);
+  assert.equal(typeof ns.Counter, 'function');
+  assert.equal(ns.Counter.name, 'Counter');
+  const c = toy.counter();
+  assert.ok(c instanceof toy.LegacyCounter);
+  assert.ok(!(c instanceof ns.Counter));
+  assert.equal(c.constructor.name, 'LegacyCounter');
+  assert.equal(c.label(), 'counter');
   const t = ns.tally();
   assert.ok(t instanceof ns.Tally);
   assert.equal(t.constructor.name, 'Tally');

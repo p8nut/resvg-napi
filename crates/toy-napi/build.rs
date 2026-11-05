@@ -11,7 +11,7 @@ use napi_gen::{Config, Shapes};
 use quote::quote;
 
 /// The toy has no transform, size, box, path data or font tag, no feature
-/// gates and nothing to rename: most answers are empty.
+/// gates and no data or enum to rename: most answers are empty.
 const GEN: Config = Config {
     log_env: "TOY_NAPI_CODEGEN_LOG",
     // No u8 option field, so no table to clamp an index to.
@@ -40,6 +40,8 @@ const GEN: Config = Config {
     enum_renames: &[],
     features: &[],
     namespaces: &[("toy", "toy")],
+    // The flat `Counter` gives way to `toy.Counter`.
+    legacy_prefix: Some("Legacy"),
 };
 
 fn main() {
@@ -137,17 +139,19 @@ fn main() {
         }
     };
     // `Counter` is a class of the first surface already, and napi keeps one
-    // constructor per class name: `toy.Counter` has to wait for the flat one
-    // to go. The rest is copied.
-    let (mirrored, left_out) = namespaced(
+    // constructor per class name: the flat one gives way and becomes
+    // `LegacyCounter` (`GEN.legacy_prefix`), so `toy.Counter` is copied with
+    // the rest.
+    let surfaces = namespaced(
         &[("toy", quote! { #enum_code #point #ns_counter #tally })],
-        &class_names(&flat),
+        &flat,
     );
     assert_eq!(
-        left_out,
-        ["toy.Counter: a class named Counter exists already"],
-        "only the colliding class is left out"
+        surfaces.report,
+        ["legacy flat name: LegacyCounter (was Counter), beside toy.Counter"],
+        "only the colliding class is renamed, and nothing is left out"
     );
+    let (flat, mirrored) = (surfaces.flat, surfaces.namespaced);
     let code = quote! {
         #flat
         #mirrored

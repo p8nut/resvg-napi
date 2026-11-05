@@ -71,11 +71,11 @@ impl Options {
 }
 #[doc = " Read-only handle on a `toy::Counter`."]
 #[napi]
-pub struct Counter {
+pub struct LegacyCounter {
     inner: std::sync::Arc<toy::Counter>,
     doc: Doc,
 }
-impl Counter {
+impl LegacyCounter {
     fn wrap(inner: std::sync::Arc<toy::Counter>, doc: Doc) -> Self {
         Self { inner, doc }
     }
@@ -84,7 +84,7 @@ impl Counter {
     }
 }
 #[napi]
-impl Counter {
+impl LegacyCounter {
     #[napi]
     pub fn label(&self) -> String {
         self.inner.label().to_string()
@@ -104,12 +104,12 @@ impl Counter {
 }
 #[doc = " A new `Counter`."]
 #[napi]
-pub fn counter(options: Option<Options>) -> Counter {
+pub fn counter(options: Option<Options>) -> LegacyCounter {
     let mut o = toy::Options::default();
     if let Some(options) = options {
         options.apply(&mut o);
     }
-    Counter::wrap(toy::Counter::new(&o), Doc)
+    LegacyCounter::wrap(toy::Counter::new(&o), Doc)
 }
 #[doc = " Which way a counter counts."]
 #[napi(string_enum = "camelCase", js_name = "Direction", namespace = "toy")]
@@ -124,6 +124,12 @@ pub enum ToyDirection {
 pub struct ToyPoint {
     pub x: f64,
     pub y: f64,
+}
+#[doc = " Read-only handle on a `toy::Counter`."]
+#[napi(js_name = "Counter", namespace = "toy")]
+pub struct ToyCounter {
+    inner: std::sync::Arc<toy::Counter>,
+    doc: Doc,
 }
 #[doc = " Handle on a `toy::Tally`, copied on the first write while shared."]
 #[napi(js_name = "Tally", namespace = "toy")]
@@ -153,6 +159,33 @@ impl From<&toy::Point> for ToyPoint {
             x: f64::from(v.x),
             y: f64::from(v.y),
         }
+    }
+}
+impl ToyCounter {
+    fn wrap(inner: std::sync::Arc<toy::Counter>, doc: Doc) -> Self {
+        Self { inner, doc }
+    }
+    fn doc(&self) -> Doc {
+        self.doc.clone()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyCounter {
+    #[napi]
+    pub fn label(&self) -> String {
+        self.inner.label().to_string()
+    }
+    #[napi]
+    pub fn step(&self) -> f64 {
+        f64::from(self.inner.step())
+    }
+    #[napi]
+    pub fn direction(&self) -> ToyDirection {
+        ToyDirection::from(self.inner.direction())
+    }
+    #[napi]
+    pub fn origin(&self) -> ToyPoint {
+        ToyPoint::from(self.inner.origin())
     }
 }
 impl ToyTally {
@@ -202,7 +235,36 @@ pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> bool {
     std::sync::Arc::ptr_eq(&a.inner, &b.inner)
 }
 #[napi]
-impl Counter {
+impl LegacyCounter {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "LegacyCounter",
+            &[],
+            &["label", "step", "direction"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "LegacyCounter".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyCounter {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(

@@ -2,7 +2,7 @@
 /* eslint-disable */
 
 /** Read-only handle on a `toy::Counter`. */
-export declare class Counter {
+export declare class LegacyCounter {
   label(): string
   step(): number
   direction(): Direction
@@ -12,7 +12,7 @@ export declare class Counter {
 }
 
 /** A new `Counter`. */
-export declare function counter(options?: Options | undefined | null): Counter
+export declare function counter(options?: Options | undefined | null): LegacyCounter
 
 /** Which way a counter counts. */
 export declare const enum Direction {
@@ -36,6 +36,16 @@ export interface Point {
 }
 
 export declare namespace toy {
+  /** Read-only handle on a `toy::Counter`. */
+  export class Counter {
+    label(): string
+    step(): number
+    direction(): toy.Direction
+    origin(): toy.Point
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyCounter = Counter
   /** Handle on a `toy::Tally`, copied on the first write while shared. */
   export class Tally {
     push(name: string): void

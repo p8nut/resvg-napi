@@ -1440,27 +1440,27 @@ try {
   throw __attachCleanupErrors(error, cleanupErrors)
 }
 export default __napiModule.exports
-export const ClipPath = __napiModule.exports.ClipPath
-export const Filter = __napiModule.exports.Filter
-export const Font = __napiModule.exports.Font
 export const FontDatabase = __napiModule.exports.FontDatabase
 export const FontFace = __napiModule.exports.FontFace
-export const Image = __napiModule.exports.Image
-export const ImageKindGif = __napiModule.exports.ImageKindGif
-export const ImageKindJpeg = __napiModule.exports.ImageKindJpeg
-export const ImageKindPng = __napiModule.exports.ImageKindPng
-export const ImageKindWebp = __napiModule.exports.ImageKindWebp
-export const LinearGradient = __napiModule.exports.LinearGradient
-export const Mask = __napiModule.exports.Mask
-export const Pattern = __napiModule.exports.Pattern
-export const PositionedGlyph = __napiModule.exports.PositionedGlyph
-export const RadialGradient = __napiModule.exports.RadialGradient
+export const LegacyClipPath = __napiModule.exports.LegacyClipPath
+export const LegacyFilter = __napiModule.exports.LegacyFilter
+export const LegacyFont = __napiModule.exports.LegacyFont
+export const LegacyImage = __napiModule.exports.LegacyImage
+export const LegacyImageKindGif = __napiModule.exports.LegacyImageKindGif
+export const LegacyImageKindJpeg = __napiModule.exports.LegacyImageKindJpeg
+export const LegacyImageKindPng = __napiModule.exports.LegacyImageKindPng
+export const LegacyImageKindWebp = __napiModule.exports.LegacyImageKindWebp
+export const LegacyLinearGradient = __napiModule.exports.LegacyLinearGradient
+export const LegacyMask = __napiModule.exports.LegacyMask
+export const LegacyPattern = __napiModule.exports.LegacyPattern
+export const LegacyPositionedGlyph = __napiModule.exports.LegacyPositionedGlyph
+export const LegacyRadialGradient = __napiModule.exports.LegacyRadialGradient
+export const LegacySpan = __napiModule.exports.LegacySpan
+export const LegacyText = __napiModule.exports.LegacyText
+export const LegacyTextChunk = __napiModule.exports.LegacyTextChunk
+export const LegacyTextSpan = __napiModule.exports.LegacyTextSpan
 export const Resvg = __napiModule.exports.Resvg
-export const Span = __napiModule.exports.Span
 export const SvgNode = __napiModule.exports.SvgNode
-export const Text = __napiModule.exports.Text
-export const TextChunk = __napiModule.exports.TextChunk
-export const TextSpan = __napiModule.exports.TextSpan
 export const AlignmentBaseline = __napiModule.exports.AlignmentBaseline
 export const BlendMode = __napiModule.exports.BlendMode
 export const ColorChannel = __napiModule.exports.ColorChannel

@@ -7,6 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import binding from '../../index.js';
 import helpers, { createHelpers, parse, parseAsync, renderPng, systemFonts, systemFontsAsync } from '../../helpers.mjs';
@@ -118,7 +119,7 @@ test('fonts: a database, files and buffers, or the system fonts', () => {
   assert.deepEqual(parse(text, { fonts: db }).pendingFonts, []);
   assert.deepEqual(parse(text, { fontdb: db }).pendingFonts, [], 'usvg\'s name for it');
   assert.deepEqual(parse(text, { fonts: [FONT] }).pendingFonts, []);
-  const file = new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url).pathname;
+  const file = fileURLToPath(new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url));
   if (existsSync(file)) assert.deepEqual(parse(text, { fonts: [file] }).pendingFonts, []);
   assert.deepEqual(parse(text, { fonts: [] }).pendingFonts, ['IBM Plex Sans'], 'an empty list is no fonts');
   assert.ok(renderPng(text, { fonts: db }).equals(renderPng(text, { fonts: [FONT] })));

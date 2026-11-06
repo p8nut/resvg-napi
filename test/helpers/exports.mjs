@@ -19,7 +19,13 @@ function resolved(specifier, conditions = []) {
     ...flag,
     ...conditions.map((c) => `--conditions=${c}`),
     '--input-type=module',
-    '-e', `try { console.log(import.meta.resolve(${JSON.stringify(specifier)})) } catch (e) { console.log(e.code) }`,
+    // import.meta.resolve is unflagged from Node 20.6; on the 20.3.0 floor the
+    // CommonJS resolver reads the same `exports` under the same --conditions.
+    '-e', `import { createRequire } from 'node:module';
+      const resolve = typeof import.meta.resolve === 'function'
+        ? (s) => import.meta.resolve(s)
+        : (s) => new URL('file://' + createRequire(import.meta.url).resolve(s)).href;
+      try { console.log(resolve(${JSON.stringify(specifier)})) } catch (e) { console.log(e.code) }`,
   ], { cwd: root, encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
   return child.stdout.trim().replace(new URL('../../', import.meta.url).href, './');

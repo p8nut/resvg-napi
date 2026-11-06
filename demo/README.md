@@ -21,17 +21,14 @@ Two pages:
 Both pages, and `render.mjs`, use the API the way a user would:
 [`resvg-napi/helpers`](../README.md#helpers) for parsing and rendering --
 `createHelpers(binding)` on the loaded wasm module in the browser, the
-`resvg-napi/helpers` entry in Node -- and the namespaced API (`usvg`,
-`fontdb`, `resvg`...) where the helpers stop: the one `fontdb.Database` of
-the page's fonts, the Nodes panel's walk of `tree.root().children()`, the
-global `takeLogs()`. The demo is the helpers' real-world test (ADR 0001).
+`resvg-napi/helpers` entry in Node -- and the raw API (`usvg`, `fontdb`,
+`resvg`...) where the helpers stop: the one `fontdb.Database` of the page's
+fonts, the Nodes panel's walk of `tree.root().children()`, the global
+`takeLogs()`. The demo is the helpers' real-world test (ADR 0001).
 
-One thing the namespaced API does not give yet: a font's family names.
-fontdb keeps them as `(String, Language)` pairs, which the generator does not
-map, so `fontdb.FaceInfo` has no `families`. The demo needs the first font's
-family to point the generic ones (`sans-serif`...) at it, and reads it from
-the font's `name` table the way fontdb does, in
-[`font-names.mjs`](font-names.mjs).
+The generic families (`sans-serif`...) point at the first font the demo
+loads, by the family fontdb read for it: `db.faces()[n].families[0][0]`, the
+name of the first `[name, language]` pair (English (US) first).
 
 ![the proof bench](assets/screenshot.png)
 

@@ -336,6 +336,104 @@ any more. What it found:
   sorted, as upstream's do. The baseline did not move: 2 of 1742, the two
   SVGZ images, by the same 57544 pixels.
 
+Step 13 removed the old API (labelled `breaking-api`; README, "Upgrading from
+0.9"). The root of `resvg-napi` holds the namespaces, `setLogLevel` and
+`takeLogs`, nothing else. What went:
+
+- From the binding: the `Resvg` class (its constructor, `parseAsync`,
+  `renderPng` / `renderRaw` / `toString` and their twins, `pendingImages`,
+  `pendingFonts`, `resolveImage(s)`, per-document `takeLogs`, `dispose`, the
+  root group's boxes and predicates), the free `renderAsync`,
+  `FontDatabase` (with its hand-written `query`, `faceData`, `familyName`,
+  `faceSource`, and the generated `face` / `removeFace` /
+  `makeFaceDataUnshared` taking a face as the `ID` stand-in), `FontFace`,
+  `FaceSource`, `RenderOptions`, `RenderParams`, `WriteOptions`, `RawImage`,
+  `ParseErrorCode`, the shapes `BBox`, `Dimensions`, `Matrix` and
+  `PathSegment`, and the flat data types and enums still exported
+  (`BlendMode`, `ShapeRendering`, `FontFaceStyle`, `Stretch`...).
+- From the generator: `Config::shapes`, `size_new` (the flattened
+  `defaultSizeWidth` / `Height`), `matrix_fields` and `Vocab::matrices`,
+  `size_types`, `rect_types`, `opt_rect_types`, `path_data_types`,
+  `arg_standin` (`Arg::Standin`), `hand_wired_fields` (`map_struct`),
+  `hand_wrapped`, `data_renames`, `enum_renames`, the `Js::Size` / `Bbox` /
+  `OptBbox` / `Matrix` / `PathData` kinds; the `#[async_twin]` marker
+  (`async_twins`, `emit_twins`), `guard_live`, `template_fns`,
+  `template_returns` and `class_names`; `namespaced`'s flat argument;
+  `MethodPass::skip` and `standin`. In `build.rs`: `PASSES`, `RENAMED`,
+  `prune`, the template's two builds and the "covered by the template"
+  report. In `napi-support`: the per-document `Logs` and the thread sink
+  behind it.
+- `build/template.rs` went from 1076 lines to 34: the crate paths,
+  `mod guard;` and `indent_from_js`. The generic part of what it held,
+  napi's imports, `to_f32` and the two log functions, is
+  `napi_gen::emit::prelude()`, which the toy uses too.
+- From JS: `fit.mjs`, `fit.d.mts` and the `./fit.mjs` export (the helpers
+  have it), `demo/font-names.mjs`, and the old suite's flat-only files
+  (`test/async.mjs`, `dispose.mjs`, `errors.mjs`, `render.mjs`,
+  `fit-types.mts`), each covered by `test/api/` or `test/helpers/`; the
+  rest of `test/*.mjs` was ported (the report has the map).
+
+Every namespaced member typed with a flat shape moved to tiny-skia's class:
+
+- **A class held by value is that class wherever a member names it**
+  (`Js::Class`, generic): `Transform` where `Matrix` was
+  (`LinearGradient.transform()`, `PositionedGlyph.transform`...),
+  `NonZeroRect`, now listed, where `BBox` was (`layerBoundingBox()`,
+  `filtersBoundingBox()`, `Filter.rect()`, `Mask.rect()`, `Pattern.rect()`,
+  `Rect.toNonZeroRect()`). A class cannot be an object field, so
+  `usvg.Primitive`, which holds a `NonZeroRect`, became a read-only class of
+  getters; a plain-data class can, as its `<Name>Object`.
+- **`usvg.Options.defaultSize` is a `tiny_skia.Size`** (Q39), a provider
+  field like `fontdb`: `tiny_skia.Size.fromWh(w, h)` builds it, since `Size`
+  has no `fromObject`.
+- **Path data** (`usvg.Path.data()`): `tiny_skia_path::Path` cannot be a
+  class, because `usvg.Path` has its JS name and napi keeps one constructor
+  per name. It is what its `segments()` iterates instead
+  (`Config::iterated`, generic): `tiny_skia_path::PathSegment` as a union
+  (`{ type: 'cubicTo', value: [p1, p2, p] }`), each point a
+  `tiny_skia.PointObject` (`Point` is listed, plain data). Mapping it needed
+  payload variants with several unnamed fields (a tuple, `value: [a, b]`),
+  and the vocabulary crates' payload enums placed under the namespace of the
+  path that reaches them (`VOCAB_ROOT`, now `tiny_skia`).
+
+And the tuple rule (Q38), generic: `Vec<(A, B)>` and slices of tuples are
+`Array<[A, B]>`, each element mapped as a union's payload is; a returned
+tuple of numbers, booleans or strings is `[A, B]` (`IntSize.dimensions()`,
+`Transform.getScale()`, which it brought back). `fontdb.FaceInfo.families` is
+`Array<[string, fontdb.Language]>`: the field types are now read inside
+tuples, so `Language` (206 variants, `'englishUnitedStates'`...) is mirrored.
+The demo reads a font's family with `db.faces()[n].families[0][0]`, and
+`demo/font-names.mjs` is gone. The toy covers each rule (`Tally.pairs()`,
+`Vec2.parts()`, `scene.trail()`, a `Step` union with a tuple variant).
+
+What it found:
+
+- The helpers no longer have a flat render to be compared with:
+  `test/helpers/render.mjs` keeps the sizes 0.9's Rust computed for every
+  sizing path, frozen, and compares the pixels with the raw API's; the four
+  examples render byte for byte as 0.9 drew them.
+- `nodeExtent` returns a plain `{ x, y, width, height }` rather than the
+  `NonZeroRect`, so the helpers' option shapes (`crop`) and what callers read
+  of a box did not move. `crop` takes a `Rect` or `NonZeroRect` too.
+- `test/helpers/exports.mjs` resolved nothing on Node 20.3, the oldest CI
+  runs: `import.meta.resolve` is unflagged from 20.6. The child now gets
+  `--experimental-import-meta-resolve` when the parent lacks it (a commit of
+  its own, for #196 and #197, which fail on it too).
+- `api-diff` against step 12 says breaking: 26 removed, 16 changed, 19
+  added.
+
+Still open after 13 (for 0.10's notes, step 14):
+
+- #181: fontdb's `query`, `faceData`, `familyName`, `faceSource`, the face
+  `ID`s (`face`, `removeFace`, `makeFaceDataUnshared`). `families` is back.
+- #191: what an `feImage` draws, the tree an `<image>` embeds (a nested
+  owner), which face drew a glyph, `usvg.Font.families` (`&[FontFamily]`,
+  a payload enum with a borrowed name).
+- `util.inspect` of a leased instance, and the inspection of the new
+  `Primitive` class's union getter.
+- Hand-written `.d.mts` of the helpers, which can drift: generate them from
+  JSDoc with `tsc --allowJs --declaration` (asked during this step).
+
 ## Status
 
 - [x] 1
@@ -352,5 +450,5 @@ any more. What it found:
 - [x] 10
 - [x] 11
 - [x] 12
-- [ ] 13
+- [x] 13
 - [ ] 14

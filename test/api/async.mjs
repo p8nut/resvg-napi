@@ -22,6 +22,7 @@ if (process.env.UV_THREADPOOL_SIZE !== '1') {
 }
 
 const { readFileSync } = await import('node:fs');
+const { fileURLToPath } = await import('node:url');
 const { default: binding } = await import('../../index.js');
 const { usvg, fontdb, tiny_skia, resvg } = binding;
 
@@ -105,7 +106,7 @@ const transform = tiny_skia.Transform.identity();
 
   // Fonts loaded on a worker thread.
   const dir = new fontdb.Database();
-  assert.equal(await dir.loadFontsDirAsync(FONT_DIR.pathname), undefined);
+  assert.equal(await dir.loadFontsDirAsync(fileURLToPath(FONT_DIR)), undefined);
   assert.ok(dir.len() > 0, 'loadFontsDirAsync found the repository\'s fonts');
   const sys = new fontdb.Database();
   assert.equal(await sys.loadSystemFontsAsync(), undefined);
@@ -172,7 +173,7 @@ const transform = tiny_skia.Transform.identity();
 
   // A database loading fonts is leased: its copy-on-write value is written.
   const fonts = new fontdb.Database();
-  const loading = fonts.loadFontsDirAsync(FONT_DIR.pathname);
+  const loading = fonts.loadFontsDirAsync(fileURLToPath(FONT_DIR));
   assert.throws(() => fonts.len(), coded('Leased', 'this Database is in use by an async call'));
   await loading;
   assert.ok(fonts.len() > 0);
@@ -249,7 +250,7 @@ const transform = tiny_skia.Transform.identity();
     renderNodeAsync: (s) => resvg.renderNodeAsync(tree.root().children()[0], transform, pixmap, s),
     encodePngAsync: (s) => pixmap.encodePngAsync(s),
     loadSystemFontsAsync: (s) => db.loadSystemFontsAsync(s),
-    loadFontsDirAsync: (s) => db.loadFontsDirAsync(FONT_DIR.pathname, s),
+    loadFontsDirAsync: (s) => db.loadFontsDirAsync(fileURLToPath(FONT_DIR), s),
   };
   for (const [name, call] of Object.entries(calls)) {
     await assert.rejects(async () => call(gone.signal), /already aborted/, name);

@@ -66,7 +66,7 @@ export declare namespace usvg {
   export interface Filter {
     [Symbol.dispose](): void
   }
-  export interface Font {
+  export interface FilterImage {
     [Symbol.dispose](): void
   }
   export interface Group {
@@ -112,12 +112,6 @@ export declare namespace usvg {
     [Symbol.dispose](): void
   }
   export interface Text {
-    [Symbol.dispose](): void
-  }
-  export interface TextChunk {
-    [Symbol.dispose](): void
-  }
-  export interface TextSpan {
     [Symbol.dispose](): void
   }
   export interface Tree {
@@ -1369,12 +1363,9 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgFilter = Filter
-  /** Read-only view of a `Font`. */
-  export class Font {
-    get style(): usvg.FontStyle
-    get stretch(): usvg.FontStretch
-    get weight(): number
-    get variations(): Array<usvg.FontVariation>
+  /** Read-only view of a `filter::Image`. */
+  export class FilterImage {
+    get root(): usvg.Group
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
@@ -1386,7 +1377,7 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgFont = Font
+  export type UsvgFilterImage = FilterImage
   /**
    * A group container.
    *
@@ -2133,59 +2124,6 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgText = Text
-  /** Read-only view of a `TextChunk`. */
-  export class TextChunk {
-    get x(): number | null
-    get y(): number | null
-    get anchor(): usvg.TextAnchor
-    get spans(): Array<usvg.TextSpan>
-    get textFlow(): usvg.TextFlowPlain | usvg.TextFlowPath
-    get text(): string
-    /**
-     * Drops this instance's value now, not at garbage collection: every later
-     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
-     * the symbol, for `using`. Harmless twice.
-     */
-    dispose(): void
-    /** Whether `dispose()` has been called. */
-    get disposed(): boolean
-    /** The class name, for `Object.prototype.toString`. */
-    get [globalThis.Symbol.toStringTag](): string
-  }
-  export type UsvgTextChunk = TextChunk
-  /** Read-only view of a `TextSpan`. */
-  export class TextSpan {
-    get start(): number
-    get end(): number
-    get fill(): usvg.Fill | null
-    get stroke(): usvg.Stroke | null
-    get paintOrder(): usvg.PaintOrder
-    get font(): usvg.Font
-    get fontSize(): number
-    get smallCaps(): boolean
-    get applyKerning(): boolean
-    get fontOpticalSizing(): usvg.FontOpticalSizing
-    get decoration(): usvg.TextDecoration
-    get dominantBaseline(): usvg.DominantBaseline
-    get alignmentBaseline(): usvg.AlignmentBaseline
-    get baselineShift(): Array<usvg.BaselineShiftPlain | usvg.BaselineShiftNumber>
-    get isVisible(): boolean
-    get letterSpacing(): number
-    get wordSpacing(): number
-    get textLength(): number | null
-    get lengthAdjust(): usvg.LengthAdjust
-    /**
-     * Drops this instance's value now, not at garbage collection: every later
-     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
-     * the symbol, for `using`. Harmless twice.
-     */
-    dispose(): void
-    /** Whether `dispose()` has been called. */
-    get disposed(): boolean
-    /** The class name, for `Object.prototype.toString`. */
-    get [globalThis.Symbol.toStringTag](): string
-  }
-  export type UsvgTextSpan = TextSpan
   /**
    * A nodes tree container.
    *
@@ -2445,6 +2383,25 @@ export declare namespace usvg {
     color: usvg.Color
     opacity: number
   }
+  /** Plain view of a `Font`. */
+  export interface Font {
+    families: Array<usvg.FontFamilyPlain | usvg.FontFamilyNamed>
+    style: usvg.FontStyle
+    stretch: usvg.FontStretch
+    weight: number
+    variations: Array<usvg.FontVariation>
+  }
+  /** `FontFamily::Named`. */
+  export interface FontFamilyNamed {
+    /** Discriminant. Narrow on this. */
+    type: 'named'
+    value: string
+  }
+  /** The payload-free variants of `FontFamily`. */
+  export interface FontFamilyPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'serif' | 'sansSerif' | 'cursive' | 'fantasy' | 'monospace'
+  }
   /**
    * A font optical sizing property.
    *
@@ -2471,6 +2428,7 @@ export declare namespace usvg {
   export interface ImageKindSvg {
     /** Discriminant. Narrow on this. */
     type: 'svg'
+    value: usvg.Tree
   }
   /**
    * An image rendering method.
@@ -2553,6 +2511,7 @@ export declare namespace usvg {
   export interface KindImage {
     /** Discriminant. Narrow on this. */
     type: 'image'
+    value: usvg.FilterImage
   }
   /** `Kind::Merge`. */
   export interface KindMerge {
@@ -2879,6 +2838,15 @@ export declare namespace usvg {
   }
   /** A text chunk anchor property. */
   export type TextAnchor = 'start' | 'middle' | 'end'
+  /** Plain view of a `TextChunk`. */
+  export interface TextChunk {
+    x?: number
+    y?: number
+    anchor: usvg.TextAnchor
+    spans: Array<usvg.TextSpan>
+    textFlow: usvg.TextFlowPlain | usvg.TextFlowPath
+    text: string
+  }
   /** Plain view of a `TextDecoration`. */
   export interface TextDecoration {
     underline?: usvg.TextDecorationStyle
@@ -2907,6 +2875,28 @@ export declare namespace usvg {
    * `text-rendering` attribute in the SVG.
    */
   export type TextRendering = 'optimizeSpeed' | 'optimizeLegibility' | 'geometricPrecision'
+  /** Plain view of a `TextSpan`. */
+  export interface TextSpan {
+    start: number
+    end: number
+    fill?: usvg.Fill
+    stroke?: usvg.Stroke
+    paintOrder: usvg.PaintOrder
+    font: usvg.Font
+    fontSize: number
+    smallCaps: boolean
+    applyKerning: boolean
+    fontOpticalSizing: usvg.FontOpticalSizing
+    decoration: usvg.TextDecoration
+    dominantBaseline: usvg.DominantBaseline
+    alignmentBaseline: usvg.AlignmentBaseline
+    baselineShift: Array<usvg.BaselineShiftPlain | usvg.BaselineShiftNumber>
+    isVisible: boolean
+    letterSpacing: number
+    wordSpacing: number
+    textLength?: number
+    lengthAdjust: usvg.LengthAdjust
+  }
   /** Plain view of a `Tile`. */
   export interface Tile {
     input: usvg.InputPlain | usvg.InputReference

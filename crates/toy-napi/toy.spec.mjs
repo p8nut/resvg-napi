@@ -44,7 +44,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Key', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
+    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
     'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync', 'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
   ]);
@@ -608,4 +608,23 @@ test('an async twin runs off the main thread', async () => {
   await spinAsync(rounds);
   clearInterval(timer);
   assert.ok(ticks > 0, `the event loop kept turning (${ticks} ticks)`);
+});
+
+// A payload variant carrying a class hands out a copy of it (`Canvas`, owned),
+// one carrying a value that maps only partly holds its read-only class
+// (`Frame`), whose `layer` is a copy of a projected class. `Shade` is another
+// crate's enum, re-exported: read as the toy's own.
+test('a union variant may carry a class, and a re-exported enum maps', () => {
+  const [empty, canvas, frame] = toy.toy.Scene.demo().contents();
+  assert.deepEqual(empty, { type: 'empty' });
+  assert.equal(canvas.type, 'canvas');
+  assert.ok(canvas.value instanceof toy.toy.Canvas);
+  assert.deepEqual([canvas.value.width(), canvas.value.height()], [2, 1]);
+  assert.equal(frame.type, 'frame');
+  assert.ok(frame.value instanceof toy.toy.Frame);
+  const layer = frame.value.layer;
+  assert.ok(layer instanceof toy.toy.Layer);
+  assert.equal(layer.name(), 'framed');
+  assert.deepEqual(layer.items().map((i) => i.value.name()), ['f']);
+  assert.deepEqual(frame.value.shades, [{ type: 'plain' }, { type: 'named', value: 'teal' }]);
 });

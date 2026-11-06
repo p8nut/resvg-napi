@@ -1260,10 +1260,22 @@ pub struct UsvgFlood {
     pub color: UsvgColor,
     pub opacity: f64,
 }
-#[doc = " Read-only view of a `Font`."]
-#[napi(js_name = "Font", namespace = "usvg")]
-pub struct UsvgFont {
-    inner: napi_support::Slot<usvg::Font>,
+#[doc = " `FontFamily::Named`."]
+#[napi(object, js_name = "FontFamilyNamed", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgFontFamilyNamed {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'named'")]
+    pub r#type: String,
+    pub value: String,
+}
+#[doc = " The payload-free variants of `FontFamily`."]
+#[napi(object, js_name = "FontFamilyPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgFontFamilyPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'serif' | 'sansSerif' | 'cursive' | 'fantasy' | 'monospace'")]
+    pub r#type: String,
 }
 #[doc = " Plain view of a `FontVariation`."]
 #[napi(object, js_name = "FontVariation", namespace = "usvg")]
@@ -1271,6 +1283,16 @@ pub struct UsvgFont {
 pub struct UsvgFontVariation {
     pub tag: String,
     pub value: f64,
+}
+#[doc = " Plain view of a `Font`."]
+#[napi(object, js_name = "Font", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgFont {
+    pub families: Vec<Either<UsvgFontFamilyPlain, UsvgFontFamilyNamed>>,
+    pub style: UsvgFontStyle,
+    pub stretch: UsvgFontStretch,
+    pub weight: u32,
+    pub variations: Vec<UsvgFontVariation>,
 }
 #[doc = " Plain view of a `GaussianBlur`."]
 #[napi(object, js_name = "GaussianBlur", namespace = "usvg")]
@@ -1352,10 +1374,39 @@ pub struct UsvgStroke {
     pub linecap: UsvgLineCap,
     pub linejoin: UsvgLineJoin,
 }
-#[doc = " Read-only view of a `TextChunk`."]
-#[napi(js_name = "TextChunk", namespace = "usvg")]
-pub struct UsvgTextChunk {
-    inner: napi_support::Slot<usvg::TextChunk>,
+#[doc = " `TextFlow::Path`."]
+#[napi(object, js_name = "TextFlowPath", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextFlowPath {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'path'")]
+    pub r#type: String,
+    pub id: String,
+}
+#[doc = " The payload-free variants of `TextFlow`."]
+#[napi(object, js_name = "TextFlowPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextFlowPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'linear'")]
+    pub r#type: String,
+}
+#[doc = " `BaselineShift::Number`."]
+#[napi(object, js_name = "BaselineShiftNumber", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBaselineShiftNumber {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'number'")]
+    pub r#type: String,
+    pub value: f64,
+}
+#[doc = " The payload-free variants of `BaselineShift`."]
+#[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgBaselineShiftPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
+    pub r#type: String,
 }
 #[doc = " Plain view of a `TextDecorationStyle`."]
 #[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
@@ -1372,10 +1423,40 @@ pub struct UsvgTextDecoration {
     pub overline: Option<UsvgTextDecorationStyle>,
     pub line_through: Option<UsvgTextDecorationStyle>,
 }
-#[doc = " Read-only view of a `TextSpan`."]
-#[napi(js_name = "TextSpan", namespace = "usvg")]
+#[doc = " Plain view of a `TextSpan`."]
+#[napi(object, js_name = "TextSpan", namespace = "usvg")]
+#[derive(Clone)]
 pub struct UsvgTextSpan {
-    inner: napi_support::Slot<usvg::TextSpan>,
+    pub start: u32,
+    pub end: u32,
+    pub fill: Option<UsvgFill>,
+    pub stroke: Option<UsvgStroke>,
+    pub paint_order: UsvgPaintOrder,
+    pub font: UsvgFont,
+    pub font_size: f64,
+    pub small_caps: bool,
+    pub apply_kerning: bool,
+    pub font_optical_sizing: UsvgFontOpticalSizing,
+    pub decoration: UsvgTextDecoration,
+    pub dominant_baseline: UsvgDominantBaseline,
+    pub alignment_baseline: UsvgAlignmentBaseline,
+    pub baseline_shift: Vec<Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>>,
+    pub is_visible: bool,
+    pub letter_spacing: f64,
+    pub word_spacing: f64,
+    pub text_length: Option<f64>,
+    pub length_adjust: UsvgLengthAdjust,
+}
+#[doc = " Plain view of a `TextChunk`."]
+#[napi(object, js_name = "TextChunk", namespace = "usvg")]
+#[derive(Clone)]
+pub struct UsvgTextChunk {
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub anchor: UsvgTextAnchor,
+    pub spans: Vec<UsvgTextSpan>,
+    pub text_flow: Either<UsvgTextFlowPlain, UsvgTextFlowPath>,
+    pub text: String,
 }
 #[doc = " Plain view of a `Tile`."]
 #[napi(object, js_name = "Tile", namespace = "usvg")]
@@ -1394,22 +1475,10 @@ pub struct UsvgTurbulence {
     pub stitch_tiles: bool,
     pub kind: UsvgTurbulenceKind,
 }
-#[doc = " The payload-free variants of `BaselineShift`."]
-#[napi(object, js_name = "BaselineShiftPlain", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgBaselineShiftPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
-    pub r#type: String,
-}
-#[doc = " `BaselineShift::Number`."]
-#[napi(object, js_name = "BaselineShiftNumber", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgBaselineShiftNumber {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'number'")]
-    pub r#type: String,
-    pub value: f64,
+#[doc = " Read-only view of a `filter::Image`."]
+#[napi(js_name = "FilterImage", namespace = "usvg")]
+pub struct UsvgFilterImage {
+    inner: napi_support::Slot<usvg::filter::Image>,
 }
 #[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
 #[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
@@ -1432,12 +1501,17 @@ pub struct UsvgImageKindWebp {
     raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
 #[doc = " `ImageKind::SVG`."]
-#[napi(object, js_name = "ImageKindSvg", namespace = "usvg")]
-#[derive(Clone)]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "ImageKindSvg",
+    namespace = "usvg"
+)]
 pub struct UsvgImageKindSvg {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(ts_type = "'svg'")]
     pub r#type: String,
+    pub value: UsvgTree,
 }
 #[doc = " `Kind::Blend`."]
 #[napi(object, js_name = "KindBlend", namespace = "usvg")]
@@ -1530,12 +1604,17 @@ pub struct UsvgKindGaussianBlur {
     pub value: UsvgGaussianBlur,
 }
 #[doc = " `Kind::Image`."]
-#[napi(object, js_name = "KindImage", namespace = "usvg")]
-#[derive(Clone)]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "KindImage",
+    namespace = "usvg"
+)]
 pub struct UsvgKindImage {
     #[doc = " Discriminant. Narrow on this."]
     #[napi(ts_type = "'image'")]
     pub r#type: String,
+    pub value: UsvgFilterImage,
 }
 #[doc = " `Kind::Merge`."]
 #[napi(object, js_name = "KindMerge", namespace = "usvg")]
@@ -1590,23 +1669,6 @@ pub struct UsvgKindTurbulence {
     #[napi(ts_type = "'turbulence'")]
     pub r#type: String,
     pub value: UsvgTurbulence,
-}
-#[doc = " The payload-free variants of `TextFlow`."]
-#[napi(object, js_name = "TextFlowPlain", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgTextFlowPlain {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'linear'")]
-    pub r#type: String,
-}
-#[doc = " `TextFlow::Path`."]
-#[napi(object, js_name = "TextFlowPath", namespace = "usvg")]
-#[derive(Clone)]
-pub struct UsvgTextFlowPath {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'path'")]
-    pub r#type: String,
-    pub id: String,
 }
 #[doc = " Allows italic or oblique faces to be selected."]
 #[napi(string_enum = "camelCase", js_name = "Style", namespace = "fontdb")]
@@ -5889,7 +5951,7 @@ impl UsvgText {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Text::chunks", || __self.chunks())
             .map_err(napi_support::coded)?;
-        Ok(__v.iter().map(|x| UsvgTextChunk::wrap(x.clone())).collect())
+        Ok(__v.iter().map(UsvgTextChunk::from).collect())
     }
     #[doc = " Element's absolute transform."]
     #[doc = ""]
@@ -6525,46 +6587,15 @@ impl From<&usvg::filter::Flood> for UsvgFlood {
         }
     }
 }
-impl UsvgFont {
-    fn wrap(inner: usvg::Font) -> Self {
+impl From<&usvg::Font> for UsvgFont {
+    fn from(v: &usvg::Font) -> Self {
         Self {
-            inner: napi_support::Slot::new(inner),
+            families: v.families().iter().map(usvg_font_family_to_js).collect(),
+            style: UsvgFontStyle::from(v.style()),
+            stretch: UsvgFontStretch::from(v.stretch()),
+            weight: u32::from(v.weight()),
+            variations: v.variations().iter().map(UsvgFontVariation::from).collect(),
         }
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgFont {
-    #[napi(getter)]
-    pub fn style(&self) -> Result<UsvgFontStyle, String> {
-        let __inner = self.inner.get("Font")?;
-        Ok({
-            let v = __inner;
-            UsvgFontStyle::from(v.style())
-        })
-    }
-    #[napi(getter)]
-    pub fn stretch(&self) -> Result<UsvgFontStretch, String> {
-        let __inner = self.inner.get("Font")?;
-        Ok({
-            let v = __inner;
-            UsvgFontStretch::from(v.stretch())
-        })
-    }
-    #[napi(getter)]
-    pub fn weight(&self) -> Result<u32, String> {
-        let __inner = self.inner.get("Font")?;
-        Ok({
-            let v = __inner;
-            u32::from(v.weight())
-        })
-    }
-    #[napi(getter)]
-    pub fn variations(&self) -> Result<Vec<UsvgFontVariation>, String> {
-        let __inner = self.inner.get("Font")?;
-        Ok({
-            let v = __inner;
-            v.variations().iter().map(UsvgFontVariation::from).collect()
-        })
     }
 }
 impl From<&usvg::FontVariation> for UsvgFontVariation {
@@ -6915,65 +6946,16 @@ impl From<&usvg::Stroke> for UsvgStroke {
         }
     }
 }
-impl UsvgTextChunk {
-    fn wrap(inner: usvg::TextChunk) -> Self {
+impl From<&usvg::TextChunk> for UsvgTextChunk {
+    fn from(v: &usvg::TextChunk) -> Self {
         Self {
-            inner: napi_support::Slot::new(inner),
+            x: v.x().map(f64::from),
+            y: v.y().map(f64::from),
+            anchor: UsvgTextAnchor::from(v.anchor()),
+            spans: v.spans().iter().map(UsvgTextSpan::from).collect(),
+            text_flow: usvg_text_flow_to_js(&v.text_flow()),
+            text: v.text().to_string(),
         }
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgTextChunk {
-    #[napi(getter)]
-    pub fn x(&self) -> Result<Option<f64>, String> {
-        let __inner = self.inner.get("TextChunk")?;
-        Ok({
-            let v = __inner;
-            v.x().map(f64::from)
-        })
-    }
-    #[napi(getter)]
-    pub fn y(&self) -> Result<Option<f64>, String> {
-        let __inner = self.inner.get("TextChunk")?;
-        Ok({
-            let v = __inner;
-            v.y().map(f64::from)
-        })
-    }
-    #[napi(getter)]
-    pub fn anchor(&self) -> Result<UsvgTextAnchor, String> {
-        let __inner = self.inner.get("TextChunk")?;
-        Ok({
-            let v = __inner;
-            UsvgTextAnchor::from(v.anchor())
-        })
-    }
-    #[napi(getter)]
-    pub fn spans(&self) -> Result<Vec<UsvgTextSpan>, String> {
-        let __inner = self.inner.get("TextChunk")?;
-        Ok({
-            let v = __inner;
-            v.spans()
-                .iter()
-                .map(|x| UsvgTextSpan::wrap(x.clone()))
-                .collect()
-        })
-    }
-    #[napi(getter)]
-    pub fn text_flow(&self) -> Result<Either<UsvgTextFlowPlain, UsvgTextFlowPath>, String> {
-        let __inner = self.inner.get("TextChunk")?;
-        Ok({
-            let v = __inner;
-            usvg_text_flow_to_js(&v.text_flow())
-        })
-    }
-    #[napi(getter)]
-    pub fn text(&self) -> Result<String, String> {
-        let __inner = self.inner.get("TextChunk")?;
-        Ok({
-            let v = __inner;
-            v.text().to_string()
-        })
     }
 }
 impl From<&usvg::TextDecoration> for UsvgTextDecoration {
@@ -6993,171 +6975,33 @@ impl From<&usvg::TextDecorationStyle> for UsvgTextDecorationStyle {
         }
     }
 }
-impl UsvgTextSpan {
-    fn wrap(inner: usvg::TextSpan) -> Self {
+impl From<&usvg::TextSpan> for UsvgTextSpan {
+    fn from(v: &usvg::TextSpan) -> Self {
         Self {
-            inner: napi_support::Slot::new(inner),
-        }
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgTextSpan {
-    #[napi(getter)]
-    pub fn start(&self) -> Result<u32, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            u32::try_from(v.start()).unwrap_or(u32::MAX)
-        })
-    }
-    #[napi(getter)]
-    pub fn end(&self) -> Result<u32, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            u32::try_from(v.end()).unwrap_or(u32::MAX)
-        })
-    }
-    #[napi(getter)]
-    pub fn fill(&self) -> Result<Option<UsvgFill>, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.fill().map(UsvgFill::from)
-        })
-    }
-    #[napi(getter)]
-    pub fn stroke(&self) -> Result<Option<UsvgStroke>, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.stroke().map(UsvgStroke::from)
-        })
-    }
-    #[napi(getter)]
-    pub fn paint_order(&self) -> Result<UsvgPaintOrder, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgPaintOrder::from(v.paint_order())
-        })
-    }
-    #[napi(getter)]
-    pub fn font(&self) -> Result<UsvgFont, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgFont::wrap(v.font().clone())
-        })
-    }
-    #[napi(getter)]
-    pub fn font_size(&self) -> Result<f64, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            f64::from(v.font_size().get())
-        })
-    }
-    #[napi(getter)]
-    pub fn small_caps(&self) -> Result<bool, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.small_caps()
-        })
-    }
-    #[napi(getter)]
-    pub fn apply_kerning(&self) -> Result<bool, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.apply_kerning()
-        })
-    }
-    #[napi(getter)]
-    pub fn font_optical_sizing(&self) -> Result<UsvgFontOpticalSizing, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgFontOpticalSizing::from(v.font_optical_sizing())
-        })
-    }
-    #[napi(getter)]
-    pub fn decoration(&self) -> Result<UsvgTextDecoration, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgTextDecoration::from(v.decoration())
-        })
-    }
-    #[napi(getter)]
-    pub fn dominant_baseline(&self) -> Result<UsvgDominantBaseline, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgDominantBaseline::from(v.dominant_baseline())
-        })
-    }
-    #[napi(getter)]
-    pub fn alignment_baseline(&self) -> Result<UsvgAlignmentBaseline, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgAlignmentBaseline::from(v.alignment_baseline())
-        })
-    }
-    #[napi(getter)]
-    pub fn baseline_shift(
-        &self,
-    ) -> Result<Vec<Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>>, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.baseline_shift()
+            start: u32::try_from(v.start()).unwrap_or(u32::MAX),
+            end: u32::try_from(v.end()).unwrap_or(u32::MAX),
+            fill: v.fill().map(UsvgFill::from),
+            stroke: v.stroke().map(UsvgStroke::from),
+            paint_order: UsvgPaintOrder::from(v.paint_order()),
+            font: UsvgFont::from(v.font()),
+            font_size: f64::from(v.font_size().get()),
+            small_caps: v.small_caps(),
+            apply_kerning: v.apply_kerning(),
+            font_optical_sizing: UsvgFontOpticalSizing::from(v.font_optical_sizing()),
+            decoration: UsvgTextDecoration::from(v.decoration()),
+            dominant_baseline: UsvgDominantBaseline::from(v.dominant_baseline()),
+            alignment_baseline: UsvgAlignmentBaseline::from(v.alignment_baseline()),
+            baseline_shift: v
+                .baseline_shift()
                 .iter()
                 .map(usvg_baseline_shift_to_js)
-                .collect()
-        })
-    }
-    #[napi(getter)]
-    pub fn is_visible(&self) -> Result<bool, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.is_visible()
-        })
-    }
-    #[napi(getter)]
-    pub fn letter_spacing(&self) -> Result<f64, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            f64::from(v.letter_spacing())
-        })
-    }
-    #[napi(getter)]
-    pub fn word_spacing(&self) -> Result<f64, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            f64::from(v.word_spacing())
-        })
-    }
-    #[napi(getter)]
-    pub fn text_length(&self) -> Result<Option<f64>, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            v.text_length().map(f64::from)
-        })
-    }
-    #[napi(getter)]
-    pub fn length_adjust(&self) -> Result<UsvgLengthAdjust, String> {
-        let __inner = self.inner.get("TextSpan")?;
-        Ok({
-            let v = __inner;
-            UsvgLengthAdjust::from(v.length_adjust())
-        })
+                .collect(),
+            is_visible: v.is_visible(),
+            letter_spacing: f64::from(v.letter_spacing()),
+            word_spacing: f64::from(v.word_spacing()),
+            text_length: v.text_length().map(f64::from),
+            length_adjust: UsvgLengthAdjust::from(v.length_adjust()),
+        }
     }
 }
 impl From<&usvg::filter::Tile> for UsvgTile {
@@ -7177,6 +7021,24 @@ impl From<&usvg::filter::Turbulence> for UsvgTurbulence {
             stitch_tiles: v.stitch_tiles(),
             kind: UsvgTurbulenceKind::from(v.kind()),
         }
+    }
+}
+impl UsvgFilterImage {
+    fn wrap(inner: usvg::filter::Image) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+}
+#[napi(namespace = "usvg")]
+impl UsvgFilterImage {
+    #[napi(getter)]
+    pub fn root(&self) -> Result<UsvgGroup, String> {
+        let __inner = self.inner.get("FilterImage")?;
+        Ok({
+            let v = __inner;
+            UsvgGroup::__from((v.root()).clone())
+        })
     }
 }
 fn usvg_baseline_shift_to_js(
@@ -7255,6 +7117,31 @@ fn usvg_composite_operator_to_js(
                 k4: f64::from(*k4),
             })
         }
+    }
+}
+fn usvg_font_family_to_js(
+    v: &usvg::FontFamily,
+) -> Either<UsvgFontFamilyPlain, UsvgFontFamilyNamed> {
+    match v {
+        usvg::FontFamily::Serif => Either::A(UsvgFontFamilyPlain {
+            r#type: "serif".to_string(),
+        }),
+        usvg::FontFamily::SansSerif => Either::A(UsvgFontFamilyPlain {
+            r#type: "sansSerif".to_string(),
+        }),
+        usvg::FontFamily::Cursive => Either::A(UsvgFontFamilyPlain {
+            r#type: "cursive".to_string(),
+        }),
+        usvg::FontFamily::Fantasy => Either::A(UsvgFontFamilyPlain {
+            r#type: "fantasy".to_string(),
+        }),
+        usvg::FontFamily::Monospace => Either::A(UsvgFontFamilyPlain {
+            r#type: "monospace".to_string(),
+        }),
+        usvg::FontFamily::Named(v) => Either::B(UsvgFontFamilyNamed {
+            r#type: "named".to_string(),
+            value: v.to_string(),
+        }),
     }
 }
 #[napi(namespace = "usvg")]
@@ -7339,8 +7226,9 @@ fn usvg_image_kind_to_js(
         usvg::ImageKind::WEBP(v) => Either5::D(UsvgImageKindWebp {
             raw: napi_support::Slot::new(v.clone()),
         }),
-        usvg::ImageKind::SVG(_) => Either5::E(UsvgImageKindSvg {
+        usvg::ImageKind::SVG(v) => Either5::E(UsvgImageKindSvg {
             r#type: "svg".to_string(),
+            value: UsvgTree::__from((*v).clone()),
         }),
     }
 }
@@ -7420,8 +7308,9 @@ fn usvg_kind_to_js(
             r#type: "gaussianBlur".to_string(),
             value: UsvgGaussianBlur::from(v),
         }),
-        usvg::filter::Kind::Image(_) => Either17::K(UsvgKindImage {
+        usvg::filter::Kind::Image(v) => Either17::K(UsvgKindImage {
             r#type: "image".to_string(),
+            value: UsvgFilterImage::wrap((*v).clone()),
         }),
         usvg::filter::Kind::Merge(v) => Either17::L(UsvgKindMerge {
             r#type: "merge".to_string(),
@@ -8745,21 +8634,6 @@ impl UsvgLinearGradient {
     }
 }
 #[napi(namespace = "usvg")]
-impl UsvgFont {
-    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
-    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
-    #[doc = " the symbol, for `using`. Harmless twice."]
-    #[napi]
-    pub fn dispose(&mut self) -> Result<(), String> {
-        self.inner.dispose("Font")
-    }
-    #[doc = " Whether `dispose()` has been called."]
-    #[napi(getter)]
-    pub fn disposed(&self) -> bool {
-        self.inner.disposed()
-    }
-}
-#[napi(namespace = "usvg")]
 impl UsvgPositionedGlyph {
     #[doc = " Drops this instance's value now, not at garbage collection: every later"]
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
@@ -8805,28 +8679,13 @@ impl UsvgSpan {
     }
 }
 #[napi(namespace = "usvg")]
-impl UsvgTextChunk {
+impl UsvgFilterImage {
     #[doc = " Drops this instance's value now, not at garbage collection: every later"]
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
     #[doc = " the symbol, for `using`. Harmless twice."]
     #[napi]
     pub fn dispose(&mut self) -> Result<(), String> {
-        self.inner.dispose("TextChunk")
-    }
-    #[doc = " Whether `dispose()` has been called."]
-    #[napi(getter)]
-    pub fn disposed(&self) -> bool {
-        self.inner.disposed()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgTextSpan {
-    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
-    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
-    #[doc = " the symbol, for `using`. Harmless twice."]
-    #[napi]
-    pub fn dispose(&mut self) -> Result<(), String> {
-        self.inner.dispose("TextSpan")
+        self.inner.dispose("FilterImage")
     }
     #[doc = " Whether `dispose()` has been called."]
     #[napi(getter)]
@@ -8936,7 +8795,7 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("tiny_skia"), "Transform"),
         (Some("usvg"), "ClipPath"),
         (Some("usvg"), "Filter"),
-        (Some("usvg"), "Font"),
+        (Some("usvg"), "FilterImage"),
         (Some("usvg"), "Group"),
         (Some("usvg"), "Image"),
         (Some("usvg"), "ImageKindGif"),
@@ -8952,8 +8811,6 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("usvg"), "RadialGradient"),
         (Some("usvg"), "Span"),
         (Some("usvg"), "Text"),
-        (Some("usvg"), "TextChunk"),
-        (Some("usvg"), "TextSpan"),
         (Some("usvg"), "Tree"),
     ];
     for (ns, name) in classes {
@@ -9600,35 +9457,6 @@ impl UsvgPattern {
     }
 }
 #[napi(namespace = "usvg")]
-impl UsvgFont {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Font",
-            &["style", "stretch", "weight", "variations", "disposed"],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Font".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
 impl UsvgPositionedGlyph {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -9739,7 +9567,7 @@ impl UsvgSpan {
     }
 }
 #[napi(namespace = "usvg")]
-impl UsvgTextChunk {
+impl UsvgFilterImage {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
     pub fn inspect_custom(
@@ -9753,8 +9581,8 @@ impl UsvgTextChunk {
         napi_support::inspect(
             &env,
             &this,
-            "TextChunk",
-            &["x", "y", "anchor", "spans", "textFlow", "text", "disposed"],
+            "FilterImage",
+            &["root", "disposed"],
             &[],
             depth,
             options,
@@ -9764,57 +9592,7 @@ impl UsvgTextChunk {
     #[doc = " The class name, for `Object.prototype.toString`."]
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
-        "TextChunk".to_string()
-    }
-}
-#[napi(namespace = "usvg")]
-impl UsvgTextSpan {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "TextSpan",
-            &[
-                "start",
-                "end",
-                "fill",
-                "stroke",
-                "paintOrder",
-                "font",
-                "fontSize",
-                "smallCaps",
-                "applyKerning",
-                "fontOpticalSizing",
-                "decoration",
-                "dominantBaseline",
-                "alignmentBaseline",
-                "baselineShift",
-                "isVisible",
-                "letterSpacing",
-                "wordSpacing",
-                "textLength",
-                "lengthAdjust",
-                "disposed",
-            ],
-            &[],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "TextSpan".to_string()
+        "FilterImage".to_string()
     }
 }
 #[napi(namespace = "usvg")]

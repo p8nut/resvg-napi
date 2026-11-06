@@ -1,19 +1,14 @@
 FaceInfo member not exposed: source: Source
 FaceInfo: partial mapping, emitted as read-only class FaceInfo
-Font member not exposed: families: &[FontFamily]
-Font: partial mapping, emitted as read-only class Font
 Image: partial mapping, emitted as read-only class Image
-ImageKind::SVG carries Tree, which has no mappable data: emitted without a value
-Kind::Image carries filter::Image, which has no mappable data: emitted without a value
 Path: partial mapping, emitted as read-only class Path
 PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
 Primitive: partial mapping, emitted as read-only class Primitive
 Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
-TextChunk: partial mapping, emitted as read-only class TextChunk
-TextSpan: partial mapping, emitted as read-only class TextSpan
-data type filter::Image skipped: nothing mappable on it
-data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
+classes a borrowing member copies: Database, Group, Image, Path, Pixmap, Text, Tree
+data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence, filter::Image
+filter::Image: partial mapping, emitted as read-only class FilterImage
 names defined more than once across the sources, keyed by module: Image
 object Arc<ClipPath> skipped: not a public struct
 object Arc<LinearGradient> skipped: not a public struct
@@ -29,10 +24,11 @@ object Source skipped: not a public struct
 object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None
+payload enum Indent not mapped: a converter reads it
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
 payload enum Source not mapped: Binary carries alloc::sync::Arc<dynAsRef<[u8]>+Sync+Send>, and it maps to None
-payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, ImageKind, Input, Kind, LightSource, Paint, PathSegment, TextFlow, TransferFunction
-payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
+payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, FontFamily, ImageKind, Input, Kind, LightSource, Paint, PathSegment, TextFlow, TransferFunction
+payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), FontFamily(6), ImageKind(5), Indent(3), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
 svgtypes::Color is a class: Value, plain data, a JS name another namespace has
 tiny_skia::Color is a class: Value, a JS name another namespace has
 tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)
@@ -67,6 +63,8 @@ tiny_skia::Size is a class: Value
 tiny_skia::Transform is a class: Value, plain data
 tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])
 usvg index bound for `*_precision` derived from POW_VEC: 12
+usvg re-exports enum FontFamily: read as its own
+usvg re-exports enum Indent: read as its own
 usvg sources: usvg-0.49.0
 usvg::ClipPath is a class: Projected
 usvg::Group is a class: Projected

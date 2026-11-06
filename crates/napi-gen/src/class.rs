@@ -496,6 +496,19 @@ impl<'a> Classes<'a> {
             })
     }
 
+    /// The classes not held by value whose upstream type is `Clone`, by
+    /// upstream name, each with the root of its source: what `Vocab::owned`
+    /// starts from (`Js::Owned`).
+    pub fn by_clone(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.classes
+            .iter()
+            .filter(|c| {
+                c.holding != Holding::Value
+                    && derives(self.sources[c.source].files, &c.name, "Clone")
+            })
+            .map(|c| (c.name.as_str(), self.sources[c.source].root))
+    }
+
     /// Whether `ty` (an upstream root-relative key such as `a::Ty` or `Ty`)
     /// is a listed class of the source at `root`.
     pub fn lists(&self, root: &str, ty: &str) -> bool {

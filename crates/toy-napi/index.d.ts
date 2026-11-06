@@ -24,6 +24,9 @@ export declare namespace toy {
   export interface Dot {
     [Symbol.dispose](): void
   }
+  export interface Frame {
+    [Symbol.dispose](): void
+  }
   export interface Key {
     [Symbol.dispose](): void
   }
@@ -219,6 +222,22 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyDot = Dot
+  /** Read-only view of a `Frame`. */
+  export class Frame {
+    get layer(): toy.Layer
+    get shades(): Array<toy.ShadePlain | toy.ShadeNamed>
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyFrame = Frame
   /**
    * An opaque key: no public field, `Copy`, printed as a number.
    *
@@ -286,6 +305,11 @@ export declare namespace toy {
     find(name: string): toy.ItemLayer | toy.ItemDot | null
     /** The way through the scene: a jump to `a`, a line to `d`, a stop. */
     trail(): Array<toy.StepPlain | toy.StepJump | toy.StepLine>
+    /**
+     * What the scene's slots hold: nothing, a 2x1 canvas, and a frame
+     * around the layer `framed` (the dot `f`).
+     */
+    contents(): Array<toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame>
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -404,6 +428,23 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyVec2 = Vec2
+  /** `Content::Canvas`. */
+  export interface ContentCanvas {
+    /** Discriminant. Narrow on this. */
+    type: 'canvas'
+    value: toy.Canvas
+  }
+  /** `Content::Frame`. */
+  export interface ContentFrame {
+    /** Discriminant. Narrow on this. */
+    type: 'frame'
+    value: toy.Frame
+  }
+  /** The payload-free variants of `Content`. */
+  export interface ContentPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'empty'
+  }
   /** How many dots `item` holds, itself included. */
   export function count(item: toy.ItemLayer | toy.ItemDot): number
   /**
@@ -507,6 +548,17 @@ export declare namespace toy {
     base?: toy.Tally
     /** Default: [`Width::Auto`] */
     width?: number | 'auto'
+  }
+  /** `Shade::Named`. */
+  export interface ShadeNamed {
+    /** Discriminant. Narrow on this. */
+    type: 'named'
+    value: string
+  }
+  /** The payload-free variants of `Shade`. */
+  export interface ShadePlain {
+    /** Discriminant. Narrow on this. */
+    type: 'plain'
   }
   /** A second handle on the same `Tally`: shared until one of them writes. */
   export function share(t: toy.Tally): toy.Tally

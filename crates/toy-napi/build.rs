@@ -6,7 +6,7 @@ use std::{env, fs, path::PathBuf, process::Command};
 
 use napi_gen::class::{Classes, Holding, Source};
 use napi_gen::emit::*;
-use napi_gen::sources::{ModTree, parse_crate};
+use napi_gen::sources::{ModTree, inline_reexported_enums, parse_crate};
 use napi_gen::vocab::{Vocab, payload_enums};
 use napi_gen::{Config, Converter, Iterated, Provider, View};
 use quote::quote;
@@ -106,7 +106,14 @@ fn main() {
 
     let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let src = here.join("../toy/src");
-    let all = parse_crate(&src);
+    let mut all = parse_crate(&src);
+    // `pub use toy_dep::Shade`: another crate's enum, read as the toy's.
+    let dep = here.join("../toy-dep/src");
+    println!("cargo::rerun-if-changed={}", dep.display());
+    let inlined = inline_reexported_enums(&mut all, &mut |krate| {
+        (krate == "toy_dep").then(|| parse_crate(&dep).into_iter().map(|(_, f)| f).collect())
+    });
+    assert_eq!(inlined, ["Shade"], "Shade is the one re-exported enum");
     let tree = ModTree::load(&src, &all);
     // The crate root's files and the `alt` module's: a source each.
     let (alt, files): (Vec<_>, Vec<_>) = tree
@@ -149,6 +156,16 @@ fn main() {
             vocab.plain.insert(name.to_string());
         }
     }
+    // The classes a borrowing member hands out a copy of: `Canvas` (owned)
+    // and `Layer` and `Dot` (projected), and `Tally`.
+    for (name, _) in classes.by_clone() {
+        vocab.owned.insert(name.to_string());
+    }
+    assert_eq!(
+        vocab.owned,
+        ["Canvas", "Dot", "Layer", "Tally"].map(String::from).into(),
+        "the Clone classes not held by value"
+    );
     let wanted = ["Direction".to_string()].into();
     let (enums, enum_code, _) = map_enums(&files, &wanted, modules, &root);
     vocab.enums = enums;
@@ -170,6 +187,30 @@ fn main() {
     );
     let step =
         payload_enum_code("Step", &vocab.payload["Step"], &vocab, modules).expect("the Step union");
+    // `Shade` (re-exported, `{ type, value }`), `Frame` (a read-only class:
+    // `layer` is a copy of a projected class) and `Content`, whose variants
+    // carry a class and that read-only class: output-only objects.
+    let mut found = payload_enums(&files, "", &Default::default(), "toy");
+    for name in ["Shade", "Content"] {
+        let e = found.remove(name).expect("a payload enum");
+        vocab.payload.insert(name.into(), e);
+    }
+    vocab.values.insert("Frame".into());
+    let (frame, skipped, _) = value_class(&files, "Frame", &vocab, modules, &root);
+    assert!(
+        !frame.is_empty() && skipped.is_empty(),
+        "Frame maps: layer and shades"
+    );
+    let mut unions = quote!();
+    for name in ["Shade", "Content"] {
+        assert!(
+            vocab.payload[name].payload_blocker(&vocab).is_none(),
+            "every {name} variant maps"
+        );
+        unions.extend(
+            payload_enum_code(name, &vocab.payload[name], &vocab, modules).expect("the union"),
+        );
+    }
     let bounds = index_bounds(&files);
     assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
 
@@ -245,7 +286,7 @@ fn main() {
         ["Color".to_string()].into(),
         "two namespaces have a Color"
     );
-    let mut toy_part = quote! { #enum_code #point #step #tag #options };
+    let mut toy_part = quote! { #enum_code #point #step #tag #options #frame #unions };
     let mut alt_part = quote!();
     for (i, c) in classes.classes.iter().enumerate() {
         let (code, skipped) = classes.class(i, &vocab);

@@ -146,6 +146,70 @@ pub struct ToyFilter {
     pub tags: Option<Vec<ToyTag>>,
     pub min_len: Option<u32>,
 }
+#[doc = " Read-only view of a `Frame`."]
+#[napi(js_name = "Frame", namespace = "toy")]
+pub struct ToyFrame {
+    inner: napi_support::Slot<toy::Frame>,
+}
+#[doc = " The payload-free variants of `Shade`."]
+#[napi(object, js_name = "ShadePlain", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyShadePlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'plain'")]
+    pub r#type: String,
+}
+#[doc = " `Shade::Named`."]
+#[napi(object, js_name = "ShadeNamed", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyShadeNamed {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'named'")]
+    pub r#type: String,
+    pub value: String,
+}
+#[doc = " The payload-free variants of `Content`."]
+#[napi(object, js_name = "ContentPlain", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyContentPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'empty'")]
+    pub r#type: String,
+}
+#[doc = " A grid of bytes, owned and written in place."]
+#[doc = ""]
+#[doc = " A `toy::Canvas`, owned. A method that consumes it in Rust leaves this"]
+#[doc = " instance spent: every later call throws."]
+#[napi(js_name = "Canvas", namespace = "toy")]
+pub struct ToyCanvas {
+    inner: napi_support::Slot<toy::Canvas>,
+}
+#[doc = " `Content::Canvas`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "ContentCanvas",
+    namespace = "toy"
+)]
+pub struct ToyContentCanvas {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'canvas'")]
+    pub r#type: String,
+    pub value: ToyCanvas,
+}
+#[doc = " `Content::Frame`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "ContentFrame",
+    namespace = "toy"
+)]
+pub struct ToyContentFrame {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'frame'")]
+    pub r#type: String,
+    pub value: ToyFrame,
+}
 #[doc = " An immutable counter, shared behind an `Arc`."]
 #[doc = ""]
 #[doc = " A shared, read-only `toy::Counter`."]
@@ -168,14 +232,6 @@ pub struct ToyVec2 {
 #[napi(js_name = "Color", namespace = "toy")]
 pub struct ToyColor {
     inner: napi_support::Slot<toy::Color>,
-}
-#[doc = " A grid of bytes, owned and written in place."]
-#[doc = ""]
-#[doc = " A `toy::Canvas`, owned. A method that consumes it in Rust leaves this"]
-#[doc = " instance spent: every later call throws."]
-#[napi(js_name = "Canvas", namespace = "toy")]
-pub struct ToyCanvas {
-    inner: napi_support::Slot<toy::Canvas>,
 }
 #[doc = " A tree of layers and dots, shared behind an `Arc`: its nodes are only"]
 #[doc = " ever borrowed from it, the shape a binding projects."]
@@ -381,6 +437,60 @@ impl ToyFilter {
                 .map_err(|_| napi_support::invalid("minLen", v))?;
         }
         Ok(o)
+    }
+}
+impl ToyFrame {
+    fn wrap(inner: toy::Frame) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyFrame {
+    #[napi(getter)]
+    pub fn layer(&self) -> Result<ToyLayer, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let v = __inner;
+            ToyLayer::__from((v.layer()).clone())
+        })
+    }
+    #[napi(getter)]
+    pub fn shades(&self) -> Result<Vec<Either<ToyShadePlain, ToyShadeNamed>>, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let v = __inner;
+            v.shades().iter().map(toy_shade_to_js).collect()
+        })
+    }
+}
+fn toy_shade_to_js(v: &toy::Shade) -> Either<ToyShadePlain, ToyShadeNamed> {
+    match v {
+        toy::Shade::Plain => Either::A(ToyShadePlain {
+            r#type: "plain".to_string(),
+        }),
+        toy::Shade::Named(v) => Either::B(ToyShadeNamed {
+            r#type: "named".to_string(),
+            value: v.to_string(),
+        }),
+    }
+}
+fn toy_content_to_js(
+    v: &toy::Content,
+) -> Either3<ToyContentPlain, ToyContentCanvas, ToyContentFrame> {
+    match v {
+        toy::Content::Empty => Either3::A(ToyContentPlain {
+            r#type: "empty".to_string(),
+        }),
+        toy::Content::Canvas(v) => Either3::B(ToyContentCanvas {
+            r#type: "canvas".to_string(),
+            value: ToyCanvas::__from((*v).clone()),
+        }),
+        toy::Content::Frame(v) => Either3::C(ToyContentFrame {
+            r#type: "frame".to_string(),
+            value: ToyFrame::wrap((*v).clone()),
+        }),
     }
 }
 impl ToyCounter {
@@ -1137,6 +1247,18 @@ impl ToyScene {
             .map_err(napi_support::coded)?;
         Ok(__v.steps().map(|x| toy_step_to_js(&x)).collect())
     }
+    #[doc = " What the scene's slots hold: nothing, a 2x1 canvas, and a frame"]
+    #[doc = " around the layer `framed` (the dot `f`)."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn contents(
+        &self,
+    ) -> Result<Vec<Either3<ToyContentPlain, ToyContentCanvas, ToyContentFrame>>, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Scene::contents", || __self.contents())
+            .map_err(napi_support::coded)?;
+        Ok(__v.iter().map(toy_content_to_js).collect())
+    }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
     #[doc = " holds it."]
@@ -1676,6 +1798,21 @@ pub fn toy_share(t: &ToyTally) -> Result<ToyTally, String> {
 pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> Result<bool, String> {
     Ok(std::sync::Arc::ptr_eq(a.__ref()?, b.__ref()?))
 }
+#[napi(namespace = "toy")]
+impl ToyFrame {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Frame")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
 #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
 #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
 #[doc = " the whole module without it. The `.d.ts` header declares it."]
@@ -1692,6 +1829,7 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("toy"), "Color"),
         (Some("toy"), "Counter"),
         (Some("toy"), "Dot"),
+        (Some("toy"), "Frame"),
         (Some("toy"), "Key"),
         (Some("toy"), "Layer"),
         (Some("toy"), "Scene"),
@@ -1737,6 +1875,64 @@ impl ToyTally {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Tally".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyFrame {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Frame",
+            &["layer", "shades", "disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Frame".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyCanvas {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Canvas",
+            &["disposed"],
+            &["width", "height"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Canvas".to_string()
     }
 }
 #[napi(namespace = "toy")]
@@ -1824,35 +2020,6 @@ impl ToyColor {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Color".to_string()
-    }
-}
-#[napi(namespace = "toy")]
-impl ToyCanvas {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Canvas",
-            &["disposed"],
-            &["width", "height"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Canvas".to_string()
     }
 }
 #[napi(namespace = "toy")]

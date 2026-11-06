@@ -423,9 +423,14 @@ Still open after 13 (for 0.10's notes, step 14):
 - #181: fontdb's `query`, `withFaceData`, `familyName`, the face `ID`s
   (`face`, `removeFace`, `makeFaceDataUnshared`) and `families` are back;
   `faceSource` (a `Source` union of shared bytes and paths) is not.
-- #191: what an `feImage` draws, the tree an `<image>` embeds (a nested
-  owner), which face drew a glyph, `usvg.Font.families` (`&[FontFamily]`,
-  a payload enum with a borrowed name).
+- ~~#191~~: back through generic rules. A union variant carrying a class
+  is an output-only object holding a copy: `ImageKind`'s `svg` variant holds
+  the embedded `usvg.Tree`, `Kind`'s `image` a `usvg.FilterImage` whose
+  `root` is a copy of the group the `feImage` draws. An enum a crate
+  re-exports from a dependency is read as its own: `usvg.Font.families`
+  lists `FontFamily` (svgtypes'), which makes `Font`, `TextSpan` and
+  `TextChunk` plain objects (every member maps). `PositionedGlyph.font` is
+  the `fontdb.ID` of the face that drew the glyph (#181).
 - ~~`util.inspect` of a leased instance~~: prints `Pixmap { leased: true }`
   (or `consumed: true`) since 0.10.1; `Primitive`'s union getter prints fine.
 - Hand-written `.d.mts` of the helpers, which can drift: generate them from

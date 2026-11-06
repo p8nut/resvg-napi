@@ -8,6 +8,9 @@ use std::sync::Arc;
 
 pub mod alt;
 
+/// Another crate's enum, re-exported: `toy::Shade` to a caller.
+pub use toy_dep::Shade;
+
 /// Which way a counter counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Direction {
@@ -502,6 +505,7 @@ pub struct Scene {
     /// Dots shared by name, a table of `Arc`s beside the tree.
     marks: Vec<Arc<Dot>>,
     trail: Trail,
+    contents: Vec<Content>,
 }
 
 impl Scene {
@@ -543,6 +547,17 @@ impl Scene {
                     Step::Stop,
                 ],
             },
+            contents: vec![
+                Content::Empty,
+                Content::Canvas(Canvas::new(2, 1).expect("a 2x1 canvas")),
+                Content::Frame(Frame {
+                    layer: Layer {
+                        name: "framed".into(),
+                        items: vec![dot("f", 5.0)],
+                    },
+                    shades: vec![Shade::Plain, Shade::Named("teal".into())],
+                }),
+            ],
         })
     }
 
@@ -563,6 +578,39 @@ impl Scene {
     /// The way through the scene: a jump to `a`, a line to `d`, a stop.
     pub fn trail(&self) -> &Trail {
         &self.trail
+    }
+
+    /// What the scene's slots hold: nothing, a 2x1 canvas, and a frame
+    /// around the layer `framed` (the dot `f`).
+    pub fn contents(&self) -> &[Content] {
+        &self.contents
+    }
+}
+
+/// A slot's content: a variant may carry a class (`Canvas`), or a value
+/// that only partly maps (`Frame`).
+#[derive(Clone, Debug)]
+pub enum Content {
+    Empty,
+    Canvas(Canvas),
+    Frame(Frame),
+}
+
+/// A layer, framed: its members borrow a projected class (a copy is handed
+/// out) and a re-exported enum.
+#[derive(Clone, Debug)]
+pub struct Frame {
+    layer: Layer,
+    shades: Vec<Shade>,
+}
+
+impl Frame {
+    pub fn layer(&self) -> &Layer {
+        &self.layer
+    }
+
+    pub fn shades(&self) -> &[Shade] {
+        &self.shades
     }
 }
 

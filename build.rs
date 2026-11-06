@@ -123,7 +123,19 @@ fn main() {
             if i == 0 {
                 report!("{} sources: {}", u.root, dir.display());
             }
-            let all = parse_crate(&dir);
+            let mut all = parse_crate(&dir);
+            // What it re-exports of a dependency's enums is its own
+            // (`usvg::FontFamily`, defined by svgtypes).
+            let mut load = |krate: &str| {
+                let pkg = [krate.to_string(), krate.replace('_', "-")]
+                    .into_iter()
+                    .find(|p| locked.get(p).is_some_and(|v| v.len() == 1))?;
+                let dir = locate(&pkg, "lib.rs", &locked);
+                Some(parse_crate(&dir).into_iter().map(|(_, f)| f).collect())
+            };
+            for name in inline_reexported_enums(&mut all, &mut load) {
+                report!("{} re-exports enum {name}: read as its own", u.root);
+            }
             let tree = ModTree::load(&dir, &all);
             let parsed = tree.public_view(&all, &dir);
             Source {
@@ -405,6 +417,17 @@ fn main() {
             }
         }
     }
+    // The classes a borrowed member hands out a copy of (`usvg.Tree` in an
+    // image, the `usvg.Group` of an `feImage`), under the same rule.
+    for (name, root) in classes.by_clone() {
+        if defines(name).is_none_or(|s| s.root_str == root) {
+            vocab.owned.insert(name.to_string());
+        }
+    }
+    report!(
+        "classes a borrowing member copies: {}",
+        vocab.owned.iter().cloned().collect::<Vec<_>>().join(", ")
+    );
 
     // Every source, not just usvg: fontdb defines enums too -- `Style` is
     // Normal/Italic/Oblique -- and a usvg-only pass left them to the object
@@ -776,6 +799,12 @@ fn main() {
     // be one of the data types settled just above.
     let mut unions: Vec<String> = Vec::new();
     for (name, info) in &vocab.payload {
+        // A converter is that type's JS form (`usvg::Indent`, read by
+        // `indent_from_js`): no union of its own beside it.
+        if GEN.converters.iter().any(|c| c.ty == name) {
+            report!("payload enum {name} not mapped: a converter reads it");
+            continue;
+        }
         if let Some(why) = info.payload_blocker(&vocab) {
             report!("payload enum {name} not mapped: {why}");
             continue;

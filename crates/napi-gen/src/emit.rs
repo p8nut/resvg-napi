@@ -133,6 +133,11 @@ pub fn js_conv(
             };
             plain(quote!(#c), quote!(#c::__from(#v)))
         }
+        // A copy of the borrowed value, wrapped as the class wraps its own.
+        (Js::Owned(t), Getter | Method | Carried) => {
+            let c = format_ident!("{t}");
+            plain(quote!(#c), quote!(#c::__from((#d).clone())))
+        }
         (Js::OptClass(t), Getter | Method) => {
             let c = format_ident!("{t}");
             let f = if src_ty.contains("Option<&") {
@@ -181,6 +186,12 @@ pub fn js_conv(
         (Js::Value(t), Getter | Method) => {
             let c = data_ident(t);
             reaching(quote!(#c), quote!(#c::wrap(#a.clone())), t)
+        }
+        // Carried alone by a union variant, which is then an output-only
+        // object (`payload_enum_code`).
+        (Js::Value(t), Carried) => {
+            let c = data_ident(t);
+            reaching(quote!(#c), quote!(#c::wrap((*#a).clone())), t)
         }
         (Js::ValueList(t), Getter) => {
             let c = data_ident(t);
@@ -402,6 +413,31 @@ pub fn payload_enum_code(
                     }
                 });
                 arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: v.clone() }),));
+                continue;
+            }
+            // A class carried alone: an output-only object holding it, which
+            // napi does not require to be `Clone`.
+            Payload::Value(ty)
+                if matches!(vocab.classify(ty), Some(Js::Owned(_) | Js::Value(_))) =>
+            {
+                let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(v)) else {
+                    return Err(format!("{name}::{n} carries {ty}, which cannot be carried"));
+                };
+                let doc = format!(" `{name}::{n}`.");
+                items.extend(quote! {
+                    #[doc = #doc]
+                    #[napi(object, object_from_js = false)]
+                    pub struct #sid {
+                        #[doc = " Discriminant. Narrow on this."]
+                        #[napi(ts_type = #ts)]
+                        pub r#type: String,
+                        pub value: #fty,
+                    }
+                });
+                arms.push(quote!(#up::#vid(v) => #arm(#sid {
+                    r#type: #tag.to_string(),
+                    value: #expr,
+                }),));
                 continue;
             }
             Payload::Value(ty) => {
@@ -841,6 +877,7 @@ fn map_field(
             | Some(Js::Object(_))
             | Some(Js::ObjectList(_))
             | Some(Js::Value(_))
+            | Some(Js::Owned(_))
             | Some(Js::ValueList(_))
             | Some(Js::OptObject(_))
             | Some(Js::OptValue(_))
@@ -990,11 +1027,13 @@ pub fn data_members(
             return;
         }
         let peeled = peel_type(ty_s);
-        if config().node_types.contains(&bare(peeled)) {
+        let js = vocab.classify(ty_s);
+        // A node type a listed class copies (`Js::Owned`) is that class, and
+        // reaches nothing behind it.
+        if config().node_types.contains(&bare(peeled)) && !matches!(js, Some(Js::Owned(_))) {
             return;
         }
         let id = format_ident!("{}", name);
-        let js = vocab.classify(ty_s);
         // `Image` was a read-only class only because `size` did not map;
         // mapping it promoted Image to an object holding `ImageKind`, whose
         // byte variants are classes. Say so instead of relying on luck.
@@ -1089,7 +1128,7 @@ pub fn data_members(
     // Accessors first so a name they share with a field resolves to the
     // accessor, which is the one upstream means to be read.
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for imp in inherent_impls(files, ty) {
+    for imp in inherent_impls(files, bare(ty)) {
         for it in &imp.items {
             let ImplItem::Fn(f) = it else { continue };
             if !is_pub(&f.vis) || f.sig.inputs.len() != 1 {
@@ -1103,7 +1142,7 @@ pub fn data_members(
             push(&id.to_string(), &ty_str(o), quote!(v.#id()));
         }
     }
-    if let Some(Fields::Named(named)) = struct_fields_opt(files, ty) {
+    if let Some(Fields::Named(named)) = struct_fields_opt(files, bare(ty)) {
         for f in &named.named {
             if !is_pub(&f.vis) {
                 continue;

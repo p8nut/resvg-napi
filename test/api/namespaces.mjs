@@ -96,9 +96,9 @@ test('the Rust names, and nothing else at the root', () => {
 // The usvg classes the flat surface had copies of, under other names until
 // those went with the flat node classes (step 7b of the migration).
 const USVG_CLASSES = [
-  'ClipPath', 'Filter', 'Font', 'Image', 'ImageKindGif', 'ImageKindJpeg', 'ImageKindPng',
+  'ClipPath', 'Filter', 'FilterImage', 'Image', 'ImageKindGif', 'ImageKindJpeg', 'ImageKindPng',
   'ImageKindWebp', 'LinearGradient', 'Mask', 'Pattern', 'PositionedGlyph', 'RadialGradient',
-  'Span', 'Text', 'TextChunk', 'TextSpan',
+  'Span', 'Text',
 ];
 
 test('the usvg classes are namespaced, with no flat copy left', () => {

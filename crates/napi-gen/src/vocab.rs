@@ -48,6 +48,11 @@ pub enum Js {
     // class cannot go (an object field, a union's payload).
     Class(String),
     OptClass(String),
+    // A listed class not held by value, whose upstream type is `Clone`: a
+    // copy of the borrowed value, given to the class's `__from` (`Tree`
+    // embedded in an image, the `Group` an `feImage` draws). Never an object
+    // field: a class is not `Clone`.
+    Owned(String),
     // `Vec<(A, B)>` or `&[(A, B)]`: an `Array<[A, B]>`, each element mapped
     // as a union's payload is.
     TupleList(Vec<(String, Js)>),
@@ -134,7 +139,10 @@ impl PayloadEnum {
     /// union: its holder has to stay a read-only class.
     pub fn holds_class(&self, vocab: &Vocab) -> bool {
         self.variants.iter().any(|(_, p)| {
-            matches!(p, Payload::Value(ty) if matches!(vocab.classify(ty), Some(Js::Bytes)))
+            matches!(p, Payload::Value(ty) if matches!(
+                vocab.classify(ty),
+                Some(Js::Bytes | Js::Owned(_) | Js::Value(_))
+            ))
         })
     }
 
@@ -265,9 +273,14 @@ impl PayloadEnum {
                     | Js::Enum
                     | Js::Object(_),
                 ) => Ok(()),
-                // A read-only class is not a field: napi needs Clone and
-                // FromNapiValue of one, and a class has neither.
-                Some(Js::Value(t)) => Err(format!("{t} maps only partially")),
+                // A class carried alone: the variant is an output-only
+                // object holding it (`payload_enum_code`). Beside other
+                // fields it would be an object field, which napi requires to
+                // be Clone and a class is not.
+                Some(Js::Value(_) | Js::Owned(_)) if sole => Ok(()),
+                Some(Js::Value(t) | Js::Owned(t)) => {
+                    Err(format!("{t} is a class, which can only be carried alone"))
+                }
                 // Bytes cannot be an object *field* -- neither `Buffer` nor
                 // `Uint8Array` is `Clone`, and napi requires that of every
                 // field. They can be a getter, so the variant carrying them is
@@ -552,6 +565,9 @@ pub struct Vocab {
     pub classes: BTreeSet<String>,
     /// Those of them that are plain data, with a `<Name>Object`.
     pub plain: BTreeSet<String>,
+    /// The listed classes not held by value whose upstream type is `Clone`
+    /// (`Js::Owned`): a member borrowing one hands out a copy.
+    pub owned: BTreeSet<String>,
 }
 
 impl Vocab {
@@ -588,6 +604,9 @@ impl Vocab {
             && self.classes.contains(inner)
         {
             return Some(Js::OptClass(inner.to_string()));
+        }
+        if self.owned.contains(unref) {
+            return Some(Js::Owned(unref.to_string()));
         }
         if let Some(it) = config().iterated.iter().find(|i| i.ty == unref) {
             return self

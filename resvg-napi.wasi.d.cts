@@ -12,6 +12,9 @@ export declare namespace fontdb {
   export interface FaceInfo {
     [Symbol.dispose](): void
   }
+  export interface ID {
+    [Symbol.dispose](): void
+  }
 }
 
 export declare namespace guard {
@@ -208,6 +211,16 @@ export declare namespace fontdb {
      * Until it settles, this instance is in use: any other use throws `Leased`.
      */
     loadSystemFontsAsync(signal?: AbortSignal | undefined | null): Promise<void>
+    /**
+     * Removes a font face by `id` from the database.
+     *
+     * Returns `false` while attempting to remove a non-existing font face.
+     *
+     * Useful when you want to ignore some specific font face(s)
+     * after loading a large directory with fonts.
+     * Or a specific face from a font.
+     */
+    removeFace(id: fontdb.ID): void
     /** Returns `true` if the `Database` contains no font faces. */
     isEmpty(): boolean
     /**
@@ -229,11 +242,54 @@ export declare namespace fontdb {
     /** Sets the family that will be used by `Family::Monospace`. */
     setMonospaceFamily(family: string): void
     /**
+     * Returns the generic family name or the `Family::Name` itself.
+     *
+     * Generic family names should be set via `Database::set_*_family` methods.
+     */
+    familyName(family: fontdb.Family): string
+    /** Performs a CSS-like query and returns the best matched font face. */
+    query(query?: fontdb.Query | undefined | null): fontdb.ID | null
+    /**
      * Returns an iterator over the internal storage.
      *
      * This can be used for manual font matching.
      */
     faces(): Array<fontdb.FaceInfo>
+    /**
+     * Selects a `FaceInfo` by `id`.
+     *
+     * Returns `None` if a face with such ID was already removed,
+     * or this ID belong to the other `Database`.
+     */
+    face(id: fontdb.ID): fontdb.FaceInfo | null
+    /**
+     * Executes a closure with a font's data.
+     *
+     * We can't return a reference to a font binary data because of lifetimes.
+     * So instead, you can use this method to process font's data.
+     *
+     * The closure accepts raw font data and font face index.
+     *
+     * In case of `Source::File`, the font file will be memory mapped.
+     *
+     * Returns `None` when font file loading failed.
+     *
+     * # Example
+     *
+     * ```ignore
+     * let is_variable = db.with_face_data(id, |font_data, face_index| {
+     *     let font = ttf_parser::Face::from_slice(font_data, face_index).unwrap();
+     *     font.is_variable()
+     * })?;
+     * ```
+     */
+    withFaceData(id: fontdb.ID): [Buffer, number] | null
+    /**
+     * Transfers ownership of shared font data back to the font database. This is the reverse operation
+     * of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped
+     * from a file on disk, then that mapping is closed and the data becomes private to the process again.
+     */
+    makeFaceDataUnshared(id: fontdb.ID): void
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -251,6 +307,7 @@ export declare namespace fontdb {
   export type FontdbDatabase = Database
   /** Read-only view of a `FaceInfo`. */
   export class FaceInfo {
+    get id(): fontdb.ID
     get index(): number
     get families(): Array<[string, fontdb.Language]>
     get postScriptName(): string
@@ -271,6 +328,58 @@ export declare namespace fontdb {
   }
   export type FontdbFaceInfo = FaceInfo
   /**
+   * A unique per database face ID.
+   *
+   * Since `Database` is not global/unique, we cannot guarantee that a specific ID
+   * is actually from the same db instance. This is up to the caller.
+   *
+   * ID overflow will cause a panic, but it's highly unlikely that someone would
+   * load more than 4 billion font faces.
+   *
+   * Because the internal representation of ID is private, The `Display` trait
+   * implementation for this type only promise that unequal IDs will be displayed
+   * as different strings, but does not make any guarantees about format or
+   * content of the strings.
+   *
+   * [`KeyData`]: https://docs.rs/slotmap/latest/slotmap/struct.KeyData.html
+   *
+   * A `usvg::fontdb::ID`, held by value.
+   */
+  export class ID {
+    /**
+     * Creates a dummy ID.
+     *
+     * Should be used in tandem with [`Database::push_face_info`].
+     */
+    static dummy(): fontdb.ID
+    /** The `ID` as Rust's `Display` writes it. */
+    toString(): string
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type FontdbID = ID
+  /**
+   * A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family).
+   *
+   * Passed in as the union it prints as: `{ type, value }`.
+   */
+  export interface Family {
+    /** The variant. */
+    type: 'name' | 'serif' | 'sansSerif' | 'cursive' | 'fantasy' | 'monospace'
+    /** The string the variant carries: required for `'name'`, ignored otherwise. */
+    value?: string
+  }
+  /**
    * A face name language.
    *
    * Consists of Language + Region pairs.
@@ -278,6 +387,39 @@ export declare namespace fontdb {
    * <https://learn.microsoft.com/en-us/typography/opentype/spec/name#windows-language-ids>
    */
   export type Language = 'unknown' | 'afrikaansSouthAfrica' | 'albanianAlbania' | 'alsatianFrance' | 'amharicEthiopia' | 'arabicAlgeria' | 'arabicBahrain' | 'arabicEgypt' | 'arabicIraq' | 'arabicJordan' | 'arabicKuwait' | 'arabicLebanon' | 'arabicLibya' | 'arabicMorocco' | 'arabicOman' | 'arabicQatar' | 'arabicSaudiArabia' | 'arabicSyria' | 'arabicTunisia' | 'arabicUae' | 'arabicYemen' | 'armenianArmenia' | 'assameseIndia' | 'azeriCyrillicAzerbaijan' | 'azeriLatinAzerbaijan' | 'bashkirRussia' | 'basqueBasque' | 'belarusianBelarus' | 'bengaliBangladesh' | 'bengaliIndia' | 'bosnianCyrillicBosniaAndHerzegovina' | 'bosnianLatinBosniaAndHerzegovina' | 'bretonFrance' | 'bulgarianBulgaria' | 'catalanCatalan' | 'chineseHongKongSar' | 'chineseMacaoSar' | 'chinesePeoplesRepublicOfChina' | 'chineseSingapore' | 'chineseTaiwan' | 'corsicanFrance' | 'croatianCroatia' | 'croatianLatinBosniaAndHerzegovina' | 'czechCzechRepublic' | 'danishDenmark' | 'dariAfghanistan' | 'divehiMaldives' | 'dutchBelgium' | 'dutchNetherlands' | 'englishAustralia' | 'englishBelize' | 'englishCanada' | 'englishCaribbean' | 'englishIndia' | 'englishIreland' | 'englishJamaica' | 'englishMalaysia' | 'englishNewZealand' | 'englishRepublicOfThePhilippines' | 'englishSingapore' | 'englishSouthAfrica' | 'englishTrinidadAndTobago' | 'englishUnitedKingdom' | 'englishUnitedStates' | 'englishZimbabwe' | 'estonianEstonia' | 'faroeseFaroeIslands' | 'filipinoPhilippines' | 'finnishFinland' | 'frenchBelgium' | 'frenchCanada' | 'frenchFrance' | 'frenchLuxembourg' | 'frenchPrincipalityOfMonaco' | 'frenchSwitzerland' | 'frisianNetherlands' | 'galicianGalician' | 'georgianGeorgia' | 'germanAustria' | 'germanGermany' | 'germanLiechtenstein' | 'germanLuxembourg' | 'germanSwitzerland' | 'greekGreece' | 'greenlandicGreenland' | 'gujaratiIndia' | 'hausaLatinNigeria' | 'hebrewIsrael' | 'hindiIndia' | 'hungarianHungary' | 'icelandicIceland' | 'igboNigeria' | 'indonesianIndonesia' | 'inuktitutCanada' | 'inuktitutLatinCanada' | 'irishIreland' | 'isiXhosaSouthAfrica' | 'isiZuluSouthAfrica' | 'italianItaly' | 'italianSwitzerland' | 'japaneseJapan' | 'kannadaIndia' | 'kazakhKazakhstan' | 'khmerCambodia' | 'kicheGuatemala' | 'kinyarwandaRwanda' | 'kiswahiliKenya' | 'konkaniIndia' | 'koreanKorea' | 'kyrgyzKyrgyzstan' | 'laoLaoPdr' | 'latvianLatvia' | 'lithuanianLithuania' | 'lowerSorbianGermany' | 'luxembourgishLuxembourg' | 'macedonianNorthMacedonia' | 'malayBruneiDarussalam' | 'malayMalaysia' | 'malayalamIndia' | 'malteseMalta' | 'maoriNewZealand' | 'mapudungunChile' | 'marathiIndia' | 'mohawkMohawk' | 'mongolianCyrillicMongolia' | 'mongolianTraditionalPeoplesRepublicOfChina' | 'nepaliNepal' | 'norwegianBokmalNorway' | 'norwegianNynorskNorway' | 'occitanFrance' | 'odiaIndia' | 'pashtoAfghanistan' | 'polishPoland' | 'portugueseBrazil' | 'portuguesePortugal' | 'punjabiIndia' | 'quechuaBolivia' | 'quechuaEcuador' | 'quechuaPeru' | 'romanianRomania' | 'romanshSwitzerland' | 'russianRussia' | 'samiInariFinland' | 'samiLuleNorway' | 'samiLuleSweden' | 'samiNorthernFinland' | 'samiNorthernNorway' | 'samiNorthernSweden' | 'samiSkoltFinland' | 'samiSouthernNorway' | 'samiSouthernSweden' | 'sanskritIndia' | 'serbianCyrillicBosniaAndHerzegovina' | 'serbianCyrillicSerbia' | 'serbianLatinBosniaAndHerzegovina' | 'serbianLatinSerbia' | 'sesothoSaLeboaSouthAfrica' | 'setswanaSouthAfrica' | 'sinhalaSriLanka' | 'slovakSlovakia' | 'slovenianSlovenia' | 'spanishArgentina' | 'spanishBolivia' | 'spanishChile' | 'spanishColombia' | 'spanishCostaRica' | 'spanishDominicanRepublic' | 'spanishEcuador' | 'spanishElSalvador' | 'spanishGuatemala' | 'spanishHonduras' | 'spanishMexico' | 'spanishNicaragua' | 'spanishPanama' | 'spanishParaguay' | 'spanishPeru' | 'spanishPuertoRico' | 'spanishModernSortSpain' | 'spanishTraditionalSortSpain' | 'spanishUnitedStates' | 'spanishUruguay' | 'spanishVenezuela' | 'swedishFinland' | 'swedishSweden' | 'syriacSyria' | 'tajikCyrillicTajikistan' | 'tamazightLatinAlgeria' | 'tamilIndia' | 'tatarRussia' | 'teluguIndia' | 'thaiThailand' | 'tibetanPrc' | 'turkishTurkey' | 'turkmenTurkmenistan' | 'uighurPrc' | 'ukrainianUkraine' | 'upperSorbianGermany' | 'urduIslamicRepublicOfPakistan' | 'uzbekCyrillicUzbekistan' | 'uzbekLatinUzbekistan' | 'vietnameseVietnam' | 'welshUnitedKingdom' | 'wolofSenegal' | 'yakutRussia' | 'yiPrc' | 'yorubaNigeria'
+  /**
+   * A database query.
+   *
+   * Mainly used by `Database::query()`.
+   *
+   * Every field is optional: one left out keeps the `Default` value.
+   */
+  export interface Query {
+    /**
+     * A prioritized list of font family names or generic family names.
+     *
+     * [font-family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family) in CSS.
+     */
+    families?: Array<fontdb.Family>
+    /**
+     * Specifies the weight of glyphs in the font, their degree of blackness or stroke thickness.
+     *
+     * [font-weight](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-weight-prop) in CSS.
+     */
+    weight?: number
+    /**
+     * Selects a normal, condensed, or expanded face from a font family.
+     *
+     * [font-stretch](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-stretch-prop) in CSS.
+     */
+    stretch?: fontdb.Stretch
+    /**
+     * Allows italic or oblique faces to be selected.
+     *
+     * [font-style](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-style-prop) in CSS.
+     */
+    style?: fontdb.Style
+  }
   /** A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass). */
   export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
   /** Allows italic or oblique faces to be selected. */
@@ -1763,6 +1905,7 @@ export declare namespace usvg {
     get colrTransform(): tiny_skia.Transform
     get id(): number
     get text(): string
+    get font(): fontdb.ID
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has

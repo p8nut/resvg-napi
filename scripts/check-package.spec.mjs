@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assess, unconstrained, anonymous, mismatched, familyPins, wasiDeps } from './check-package.mjs';
+import { assess, exportTargets, unexported, unconstrained, anonymous, mismatched, familyPins, wasiDeps } from './check-package.mjs';
 
 test('assess: the root tarball keeps its files[] promises', () => {
   assert.deepEqual(assess({ name: 'a', promised: ['x.js'], shipped: ['x.js', 'package.json'] }), []);
@@ -15,6 +15,28 @@ test('assess: no Rust sources in the root tarball', () => {
   const rusty = assess({ name: 'r', promised: [], shipped: ['index.js', 'src/lib.rs', 'build.rs'] });
   assert.equal(rusty.length, 1);
   assert.match(rusty[0], /src\/lib\.rs, build\.rs/);
+});
+
+test('exportTargets: every condition, nested or not', () => {
+  assert.deepEqual(exportTargets('./index.js'), ['./index.js']);
+  assert.deepEqual(exportTargets({
+    '.': { types: './index.d.ts', browser: './browser.js', default: './index.js' },
+    './helpers': { browser: { types: './b.d.mts', default: './b.mjs' }, types: './h.d.mts', default: './h.mjs' },
+    './package.json': './package.json',
+    './alt': ['./a.js', { node: './n.js' }],
+  }), ['./index.d.ts', './browser.js', './index.js', './b.d.mts', './b.mjs', './h.d.mts', './h.mjs',
+    './package.json', './a.js', './n.js']);
+  assert.deepEqual(exportTargets(undefined), []);
+});
+
+test('unexported: every exports target is in the tarball', () => {
+  const exports = { '.': { types: './index.d.ts', default: './index.js' }, './helpers': './helpers.mjs', './package.json': './package.json' };
+  assert.deepEqual(unexported({ name: 'a', exports, shipped: ['index.d.ts', 'index.js', 'helpers.mjs', 'package.json'] }), []);
+  // The helpers written but left out of files[]: installed, the import fails.
+  const missing = unexported({ name: 'a', exports, shipped: ['index.d.ts', 'index.js', 'package.json'] });
+  assert.deepEqual(missing, ['a exports ./helpers.mjs but the tarball has no such path']);
+  assert.match(unexported({ name: 'a', exports: { '.': 'index.js' }, shipped: ['index.js'] })[0], /not a \.\/ path/);
+  assert.deepEqual(unexported({ name: 'a', exports: undefined, shipped: [] }), []);
 });
 
 test('unconstrained: an optionalDependency needs os or cpu', () => {

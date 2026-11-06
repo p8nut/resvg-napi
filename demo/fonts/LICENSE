@@ -3,8 +3,8 @@ self-hosts -- COEP require-corp blocks a cross-origin font that carries no CORP
 header, so linking them was not an option.
 
 The four .woff2 files are the page's own typography, taken from the @fontsource
-packages. IBMPlexSans-Latin.ttf is what the bench loads into `FontDatabase` on
-a first visit, since WASI has no system fonts and a page that cannot draw text
+packages. IBMPlexSans-Latin.ttf is what the pages load into `fontdb.Database`
+on a first visit, since WASI has no system fonts and a page that cannot draw text
 is a poor demonstration of a text renderer. ttf rather than woff2 because
 fontdb reads neither woff nor woff2. It was cut from the upstream variable
 font, 537 KB down to 41 KB:

@@ -1,13 +1,18 @@
 // Horizontal fitting driven by the template's own `data-maxwidth`.
 import assert from 'node:assert/strict';
-import { Resvg, FontDatabase } from '../index.js';
-import { fontsOrSkip } from './support.mjs';
-import { fitTextWidths, findWidthConstraints } from '../fit.mjs';
+import binding from '../index.js';
+import { fontsOrSkip, extent } from './support.mjs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fitTextWidths, findWidthConstraints, guardedParse } from '../helpers.browser.mjs';
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds. testFonts also points the
 // generic families at it, so `font-size` on a bare <text> resolves.
-const { db: fonts, family } = fontsOrSkip(FontDatabase, 'horizontal fitting');
-const render = (svg) => new Resvg(svg, { fontFamily: family }, fonts);
+const { db: fonts, family } = fontsOrSkip(binding, 'horizontal fitting');
+// The safe default: a fresh guard.ImageHrefResolver per parse.
+const render = guardedParse(binding, { fontdb: fonts, fontFamily: family });
+const measured = (tree, id) => extent(tree.nodeById(id));
 
 // Shaped like a card template: a translate already in place, per-element limits.
 const card = (long) => `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="100">
@@ -22,7 +27,7 @@ assert.deepEqual(found.map((c) => [c.id, c.max]), [['short', 200], ['long', 80]]
 
 // 2. a name that overflows is compressed to exactly its limit
 const svg = card('Wolfeschlegelsteinhausen');
-const before = render(svg).node('long').extent().width;
+const before = measured(render(svg), 'long').width;
 assert.ok(before > 80, `starts too wide: ${before}`);
 const { svg: fitted, adjustments, problems } = fitTextWidths(svg, render);
 assert.deepEqual(problems, []);
@@ -73,7 +78,7 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
 </svg>`;
 {
   const src = inMm('ab', 15);
-  const canvas = render(src).node('t').extent().width;
+  const canvas = measured(render(src), 't').width;
   assert.ok(canvas > 15, `canvas width ${canvas} exceeds the limit, which is the trap`);
   const { adjustments, problems } = fitTextWidths(src, render);
   assert.deepEqual(problems, []);
@@ -98,7 +103,7 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
   assert.equal(adjustments.length, 2, 'both, and neither needed an id in the source');
   const after = render(fitted);
   for (const a of adjustments) {
-    const box = after.node(a.id).extent();
+    const box = measured(after, a.id);
     assert.ok(Math.abs(a.measured - 10) < 0.5, `${a.id} width ${a.measured}`);
     // The invariant is the anchor, x=28, not the ink edge: the first glyph's
     // side bearing compresses too, so the ink starts nearer the anchor than
@@ -161,4 +166,24 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
   assert.ok(Math.abs(adjustments[0].measured - 20) < 0.5, `fitted in the viewBox's units: ${adjustments[0].measured}`);
   assert.match(out, /transform='translate\(1 0\) translate\(5 0\) scale\([\d.]+ 1\) translate\(-5 0\)'/, 'one transform, same quotes');
   render(out);
+}
+
+// guardedParse fences <image href>: a local file outside resourcesDir is not
+// read, where the raw usvg.Tree.fromStr reads it (test/api/guard.mjs). Supplied
+// images still resolve.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'resvg-fit-'));
+  const pixmap = new binding.tiny_skia.Pixmap(4, 4);
+  pixmap.fill(binding.tiny_skia.Color.fromRgba8(255, 0, 0, 255));
+  const png = pixmap.encodePng();
+  const file = join(dir, 'secret.png');
+  writeFileSync(file, png);
+  const doc = (href) => `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
+    <image id="i" href="${href}" width="4" height="4"/>
+    <text id="t" x="2" y="15" font-size="12" data-maxwidth="10">far too long</text></svg>`;
+  assert.equal(binding.usvg.Tree.fromStr(doc(file)).nodeById('i') !== null, true, 'the raw parse read the file');
+  assert.equal(render(doc(file)).nodeById('i'), null, 'guardedParse did not');
+  const supplied = guardedParse(binding, { fontdb: fonts, fontFamily: family, images: { logo: png } });
+  assert.notEqual(supplied(doc('logo')).nodeById('i'), null, 'a supplied image resolves');
+  assert.equal(fitTextWidths(doc(file), render).adjustments.length, 1, 'and fitting works through it');
 }

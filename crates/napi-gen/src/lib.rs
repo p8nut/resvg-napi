@@ -11,6 +11,9 @@
 //!   cfg      which upstream methods exist on which target
 //!   class    classes and free functions of the namespaced surface:
 //!            constructors, statics, `Result` errors, conversions
+//!   project  classes and unions over values borrowed from an owner
+//!   dispose  `dispose()` and `[Symbol.dispose]` for every class
+//!   twin     `*Async` twins, on a worker thread, with leases
 //!
 //! What is specific to the wrapped crates is not here: the build script fills
 //! a [`Config`] and hands it over with [`configure`] before any phase runs.
@@ -32,8 +35,11 @@ macro_rules! report {
 
 pub mod cfg;
 pub mod class;
+pub mod dispose;
 pub mod emit;
+pub mod project;
 pub mod sources;
+pub mod twin;
 pub mod vocab;
 
 /// What the phases need to know about the wrapped crates and do not discover
@@ -58,41 +64,15 @@ pub struct Config {
     /// a crate it does not parse), converted from a JS value by a template
     /// function instead.
     pub converters: &'static [Converter],
-    /// A struct with these fields is a transform, mapped to `Shapes::matrix`.
-    pub matrix_fields: &'static [&'static str],
-    /// Upstream type spellings for the template's domain shapes.
-    pub size_types: &'static [&'static str],
-    pub rect_types: &'static [&'static str],
-    pub opt_rect_types: &'static [&'static str],
-    pub path_data_types: &'static [&'static str],
+    /// An `[u8; 4]` spelling: an OpenType tag, a string in JS.
     pub tag4_types: &'static [&'static str],
-    /// What the template calls those shapes: the types generated code
-    /// converts them into.
-    pub shapes: Shapes,
-    /// The upstream size type's fallible `(width, height)` constructor, as a
-    /// path from the generated file. An option field of that type is
-    /// flattened into a `*_width`/`*_height` pair and rebuilt through it.
-    pub size_new: &'static str,
-    /// An argument type JS hands over as a class instance instead: (the
-    /// upstream type, the class, and the class's method that resolves it
-    /// against the receiver before the call).
-    pub arg_standin: Option<(&'static str, &'static str, &'static str)>,
-    /// What a handle owning content adds to its class, when the template has
-    /// such a view.
-    pub content_view: Option<ContentView>,
-    /// Option fields the template wires by hand; every other unmappable field
-    /// is dropped.
-    pub hand_wired_fields: &'static [&'static str],
+    /// Types JS sees as the list one of their methods iterates (see
+    /// [`Iterated`]).
+    pub iterated: &'static [Iterated],
     /// The tree's own types: never followed as data.
     pub node_types: &'static [&'static str],
     /// Conversions, not data: members never counted as unmapped data.
     pub not_data: &'static [&'static str],
-    /// Upstream handle types the template wraps by hand, with their class.
-    pub hand_wrapped: &'static [(&'static str, &'static str)],
-    /// Data types emitted under another name.
-    pub data_renames: &'static [(&'static str, &'static str)],
-    /// Enums emitted under another name.
-    pub enum_renames: &'static [(&'static str, &'static str)],
     /// Upstream Cargo features an emitted method can be gated on, and what
     /// each is for the binding crate: `"true"` (always built) or a cfg it is
     /// built under. A gate listed nowhere fails the build.
@@ -102,11 +82,6 @@ pub struct Config {
     /// type goes in the namespace of the source that defines it; a source
     /// listed nowhere gets none. See [`emit::namespaced`] for the naming rule.
     pub namespaces: &'static [(&'static str, &'static str)],
-    /// What a flat class is renamed with when a namespaced copy has its JS
-    /// name (`Some("Legacy")`: `ClipPath` becomes `LegacyClipPath`). napi
-    /// keeps one constructor per class name, so the two cannot share it;
-    /// `None` leaves the copy out instead. See [`emit::namespaced`].
-    pub legacy_prefix: Option<&'static str>,
     /// Upstream types mirrored as classes of the namespaced surface by
     /// [`class::Classes`], by source root and name (`("toy", "Canvas")`):
     /// associated functions become the constructor (`new`) and statics,
@@ -122,6 +97,24 @@ pub struct Config {
     /// class by one of its methods, for the call (`CanvasView` from a
     /// `Canvas` by `as_view`).
     pub views: &'static [View],
+    /// Types only ever borrowed from an `Arc`-held owner, by source root and
+    /// name (`("toy", "Layer")`): a struct becomes a class holding a
+    /// projection (the owner and the path to the value), and an enum whose
+    /// variants each carry one of those structs a union of `{ kind, value }`
+    /// objects. A method returning `&T`, `Option<&T>` or `&[T]` of either,
+    /// on a projected class or one behind an `Arc`, hands out projections.
+    /// See [`project`].
+    pub projections: &'static [(&'static str, &'static str)],
+    /// The members that get an async twin, by source root and name: a
+    /// method or a static as `Type::name` (`("toy", "Canvas::fill")`), a
+    /// free function by its name (`("toy", "paint")`). The twin is
+    /// `<name>Async(...args, signal?)`, returning a promise: its arguments
+    /// are converted on the main thread, the call runs on a worker thread.
+    /// A value it takes by reference and holds by value (an owned class, a
+    /// `&mut` one) is leased to the call: see `napi_support::Slot::lease`.
+    /// Each entry must name a member of a listed class or function that has
+    /// a JS form, and a twin of it must be possible, or the build fails.
+    pub asynchronous: &'static [(&'static str, &'static str)],
 }
 
 /// "An argument `&mut <ty>` is `<class>`'s `<via>()`, borrowed for the
@@ -135,18 +128,17 @@ pub struct View {
     pub via: &'static str,
 }
 
-/// The template types the domain shapes become. Each has a `From` impl for
-/// every upstream spelling [`Config`] lists for it.
-pub struct Shapes {
-    /// What a `rect_types` or `opt_rect_types` value becomes.
-    pub rect: &'static str,
-    /// What a `size_types` value becomes.
-    pub size: &'static str,
-    /// What a struct with the `matrix_fields` becomes.
-    pub matrix: &'static str,
-    /// What a `path_data_types` value becomes: the segment type, and the
-    /// template function that returns a `Vec` of them.
-    pub path: (&'static str, &'static str),
+/// "A value of type `ty` is the list its method `via` iterates, each item an
+/// `item`": JS gets an `Array` of the items, each mapped as `item` maps. For a
+/// type with no JS form of its own whose content an iterator hands out (a
+/// stream of payload-enum segments, say).
+pub struct Iterated {
+    /// The type, as the generator spells it (no spaces, no `&`).
+    pub ty: &'static str,
+    /// Its `&self` method returning the iterator.
+    pub via: &'static str,
+    /// The iterator's item type, by name.
+    pub item: &'static str,
 }
 
 /// "An option field of type `ty` is supplied by an instance of `class`
@@ -160,7 +152,9 @@ pub struct Provider {
     /// named as before [`emit::namespaced`] prefixes it, by its upstream name
     /// (`Tally`); a class the template writes, by its own ident.
     pub class: &'static str,
-    /// A Rust expression of `v`, a `&` to the instance, giving the value.
+    /// A Rust expression of `v`, a `&` to the instance, giving the value. It
+    /// may `?` a `Result<_, String>`: `v.__ref()?` is a generated class's
+    /// value, which throws `Disposed` once `dispose()` emptied it.
     pub provide: &'static str,
     /// A paragraph added to the field's doc comment: what leaving it out
     /// means, say. Empty for none.
@@ -178,14 +172,6 @@ pub struct Converter {
     pub ts: &'static str,
     /// The template function, by name.
     pub convert: &'static str,
-}
-
-/// A handle whose upstream type has `pub fn <accessor.0>(&self) -> <accessor.1>`
-/// owns content, and its class gets what `emit` writes, given the handle's
-/// upstream path and the class.
-pub struct ContentView {
-    pub accessor: (&'static str, &'static str),
-    pub emit: fn(&proc_macro2::TokenStream, &proc_macro2::Ident) -> proc_macro2::TokenStream,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -212,12 +198,4 @@ pub fn namespace_of(root: &str) -> Option<&'static str> {
         .iter()
         .find(|(r, _)| *r == root)
         .map(|(_, ns)| *ns)
-}
-
-/// `name` through a rename table, or unchanged.
-pub fn renamed<'a>(table: &[(&str, &'a str)], name: &'a str) -> &'a str {
-    table
-        .iter()
-        .find(|(from, _)| *from == name)
-        .map_or(name, |(_, to)| to)
 }

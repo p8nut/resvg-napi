@@ -94,8 +94,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-android-arm64')
         const bindingPackageVersion = require('resvg-napi-android-arm64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -110,8 +110,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-android-arm-eabi')
         const bindingPackageVersion = require('resvg-napi-android-arm-eabi/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -131,8 +131,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-win32-x64-gnu')
           const bindingPackageVersion = require('resvg-napi-win32-x64-gnu/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -147,8 +147,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-win32-x64-msvc')
           const bindingPackageVersion = require('resvg-napi-win32-x64-msvc/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -164,8 +164,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-win32-ia32-msvc')
         const bindingPackageVersion = require('resvg-napi-win32-ia32-msvc/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -180,8 +180,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-win32-arm64-msvc')
         const bindingPackageVersion = require('resvg-napi-win32-arm64-msvc/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -199,8 +199,8 @@ function requireNative() {
     try {
       const binding = require('resvg-napi-darwin-universal')
       const bindingPackageVersion = require('resvg-napi-darwin-universal/package.json').version
-      if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-        throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+      if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+        throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
       }
       return binding
     } catch (e) {
@@ -215,8 +215,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-darwin-x64')
         const bindingPackageVersion = require('resvg-napi-darwin-x64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -231,8 +231,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-darwin-arm64')
         const bindingPackageVersion = require('resvg-napi-darwin-arm64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -251,8 +251,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-freebsd-x64')
         const bindingPackageVersion = require('resvg-napi-freebsd-x64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -267,8 +267,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-freebsd-arm64')
         const bindingPackageVersion = require('resvg-napi-freebsd-arm64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -283,8 +283,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-freebsd-ppc64')
         const bindingPackageVersion = require('resvg-napi-freebsd-ppc64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -304,8 +304,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-x64-musl')
           const bindingPackageVersion = require('resvg-napi-linux-x64-musl/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -320,8 +320,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-x64-gnu')
           const bindingPackageVersion = require('resvg-napi-linux-x64-gnu/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -338,8 +338,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-arm64-musl')
           const bindingPackageVersion = require('resvg-napi-linux-arm64-musl/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -354,8 +354,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-arm64-gnu')
           const bindingPackageVersion = require('resvg-napi-linux-arm64-gnu/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -372,8 +372,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-arm-musleabihf')
           const bindingPackageVersion = require('resvg-napi-linux-arm-musleabihf/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -388,8 +388,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-arm-gnueabihf')
           const bindingPackageVersion = require('resvg-napi-linux-arm-gnueabihf/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -406,8 +406,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-loong64-musl')
           const bindingPackageVersion = require('resvg-napi-linux-loong64-musl/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -422,8 +422,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-loong64-gnu')
           const bindingPackageVersion = require('resvg-napi-linux-loong64-gnu/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -440,8 +440,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-riscv64-musl')
           const bindingPackageVersion = require('resvg-napi-linux-riscv64-musl/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -456,8 +456,8 @@ function requireNative() {
         try {
           const binding = require('resvg-napi-linux-riscv64-gnu')
           const bindingPackageVersion = require('resvg-napi-linux-riscv64-gnu/package.json').version
-          if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-            throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+            throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
           return binding
         } catch (e) {
@@ -473,8 +473,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-linux-ppc64-gnu')
         const bindingPackageVersion = require('resvg-napi-linux-ppc64-gnu/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -489,8 +489,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-linux-s390x-gnu')
         const bindingPackageVersion = require('resvg-napi-linux-s390x-gnu/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -509,8 +509,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-openharmony-arm64')
         const bindingPackageVersion = require('resvg-napi-openharmony-arm64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -525,8 +525,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-openharmony-x64')
         const bindingPackageVersion = require('resvg-napi-openharmony-x64/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -541,8 +541,8 @@ function requireNative() {
       try {
         const binding = require('resvg-napi-openharmony-arm')
         const bindingPackageVersion = require('resvg-napi-openharmony-arm/package.json').version
-        if (bindingPackageVersion !== '0.9.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          throw new Error(`Native binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+        if (bindingPackageVersion !== '0.10.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
+          throw new Error(`Native binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
         return binding
       } catch (e) {
@@ -683,8 +683,8 @@ if (!nativeBinding || forceWasi) {
       if (!candidateFailed) {
         if (process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           const bindingPackageVersion = require('resvg-napi-wasm32-wasi/package.json').version
-          if (bindingPackageVersion !== '0.9.0') {
-            throw new Error(`WASI binding package version mismatch, expected 0.9.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
+          if (bindingPackageVersion !== '0.10.0') {
+            throw new Error(`WASI binding package version mismatch, expected 0.10.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
         }
         wasiBinding = require('resvg-napi-wasm32-wasi')
@@ -835,58 +835,10 @@ function __napiStampBindingTarget(exportsObject, target) {
 // linked import resolves to `undefined`.
 module.exports.__napiBindingTarget = __napiStampBindingTarget(nativeBinding, __napiLoadedBindingTarget)
 module.exports = nativeBinding
-module.exports.FontDatabase = nativeBinding.FontDatabase
-module.exports.FontFace = nativeBinding.FontFace
-module.exports.LegacyClipPath = nativeBinding.LegacyClipPath
-module.exports.LegacyFilter = nativeBinding.LegacyFilter
-module.exports.LegacyFont = nativeBinding.LegacyFont
-module.exports.LegacyImage = nativeBinding.LegacyImage
-module.exports.LegacyImageKindGif = nativeBinding.LegacyImageKindGif
-module.exports.LegacyImageKindJpeg = nativeBinding.LegacyImageKindJpeg
-module.exports.LegacyImageKindPng = nativeBinding.LegacyImageKindPng
-module.exports.LegacyImageKindWebp = nativeBinding.LegacyImageKindWebp
-module.exports.LegacyLinearGradient = nativeBinding.LegacyLinearGradient
-module.exports.LegacyMask = nativeBinding.LegacyMask
-module.exports.LegacyPattern = nativeBinding.LegacyPattern
-module.exports.LegacyPositionedGlyph = nativeBinding.LegacyPositionedGlyph
-module.exports.LegacyRadialGradient = nativeBinding.LegacyRadialGradient
-module.exports.LegacySpan = nativeBinding.LegacySpan
-module.exports.LegacyText = nativeBinding.LegacyText
-module.exports.LegacyTextChunk = nativeBinding.LegacyTextChunk
-module.exports.LegacyTextSpan = nativeBinding.LegacyTextSpan
-module.exports.Resvg = nativeBinding.Resvg
-module.exports.SvgNode = nativeBinding.SvgNode
-module.exports.AlignmentBaseline = nativeBinding.AlignmentBaseline
-module.exports.BlendMode = nativeBinding.BlendMode
-module.exports.ColorChannel = nativeBinding.ColorChannel
-module.exports.ColorInterpolation = nativeBinding.ColorInterpolation
-module.exports.DominantBaseline = nativeBinding.DominantBaseline
-module.exports.EdgeMode = nativeBinding.EdgeMode
-module.exports.FillRule = nativeBinding.FillRule
-module.exports.FontFaceStyle = nativeBinding.FontFaceStyle
-module.exports.FontOpticalSizing = nativeBinding.FontOpticalSizing
-module.exports.FontStretch = nativeBinding.FontStretch
-module.exports.FontStyle = nativeBinding.FontStyle
-module.exports.ImageRendering = nativeBinding.ImageRendering
-module.exports.LengthAdjust = nativeBinding.LengthAdjust
-module.exports.LineCap = nativeBinding.LineCap
-module.exports.LineJoin = nativeBinding.LineJoin
-module.exports.MaskType = nativeBinding.MaskType
-module.exports.MorphologyOperator = nativeBinding.MorphologyOperator
-module.exports.NodeKind = nativeBinding.NodeKind
-module.exports.PaintOrder = nativeBinding.PaintOrder
-module.exports.ParseErrorCode = nativeBinding.ParseErrorCode
-module.exports.renderAsync = nativeBinding.renderAsync
 module.exports.setLogLevel = nativeBinding.setLogLevel
-module.exports.ShapeRendering = nativeBinding.ShapeRendering
-module.exports.SpreadMethod = nativeBinding.SpreadMethod
-module.exports.Stretch = nativeBinding.Stretch
 module.exports.takeLogs = nativeBinding.takeLogs
-module.exports.TextAnchor = nativeBinding.TextAnchor
-module.exports.TextRendering = nativeBinding.TextRendering
-module.exports.TurbulenceKind = nativeBinding.TurbulenceKind
-module.exports.WritingMode = nativeBinding.WritingMode
 module.exports.fontdb = nativeBinding.fontdb
+module.exports.guard = nativeBinding.guard
 module.exports.resvg = nativeBinding.resvg
 module.exports.svgtypes = nativeBinding.svgtypes
 module.exports.tiny_skia = nativeBinding.tiny_skia

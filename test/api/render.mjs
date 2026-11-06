@@ -3,12 +3,14 @@
 //   usvg.Tree.fromStr(svg, { fontdb }) -> new tiny_skia.Pixmap(w, h)
 //   -> resvg.render(tree, transform, pixmap) -> pixmap.encodePng()
 //
-// and the same PNG, byte for byte, as the flat `Resvg.renderPng` at the same
-// scale with the same fonts: the two surfaces drive the same crates.
+// and the same PNG, byte for byte, as the helpers' `renderPng` at the same
+// scale with the same fonts: both drive the same crates. (Until 0.10 this
+// compared with the flat `Resvg.renderPng`, which the helpers replaced.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import binding from '../../index.js';
+import { renderPng } from '../../helpers.mjs';
 
 const { usvg, fontdb, tiny_skia, resvg } = binding;
 
@@ -41,11 +43,11 @@ const SVGS = {
   </svg>`,
 };
 
-/** The flat surface's PNG. */
-function flatPng(svg, scale) {
-  const db = new binding.FontDatabase();
+/** The helpers' PNG. */
+function helpersPng(svg, scale) {
+  const db = new fontdb.Database();
   db.loadFontData(FONT);
-  return new binding.Resvg(svg, { fontFamily: FAMILY }, db).renderPng({ scale });
+  return renderPng(svg, { fonts: db, fontFamily: FAMILY, scale });
 }
 
 /** The same through usvg, tiny-skia and resvg, as their Rust APIs read. */
@@ -60,9 +62,9 @@ function namespacedPng(svg, scale) {
 }
 
 for (const [name, svg] of Object.entries(SVGS)) {
-  test(`${name}: the namespaced render is the flat one, byte for byte`, () => {
+  test(`${name}: the raw render is the helpers' one, byte for byte`, () => {
     for (const scale of [1, 2]) {
-      const a = flatPng(svg, scale);
+      const a = helpersPng(svg, scale);
       const b = namespacedPng(svg, scale);
       assert.ok(b.length > 100, `${name} @${scale}x is a PNG`);
       assert.ok(Buffer.compare(a, b) === 0, `${name} @${scale}x: same bytes`);

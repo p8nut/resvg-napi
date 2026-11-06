@@ -2,7 +2,8 @@
 // used to end in a failed allocation, which aborts the process: no try/catch,
 // no rejected promise.
 import assert from 'node:assert/strict';
-import { Resvg, setLogLevel, takeLogs } from '../index.js';
+import binding from '../index.js';
+import { parse, parseAsync, renderPng } from '../helpers.mjs';
 import { Readable } from 'node:stream';
 import { buffer } from 'node:stream/consumers';
 import zlib from 'node:zlib';
@@ -20,68 +21,29 @@ const gzipOf = (n, head = '', tail = '') => buffer(Readable.from((function* () {
 const svg = (body) => `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${body}</svg>`;
 
 // 1. SVGZ is not supported: usvg inflates it with no cap (linebender/resvg#1138),
-//    so any gzip data is refused before it gets there, whatever it expands to.
+//    so any gzip data is refused before it gets there, whatever it expands to:
+//    by the helpers with advice, by the raw API (built without usvg's `svgz`)
+//    with usvg's own error.
 const bomb = await gzipOf(300, '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><!--', '--></svg>');
 assert.ok(bomb.length < 1024 * 1024, `the bomb is small: ${bomb.length} bytes`);
 const nested = zlib.gzipSync(bomb);
 const red = svg('<rect width="10" height="10" fill="red"/>');
 const refused = { code: 'SvgzFeatureNotEnabled', message: /SVGZ is not supported: inflate it first/ };
 for (const [what, data] of [['bomb', bomb], ['gzip inside gzip', nested], ['small svgz', zlib.gzipSync(red)]]) {
-  assert.throws(() => new Resvg(data), refused, what);
-  await assert.rejects(Resvg.parseAsync(data), refused, `${what}, async`);
+  assert.throws(() => parse(data, { fonts: [] }), refused, what);
+  await assert.rejects(parseAsync(data, { fonts: [] }), refused, `${what}, async`);
+  assert.throws(() => binding.usvg.Tree.fromData(data), { code: 'SvgzFeatureNotEnabled' }, `${what}, raw`);
 }
 // What the message advises works, with a cap of the caller's choosing.
-assert.equal(new Resvg(zlib.gunzipSync(zlib.gzipSync(red), { maxOutputLength: 1 << 20 })).width, 10, 'inflated by the caller');
+const inflated = zlib.gunzipSync(zlib.gzipSync(red), { maxOutputLength: 1 << 20 });
+assert.equal(parse(inflated, { fonts: [] }).tree.size().width(), 10, 'inflated by the caller');
 
-// ...and as an image: supplied, from a file, or as a data URI. Refused images
-// are logged and drawn as nothing; a red square tells drawn from not.
-setLogLevel('warn');
-takeLogs();
-const img = (href) => svg(`<image href="${href}" width="10" height="10"/>`);
-const drawn = (doc) => doc.renderRaw().data.some((b) => b !== 0);
-assert.equal(drawn(new Resvg(img(`data:image/svg+xml;base64,${Buffer.from(red).toString('base64')}`))), true, 'plain svg image drawn');
-const supplied = new Resvg(img('red.svgz'), null, null, { 'red.svgz': zlib.gzipSync(red) });
-assert.deepEqual(supplied.pendingImages(), ['red.svgz'], 'supplied svgz refused');
-assert.equal(drawn(supplied), false, 'supplied svgz not drawn');
-assert.equal(drawn(new Resvg(img(`data:image/svg+xml;base64,${nested.toString('base64')}`))), false, 'svgz data URI not drawn');
-assert.ok(takeLogs().filter((l) => /image refused, SVGZ is not supported/.test(l)).length >= 2, 'both refusals logged');
-
-// 2. A raster image whose header declares more than 2^28 px is refused before
-//    resvg decodes it: an IHDR claiming 65535x65535 with no pixel data.
-const crc = (buf) => {
-  let c = ~0;
-  for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); }
-  return ~c >>> 0;
-};
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(65535, 0);
-ihdr.writeUInt32BE(65535, 4);
-ihdr.set([8, 6, 0, 0, 0], 8);
-const chunk = (type, data) => {
-  const out = Buffer.alloc(12 + data.length);
-  out.writeUInt32BE(data.length, 0);
-  out.write(type, 4, 'latin1');
-  data.copy(out, 8);
-  out.writeUInt32BE(crc(out.subarray(4, 8 + data.length)), 8 + data.length);
-  return out;
-};
-const huge = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IEND', Buffer.alloc(0))]);
-const big = new Resvg(img('huge.png'), null, null, { 'huge.png': huge });
-assert.deepEqual(big.pendingImages(), ['huge.png'], 'oversized raster refused');
-big.renderPng();
-new Resvg(img(`data:image/png;base64,${huge.toString('base64')}`)).renderPng();
-assert.ok(takeLogs().filter((l) => /image refused, 4294836225 px exceeds 268435456 px/.test(l)).length >= 2, 'logged');
-
-// ...and one that claims to be PNG but has no readable header is refused too,
-// rather than slipping past the size check to the decoder.
-const headless = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]);
-assert.deepEqual(new Resvg(img('headless.png'), null, null, { 'headless.png': headless }).pendingImages(),
-  ['headless.png'], 'unsized raster refused');
-setLogLevel('off');
+// As an image (supplied, from a file, as a data URI) and the raster cap of
+// 2^28 px: the guard's, test/api/guard.mjs.
 
 // 3. The canvas cap defaults to 2^26 px: 8192x8192 is the largest square.
 assert.throws(
-  () => new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="8193" height="8192"/>').renderPng(),
+  () => renderPng('<svg xmlns="http://www.w3.org/2000/svg" width="8193" height="8192"/>', { fonts: [] }),
   /8193x8192 exceeds maxPixels \(67108864\)/,
   'default maxPixels',
 );

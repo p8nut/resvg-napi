@@ -5,11 +5,14 @@
 // not: `exclude = ["tests"]`, so it is fetched from the tag matching our resvg
 // version, or the references mean nothing.
 //
-// Settings replicate crates/resvg/tests/integration/main.rs exactly: width 300
-// keeping the ratio, `resources_dir` set to the SVG's own directory, the five
-// generic families pointed at the corpus fonts, and an un-premultiplied RGBA8
-// comparison -- their harness demultiplies before diffing and `renderRaw`
-// already hands that over.
+// The raw API, call for call as crates/resvg/tests/integration/main.rs makes
+// them: one `fontdb.Database` of the corpus fonts loaded in sorted order with
+// the five generic families pointed at them, `usvg.Tree.fromData` with
+// `resourcesDir` set to the SVG's own directory and usvg's default resolvers,
+// a pixmap of the size scaled to width 300, `resvg.render` with the scale on
+// each axis, and an un-premultiplied RGBA8 comparison -- their harness
+// demultiplies before diffing, and `takeDemultiplied` hands that over. No
+// helpers: they add the guard, which upstream does not have.
 //
 //   npm run conformance             compare against the baseline
 //   npm run conformance -- -w       rewrite the baseline
@@ -131,19 +134,20 @@ export function formatBaseline(got) {
 
 function run() {
   const require = createRequire(import.meta.url);
-  const { Resvg, FontDatabase } = require('../index.js');
+  const { usvg, resvg, tiny_skia, fontdb } = require('../index.js');
   const { PNG } = require('pngjs');
 
-  const fonts = new FontDatabase();
-  for (const f of readdirSync(FONTS)) {
-    if (/\.(ttf|otf|ttc)$/i.test(f)) fonts.loadFontFile(join(FONTS, f));
+  // Upstream's GLOBAL_FONTDB: sorted, so the load order is deterministic.
+  const db = new fontdb.Database();
+  for (const f of readdirSync(FONTS).sort()) {
+    if (/\.(ttf|ttc|otf|otc)$/i.test(f)) db.loadFontFile(join(FONTS, f));
   }
   // The names the upstream harness sets, verbatim.
-  fonts.setSerifFamily('Noto Serif');
-  fonts.setSansSerifFamily('Noto Sans');
-  fonts.setCursiveFamily('Yellowtail');
-  fonts.setFantasyFamily('Sedgwick Ave Display');
-  fonts.setMonospaceFamily('Noto Mono');
+  db.setSerifFamily('Noto Serif');
+  db.setSansSerifFamily('Noto Sans');
+  db.setCursiveFamily('Yellowtail');
+  db.setFantasyFamily('Sedgwick Ave Display');
+  db.setMonospaceFamily('Noto Mono');
 
   const files = testList(readFileSync(TESTLIST, 'utf8'));
   // A corpus that moved, a regex that stopped matching, or a fetch that landed
@@ -164,16 +168,30 @@ function run() {
     const pngPath = svgPath.replace(/\.svg$/, '.png');
     if (!existsSync(pngPath)) continue; // no reference, not a test
     try {
-      // The corpus reaches its shared images through `../../../resources`, a
-      // sibling of tests/; resourcesRoot lets disk reads leave the file's folder.
-      const doc = new Resvg(readFileSync(svgPath), { resourcesDir: dirname(svgPath), resourcesRoot: ROOT }, fonts);
-      const raw = doc.renderRaw({ width: WIDTH });
+      // usvg's default resolvers read any path, as upstream's do: the corpus
+      // reaches its shared images through `../../../resources`, a sibling of
+      // tests/, and nothing in it points further out.
+      const tree = usvg.Tree.fromData(readFileSync(svgPath), { fontdb: db, resourcesDir: dirname(svgPath) });
+      const svgSize = tree.size();
+      const size = svgSize.toIntSize().scaleToWidth(WIDTH);
+      if (!size) throw new Error(`cannot scale ${svgSize.width()}x${svgSize.height()} to width ${WIDTH}`);
+      const pixmap = new tiny_skia.Pixmap(size.width(), size.height());
+      // `size.width() as f32 / tree.size().width()`: one division of two f32s,
+      // which f64 then f32 rounds exactly the same.
+      const transform = tiny_skia.Transform.fromScale(
+        size.width() / svgSize.width(),
+        size.height() / svgSize.height(),
+      );
+      resvg.render(tree, transform, pixmap);
+      tree.dispose();
+      const [width, height] = [pixmap.width(), pixmap.height()];
+      const data = pixmap.takeDemultiplied();
       const ref = PNG.sync.read(readFileSync(pngPath));
-      if (ref.width !== raw.width || ref.height !== raw.height) {
+      if (ref.width !== width || ref.height !== height) {
         got.set(rel, ref.width * ref.height); // size mismatch: count it all
         continue;
       }
-      got.set(rel, diffPixels(raw.data, ref.data));
+      got.set(rel, diffPixels(data, ref.data));
     } catch (e) {
       errors.set(rel, e.message.split('\n')[0]);
       got.set(rel, THREW);

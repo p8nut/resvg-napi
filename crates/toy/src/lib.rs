@@ -109,6 +109,15 @@ impl Tally {
     pub fn joined(&self) -> String {
         self.names.join(",")
     }
+
+    /// Each name with its place: a list of pairs.
+    pub fn pairs(&self) -> Vec<(String, u32)> {
+        self.names
+            .iter()
+            .zip(0..)
+            .map(|(n, i)| (n.clone(), i))
+            .collect()
+    }
 }
 
 /// The styles a report can take, indexed by [`ReportOptions::style_index`].
@@ -244,6 +253,11 @@ impl Vec2 {
     pub fn translate(&mut self, dx: f32, dy: f32) {
         self.x += dx;
         self.y += dy;
+    }
+
+    /// `(x, y)`, a pair.
+    pub fn parts(&self) -> (f32, f32) {
+        (self.x, self.y)
     }
 }
 
@@ -404,4 +418,186 @@ pub fn paint(view: &mut CanvasView<'_>, at: Vec2, color: Color) -> Result<u32, P
     let i = i as usize;
     view.data[i] = color.r;
     u32::try_from(i).map_err(|_| off)
+}
+
+/// A tree of layers and dots, shared behind an `Arc`: its nodes are only
+/// ever borrowed from it, the shape a binding projects.
+#[derive(Debug)]
+pub struct Scene {
+    root: Layer,
+    /// Dots shared by name, a table of `Arc`s beside the tree.
+    marks: Vec<Arc<Dot>>,
+    trail: Trail,
+}
+
+impl Scene {
+    /// `root` holding the dot `a`, the layer `inner` (dots `b` and `c`, and
+    /// the empty layer `empty`), and the dot `d`; and the mark `x`.
+    pub fn demo() -> Arc<Scene> {
+        let dot = |name: &str, x: f32| {
+            Item::Dot(Dot {
+                name: name.into(),
+                at: Vec2::new(x, 0.0),
+            })
+        };
+        let layer = |name: &str, items| {
+            Item::Layer(Box::new(Layer {
+                name: name.into(),
+                items,
+            }))
+        };
+        Arc::new(Scene {
+            root: Layer {
+                name: "root".into(),
+                items: vec![
+                    dot("a", 1.0),
+                    layer(
+                        "inner",
+                        vec![dot("b", 2.0), dot("c", 3.0), layer("empty", vec![])],
+                    ),
+                    dot("d", 4.0),
+                ],
+            },
+            marks: vec![Arc::new(Dot {
+                name: "x".into(),
+                at: Vec2::new(9.0, 9.0),
+            })],
+            trail: Trail {
+                steps: vec![
+                    Step::Jump(Vec2::new(1.0, 0.0)),
+                    Step::Line(Vec2::new(1.0, 0.0), Vec2::new(4.0, 0.0)),
+                    Step::Stop,
+                ],
+            },
+        })
+    }
+
+    pub fn root(&self) -> &Layer {
+        &self.root
+    }
+
+    /// The shared dots: the mark `x`.
+    pub fn marks(&self) -> &[Arc<Dot>] {
+        &self.marks
+    }
+
+    /// The first item called `name`, depth first.
+    pub fn find(&self, name: &str) -> Option<&Item> {
+        self.root.find(name)
+    }
+
+    /// The way through the scene: a jump to `a`, a line to `d`, a stop.
+    pub fn trail(&self) -> &Trail {
+        &self.trail
+    }
+}
+
+/// One move of a [`Trail`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Step {
+    Jump(Vec2),
+    Line(Vec2, Vec2),
+    Stop,
+}
+
+/// Steps held as a stream, not a list: its content is what
+/// [`Trail::steps`] iterates, the shape a binding hands out as an array.
+#[derive(Clone, Debug)]
+pub struct Trail {
+    steps: Vec<Step>,
+}
+
+impl Trail {
+    pub fn steps(&self) -> impl Iterator<Item = Step> + '_ {
+        self.steps.iter().copied()
+    }
+}
+
+/// One node of a [`Scene`].
+#[derive(Clone, Debug)]
+pub enum Item {
+    Layer(Box<Layer>),
+    Dot(Dot),
+}
+
+impl Item {
+    pub fn name(&self) -> &str {
+        match self {
+            Item::Layer(l) => &l.name,
+            Item::Dot(d) => &d.name,
+        }
+    }
+}
+
+/// A named list of items.
+#[derive(Clone, Debug)]
+pub struct Layer {
+    name: String,
+    items: Vec<Item>,
+}
+
+impl Layer {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn items(&self) -> &[Item] {
+        &self.items
+    }
+
+    /// The first item, if any.
+    pub fn first(&self) -> Option<&Item> {
+        self.items.first()
+    }
+
+    fn find(&self, name: &str) -> Option<&Item> {
+        self.items.iter().find_map(|i| match i {
+            _ if i.name() == name => Some(i),
+            Item::Layer(l) => l.find(name),
+            Item::Dot(_) => None,
+        })
+    }
+}
+
+/// A named point.
+#[derive(Clone, Debug)]
+pub struct Dot {
+    name: String,
+    at: Vec2,
+}
+
+impl Dot {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn at(&self) -> Vec2 {
+        self.at
+    }
+}
+
+/// How many dots `item` holds, itself included.
+pub fn count(item: &Item) -> u32 {
+    match item {
+        Item::Dot(_) => 1,
+        Item::Layer(l) => l.items.iter().map(count).sum(),
+    }
+}
+
+/// `None` for an empty layer: nothing to visit.
+pub fn visit(item: &Item) -> Option<()> {
+    match item {
+        Item::Layer(l) if l.items.is_empty() => None,
+        _ => Some(()),
+    }
+}
+
+/// Mixes `rounds` times: a call slow enough to keep a worker thread busy
+/// while another waits behind it.
+pub fn spin(rounds: u32) -> u32 {
+    let mut x: u32 = 0x9e37_79b9;
+    for i in 0..rounds {
+        x = std::hint::black_box(x.rotate_left(5) ^ i).wrapping_mul(0x0100_0193);
+    }
+    x
 }

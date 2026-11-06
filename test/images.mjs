@@ -1,69 +1,32 @@
-// Image resolution: two-pass hook (Send+Sync forbids a JS callback inside usvg).
+// Images: resolving them through the helpers, and reading them back out of
+// the tree. What the guard reads and refuses (fences, caps, FIFOs, SVGZ,
+// oversized rasters) is test/api/guard.mjs.
 import assert from 'node:assert/strict';
-import { mkdtempSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { Resvg } from '../index.js';
+import binding from '../index.js';
+import { parse, renderPng, renderRaw } from '../helpers.mjs';
+
+const { usvg } = binding;
 
 // a 20x20 red PNG, produced by our own renderer
-const red = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').renderPng();
+const red = renderPng('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>', { fonts: [] });
 
 const doc = (href) => `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20">
   <image xlink:href="${href}" x="0" y="0" width="20" height="20"/>
 </svg>`;
 
-const pixel = (r) => [...r.renderRaw().data.subarray(0, 4)];
+const pixel = (tree) => [...renderRaw(tree).data.subarray(0, 4)];
 
-// 1. unresolvable href is reported, not fatal
-const a = new Resvg(doc('company-logo'));
-assert.deepEqual(a.pendingImages(), ['company-logo']);
-assert.deepEqual(pixel(a), [0, 0, 0, 0], 'nothing drawn yet');
-
-// 2. hand the buffer over -> re-parse -> image drawn
-a.resolveImage('company-logo', red);
-assert.deepEqual(a.pendingImages(), []);
-assert.deepEqual(pixel(a), [255, 0, 0, 255], 'red image drawn');
-
-// 2b. several at once: one call, one re-parse, every href resolved. A href the
-//     document does not use is kept for later parses and is not an error.
+// 1. Two passes, as the 0.9 `resolveImage` did them: an unresolvable href is
+//    reported, not fatal; parsing again with the bytes draws it. `images`
+//    takes every href at once, and one the document does not use is no error.
 {
-  const two = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20">
-  <image xlink:href="left" x="0" y="0" width="10" height="20"/><image xlink:href="right" x="10" y="0" width="10" height="20"/>
-</svg>`;
-  const r = new Resvg(two);
-  assert.deepEqual(r.pendingImages().sort(), ['left', 'right']);
-  r.resolveImages({ left: red, right: red, unused: red });
-  assert.deepEqual(r.pendingImages(), [], 'both resolved by one call');
-  // row 10, column 19: a 20x20 image fit into a 10x20 box is centred, rows 5-15
-  const at = (10 * 20 + 19) * 4;
-  assert.deepEqual([...r.renderRaw().data.subarray(at, at + 4)], [255, 0, 0, 255], 'right half drawn');
+  const first = parse(doc('company-logo'), { fonts: [] });
+  assert.deepEqual(first.pendingImages, ['company-logo']);
+  assert.deepEqual(pixel(first.tree), [0, 0, 0, 0], 'nothing drawn yet');
+  const second = parse(doc('company-logo'), { fonts: [], images: { 'company-logo': red, unused: red } });
+  assert.deepEqual(second.pendingImages, []);
+  assert.deepEqual(pixel(second.tree), [255, 0, 0, 255], 'red image drawn');
 }
-
-// 3. preload through the constructor: nothing pending, one parse
-const b = new Resvg(doc('company-logo'), null, null, { 'company-logo': red });
-assert.deepEqual(b.pendingImages(), []);
-assert.deepEqual(pixel(b), [255, 0, 0, 255]);
-
-// 4. regression: real paths still resolve off disk via resourcesDir
-const dir = mkdtempSync(join(tmpdir(), 'resvg-'));
-writeFileSync(join(dir, 'disk.png'), red);
-const c = new Resvg(doc('disk.png'), { resourcesDir: dir });
-assert.deepEqual(c.pendingImages(), []);
-assert.deepEqual(pixel(c), [255, 0, 0, 255], 'loaded from disk');
-
-// 5. regression: data: URIs still handled by the usvg default resolver
-const d = new Resvg(doc(`data:image/png;base64,${red.toString('base64')}`));
-assert.deepEqual(d.pendingImages(), []);
-assert.deepEqual(pixel(d), [255, 0, 0, 255], 'data URI');
-
-// 6. nested SVG passed as a buffer is sniffed too
-const e = new Resvg(doc('sub'), null, null, {
-  sub: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#00ff00"/></svg>'),
-});
-assert.deepEqual(e.pendingImages(), []);
-assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
 
 // --- reading an embedded image back out ------------------------------------
 // The bytes a document carried, handed over untouched. usvg says a raster
@@ -74,139 +37,47 @@ assert.deepEqual(pixel(e), [0, 255, 0, 255], 'nested SVG drawn');
 // requires of every field of an object, and a getter has no such constraint.
 {
   const b64 = red.toString('base64');
-  const parsed = new Resvg(doc(`data:image/png;base64,${b64}`));
+  const parsed = usvg.Tree.fromStr(doc(`data:image/png;base64,${b64}`));
 
-  // usvg wraps the element in a group and puts the id there, so the image is
-  // the child -- the same shape as any other node with an id.
-  const node = parsed.children()[0].children()[0];
+  // usvg wraps the element in a group, so the image is the group's child --
+  // the same shape as any other node with an id.
+  const [group] = parsed.root().children();
+  assert.equal(group.kind, 'group', 'the wrapper is a group, not an image');
+  const [node] = group.value.children();
   assert.equal(node.kind, 'image', 'the child is the image itself');
+  const img = node.value;
+  assert.ok(img instanceof usvg.Image);
 
-  const img = node.image();
-  assert.ok(img, 'image() on an image node');
-  assert.equal(parsed.children()[0].image(), null, 'and null on the group above it');
-
-  assert.equal(img.kind.type, 'png', 'discriminant, lowercase despite usvg spelling it PNG');
-  assert.ok(Buffer.isBuffer(img.kind.bytes));
-  assert.equal(Buffer.compare(img.kind.bytes, red), 0, 'byte-for-byte what went in');
+  const kind = img.kind();
+  assert.equal(kind.type, 'png', 'discriminant, lowercase despite usvg spelling it PNG');
+  assert.ok(Buffer.isBuffer(kind.bytes));
+  assert.equal(Buffer.compare(kind.bytes, red), 0, 'byte-for-byte what went in');
 
   // and it is a real PNG on the way out, not a re-encode
-  assert.equal(img.kind.bytes.subarray(0, 4).toString('hex'), '89504e47');
+  assert.equal(kind.bytes.subarray(0, 4).toString('hex'), '89504e47');
 
   // the rest of the node reads back too
-  assert.equal(img.renderingMode, 'optimizeQuality');
+  assert.equal(img.renderingMode(), 'optimizeQuality');
 
   // `size` is the encoded image's own, not the element's width/height
-  const wide = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20"/></svg>').renderPng({ width: 40 });
-  const shown = new Resvg(doc(`data:image/png;base64,${wide.toString('base64')}`));
-  assert.deepEqual({ ...shown.children()[0].children()[0].image().size }, { width: 40, height: 40 });
+  const wide = renderPng('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20"/></svg>', { fonts: [], width: 40 });
+  const shown = usvg.Tree.fromStr(doc(`data:image/png;base64,${wide.toString('base64')}`));
+  const size = shown.root().children()[0].value.children()[0].value.size();
+  assert.deepEqual([size.width(), size.height()], [40, 40]);
   assert.deepEqual(
-    [img.boundingBox.width, img.boundingBox.height],
+    [img.boundingBox().width(), img.boundingBox().height()],
     [20, 20],
     'the box is the image, in its own pixels',
   );
 }
 
-// 6b. an embedded SVG is a document of its own: its nodes are reachable, and
-//     resolve their clip path against its definitions, not the outer ones --
-//     one level down and two
+// 2. An embedded SVG is a kind of its own. Its tree (`ImageKind::SVG`, a tree
+//    held by value inside a node) has no form yet (#191): only the kind reads
+//    back.
 {
-  const svgHref = (body) => `data:image/svg+xml;utf8,${encodeURIComponent(body)}`;
-  const level = (id, inside) => '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">' +
-    `<clipPath id="${id}"><rect width="3" height="3"/></clipPath>` +
-    `<g clip-path="url(#${id})"><rect id="r-${id}" width="10" height="10" fill="blue"/>${inside}</g></svg>`;
-  const deepest = level('c2', '');
-  const middle = level('c1', `<image width="10" height="10" href="${svgHref(deepest)}"/>`);
-  const outer = new Resvg(doc(svgHref(middle)));
-
-  const imageNode = outer.children()[0].children()[0];
-  assert.equal(imageNode.image().kind.type, 'svg');
-  const [g1] = imageNode.svgChildren();
-  assert.equal(g1.clipPath().id(), 'c1');
-  assert.equal(g1.children()[0].id(), 'r-c1');
-  assert.ok(g1.renderPng().length > 0);
-  assert.equal(outer.node('r-c1'), null, 'the inner document stays separate');
-
-  // the clip path handle keeps the inner document too: its content nodes resolve
-  assert.equal(g1.clipPath().children()[0].kind, 'path');
-
-  const find = (nodes, kind) => nodes.flatMap(function all(n) {
-    return [n, ...n.children().flatMap(all)];
-  }).find((n) => n.kind === kind);
-  const [g2] = find([g1], 'image').svgChildren();
-  assert.equal(g2.clipPath().id(), 'c2', 'two levels down, its own definitions');
-  assert.equal(g2.children()[0].id(), 'r-c2');
-
-  const raster = new Resvg(doc(`data:image/png;base64,${red.toString('base64')}`));
-  const rasterNode = raster.children()[0].children()[0];
-  assert.equal(rasterNode.svgChildren(), null, 'a raster image');
-  assert.equal(raster.children()[0].svgChildren(), null, 'not an image');
-}
-
-// 7. the disk is off limits outside resourcesDir: no absolute paths, no
-//    `..`, no symlink out, and nothing at all without resourcesDir
-{
-  const outside = mkdtempSync(join(tmpdir(), 'resvg-out-'));
-  const secret = join(outside, 'secret.png');
-  writeFileSync(secret, red);
-  const inside = mkdtempSync(join(tmpdir(), 'resvg-in-'));
-  const hrefs = [secret, `../${basename(outside)}/secret.png`];
-  // Windows needs a privilege to create symlinks; skip that case there.
-  try { symlinkSync(secret, join(inside, 'link.png')); hrefs.push('link.png'); } catch {}
-  for (const href of hrefs) {
-    assert.deepEqual(new Resvg(doc(href), { resourcesDir: inside }).pendingImages(), [href], `refused: ${href}`);
-  }
-  assert.deepEqual(new Resvg(doc(secret)).pendingImages(), [secret], 'absolute path without resourcesDir');
-  // resourcesRoot widens the fence, not the base: `..` now reaches the
-  // sibling folder, while a path outside the root is still refused
-  const root = dirname(outside);
-  const up = `../${basename(outside)}/secret.png`;
-  assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: root }).pendingImages(), [], 'reached under resourcesRoot');
-  assert.deepEqual(new Resvg(doc(up), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [up], 'a root equal to resourcesDir changes nothing');
-  assert.deepEqual(new Resvg(doc(secret), { resourcesDir: inside, resourcesRoot: inside }).pendingImages(), [secret], 'absolute path outside the root');
-}
-
-// 8. a file past the read cap (256 MiB) is refused from its size alone. The
-//    file is sparse, so the test costs no disk; a read that ignored the cap
-//    would allocate the whole of it before anything could refuse it.
-{
-  const dir = mkdtempSync(join(tmpdir(), 'resvg-big-'));
-  writeFileSync(join(dir, 'big.png'), red);
-  truncateSync(join(dir, 'big.png'), 256 * 1024 * 1024 + 1);
-  assert.deepEqual(new Resvg(doc('big.png'), { resourcesDir: dir }).pendingImages(), ['big.png'], 'oversized file refused');
-}
-
-// 9. only regular files are read: a FIFO or a device is a stream, and usvg's
-//    fs::read would never return on it. A FIFO with no writer blocks without
-//    growing memory, so a lost regular-file check hangs instead of eating RAM.
-//    The read is synchronous native code that no in-process timeout can
-//    interrupt, hence the child process, killed after 5s.
-//    Both FIFOs are our own, nothing from /dev: one beside the SVG, one
-//    reached by absolute path from outside resourcesDir. Linux only: mkfifo.
-if (process.platform === 'linux') {
-  const dir = mkdtempSync(join(tmpdir(), 'resvg-fifo-'));
-  const away = join(mkdtempSync(join(tmpdir(), 'resvg-fifo-out-')), 'pipe.png');
-  execFileSync('mkfifo', [join(dir, 'pipe.png'), away]);
-  const hrefs = ['pipe.png', away];
-  const script = `
-    const { Resvg } = require(${JSON.stringify(createRequire(import.meta.url).resolve('../index.js'))});
-    const doc = ${doc};
-    const out = ${JSON.stringify(hrefs)}.map((h) => new Resvg(doc(h), { resourcesDir: ${JSON.stringify(dir)} }).pendingImages());
-    process.stdout.write(JSON.stringify(out));`;
-  const child = spawnSync(process.execPath, ['-e', script], { timeout: 5000, encoding: 'utf8' });
-  assert.equal(child.signal, null, 'parse blocked reading a stream (regular-file check lost?)');
-  assert.equal(child.status, 0, child.stderr);
-  assert.deepEqual(JSON.parse(child.stdout), hrefs.map((h) => [h]), 'streams refused');
-} else {
-  console.log('skip — stream hrefs: Linux only');
-}
-
-// 10. an href is pending once, however many elements resolve it: two <image>s
-//     and a <use> of one of them asked three times.
-{
-  const twice = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="10" height="10">
-    <image id="i" href="a.png" width="5" height="5"/><image href="a.png" width="5" height="5"/><use xlink:href="#i"/></svg>`;
-  assert.deepEqual(new Resvg(twice).pendingImages(), ['a.png'], 'deduplicated');
-  // ...and supplied bytes that are not an image are pending, not dropped.
-  const junk = new Resvg(twice, null, null, { 'a.png': Buffer.from('not an image') });
-  assert.deepEqual(junk.pendingImages(), ['a.png'], 'unusable bytes are a miss');
+  const svgHref = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>')}`;
+  const outer = usvg.Tree.fromStr(doc(svgHref));
+  const image = outer.root().children()[0].value.children()[0];
+  assert.equal(image.kind, 'image');
+  assert.equal(image.value.kind().type, 'svg');
 }

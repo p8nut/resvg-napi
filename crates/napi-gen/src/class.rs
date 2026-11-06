@@ -52,6 +52,9 @@ pub enum Holding {
     /// Behind an `Arc`, its `&mut self` methods through `Arc::make_mut`:
     /// a `Clone` type with `&mut self` methods and none taking `self`.
     SharedCow,
+    /// Borrowed from the value it was reached from, which it keeps alive: a
+    /// `napi_support::Projection` (`Config::projections`). Read-only.
+    Projected,
 }
 
 /// One listed class.
@@ -70,12 +73,16 @@ pub struct Class {
     /// so such a class is only ever returned by its own constructor and
     /// factories, which build from the class they are called on.
     pub shared_name: bool,
+    /// The union ([`Classes::unions`]) whose variant carries it, if any.
+    pub of: Option<usize>,
 }
 
 /// The table, and what was emitted from it.
 pub struct Classes<'a> {
     pub sources: Vec<Source<'a>>,
     pub classes: Vec<Class>,
+    /// The enums `Config::projections` lists, each a union of projections.
+    pub unions: Vec<crate::project::Union>,
     /// Error enums thrown by something emitted: (source, name). Each gets a
     /// type of its codes from [`Classes::error_codes`].
     errors: RefCell<BTreeSet<(usize, String)>>,
@@ -97,7 +104,7 @@ pub enum Prim {
 }
 
 impl Prim {
-    fn of(ty: &Type) -> Option<Prim> {
+    pub(crate) fn of(ty: &Type) -> Option<Prim> {
         let segs = segs(ty)?;
         if segs.len() != 1 {
             return None;
@@ -117,7 +124,7 @@ impl Prim {
     }
 
     /// The type napi converts the JS value into.
-    fn js(self) -> TokenStream {
+    pub(crate) fn js(self) -> TokenStream {
         match self {
             Prim::F32 | Prim::F64 => quote!(f64),
             Prim::U8 | Prim::U16 | Prim::U32 | Prim::Usize => quote!(u32),
@@ -140,7 +147,7 @@ impl Prim {
 
     /// `e`, a JS value, as upstream: an expression that may `?` on a number
     /// that does not fit. `name` is what the error calls it.
-    fn js_in(self, e: &TokenStream, name: &str) -> TokenStream {
+    pub(crate) fn js_in(self, e: &TokenStream, name: &str) -> TokenStream {
         let narrow = |t: TokenStream| quote!(#t::try_from(#e).map_err(|_| napi_support::invalid(#name, #e))?);
         match self {
             Prim::F32 => quote!(to_f32(#e)),
@@ -154,7 +161,7 @@ impl Prim {
 
 /// A type's path segments, references and lifetimes aside: `&a::B<'_>` is
 /// `[a, B]`. None for anything but a path.
-fn segs(ty: &Type) -> Option<Vec<String>> {
+pub(crate) fn segs(ty: &Type) -> Option<Vec<String>> {
     match ty {
         Type::Path(p) if p.qself.is_none() => Some(
             p.path
@@ -170,7 +177,7 @@ fn segs(ty: &Type) -> Option<Vec<String>> {
 }
 
 /// The type arguments of a path's last segment: `Result<A, B>` is `[A, B]`.
-fn args(ty: &Type) -> Vec<&Type> {
+pub(crate) fn args(ty: &Type) -> Vec<&Type> {
     let Type::Path(p) = ty else {
         return Vec::new();
     };
@@ -188,32 +195,32 @@ fn args(ty: &Type) -> Vec<&Type> {
 }
 
 /// `&T` is `(Some(false), T)`, `&mut T` `(Some(true), T)`, `T` `(None, T)`.
-fn deref(ty: &Type) -> (Option<bool>, &Type) {
+pub(crate) fn deref(ty: &Type) -> (Option<bool>, &Type) {
     match ty {
         Type::Reference(r) => (Some(r.mutability.is_some()), &r.elem),
         _ => (None, ty),
     }
 }
 
-fn is_unit(ty: &Type) -> bool {
+pub(crate) fn is_unit(ty: &Type) -> bool {
     matches!(ty, Type::Tuple(t) if t.elems.is_empty())
 }
 
 /// The last segment is `name`, with `n` type arguments.
-fn is(ty: &Type, name: &str, n: usize) -> bool {
+pub(crate) fn is(ty: &Type, name: &str, n: usize) -> bool {
     segs(ty).is_some_and(|s| s.last().is_some_and(|l| l == name)) && args(ty).len() == n
 }
 
 /// What a method's receiver is.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Recv {
+pub(crate) enum Recv {
     None,
     Ref,
     Mut,
     Value,
 }
 
-fn receiver(sig: &syn::Signature) -> Option<Recv> {
+pub(crate) fn receiver(sig: &syn::Signature) -> Option<Recv> {
     match sig.inputs.first() {
         Some(FnArg::Receiver(r)) => match &r.kind {
             syn::ReceiverKind::Reference(_, _, m) => {
@@ -227,14 +234,14 @@ fn receiver(sig: &syn::Signature) -> Option<Recv> {
     }
 }
 
-fn find_struct<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemStruct> {
+pub(crate) fn find_struct<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemStruct> {
     files.iter().flat_map(|f| &f.items).find_map(|i| match i {
         Item::Struct(s) if s.ident == name && is_pub(&s.vis) => Some(s),
         _ => None,
     })
 }
 
-fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
+pub(crate) fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
     files.iter().flat_map(|f| &f.items).find_map(|i| match i {
         Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
         _ => None,
@@ -315,21 +322,21 @@ fn plain_fields(st: &syn::ItemStruct) -> Vec<(Ident, Prim)> {
 
 /// What one generated function hands napi: its parameters, the statements
 /// before the call, and the call's arguments.
-struct Args {
-    params: Vec<TokenStream>,
-    pre: Vec<TokenStream>,
-    fwd: Vec<TokenStream>,
+pub(crate) struct Args {
+    pub(crate) params: Vec<TokenStream>,
+    pub(crate) pre: Vec<TokenStream>,
+    pub(crate) fwd: Vec<TokenStream>,
 }
 
 /// How a returned value becomes JS: its JS type, and the expression that
 /// converts `__v`.
-struct Ret {
-    ty: TokenStream,
-    conv: TokenStream,
+pub(crate) struct Ret {
+    pub(crate) ty: TokenStream,
+    pub(crate) conv: TokenStream,
 }
 
 /// Why a function or method was left out.
-type Why = (Reason, Option<String>);
+pub(crate) type Why = (Reason, Option<String>);
 
 impl<'a> Classes<'a> {
     /// The table of `Config::classes`, over `sources`.
@@ -350,7 +357,7 @@ impl<'a> Classes<'a> {
             let holding = holding(files, name);
             let plain = match holding {
                 Holding::Value | Holding::Owned => plain_fields(st),
-                Holding::Shared | Holding::SharedCow => Vec::new(),
+                Holding::Shared | Holding::SharedCow | Holding::Projected => Vec::new(),
             };
             classes.push(Class {
                 source,
@@ -358,8 +365,10 @@ impl<'a> Classes<'a> {
                 holding,
                 plain,
                 shared_name: false,
+                of: None,
             });
         }
+        let unions = crate::project::projections(&sources, &mut classes);
         let ns = |c: &Class| namespace_of(sources[c.source].root);
         for i in 0..classes.len() {
             classes[i].shared_name = classes
@@ -369,6 +378,7 @@ impl<'a> Classes<'a> {
         Classes {
             sources,
             classes,
+            unions,
             errors: RefCell::new(BTreeSet::new()),
         }
     }
@@ -386,6 +396,16 @@ impl<'a> Classes<'a> {
             .collect()
     }
 
+    /// The classes held by value (`Copy`), by upstream name, each with
+    /// whether it is plain data: what `Vocab::classes` and `Vocab::plain`
+    /// start from.
+    pub fn by_value(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.classes
+            .iter()
+            .filter(|c| c.holding == Holding::Value)
+            .map(|c| (c.name.as_str(), !c.plain.is_empty()))
+    }
+
     /// Whether `ty` (an upstream root-relative key such as `a::Ty` or `Ty`)
     /// is a listed class of the source at `root`.
     pub fn lists(&self, root: &str, ty: &str) -> bool {
@@ -398,7 +418,12 @@ impl<'a> Classes<'a> {
     /// `has` accepts: `ctx` itself for a bare name, the source whose root
     /// ends with the qualifier for a qualified one (`alt::Color` is in
     /// `toy::alt`), and otherwise the only one that has it.
-    fn resolve(&self, ctx: usize, segs: &[String], has: impl Fn(usize) -> bool) -> Option<usize> {
+    pub(crate) fn resolve(
+        &self,
+        ctx: usize,
+        segs: &[String],
+        has: impl Fn(usize) -> bool,
+    ) -> Option<usize> {
         let (name, quals) = segs.split_last()?;
         let n = self.sources.len();
         let local = quals.is_empty() || matches!(quals, [q] if q == "crate" || q == "self");
@@ -436,7 +461,7 @@ impl<'a> Classes<'a> {
     }
 
     /// The class `ty` names from source `ctx`, `this` being `Self`.
-    fn class_of(&self, ctx: usize, this: Option<usize>, ty: &Type) -> Option<usize> {
+    pub(crate) fn class_of(&self, ctx: usize, this: Option<usize>, ty: &Type) -> Option<usize> {
         let segs = segs(ty)?;
         if segs == ["Self"] {
             return this;
@@ -447,17 +472,26 @@ impl<'a> Classes<'a> {
                 .iter()
                 .any(|c| c.source == s && c.name == *name)
         })?;
-        self.classes
+        let c = self
+            .classes
             .iter()
-            .position(|c| c.source == s && c.name == *name)
+            .position(|c| c.source == s && c.name == *name)?;
+        // A re-export reaches a class by another crate's name, but another
+        // crate's type of the same name is never a projection
+        // (`other::Path` is not a projected `Path`).
+        let quals = &segs[..segs.len() - 1];
+        let foreign = !quals.is_empty()
+            && !matches!(quals, [q] if q == "crate" || q == "self")
+            && !self.sources[s].root.ends_with(&quals.join("::"));
+        (!foreign || self.classes[c].holding != Holding::Projected).then_some(c)
     }
 
-    fn ident(&self, c: usize) -> Ident {
+    pub(crate) fn ident(&self, c: usize) -> Ident {
         format_ident!("{}", self.classes[c].name)
     }
 
     /// The upstream path of a type of source `s`.
-    fn path(&self, s: usize, name: &str) -> TokenStream {
+    pub(crate) fn path(&self, s: usize, name: &str) -> TokenStream {
         let src = &self.sources[s];
         let root: TokenStream = src.root.parse().expect("a source root that is a path");
         upstream_path(name, src.modules, &root)
@@ -515,12 +549,11 @@ impl<'a> Classes<'a> {
             let id = self.ident(c);
             use Holding::*;
             let fwd = match (r, self.classes[c].holding) {
-                (None, Value) => quote!(#pat.inner),
-                (Some(false), Value | Shared | SharedCow) => quote!(&#pat.inner),
-                (Some(false), Owned) => quote!(#pat.__ref()?),
-                (Some(true), Value) => quote!(&mut #pat.inner),
-                (Some(true), Owned) => quote!(#pat.__mut()?),
-                (Some(true), SharedCow) => quote!(std::sync::Arc::make_mut(&mut #pat.inner)),
+                (None, Value) => quote!(*#pat.__ref()?),
+                (Some(false), Value | Owned | Shared | SharedCow) => quote!(#pat.__ref()?),
+                (Some(false), Projected) => quote!(#pat.__ref()?.get()),
+                (Some(true), Value | Owned) => quote!(#pat.__mut()?),
+                (Some(true), SharedCow) => quote!(std::sync::Arc::make_mut(#pat.__mut()?)),
                 _ => return None,
             };
             let param = if r == Some(true) {
@@ -531,6 +564,11 @@ impl<'a> Classes<'a> {
             // Resolved before the call: `?` cannot run inside it.
             let tmp = format_ident!("__{pat}");
             return Some((param, Some(quote!(let #tmp = #fwd;)), quote!(#tmp)));
+        }
+        if r == Some(false)
+            && let Some(u) = self.union_of(ctx, inner)
+        {
+            return Some(self.union_arg(u, pat));
         }
         let segs = segs?;
         let last = segs.last()?;
@@ -544,10 +582,9 @@ impl<'a> Classes<'a> {
             let c = self.class_of(ctx, this, &fake)?;
             let (id, via) = (self.ident(c), format_ident!("{}", v.via));
             let from = match self.classes[c].holding {
-                Holding::Owned => quote!(#pat.__mut()?),
-                Holding::Value => quote!(&mut #pat.inner),
-                Holding::SharedCow => quote!(std::sync::Arc::make_mut(&mut #pat.inner)),
-                Holding::Shared => return None,
+                Holding::Owned | Holding::Value => quote!(#pat.__mut()?),
+                Holding::SharedCow => quote!(std::sync::Arc::make_mut(#pat.__mut()?)),
+                Holding::Shared | Holding::Projected => return None,
             };
             let tmp = format_ident!("__{pat}");
             return Some((
@@ -567,7 +604,7 @@ impl<'a> Classes<'a> {
             return Some((
                 quote!(#pat: Option<#o>),
                 Some(quote! {
-                    let #tmp = #pat.unwrap_or_default().to_upstream().map_err(napi_support::coded)?;
+                    let #tmp = #pat.unwrap_or_default().to_upstream()?;
                 }),
                 quote!(&#tmp),
             ));
@@ -578,7 +615,7 @@ impl<'a> Classes<'a> {
     /// The expression turning an error `e` of type `ty` into what is thrown:
     /// an upstream enum's variant name as `code`; `GenericFailure` for an
     /// error type no source defines.
-    fn thrown(&self, ctx: usize, ty: Option<&Type>) -> TokenStream {
+    pub(crate) fn thrown(&self, ctx: usize, ty: Option<&Type>) -> TokenStream {
         let found = ty.and_then(|ty| {
             let segs = segs(ty)?;
             let name = segs.last()?.clone();
@@ -613,7 +650,7 @@ impl<'a> Classes<'a> {
     /// whether this is the class's own constructor or factory, the only
     /// place a class with a shared name may be returned; `with_self` whether
     /// the expression may use `self` (a method, not a static).
-    fn ret(
+    pub(crate) fn ret(
         &self,
         ctx: usize,
         this: Option<usize>,
@@ -660,6 +697,21 @@ impl<'a> Classes<'a> {
             };
             return Ok(Ret { ty: p.js(), conv });
         }
+        // A tuple of numbers, booleans or strings: an array, `[A, B]`.
+        if let (None, Type::Tuple(t)) = (r, inner)
+            && let Some(prims) = t.elems.iter().map(Prim::of).collect::<Option<Vec<_>>>()
+            && prims.len() > 1
+        {
+            let tys = prims.iter().map(|p| p.js());
+            let convs = prims.iter().enumerate().map(|(i, p)| {
+                let i = syn::Index::from(i);
+                p.js_out(&quote!(#v.#i))
+            });
+            return Ok(Ret {
+                ty: quote!((#(#tys),*)),
+                conv: quote!((#(#convs),*)),
+            });
+        }
         // `Arc<T>` of a class holding an `Arc`.
         if is(inner, "Arc", 1)
             && let Some(c) = self.class_of(ctx, this, args(inner)[0])
@@ -678,7 +730,7 @@ impl<'a> Classes<'a> {
             };
             return Ok(Ret {
                 ty: quote!(#id),
-                conv: quote!(#id::wrap(#arc, Doc::default())),
+                conv: quote!(#id::wrap(#arc)),
             });
         }
         if let Some(c) = self.class_of(ctx, this, inner) {
@@ -700,8 +752,11 @@ impl<'a> Classes<'a> {
         // the handles and data it reaches.
         if with_self {
             let t = ty_str(ty);
+            // A getter's conversion where a method has none (a payload
+            // enum, a list of numbers): the call is the same.
             if let Some(js) = vocab.classify(&t)
                 && let Some(c) = js_conv(&js, &t, vocab, &v, Site::Method)
+                    .or_else(|| js_conv(&js, &t, vocab, &v, Site::Getter))
                 && !c.is_result
             {
                 return Ok(Ret {
@@ -739,26 +794,21 @@ impl<'a> Classes<'a> {
         // The receiver, resolved before the call.
         let me = match (recv, holding) {
             (Recv::None, _) => None,
-            (Recv::Ref, Some(Holding::Value | Holding::Shared | Holding::SharedCow)) => {
-                Some((quote!(&self), quote!(let __self = &self.inner;)))
+            (Recv::Ref, Some(Holding::Projected)) => {
+                Some((quote!(&self), quote!(let __self = self.__ref()?.get();)))
             }
-            (Recv::Ref, Some(Holding::Owned)) => {
-                Some((quote!(&self), quote!(let __self = self.__ref()?;)))
-            }
-            (Recv::Mut, Some(Holding::Value)) => {
-                Some((quote!(&mut self), quote!(let __self = &mut self.inner;)))
-            }
-            (Recv::Mut, Some(Holding::Owned)) => {
+            (Recv::Ref, Some(_)) => Some((quote!(&self), quote!(let __self = self.__ref()?;))),
+            (Recv::Mut, Some(Holding::Value | Holding::Owned)) => {
                 Some((quote!(&mut self), quote!(let __self = self.__mut()?;)))
             }
             (Recv::Mut, Some(Holding::SharedCow)) => Some((
                 quote!(&mut self),
-                quote!(let __self = std::sync::Arc::make_mut(&mut self.inner);),
+                quote!(let __self = std::sync::Arc::make_mut(self.__mut()?);),
             )),
             (Recv::Mut, _) => return skip(Reason::NeedsMut, None),
             // A copy: the class keeps its own.
             (Recv::Value, Some(Holding::Value)) => {
-                Some((quote!(&self), quote!(let __self = self.inner;)))
+                Some((quote!(&self), quote!(let __self = *self.__ref()?;)))
             }
             // Taken out: the class is spent.
             (Recv::Value, Some(Holding::Owned)) => {
@@ -816,76 +866,106 @@ impl<'a> Classes<'a> {
         };
         let returns_this = this.is_some() && self.class_of(ctx, this, target) == this;
         let factory = recv == Recv::None && returns_this && !optional;
-        let ret = self
-            .ret(ctx, this, &out, factory || is_new, me.is_some(), vocab)
-            .map_err(|r| (r, Some(ty_str(&out))))?;
-        if is_new && !returns_this {
-            return skip(Reason::Returns, Some(ty_str(&out)));
-        }
-
         let label = match this {
             Some(c) => format!("{}::{name}", self.classes[c].name),
             None => name.clone(),
         };
-        let path = match this {
-            Some(c) => {
-                let p = self.path(self.classes[c].source, &self.classes[c].name);
-                quote!(<#p>)
+        let self_pre = me.as_ref().map(|(_, p)| p);
+        // A borrow out of a projection or an `Arc`: a projection again.
+        let projected = match (&err, holding) {
+            (None, Some(h)) if me.is_some() => self.projected(h, ctx, ident, &out, optional, &a),
+            _ => None,
+        };
+        let (body, ret_ty) = match projected {
+            Some(p) => {
+                let (ty, bind, value) = p.map_err(|r| (r, Some(ty_str(&out))))?;
+                let pre = &a.pre;
+                let body = quote! {
+                    #(#pre)*
+                    #self_pre
+                    #bind
+                    napi_support::contained(#label, || #value).map_err(napi_support::coded)
+                };
+                (body, ty)
             }
             None => {
-                let root: TokenStream = self.sources[ctx].root.parse().expect("a root path");
-                root
-            }
-        };
-        let call = match me {
-            Some(_) => quote!(__self.#ident),
-            None => quote!(#path::#ident),
-        };
-        let fwd = &a.fwd;
-        let pre = &a.pre;
-        let self_pre = me.as_ref().map(|(_, p)| p);
-        // A function of no argument is the closure itself.
-        let run = if me.is_none() && fwd.is_empty() {
-            call
-        } else {
-            quote!(|| #call(#(#fwd),*))
-        };
-        let mut value = quote!(napi_support::contained(#label, #run).map_err(napi_support::coded)?);
-        if let Some(e) = &err {
-            let thrown = self.thrown(ctx, e.as_ref());
-            value = quote!(#value.map_err(#thrown)?);
-        }
-        // The receiver last: a method taking `self` takes the value only
-        // once every argument converted.
-        let mut body = quote! {
-            #(#pre)*
-            #self_pre
-        };
-        let (js_ty, value) = if is_unit(&out) && !optional {
-            body.extend(quote!(#value;));
-            (&ret.ty, &quote!(()))
-        } else {
-            body.extend(quote!(let __v = #value;));
-            (&ret.ty, &ret.conv)
-        };
-        let ret_ty = if is_new {
-            if optional {
-                let why = format!("{label} returned None: no value for these arguments");
-                body.extend(quote! {
-                    let __v = __v.ok_or_else(|| napi_support::thrown("InvalidArg", #why))?;
-                });
-            }
-            body.extend(quote!(Ok(#value)));
-            quote!(Self)
-        } else if optional {
-            body.extend(quote!(Ok(__v.map(|__v| #value))));
-            quote!(Option<#js_ty>)
-        } else {
-            body.extend(quote!(Ok(#value)));
-            if factory {
-                quote!(Self)
-            } else {
-                quote!(#js_ty)
+                // `Option<()>` says whether it did anything: `true` or `null`.
+                let ret = if is_unit(&out) && optional {
+                    Ret {
+                        ty: quote!(bool),
+                        conv: quote!(true),
+                    }
+                } else {
+                    self.ret(ctx, this, &out, factory || is_new, me.is_some(), vocab)
+                        .map_err(|r| (r, Some(ty_str(&out))))?
+                };
+                if is_new && !returns_this {
+                    return skip(Reason::Returns, Some(ty_str(&out)));
+                }
+
+                let path = match this {
+                    Some(c) => {
+                        let p = self.path(self.classes[c].source, &self.classes[c].name);
+                        quote!(<#p>)
+                    }
+                    None => {
+                        let root: TokenStream =
+                            self.sources[ctx].root.parse().expect("a root path");
+                        root
+                    }
+                };
+                let call = match me {
+                    Some(_) => quote!(__self.#ident),
+                    None => quote!(#path::#ident),
+                };
+                let fwd = &a.fwd;
+                let pre = &a.pre;
+                // A function of no argument is the closure itself.
+                let run = if me.is_none() && fwd.is_empty() {
+                    call
+                } else {
+                    quote!(|| #call(#(#fwd),*))
+                };
+                let mut value =
+                    quote!(napi_support::contained(#label, #run).map_err(napi_support::coded)?);
+                if let Some(e) = &err {
+                    let thrown = self.thrown(ctx, e.as_ref());
+                    value = quote!(#value.map_err(#thrown)?);
+                }
+                // The receiver last: a method taking `self` takes the value only
+                // once every argument converted.
+                let mut body = quote! {
+                    #(#pre)*
+                    #self_pre
+                };
+                let (js_ty, value) = if is_unit(&out) && !optional {
+                    body.extend(quote!(#value;));
+                    (&ret.ty, &quote!(()))
+                } else {
+                    body.extend(quote!(let __v = #value;));
+                    (&ret.ty, &ret.conv)
+                };
+                let ret_ty = if is_new {
+                    if optional {
+                        let why = format!("{label} returned None: no value for these arguments");
+                        body.extend(quote! {
+                            let __v = __v.ok_or_else(|| napi_support::thrown("InvalidArg", #why))?;
+                        });
+                    }
+                    body.extend(quote!(Ok(#value)));
+                    quote!(Self)
+                } else if optional {
+                    body.extend(quote!(Ok(__v.map(|__v| #value))));
+                    quote!(Option<#js_ty>)
+                } else {
+                    body.extend(quote!(Ok(#value)));
+                    if factory {
+                        quote!(Self)
+                    } else {
+                        quote!(#js_ty)
+                    }
+                };
+                (body, ret_ty)
             }
         };
         let (cfg_attr, body) = match gate {
@@ -943,6 +1023,8 @@ impl<'a> Classes<'a> {
         let mut methods = TokenStream::new();
         // Rust idents taken in the `#[napi] impl`.
         let mut taken: BTreeSet<String> = BTreeSet::new();
+        // The members given an async twin (`Config::asynchronous`).
+        let mut twins: Vec<String> = Vec::new();
 
         for imp in inherent_impls(files, name) {
             for it in &imp.items {
@@ -951,22 +1033,49 @@ impl<'a> Classes<'a> {
                     continue;
                 }
                 let gate = method_gate(imp, f);
+                let member = format!("{name}::{}", f.sig.ident);
                 match self.function(
                     class.source,
                     Some(c),
                     &f.sig,
                     &f.attrs,
-                    gate,
+                    gate.clone(),
                     quote!(#[napi]),
                     vocab,
                 ) {
-                    Ok(code) => methods.extend(code),
+                    Ok(code) => {
+                        methods.extend(code);
+                        if crate::twin::listed(src.root, &member) {
+                            let twin = format!("{}_async", f.sig.ident);
+                            assert!(
+                                taken.insert(twin),
+                                "{member}: its async twin's name is taken"
+                            );
+                            methods.extend(self.twin(
+                                class.source,
+                                Some(c),
+                                &f.sig,
+                                gate,
+                                None,
+                                vocab,
+                            ));
+                            twins.push(member);
+                        }
+                    }
                     Err((reason, ty)) => {
                         taken.remove(&f.sig.ident.to_string());
                         skipped.push(Skip::new(&f.sig.ident.to_string(), ty.as_deref(), reason));
                     }
                 }
             }
+        }
+        for (r, member) in config().asynchronous {
+            assert!(
+                *r != src.root
+                    || member.split_once("::").is_none_or(|(t, _)| t != name)
+                    || twins.iter().any(|m| m == member),
+                "Config::asynchronous lists {r}::{member}, which has no JS form to make async"
+            );
         }
 
         // Conversions a Rust trait offers, one direction each (Q34).
@@ -976,13 +1085,9 @@ impl<'a> Classes<'a> {
             quote!(#[napi])
         };
         // The value: a reference to it, and the place itself.
-        let (read, place, place_mut) = match class.holding {
-            Holding::Owned => (
-                quote!(self.__ref()?),
-                quote!(self.__ref()?),
-                quote!(self.__mut()?),
-            ),
-            _ => (quote!(&self.inner), quote!(self.inner), quote!(self.inner)),
+        let (read, place_mut) = match class.holding {
+            Holding::Projected => (quote!(self.__ref()?.get()), quote!(self.__ref()?.get())),
+            _ => (quote!(self.__ref()?), quote!(self.__mut()?)),
         };
         if let Some(imp) = trait_impl(files, name, "FromStr")
             && taken.insert("from_str".into())
@@ -1011,7 +1116,7 @@ impl<'a> Classes<'a> {
                 #[doc = #doc]
                 #[napi]
                 pub fn to_string(&self) -> Result<String, String> {
-                    Ok(#place.to_string())
+                    Ok(#read.to_string())
                 }
             });
         }
@@ -1057,6 +1162,14 @@ impl<'a> Classes<'a> {
                 pub struct #obj {
                     #(pub #fields: #js,)*
                 }
+
+                // Where a class cannot go (an object field, a union's
+                // payload), the value is this object (`Js::Class`).
+                impl From<&#up> for #obj {
+                    fn from(__v: &#up) -> Self {
+                        Self { #(#fields: #to_js,)* }
+                    }
+                }
             });
             if taken.insert("from_object".into()) && taken.insert("to_object".into()) {
                 let doc = format!(" A `{name}` from a plain object of its fields.");
@@ -1087,6 +1200,9 @@ impl<'a> Classes<'a> {
             Holding::SharedCow => {
                 format!(" A shared `{root}::{name}`, copied on the first write while shared.")
             }
+            Holding::Projected => format!(
+                " A `{root}::{name}` borrowed from what it was reached from, which it keeps\n alive. Each call finds it there again."
+            ),
         };
         if !doc.is_empty() {
             doc.push(quote!(#[doc = ""]));
@@ -1094,40 +1210,96 @@ impl<'a> Classes<'a> {
         for line in note.lines() {
             doc.push(quote!(#[doc = #line]));
         }
-        let consumed = name.as_str();
-        let (def, helpers) = match class.holding {
-            Holding::Value => (
-                quote!(pub struct #id { inner: #up }),
+        // Every holding sits in a `napi_support::Slot`: `dispose()` empties
+        // it, as a method taking `self` does, and every call after throws.
+        let label = name.as_str();
+        let (held, def, from) = match class.holding {
+            Holding::Value | Holding::Owned => (
+                up.clone(),
+                quote!(pub struct #id { inner: napi_support::Slot<#up> }),
                 quote! {
-                    fn __from(inner: #up) -> Self { Self { inner } }
-                    fn doc(&self) -> Doc { Doc::default() }
-                },
-            ),
-            Holding::Owned => (
-                quote!(pub struct #id { inner: Option<#up> }),
-                quote! {
-                    fn __from(inner: #up) -> Self { Self { inner: Some(inner) } }
-                    fn doc(&self) -> Doc { Doc::default() }
-                    fn __ref(&self) -> Result<&#up, String> {
-                        self.inner.as_ref().ok_or_else(|| napi_support::consumed(#consumed))
-                    }
-                    fn __mut(&mut self) -> Result<&mut #up, String> {
-                        self.inner.as_mut().ok_or_else(|| napi_support::consumed(#consumed))
-                    }
-                    fn __take(&mut self) -> Result<#up, String> {
-                        self.inner.take().ok_or_else(|| napi_support::consumed(#consumed))
-                    }
+                    fn __from(inner: #up) -> Self { Self { inner: napi_support::Slot::new(inner) } }
                 },
             ),
             Holding::Shared | Holding::SharedCow => (
-                quote!(pub struct #id { inner: std::sync::Arc<#up>, doc: Doc }),
+                quote!(std::sync::Arc<#up>),
+                quote!(pub struct #id { inner: napi_support::Slot<std::sync::Arc<#up>> }),
                 quote! {
-                    fn wrap(inner: std::sync::Arc<#up>, doc: Doc) -> Self { Self { inner, doc } }
-                    fn __from(inner: #up) -> Self { Self::wrap(std::sync::Arc::new(inner), Doc::default()) }
-                    fn doc(&self) -> Doc { self.doc.clone() }
+                    fn wrap(inner: std::sync::Arc<#up>) -> Self { Self { inner: napi_support::Slot::new(inner) } }
+                    fn __from(inner: #up) -> Self { Self::wrap(std::sync::Arc::new(inner)) }
                 },
             ),
+            Holding::Projected => {
+                let (def, from) = self.projected_class(c, &up);
+                (quote!(napi_support::Projection<#up>), def, from)
+            }
         };
+        let mut helpers = quote! {
+            #from
+            fn __ref(&self) -> Result<&#held, String> { self.inner.get(#label) }
+            fn __mut(&mut self) -> Result<&mut #held, String> { self.inner.get_mut(#label) }
+        };
+        if class.holding == Holding::Owned {
+            helpers.extend(quote! {
+                fn __take(&mut self) -> Result<#up, String> { self.inner.take(#label) }
+            });
+        }
+        // Lent to an async twin (`crate::twin`): what it cannot clone.
+        if matches!(
+            class.holding,
+            Holding::Value | Holding::Owned | Holding::SharedCow
+        ) {
+            helpers.extend(quote! {
+                fn __lease(&mut self) -> Result<napi_support::Lease<#held>, String> {
+                    self.inner.lease(#label)
+                }
+            });
+        }
+        // A union's value also holds the projection it was reached through.
+        let of = class.of.is_some().then(|| quote!(self.of = None;));
+        for m in ["dispose", "disposed"] {
+            assert!(
+                taken.insert(m.to_string()),
+                "{name}: `{m}` is the generated dispose()"
+            );
+        }
+        let what = match class.holding {
+            Holding::Value => {
+                " Ends this instance: every later call throws `Disposed`. It holds a copy,\n so nothing is freed: this is for uniformity."
+            }
+            Holding::Owned => {
+                " Frees the value now, not at garbage collection: every later call throws\n `Disposed`."
+            }
+            Holding::Shared | Holding::SharedCow | Holding::Projected => {
+                " Drops this instance's reference now, not at garbage collection: every\n later call throws `Disposed`. The value lives on while another instance\n holds it."
+            }
+        };
+        let using = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.\n Harmless twice.";
+        // Only a value an async twin can lease can be in use.
+        let leased = matches!(
+            class.holding,
+            Holding::Value | Holding::Owned | Holding::SharedCow
+        )
+        .then_some(" Throws `Leased` while an async call is using it.");
+        let dispose_doc = what
+            .lines()
+            .chain(leased)
+            .chain(using.lines())
+            .map(|l| quote!(#[doc = #l]));
+        methods.extend(quote! {
+            #(#dispose_doc)*
+            #[napi]
+            pub fn dispose(&mut self) -> Result<(), String> {
+                self.inner.dispose(#label)?;
+                #of
+                Ok(())
+            }
+            #[doc = " Whether `dispose()` has been called."]
+            #[napi(getter)]
+            pub fn disposed(&self) -> bool {
+                self.inner.disposed()
+            }
+        });
         let code = quote! {
             #(#doc)*
             #[napi]
@@ -1179,9 +1351,20 @@ impl<'a> Classes<'a> {
             };
             let js = lower_camel(name);
             let napi = quote!(#[napi(js_name = #js, namespace = #ns)]);
-            match self.function(ctx, None, &f.sig, &f.attrs, gate, napi, vocab) {
+            let twin = crate::twin::listed(root, name);
+            match self.function(ctx, None, &f.sig, &f.attrs, gate.clone(), napi, vocab) {
                 Ok(c) => code.extend(c),
-                Err((reason, ty)) => skipped.push(Skip::new(name, ty.as_deref(), reason)),
+                Err((reason, ty)) => {
+                    assert!(
+                        !twin,
+                        "Config::asynchronous lists {root}::{name}, which has no JS form to make async"
+                    );
+                    skipped.push(Skip::new(name, ty.as_deref(), reason));
+                }
+            }
+            if twin {
+                let js = format!("{js}Async");
+                code.extend(self.twin(ctx, None, &f.sig, gate, Some((&js, ns)), vocab));
             }
         }
         (code, skipped)

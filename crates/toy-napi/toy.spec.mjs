@@ -12,54 +12,54 @@ const binary = readdirSync(dir).find((f) => f.endsWith('.node'));
 assert.ok(binary, 'build it first: npx napi build --cwd crates/toy-napi --platform --no-js');
 const toy = createRequire(dir)(`./${binary}`);
 
-test('a handle class wraps the Arc and maps its &self methods', () => {
-  const c = toy.counter();
-  assert.ok(c instanceof toy.LegacyCounter);
+test('a shared class wraps the Arc and maps its &self methods', () => {
+  const c = new toy.toy.Counter();
+  assert.ok(c instanceof toy.toy.Counter);
   assert.equal(c.label(), 'counter');
   assert.equal(c.step(), 1);
   assert.equal(c.direction(), 'up');
 });
 
 test('an option struct is a partial object over Default', () => {
-  const c = toy.counter({ label: 'down', step: 2.5, direction: 'down' });
+  const c = new toy.toy.Counter({ label: 'down', step: 2.5, direction: 'down' });
   assert.equal(c.label(), 'down');
   assert.equal(c.step(), -2.5);
-  assert.equal(toy.counter({ step: 3 }).label(), 'counter');
+  assert.equal(new toy.toy.Counter({ step: 3 }).label(), 'counter');
 });
 
 test('a plain data struct is an object copy', () => {
-  assert.deepEqual(toy.counter().origin(), { x: 0, y: 0 });
+  assert.deepEqual(new toy.toy.Counter().origin(), { x: 0, y: 0 });
 });
 
 test('a unit enum is a string enum, and a wrong variant throws', () => {
-  assert.throws(() => toy.counter({ direction: 'sideways' }));
+  assert.throws(() => new toy.toy.Counter({ direction: 'sideways' }));
 });
 
 test('util.inspect prints the cheap methods under the class name', () => {
-  const c = toy.counter();
-  assert.equal(Object.prototype.toString.call(c), '[object LegacyCounter]');
-  assert.match(inspect(c), /^LegacyCounter \{.*label: 'counter'.*\}$/s);
+  const c = new toy.toy.Counter();
+  assert.equal(Object.prototype.toString.call(c), '[object Counter]');
+  assert.match(inspect(c), /^Counter \{.*label: 'counter'.*\}$/s);
 });
 
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Canvas', 'Color', 'Counter', 'Direction', 'PaintErrorCode', 'ParseErrorCode', 'Tally', 'Vec2',
-    'paint', 'report', 'share', 'shared',
+    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
+    'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync', 'report', 'share', 'shared',
+    'spin', 'spinAsync', 'visit',
   ]);
   assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
-  assert.notEqual(ns.Direction, toy.Direction, 'an enum object of its own');
-  // napi keeps one constructor per class name: had the flat `Counter` kept
-  // its name beside `toy.Counter`, one would hand out the other's instances.
-  // The flat one gives way (`legacy_prefix`), and its instances still work.
+  // Nothing at the root but the generic prelude: one constructor per class
+  // name, whatever the namespace, and every class is in its namespace.
+  assert.deepEqual(Object.keys(toy).filter((k) => !k.startsWith('__')).sort(),
+    ['alt', 'setLogLevel', 'takeLogs', 'toy']);
   assert.equal(toy.Counter, undefined);
   assert.equal(typeof ns.Counter, 'function');
   assert.equal(ns.Counter.name, 'Counter');
-  const c = toy.counter();
-  assert.ok(c instanceof toy.LegacyCounter);
-  assert.ok(!(c instanceof ns.Counter));
-  assert.equal(c.constructor.name, 'LegacyCounter');
+  const c = new toy.toy.Counter();
+  assert.ok(c instanceof ns.Counter);
+  assert.equal(c.constructor.name, 'Counter');
   assert.equal(c.label(), 'counter');
   const t = new ns.Tally();
   assert.ok(t instanceof ns.Tally);
@@ -122,7 +122,7 @@ test('a provider field takes a class instance, shared not copied', () => {
   assert.equal(toy.toy.report(t, { base }), 'tally[plain]: a,b,x');
   // Only an instance of the providing class: not a look-alike, not another class.
   assert.throws(() => toy.toy.report(t, { base: {} }));
-  assert.throws(() => toy.toy.report(t, { base: toy.counter() }), /Tally/);
+  assert.throws(() => toy.toy.report(t, { base: new toy.toy.Counter() }), /Tally/);
   assert.throws(() => toy.toy.report(t, { base: 'a' }));
 });
 
@@ -256,6 +256,28 @@ test('plain data: field accessors, and fromObject/toObject in a pair', () => {
   assert.equal(toy.toy.Color.prototype.toObject, undefined);
 });
 
+test('a tuple is an array: a list of pairs, a pair, a tuple payload', () => {
+  const { Tally, Vec2, Scene } = toy.toy;
+  const t = new Tally();
+  t.push('a');
+  t.push('b');
+  assert.deepEqual(t.pairs(), [['a', 0], ['b', 1]], 'Vec<(String, u32)>');
+  assert.deepEqual(new Vec2(1.5, -2).parts(), [1.5, -2], '(f32, f32)');
+  // `Trail` is what its `steps()` iterates (`Config::iterated`): each step a
+  // union, a plain-data class carried as its object, two of them as a tuple.
+  assert.deepEqual(Scene.demo().trail(), [
+    { type: 'jump', value: { x: 1, y: 0 } },
+    { type: 'line', value: [{ x: 1, y: 0 }, { x: 4, y: 0 }] },
+    { type: 'stop' },
+  ]);
+});
+
+test('the log functions of the prelude: a level, and a drain', () => {
+  assert.throws(() => toy.setLogLevel('loud'), /unknown log level/);
+  toy.setLogLevel('warn');
+  assert.ok(Array.isArray(toy.takeLogs()));
+});
+
 test('FromStr gives fromStr, Display gives toString, independently', () => {
   const { Vec2 } = toy.toy;
   const v = Vec2.fromStr('1.5, -2');
@@ -295,4 +317,258 @@ test('inspect prints the cheap &self members, never a &mut or consuming one', ()
   assert.match(inspect(new toy.toy.Vec2(1, 2)), /^Vec2 \{.*x: 1.*y: 2.*length: /s);
   assert.match(inspect(new toy.toy.Canvas(2, 3)), /^Canvas \{.*width: 2.*height: 3.*\}$/s);
   assert.doesNotMatch(inspect(new toy.toy.Canvas(2, 3)), /intoData/);
+});
+
+// `Config::projections`: `Layer` and `Dot` are only ever borrowed from a
+// `Scene`, so their classes hold the scene and the way back to the value.
+const names = (items) => items.map(({ kind, value }) => `${kind}:${value.name()}`);
+
+test('a projection reaches borrowed nodes, and an enum of them is a { kind, value } union', () => {
+  const scene = toy.toy.Scene.demo();
+  const root = scene.root();
+  assert.ok(root instanceof toy.toy.Layer);
+  assert.equal(root.name(), 'root');
+  const items = root.items();
+  assert.deepEqual(names(items), ['dot:a', 'layer:inner', 'dot:d']);
+  assert.ok(items[0].value instanceof toy.toy.Dot);
+  assert.ok(items[1].value instanceof toy.toy.Layer);
+  assert.deepEqual(names(items[1].value.items()), ['dot:b', 'dot:c', 'layer:empty']);
+  // A value class out of a projection, and `Option<&T>` as `T | null`.
+  assert.equal(items[2].value.at().x, 4);
+  assert.equal(root.first().value.name(), 'a');
+  assert.equal(items[1].value.items()[2].value.first(), null);
+  // An argument moves into the step: `find(name)` runs again on each use.
+  assert.equal(scene.find('c').kind, 'dot');
+  assert.equal(scene.find('c').value.at().x, 3);
+  assert.equal(scene.find('nothing'), null);
+  // A table of `Arc`s is stepped through: each element a projection.
+  const [x] = scene.marks();
+  assert.ok(x instanceof toy.toy.Dot);
+  assert.deepEqual([x.name(), x.at().x], ['x', 9]);
+  // Not reached as an `Item`: not an argument where one is expected.
+  assert.throws(() => toy.toy.count({ kind: 'dot', value: x }), { code: 'InvalidArg' });
+});
+
+test('a projection re-resolves on each call and keeps its owner alive', async () => {
+  const { setFlagsFromString } = await import('node:v8');
+  const { runInNewContext } = await import('node:vm');
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc');
+  // Nothing holds the scene but the projection.
+  const inner = toy.toy.Scene.demo().root().items()[1].value;
+  for (let i = 0; i < 3; i++) {
+    gc();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(inner.name(), 'inner');
+  assert.deepEqual(names(inner.items()), ['dot:b', 'dot:c', 'layer:empty']);
+  assert.equal(inner.items()[1].value.at().x, 3);
+});
+
+test('a union argument takes the { kind, value } object a projection handed out', () => {
+  const scene = toy.toy.Scene.demo();
+  const [a, inner, d] = scene.root().items();
+  assert.equal(toy.toy.count(a), 1);
+  assert.equal(toy.toy.count(inner), 2);
+  assert.equal(toy.toy.count(scene.find('inner')), 2);
+  // `Option<()>`: `true` when it did something, `null` when not.
+  assert.equal(toy.toy.visit(d), true);
+  assert.equal(toy.toy.visit(scene.find('empty')), null);
+  // The value must be a variant of the enum: the root layer is not one.
+  const root = { kind: 'layer', value: scene.root() };
+  assert.throws(() => toy.toy.count(root), { code: 'InvalidArg' });
+  assert.throws(() => toy.toy.count({ kind: 'pebble', value: a.value }), { code: 'InvalidArg' });
+  // The class is checked: a dot is not a layer.
+  assert.throws(() => toy.toy.count({ kind: 'layer', value: a.value }));
+});
+
+// `dispose()` on every class, whatever it holds: after it every member throws
+// `Disposed`, and `[Symbol.dispose]` is the same function where the runtime
+// has the symbol, so `using` calls it.
+test('dispose() ends an instance of each holding, and `using` calls it', () => {
+  const { Vec2, Canvas, Tally, Scene, Color, paint, share, shared } = toy.toy;
+  const holdings = {
+    value: [new Vec2(1, 2), (v) => v.length()],
+    owned: [new Canvas(2, 2), (c) => c.width()],
+    shared: [new toy.toy.Counter(), (c) => c.label()],
+    cow: [new Tally(), (t) => t.len()],
+    projected: [Scene.demo().root(), (l) => l.name()],
+  };
+  for (const [holding, [it, call]] of Object.entries(holdings)) {
+    const proto = Object.getPrototypeOf(it);
+    assert.equal(proto[Symbol.dispose], Symbol.dispose && proto.dispose, holding);
+    assert.equal(it.disposed, false, holding);
+    call(it);
+    (Symbol.dispose ? it[Symbol.dispose] : it.dispose).call(it);
+    assert.equal(it.disposed, true, holding);
+    throwsCoded(() => call(it), 'Disposed', `this ${it.constructor.name} was disposed`);
+    assert.equal(inspect(it), `${it.constructor.name} { disposed: true }`, holding);
+    it.dispose();
+  }
+  // As an argument too, and after Consumed: the later call wins.
+  const c = new Canvas(2, 2);
+  c.intoData();
+  c.dispose();
+  throwsCoded(() => paint(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Disposed', /disposed/);
+  const v = new Vec2(0, 0);
+  v.dispose();
+  throwsCoded(() => new Vec2(1, 1).plus(v), 'Disposed', /disposed/);
+  // A provider field reads the instance: a disposed one throws.
+  const t = new Tally();
+  const gone = new Tally();
+  gone.dispose();
+  throwsCoded(() => toy.toy.report(t, { base: gone }), 'Disposed', /disposed/);
+  // A handle drops its own reference: another handle keeps the value.
+  const a = new Tally();
+  a.push('x');
+  const b = share(a);
+  assert.equal(shared(a, b), true);
+  a.dispose();
+  assert.equal(b.joined(), 'x');
+});
+
+test('a disposed projection lets go of its owner, and of its union', () => {
+  const scene = toy.toy.Scene.demo();
+  const [a, inner] = scene.root().items();
+  inner.value.dispose();
+  throwsCoded(() => toy.toy.count(inner), 'Disposed', 'this Layer was disposed');
+  // The scene and its other nodes live on.
+  assert.equal(toy.toy.count(a), 1);
+  assert.equal(scene.find('inner').value.name(), 'inner');
+  // The owner disposed: its projections keep their own reference.
+  scene.dispose();
+  throwsCoded(() => scene.root(), 'Disposed', 'this Scene was disposed');
+  assert.equal(a.value.name(), 'a');
+  assert.equal(toy.toy.count(a), 1);
+});
+
+// Async twins (`GEN.asynchronous`): the call on a worker thread, its result
+// or its error as the sync call gives them, and a lease on what it borrows.
+async function rejectsCoded(promise, code, message) {
+  await assert.rejects(promise, (e) => {
+    assert.ok(e instanceof Error);
+    assert.equal(e.code, code);
+    if (message instanceof RegExp) assert.match(e.message, message);
+    else assert.equal(e.message, message);
+    return true;
+  });
+}
+
+/** Rounds of `spin` that keep a worker thread busy for about `ms`. */
+function roundsFor(ms) {
+  const { spin } = toy.toy;
+  let n = 1 << 16;
+  for (;;) {
+    const t = performance.now();
+    spin(n);
+    if (performance.now() - t > 20) return Math.min(2 ** 32 - 1, Math.ceil((n * ms) / (performance.now() - t)));
+    n *= 2;
+  }
+}
+
+test('an async twin resolves with what the sync call returns', async () => {
+  const { Canvas, Color, Vec2, Tally, Scene, paint, paintAsync, count, countAsync, spin, spinAsync } = toy.toy;
+  // A static: the class, built on the main thread from what the worker made.
+  const c = await Canvas.fromTextAsync('3x2');
+  assert.ok(c instanceof Canvas);
+  assert.deepEqual([c.width(), c.height()], [3, 2]);
+  // A free function writing through a view of an owned class.
+  assert.equal(await paintAsync(c, new Vec2(1, 1), Color.fromRgb(9, 0, 0)), 4);
+  const twin = new Canvas(3, 2);
+  paint(twin, new Vec2(1, 1), Color.fromRgb(9, 0, 0));
+  assert.deepEqual([...c.data()], [...twin.data()]);
+  // A method writing its owned receiver, and one on each shared holding.
+  assert.equal(await c.fillAsync(Color.fromRgb(5, 0, 0)), undefined);
+  assert.deepEqual([...c.data()], [5, 5, 5, 5, 5, 5]);
+  const t = new Tally();
+  await t.pushAsync('a');
+  await t.pushAsync('b');
+  assert.equal(await t.joinedAsync(), 'a,b');
+  assert.equal(t.joined(), 'a,b');
+  // A union argument, and plain numbers.
+  const item = Scene.demo().find('inner');
+  assert.equal(await countAsync(item), count(item));
+  assert.equal(await spinAsync(1000), spin(1000));
+});
+
+test('an async twin rejects with the code and message the sync call throws', async () => {
+  const { Canvas, Color, Vec2, paintAsync } = toy.toy;
+  await rejectsCoded(Canvas.fromTextAsync(''), 'Empty', 'nothing to parse');
+  await rejectsCoded(Canvas.fromTextAsync('3xy'), 'BadNumber', 'not a number: "y"');
+  const c = new Canvas(2, 2);
+  await rejectsCoded(paintAsync(c, new Vec2(5, 0), Color.fromRgb(1, 1, 1)), 'OutOfBounds', '5,0 is off the canvas');
+  // A failed call gives its lease back too.
+  assert.equal(c.width(), 2);
+});
+
+test('what an async twin borrows by value is leased: in use until it settles', async () => {
+  const { Canvas, Color, Vec2, Tally, paint, paintAsync, share } = toy.toy;
+  const c = new Canvas(2, 2);
+  const pending = c.fillAsync(Color.fromRgb(3, 0, 0));
+  const inUse = 'this Canvas is in use by an async call';
+  throwsCoded(() => c.width(), 'Leased', inUse);
+  throwsCoded(() => paint(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Leased', inUse);
+  // A second twin cannot take it either: an argument error throws at the call.
+  throwsCoded(() => paintAsync(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1)), 'Leased', inUse);
+  // dispose() refuses: the value is still in use. Nothing changed.
+  throwsCoded(() => c.dispose(), 'Leased', inUse);
+  assert.equal(c.disposed, false);
+  await pending;
+  assert.deepEqual([...c.data()], [3, 3, 3, 3]);
+  c.dispose();
+  assert.equal(c.disposed, true);
+  throwsCoded(() => c.width(), 'Disposed', 'this Canvas was disposed');
+
+  // A copy-on-write handle is leased too: its `&mut` call writes the value
+  // it holds, and another handle on the same value keeps reading it.
+  const t = new Tally();
+  t.push('a');
+  const other = share(t);
+  const pushed = t.pushAsync('b');
+  throwsCoded(() => t.len(), 'Leased', 'this Tally is in use by an async call');
+  assert.equal(other.joined(), 'a');
+  await pushed;
+  assert.equal(t.joined(), 'a,b');
+  assert.equal(other.joined(), 'a');
+  // An `Arc` read is cloned, not leased.
+  const read = t.joinedAsync();
+  assert.equal(t.len(), 2);
+  assert.equal(await read, 'a,b');
+});
+
+test('an AbortSignal drops a queued twin, and its lease comes back', async () => {
+  const { Canvas, Color, Vec2, paintAsync, spinAsync } = toy.toy;
+  // Every worker thread busy, so the next call waits in the queue.
+  const threads = Number(process.env.UV_THREADPOOL_SIZE) || 4;
+  const rounds = roundsFor(150);
+  const blockers = Array.from({ length: threads }, () => spinAsync(rounds));
+  const c = new Canvas(2, 2);
+  const ac = new AbortController();
+  const queued = paintAsync(c, new Vec2(0, 0), Color.fromRgb(9, 0, 0), ac.signal);
+  throwsCoded(() => c.width(), 'Leased', /in use by an async call/);
+  ac.abort();
+  await assert.rejects(queued, (e) => e.name === 'AbortError');
+  // The call never ran, and the canvas is back.
+  assert.deepEqual([...c.data()], [0, 0, 0, 0]);
+  assert.equal(c.width(), 2);
+  await Promise.all(blockers);
+
+  // A signal already aborted is refused before anything is leased.
+  const gone = new AbortController();
+  gone.abort();
+  assert.throws(() => paintAsync(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1), gone.signal), /already aborted/);
+  assert.equal(c.width(), 2);
+  // And a signal that is not an AbortSignal.
+  assert.throws(() => spinAsync(1, {}), /signal must be an AbortSignal/);
+  assert.throws(() => spinAsync(1, c), /signal must be an AbortSignal/);
+});
+
+test('an async twin runs off the main thread', async () => {
+  const { spinAsync } = toy.toy;
+  const rounds = roundsFor(100);
+  let ticks = 0;
+  const timer = setInterval(() => { ticks += 1; }, 1);
+  await spinAsync(rounds);
+  clearInterval(timer);
+  assert.ok(ticks > 0, `the event loop kept turning (${ticks} ticks)`);
 });

@@ -1,11 +1,12 @@
-// Generated wrapper classes over usvg's Arc-held definitions.
+// Generated classes over usvg's Arc-held definitions, reached from the
+// tree's tables (`usvg.Tree`), and fontdb's faces.
 import assert from 'node:assert/strict';
 import { fontsOrSkip } from './support.mjs';
-import { Resvg, FontDatabase } from '../index.js';
+import binding from '../index.js';
+const { usvg, tiny_skia } = binding;
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
-const { db, family } = fontsOrSkip(FontDatabase, 'definition classes');
-const opts = { fontFamily: family };
+const { db, family } = fontsOrSkip(binding, 'definition classes');
 
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
@@ -23,45 +24,48 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
   <rect x="45" width="20" height="40" fill="url(#rg)" mask="url(#mk)"/>
   <rect x="70" width="25" height="40" fill="url(#pt)" filter="url(#ft)"/>
 </svg>`;
-const r = new Resvg(svg, opts, db);
+const tree = usvg.Tree.fromStr(svg, { fontdb: db, fontFamily: family });
 
-// 1. the defs tables are reachable as class instances
-assert.deepEqual(r.linearGradients().map((g) => g.id()), ['lg']);
-assert.deepEqual(r.radialGradients().map((g) => g.id()), ['rg']);
-assert.deepEqual(r.clipPaths().map((c) => c.id()), ['cp']);
-assert.deepEqual(r.masks().map((m) => m.id()), ['mk']);
-assert.deepEqual(r.patterns().map((p) => p.id()), ['pt']);
-assert.deepEqual(r.filters().map((f) => f.id()), ['ft']);
+// 1. the defs tables are reachable as class instances (clip paths, masks and
+//    patterns: test/api/nodes.mjs)
+assert.deepEqual(tree.linearGradients().map((g) => g.id()), ['lg']);
+assert.deepEqual(tree.radialGradients().map((g) => g.id()), ['rg']);
+assert.deepEqual(tree.filters().map((f) => f.id()), ['ft']);
 
 // 2. accessors of the type itself
-const [lg] = r.linearGradients();
+const [lg] = tree.linearGradients();
 // usvg keeps the gradient in its own 0..1 space and puts the mapping in the
 // transform, so x2 stays 1 and the scale shows up in transform().sx
 assert.deepEqual([lg.x1(), lg.y1(), lg.x2(), lg.y2()], [0, 0, 1, 0]);
 assert.equal(lg.transform().sx, 40);
-const [rg] = r.radialGradients();
+const [rg] = tree.radialGradients();
 assert.equal(typeof rg.r(), 'number');
 
 // 3. inherited through `impl Deref for LinearGradient { Target = BaseGradient }`
 assert.equal(lg.id(), 'lg');
-assert.deepEqual(Object.keys(lg.transform()), ['sx', 'kx', 'ky', 'sy', 'tx', 'ty']);
+assert.ok(lg.transform() instanceof tiny_skia.Transform);
+assert.deepEqual(Object.keys(lg.transform().toObject()), ['sx', 'kx', 'ky', 'sy', 'tx', 'ty']);
 assert.equal(lg.spreadMethod(), 'pad', 'enum mirrored from a wrapper accessor');
 
-// 4. filter region, and the mask/clip metadata
-assert.equal(typeof r.filters()[0].rect().width, 'number');
-assert.equal(r.masks()[0].kind(), 'luminance');
-assert.equal(typeof r.patterns()[0].rect().width, 'number');
+// 4. filter region, and the mask/pattern metadata
+assert.ok(tree.filters()[0].rect() instanceof tiny_skia.NonZeroRect);
+assert.equal(typeof tree.filters()[0].rect().width(), 'number');
+assert.equal(tree.masks()[0].kind(), 'luminance');
+assert.equal(typeof tree.patterns()[0].rect().width(), 'number');
 
-// 5. generated value objects: stops carry a nested Color, faces come from an iterator
+// 5. generated value objects: stops carry a nested Color, faces come from an
+//    iterator. A primitive holds a `tiny_skia.NonZeroRect`, which no plain
+//    object can: it is a read-only class of getters.
 const stops = lg.stops();
 assert.deepEqual(stops.map((s) => s.offset), [0, 1]);
 assert.deepEqual(stops[0].color, { red: 255, green: 0, blue: 0 });
 assert.deepEqual(stops.map((s) => s.opacity), [1, 1]);
-const prims = r.filters()[0].primitives();
+const prims = tree.filters()[0].primitives();
 assert.equal(prims.length, 1);
-assert.equal(typeof prims[0].rect.width, 'number');
+assert.ok(prims[0] instanceof usvg.Primitive);
+assert.equal(typeof prims[0].rect.width(), 'number');
 assert.equal(prims[0].colorInterpolation, 'linearRgb');
-const faces = r.fontdb().faces();
+const faces = tree.fontdb().faces();
 assert.ok(faces.length > 0);
 // FaceInfo maps only partially (ID and Source have no JS form), so the strict
 // policy makes it a class with getters rather than a plain object.
@@ -70,108 +74,91 @@ assert.ok(faces.length > 0);
 // the way the crate publishes it: fontdb lifts it out of a private module with
 // `pub use ttf_parser::Width as Stretch`, and the old rule -- keep a module or
 // drop it whole -- could only drop it.
+const plumbing = ['constructor', 'dispose', 'disposed'];
 assert.deepEqual(
-  Object.getOwnPropertyNames(Object.getPrototypeOf(faces[0])).sort(),
-  ['constructor', 'families', 'index', 'monospaced', 'postScriptName', 'stretch', 'style', 'weight'],
+  Object.getOwnPropertyNames(Object.getPrototypeOf(faces[0])).filter((k) => !plumbing.includes(k)).sort(),
+  ['families', 'index', 'monospaced', 'postScriptName', 'stretch', 'style', 'weight'],
 );
 // The nine OS/2 width classes, spelled as usvg spells its own enums.
 assert.ok(['ultraCondensed', 'condensed', 'normal', 'expanded', 'ultraExpanded', 'semiCondensed',
   'extraCondensed', 'semiExpanded', 'extraExpanded'].includes(faces[0].stretch),
   `unexpected stretch: ${faces[0].stretch}`);
 
-// 6. a def's content is walkable as nodes, rooted at that def
-const pat = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
-  <defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">
-    <circle id="dot" cx="5" cy="5" r="3"/><rect id="bar" width="10" height="2"/>
-  </pattern></defs><rect width="40" height="40" fill="url(#p)"/></svg>`).patterns()[0];
-const inside = pat.children();
-assert.deepEqual(inside.map((n) => [n.kind, n.id()]), [['path', 'dot'], ['path', 'bar']]);
-assert.deepEqual(Object.values(inside[0].absBoundingBox()), [2, 2, 6, 6]);
-assert.equal(inside[0].clipPath(), null, 'the dot is not clipped');
-
-// 6b. a node reached through a def keeps its document, so the def tables
-//     resolve from it too; and a def applied to a def resolves through it
+// 6. a def's content is a group of the same tree, so a node inside a pattern
+//    resolves the document's tables too (the defs chains themselves:
+//    test/api/nodes.mjs)
 {
-  const nested = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+  const nested = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
     <defs>
       <clipPath id="inner"><rect width="20" height="20"/></clipPath>
-      <clipPath id="outer" clip-path="url(#inner)"><rect width="30" height="30"/></clipPath>
-      <mask id="m2"><rect width="40" height="40" fill="white"/></mask>
-      <mask id="m1" mask="url(#m2)"><rect width="40" height="40" fill="white"/></mask>
       <pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse">
-        <g clip-path="url(#inner)"><circle cx="5" cy="5" r="3"/></g>
+        <g clip-path="url(#inner)"><circle id="dot" cx="5" cy="5" r="3"/></g><rect id="bar" width="10" height="2"/>
       </pattern>
     </defs>
-    <rect width="40" height="40" clip-path="url(#outer)" mask="url(#m1)"/>
     <rect width="40" height="40" fill="url(#p)"/>
   </svg>`);
-  const outer = nested.clipPaths().find((c) => c.id() === 'outer');
-  assert.equal(outer.clipPath()?.id(), 'inner', 'clip path of a clip path');
-  assert.equal(outer.clipPath().clipPath(), null, 'and the chain ends');
-  const m1 = nested.masks().find((m) => m.id() === 'm1');
-  assert.equal(m1.mask()?.id(), 'm2', 'mask of a mask');
-  assert.equal(m1.mask().mask(), null);
-  const viaDef = nested.patterns()[0].children()[0];
-  assert.equal(viaDef.clipPath()?.id(), 'inner', 'a def node resolves the document tables');
+  const inside = nested.patterns()[0].root().children();
+  assert.deepEqual(inside.map((n) => n.kind), ['group', 'path']);
+  assert.equal(inside[0].value.clipPath()?.id(), 'inner', 'a def node resolves the document tables');
+  const dot = inside[0].value.children()[0].value;
+  assert.equal(dot.id(), 'dot');
+  const b = dot.absBoundingBox();
+  assert.deepEqual([b.x(), b.y(), b.width(), b.height()], [2, 2, 6, 6]);
+  assert.equal(inside[1].value.id(), 'bar');
 }
 
-// 7. font bytes, keyed by PostScript name
-const resolved = r.fontdb();
-const face = resolved.faces()[0];
-const bytes = resolved.faceData(face.postScriptName);
-assert.ok(bytes.length > 1000);
-assert.match(bytes.subarray(0, 4).toString('hex'), /^(4f54544f|00010000|74727565|74746366)$/, 'sfnt magic');
-assert.equal(resolved.faceData('Nope-Regular'), null);
+// 7. the font database a parse actually resolved
+assert.ok(tree.fontdb().len() > 0, 'resolved fontdb reachable from the tree');
 
-// 8. the font database a parse actually resolved
-assert.ok(r.fontdb().len() > 0, 'resolved fontdb reachable from the tree');
-
-// --- FontFace: the value class that unlocked the ID-gated fontdb methods ------
+// --- fontdb.FaceInfo ----------------------------------------------------------
 {
-  const before = db.len();
-
-  // 9. faces() hands out class instances, not plain objects
+  // 8. faces() hands out class instances, not plain objects
   const face = db.faces()[0];
+  assert.ok(face instanceof binding.fontdb.FaceInfo);
   assert.equal(typeof face.postScriptName, 'string');
   // fontdb's own enum, not a string usvg invented: a face is one of three.
   assert.ok(['normal', 'italic', 'oblique'].includes(face.style), `style: ${face.style}`);
   // Family names matter: fontdb resolves by family, not by PostScript name, so
   // `postScriptName` alone leaves a caller unable to fill `fontFamily`.
+  // `Vec<(String, Language)>` in Rust: `[name, language]` pairs in JS (Q38),
+  // English (US) first when the font has it.
   assert.ok(Array.isArray(face.families) && face.families.length > 0);
-  assert.equal(typeof face.families[0], 'string');
+  const [[name, language]] = face.families;
+  assert.equal(typeof name, 'string');
+  assert.ok(Object.values(binding.fontdb.Language).includes(language), `language: ${language}`);
+  assert.ok(db.faces().some((f) => f.families.some(([, l]) => l === 'englishUnitedStates')));
+  assert.ok(db.faces().some((f) => f.families.some(([n]) => n === family)), 'the family we ask for');
   assert.equal(typeof face.weight, 'number');
   assert.equal(typeof face.index, 'number');
   assert.equal(typeof face.monospaced, 'boolean');
-
-  // 10. a FontFace stands in for the opaque fontdb ID
-  assert.equal(db.face(face).postScriptName, face.postScriptName, 'round trip through face()');
-
-  // 11. query: a CSS-ish request resolves to a face. Before the removal below,
-  // because a database with a single face has nothing left to match afterwards
-  // -- which is exactly the WASI case, where the only face is the loaded file.
-  const hit = db.query([face.families[0]], 400, false);
-  assert.ok(hit && hit.postScriptName.length > 0);
-  assert.ok(db.query(['sans-serif']), 'generic families are understood');
-  assert.equal(db.query(['No Such Family At All']), null);
-
-  // 12. bytes still reachable, keyed by PostScript name
-  const data = db.faceData(hit.postScriptName);
-  assert.match(data.subarray(0, 4).toString('hex'), /^(4f54544f|00010000|74727565|74746366)$/);
-
-  // 13. removal, by the same class: the id never leaves Rust
-  db.removeFace(face);
-  assert.equal(db.len(), before - 1, 'removeFace took the id from the class');
-  assert.equal(db.face(face), null, 'and it is gone');
+  // `query`, `faceData`, `familyName`, `faceSource` and the face `ID` the
+  // 0.9 `FontDatabase` had by hand left with it (#181).
+  assert.equal(db.query, undefined);
+  assert.equal(db.faceData, undefined);
 }
-// The Matrix doc used to claim its field order was SVG's `matrix(...)`. It is
-// not: tiny-skia says so itself -- "we are using column-major-column-vector
+
+// 9. a missing font file is an error from the OS. Neither half of the
+//    message is portable. Three environments, three answers for the same
+//    ENOENT:
+//
+//      linux native   No such file or directory (os error 2)
+//      windows native The system cannot find the file specified. (os error 2)
+//      wasm32-wasip1  No such file or directory (os error 44)
+//
+//    The text differs, and so does the number -- wasi-libc numbers ENOENT 44.
+//    What holds everywhere is that the failure came from the OS rather than
+//    from the font parser, which is all this check is for.
+assert.throws(() => db.loadFontFile('/nope.ttf'), /os error \d+/);
+
+// `tiny_skia.Transform`'s fields are not in the order of SVG's `matrix(...)`
+// (the 0.9 `Matrix` doc used to claim they were): tiny-skia says so itself -- "we are using column-major-column-vector
 // matrix notation, therefore it's ky-kx, not kx-ky". Reading the fields
 // positionally mirrors the transform, silently, so this pins which order
 // actually round-trips.
 {
-  const rot = (t) => new Resvg(
+  const rot = (t) => usvg.Tree.fromStr(
     `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g transform="${t}"><rect id="r" width="10" height="10"/></g></svg>`,
-  ).node('r').path().absTransform;
+  ).nodeById('r').value.absTransform();
 
   const m = rot('rotate(30)');
   const near = (a, b) => Math.abs(a - b) < 1e-4;
@@ -186,24 +173,16 @@ assert.ok(r.fontdb().len() > 0, 'resolved fontdb reachable from the tree');
   assert.ok(near(svgOrder.kx, m.kx) && near(svgOrder.ky, m.ky), 'sx ky kx sy tx ty round-trips');
 }
 
-// feImage: the referenced element, reachable through the filter, still
-// resolving its own clip path and rendering.
+// feImage: what the primitive references is not reachable yet. A primitive is
+// a read-only copy out of `usvg.Filter`, and its `root()` is left for later
+// (#191). The kinds still read back.
 {
-  const r = new Resvg(
+  const tree = usvg.Tree.fromStr(
     '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><defs>' +
-    '<clipPath id="c"><rect width="2" height="2"/></clipPath>' +
-    '<rect id="src" width="5" height="5" fill="red" clip-path="url(#c)"/>' +
+    '<rect id="src" width="5" height="5" fill="red"/>' +
     '<filter id="f"><feImage href="#src"/><feOffset dx="1"/></filter></defs>' +
     '<rect width="20" height="20" filter="url(#f)"/></svg>',
   );
-  const [f] = r.filters();
+  const [f] = tree.filters();
   assert.deepEqual(f.primitives().map((p) => p.kind.type), ['image', 'offset']);
-  const kids = f.imageChildren(0);
-  assert.equal(kids.length, 1);
-  assert.equal(kids[0].kind, 'group');
-  assert.equal(kids[0].clipPath().id(), 'c');
-  assert.equal(kids[0].children()[0].kind, 'path');
-  assert.ok(kids[0].renderPng().length > 0);
-  assert.equal(f.imageChildren(1), null, 'not an feImage');
-  assert.equal(f.imageChildren(9), null, 'out of range');
 }

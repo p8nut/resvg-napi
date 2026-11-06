@@ -6,10 +6,9 @@
 //! says why it exists. Wrapping another crate starts by rewriting this file.
 //!
 //! That includes the crates themselves and their roots (`UPSTREAM`), the
-//! wrapped impl blocks (`PASSES`), the index bounds, and the upstream spellings of
-//! the template's domain shapes.
+//! index bounds, and the allowlists of classes, functions and async twins.
 
-use napi_gen::{Config, ContentView, Converter, Provider, Shapes, View};
+use napi_gen::{Config, Converter, Iterated, Provider, View};
 
 /// One crate the binding wraps.
 pub struct Upstream {
@@ -39,126 +38,18 @@ pub const UPSTREAM: &[Upstream] = &[
 /// What the generated file says it was generated from.
 pub const GENERATED_FROM: &str = "the resvg/usvg/fontdb sources";
 
-/// The path the vocabulary-only crates' types are reached by: usvg re-exports
-/// what of tiny-skia-path can appear.
-pub const VOCAB_ROOT: &str = "usvg";
-
-/// One wrapped `impl` block: which upstream type's methods land on which
-/// class, called on what. `receiver` and `prologue` are Rust source.
-pub struct PassSpec {
-    pub label: &'static str,
-    pub target: &'static str,
-    /// The `Upstream::root` whose files hold the impl.
-    pub source: &'static str,
-    pub ty: &'static str,
-    pub receiver: &'static str,
-    pub skip: &'static [&'static str],
-    pub prologue: Option<&'static str>,
-    /// The receiver may not exist: every wrapper returns `Result<Option<_>>`.
-    pub optional: bool,
-}
-
-/// The wrapped impl blocks, in emission order. Group runs on SvgNode after
-/// Node: what both define (`id`, the boxes) is taken by Node, and stays
-/// non-null on every node.
-pub const PASSES: &[PassSpec] = &[
-    PassSpec {
-        label: "fontdb::Database",
-        target: "FontDatabase",
-        source: "usvg::fontdb",
-        ty: "Database",
-        receiver: "self.inner",
-        skip: &[],
-        prologue: None,
-        optional: false,
-    },
-    PassSpec {
-        label: "usvg::Tree",
-        target: "Resvg",
-        source: "usvg",
-        ty: "Tree",
-        receiver: "self.tree",
-        skip: &[],
-        prologue: None,
-        optional: false,
-    },
-    PassSpec {
-        label: "usvg::Group",
-        target: "Resvg",
-        source: "usvg",
-        ty: "Group",
-        receiver: "self.tree.root()",
-        skip: &["isolate", "should_isolate", "id"],
-        prologue: None,
-        optional: false,
-    },
-    PassSpec {
-        label: "usvg::Node",
-        target: "SvgNode",
-        source: "usvg",
-        ty: "Node",
-        receiver: "__n",
-        skip: &["subroots"],
-        prologue: Some("let __n = self.node()?;"),
-        optional: false,
-    },
-    PassSpec {
-        label: "usvg::Group (on SvgNode)",
-        target: "SvgNode",
-        source: "usvg",
-        ty: "Group",
-        receiver: "__g",
-        skip: &["filters_bounding_box"],
-        prologue: Some("let usvg::Node::Group(__g) = self.node()? else { return Ok(None); };"),
-        optional: true,
-    },
-];
-
-/// Methods a pass skips because the API serves them another way: (pass, the
-/// skip as reported, by what).
-pub const COVERED_ELSEWHERE: &[(&str, &str, &str)] = &[(
-    "usvg::Node",
-    "subroots (arg: F)",
-    // A visitor over the groups a node refers to. Each one is already a
-    // handle of its own, so a callback API would add nothing.
-    "clipPath / mask / filters / imageChildren / paint ids",
-)];
+/// The path the vocabulary-only crates' types are reached by: tiny-skia
+/// re-exports what of tiny-skia-path can appear (`PathSegment`), and those
+/// types are `tiny_skia.*`.
+pub const VOCAB_ROOT: &str = "tiny_skia";
 
 /// Crates parsed for vocabulary only (newtypes, aliases), never wrapped.
 pub const VOCAB_CRATES: &[&str] = &["tiny-skia-path", "strict-num"];
 
-/// The option structs mapped field by field into JS objects: what `Resvg`
-/// parses with, and what `toString()` writes with.
+/// The option structs mapped field by field into JS objects: what
+/// `usvg.Tree` parses with, and what `toString()` writes with.
 pub const PARSE_OPTIONS: &str = "Options";
 pub const WRITE_OPTIONS: &str = "WriteOptions";
-
-/// Upstream names the template exposes under a *different* one. A rule cannot
-/// find these -- the rename is the decision -- so they are declared, and
-/// checked: a stale entry fails the build instead of rotting in a log line.
-pub const RENAMED: &[(&str, &str)] = &[
-    ("from_data", "new"),
-    ("from_str", "new"),
-    ("from_xmltree", "new"),
-    ("from_data_nested", "new"),
-    ("node_by_id", "node"),
-    // `to_string` in Rust would collide with `Display::to_string`
-    ("to_string", "to_svg_string"),
-    ("root", "children"),
-    ("with_face_data", "face_data"),
-];
-
-/// Class names the template defines itself; a generated handle class must not
-/// take one.
-pub const RESERVED: &[&str] = &[
-    "Resvg",
-    "SvgNode",
-    "BBox",
-    "Matrix",
-    "Dimensions",
-    "RawImage",
-    "RenderOptions",
-    "RenderParams",
-];
 
 /// What the generic phases (`napi-gen`) read: resvg's answers to its questions.
 pub const GEN: Config = Config {
@@ -174,17 +65,45 @@ pub const GEN: Config = Config {
     option_objects: &[PARSE_OPTIONS, WRITE_OPTIONS],
     // Option fields with no JS form, supplied by a class instance (Q26, Q27).
     // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
-    // copied. The resolvers (`ImageHrefResolver`, `FontResolver`) get their
-    // provider classes with the `guard` module in step 10 of the migration;
-    // until then the fields are left out and usvg's default resolvers apply.
-    providers: &[Provider {
-        ty: "Arc<fontdb::Database>",
-        class: "Database",
-        provide: "v.inner.clone()",
-        doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
-              Left out, the database is empty, as in Rust: text then renders\n\
-              nothing. Load fonts into a `fontdb.Database` and pass it here.",
-    }],
+    // copied. The resolvers take the hand-written `guard` providers
+    // (src/guard.rs): left out, usvg's default resolvers apply, which read
+    // any path and decode any image, as in Rust (Q10).
+    providers: &[
+        Provider {
+            ty: "Arc<fontdb::Database>",
+            class: "Database",
+            provide: "v.__ref()?.clone()",
+            doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
+                  Left out, the database is empty, as in Rust: text then renders\n\
+                  nothing. Load fonts into a `fontdb.Database` and pass it here.",
+        },
+        Provider {
+            ty: "ImageHrefResolver<'a>",
+            class: "GuardImageHrefResolver",
+            provide: "v.resolver()?",
+            doc: "A `guard.ImageHrefResolver`: supplied images, files fenced to a\n\
+                  directory, SVGZ and oversized images refused, misses recorded.\n\
+                  Left out, usvg's default applies, as in Rust: it reads any path\n\
+                  an `<image href>` names and decodes any image. Do not parse\n\
+                  untrusted SVG without one. One instance per parse.",
+        },
+        Provider {
+            ty: "FontResolver<'a>",
+            class: "GuardFontResolver",
+            provide: "v.resolver()?",
+            doc: "A `guard.FontResolver`, recording the named families the\n\
+                  database lacks. Left out, usvg's default selection applies.",
+        },
+        // `Options::default_size` is a `tiny_skia.Size` (Q39), which has no
+        // `fromObject` (its fields are private): JS builds one with
+        // `tiny_skia.Size.fromWh(width, height)`.
+        Provider {
+            ty: "Size",
+            class: "Size",
+            provide: "*v.__ref()?",
+            doc: "A `tiny_skia.Size`: `tiny_skia.Size.fromWh(width, height)`.",
+        },
+    ],
     // `WriteOptions::indent` and `attributes_indent` are xmlwriter's `Indent`,
     // a payload enum of a crate the generator does not parse: the template's
     // `indent_from_js` reads a number of spaces, `'tabs'` or `'none'`.
@@ -194,45 +113,18 @@ pub const GEN: Config = Config {
         ts: "number | 'tabs' | 'none'",
         convert: "indent_from_js",
     }],
-    // A struct with these fields is a transform (tiny-skia's), mapped to `Matrix`.
-    matrix_fields: &["sx", "kx", "ky", "sy", "tx", "ty"],
-    // Upstream type spellings for the template's domain shapes.
-    size_types: &["Size", "usvg::Size"],
-    rect_types: &["Rect", "NonZeroRect"],
-    opt_rect_types: &["Option<NonZeroRect>"],
-    path_data_types: &["tiny_skia_path::Path", "&tiny_skia_path::Path"],
+    // OpenType tags (`FontVariation::tag`): four ASCII bytes, a string in JS.
     tag4_types: &["[u8;4]", "&[u8;4]"],
-    // The template's types for those shapes, each with a `From` per spelling.
-    shapes: Shapes {
-        rect: "BBox",
-        size: "Dimensions",
-        matrix: "Matrix",
-        path: ("PathSegment", "path_segments"),
-    },
-    // `Options::default_size` is flattened into a width/height pair, rebuilt
-    // through this. It refuses a zero or negative side, and the field keeps its
-    // default then.
-    size_new: "usvg::Size::from_wh",
-    // An argument type JS hands over as a class instance instead: a fontdb face
-    // ID arrives as the `FontFace` it names, resolved by `id_in`. fontdb IDs are
-    // slotmap keys, so another database's face could name a slot here, and
-    // `removeFace` would delete it.
-    arg_standin: Some(("ID", "FontFace", "id_in")),
-    // A definition owning a content group (`root() -> &Group`: a pattern, a
-    // mask, a clip path) gets the node view over it.
-    content_view: Some(ContentView {
-        accessor: ("root", "&Group"),
-        emit: crate::template::content_view,
-    }),
-    // Option fields the template wires by hand (opaque class, resolver hooks,
-    // xmlwriter's `Indent`); every other unmappable field is dropped.
-    hand_wired_fields: &[
-        "fontdb",
-        "image_href_resolver",
-        "font_resolver",
-        "indent",
-        "attributes_indent",
-    ],
+    // `usvg.Path.data()`. A `tiny_skia_path::Path` cannot be a class:
+    // `usvg.Path` has its JS name, and napi keeps one constructor per name.
+    // JS gets the segments it iterates instead, `tiny_skia_path::PathSegment`
+    // as a union (`{ type: 'cubicTo', value: [p1, p2, p] }`, each point a
+    // `tiny_skia.PointObject`).
+    iterated: &[Iterated {
+        ty: "tiny_skia_path::Path",
+        via: "segments",
+        item: "PathSegment",
+    }],
     // The tree itself. Group, Node and Tree are what a handle exists for, and
     // following one into the data registry drags every definition type behind it --
     // `Text::flattened` and `filter::Image::root` both hand back a Group, and
@@ -244,16 +136,6 @@ pub const GEN: Config = Config {
     // demote Stroke to a read-only class, and any object holding one -- `Path`
     // -- would then carry a field napi cannot round-trip.
     not_data: &["to_tiny_skia"],
-    // Upstream handle types the template wraps by hand, with the class name
-    // they get. Handle discovery skips them; `wrapper_ident` names them.
-    hand_wrapped: &[("fontdb::Database", "FontDatabase")],
-    // Data types emitted under another name: `FaceInfo` reads as `FontFace`.
-    data_renames: &[("FaceInfo", "FontFace")],
-    // Enums emitted under another name. `Style` alone says nothing next to usvg's
-    // own `FontStyle`, and the two would sit side by side in the exports with
-    // identical variants: one is what a text run asked for, the other what a
-    // loaded face is.
-    enum_renames: &[("Style", "FontFaceStyle")],
     // Upstream Cargo features an emitted method can be gated on, and what each is
     // for this crate: `"true"` (always built) or a cfg of ours it is built under.
     // Names are global across the parsed crates (fontdb's `memmap`, usvg's
@@ -269,11 +151,9 @@ pub const GEN: Config = Config {
         // tiny-skia's PNG codec; resvg turns it on, on every target.
         ("png-format", "true"),
     ],
-    // The second surface (ADR 0002, Q21): one namespace per crate, each type
-    // under the crate that defines it. fontdb is reached through usvg's
-    // re-export, and is still `fontdb` from JS; tiny-skia and resvg through
-    // resvg's. The flat exports stay beside it until the migration removes
-    // them.
+    // One namespace per crate (ADR 0002, Q21), each type under the crate that
+    // defines it. fontdb is reached through usvg's re-export, and is still
+    // `fontdb` from JS; tiny-skia and resvg through resvg's.
     namespaces: &[
         ("usvg", "usvg"),
         ("usvg::fontdb", "fontdb"),
@@ -281,15 +161,12 @@ pub const GEN: Config = Config {
         ("svgtypes", "svgtypes"),
         ("resvg", "resvg"),
     ],
-    // A flat class named like a namespaced one (`ClipPath`, `Text`...) is
-    // renamed `LegacyClipPath`, `LegacyText`: napi keeps one constructor per
-    // class name. Both go with the flat surface in step 13 (decision Q36).
-    legacy_prefix: Some("Legacy"),
-    // The classes with their constructors, statics, errors and conversions
-    // (step 6 of the migration). An allowlist on purpose: tiny-skia alone has
-    // forty public types, and these are the ones parsing, rendering and the
-    // helpers need. `Transform` is tiny-skia's, so `tiny_skia.Transform`
-    // (Q21), and `svgtypes.Color` parses CSS colours (Q33).
+    // The classes with their constructors, statics, errors and conversions.
+    // An allowlist on purpose: tiny-skia alone has forty public types, and
+    // these are the ones parsing, rendering, the helpers and the tree's
+    // members need. `Transform` is tiny-skia's, so `tiny_skia.Transform`
+    // (Q21); `NonZeroRect` is what usvg's boxes are, and `Point` what a path
+    // segment holds; `svgtypes.Color` parses CSS colours (Q33).
     classes: &[
         ("usvg", "Tree"),
         ("usvg::fontdb", "Database"),
@@ -298,12 +175,13 @@ pub const GEN: Config = Config {
         ("tiny_skia", "IntSize"),
         ("tiny_skia", "Transform"),
         ("tiny_skia", "Rect"),
+        ("tiny_skia", "NonZeroRect"),
         ("tiny_skia", "Size"),
+        ("tiny_skia", "Point"),
         ("svgtypes", "Color"),
     ],
-    // `resvg.render`. `render_node` takes a `&usvg::Node`, which waits for
-    // the node projections of step 7.
-    functions: &[("resvg", "render")],
+    // `resvg.render`, and `resvg.renderNode`, which takes a `usvg.Node`.
+    functions: &[("resvg", "render"), ("resvg", "render_node")],
     // `resvg::render` draws on a `&mut PixmapMut`: JS passes the
     // `tiny_skia.Pixmap`, borrowed with `as_mut()` for the call.
     views: &[View {
@@ -311,6 +189,38 @@ pub const GEN: Config = Config {
         class: "Pixmap",
         via: "as_mut",
     }],
+    // The tree's nodes are borrowed from it (ADR 0002, Q22): `usvg.Group`,
+    // `usvg.Path`, `usvg.Image` and `usvg.Text` hold the tree and the way back
+    // to their node, and `usvg.Node` is a `{ kind, value }` union of them.
+    // `tree.root()`, `group.children()` and `tree.nodeById()` hand them out.
+    // The definitions owning content are reached the same way, from the
+    // tree's tables or from what refers to them (`group.clipPath()`), and
+    // their `root()` is a group of the same tree.
+    projections: &[
+        ("usvg", "Node"),
+        ("usvg", "Group"),
+        ("usvg", "Path"),
+        ("usvg", "Image"),
+        ("usvg", "Text"),
+        ("usvg", "ClipPath"),
+        ("usvg", "Mask"),
+        ("usvg", "Pattern"),
+    ],
+    // `*Async` twins (ADR 0001): what is slow enough to leave the event
+    // loop. Parsing, writing back, rendering, PNG encoding and loading fonts
+    // from disk. A render leases its `tiny_skia.Pixmap` (Q28): it is in use
+    // until the promise settles. No render-then-encode chain (Q29): two
+    // round trips, which the helpers chain.
+    asynchronous: &[
+        ("usvg", "Tree::from_data"),
+        ("usvg", "Tree::from_str"),
+        ("usvg", "Tree::to_string"),
+        ("resvg", "render"),
+        ("resvg", "render_node"),
+        ("tiny_skia", "Pixmap::encode_png"),
+        ("usvg::fontdb", "Database::load_system_fonts"),
+        ("usvg::fontdb", "Database::load_fonts_dir"),
+    ],
 };
 
 /// Crates parsed only for the classes and functions `GEN` lists, never for

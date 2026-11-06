@@ -44,21 +44,27 @@ test('usvg.Options and usvg.WriteOptions: every field optional', () => {
   }
 });
 
-test('the same fields as the flat options, from the same upstream structs', () => {
-  const flat = (n) => Object.keys(fields(n)).sort();
-  // `resourcesRoot` is the flat surface's own fence, not a usvg field; the
-  // font database is a `Resvg` argument there and a field here.
-  const render = flat('RenderOptions').filter((f) => f !== 'resourcesRoot');
-  assert.deepEqual(Object.keys(fields('usvg.Options')).sort(), [...render, 'fontdb'].sort());
-  assert.deepEqual(Object.keys(fields('usvg.WriteOptions')).sort(), flat('WriteOptions'));
+test('every public field of the upstream structs, under its Rust name', () => {
+  // usvg 0.49's `Options` and `WriteOptions`, camelCased: a field that stops
+  // mapping shows up here, and in the codegen report.
+  assert.deepEqual(Object.keys(fields('usvg.Options')).sort(), [
+    'defaultSize', 'dpi', 'fontFamily', 'fontResolver', 'fontSize', 'fontdb', 'imageHrefResolver',
+    'imageRendering', 'languages', 'resourcesDir', 'shapeRendering', 'styleSheet', 'textRendering',
+  ]);
+  assert.deepEqual(Object.keys(fields('usvg.WriteOptions')).sort(), [
+    'attributesIndent', 'coordinatesPrecision', 'idPrefix', 'indent', 'preserveText',
+    'transformsPrecision', 'useSingleQuote',
+  ]);
 });
 
-test('usvg.Options.fontdb takes a fontdb.Database (a provider field)', () => {
+test('usvg.Options: fontdb, the resolvers and defaultSize are provider fields', () => {
   assert.equal(fields('usvg.Options').fontdb, '?: fontdb.Database');
-  // The resolvers get their provider classes in step 10 (`guard`): until
-  // then they are left out, and usvg's default resolvers apply.
-  assert.equal(fields('usvg.Options').imageHrefResolver, undefined);
-  assert.equal(fields('usvg.Options').fontResolver, undefined);
+  // `default_size` is a `tiny_skia::Size` (Q39): no `fromObject`, its
+  // fields are private, so JS builds one with `tiny_skia.Size.fromWh`.
+  assert.equal(fields('usvg.Options').defaultSize, '?: tiny_skia.Size');
+  // The resolvers take the `guard` providers (test/api/guard.mjs).
+  assert.equal(fields('usvg.Options').imageHrefResolver, '?: guard.ImageHrefResolver');
+  assert.equal(fields('usvg.Options').fontResolver, '?: guard.FontResolver');
 });
 
 test('enum fields are the namespaced enums, indent its JS form', () => {
@@ -92,7 +98,14 @@ test('the fontdb field takes a fontdb.Database, shared with the tree', () => {
   assert.ok(draws(tree), 'the text renders with the font');
   // A provider field takes its class only.
   assert.throws(() => usvg.Tree.fromStr(TEXT, { fontdb: {} }));
-  assert.throws(() => usvg.Tree.fromStr(TEXT, { fontdb: new binding.FontDatabase() }));
+  assert.throws(() => usvg.Tree.fromStr(TEXT, { fontdb: tiny_skia.Size.fromWh(1, 1) }));
+  // And `defaultSize` a `tiny_skia.Size` only (test/options.mjs: what usvg
+  // does with it).
+  assert.equal(usvg.Tree.fromStr(TEXT, { defaultSize: tiny_skia.Size.fromWh(40, 25) }).size().width(), 80);
+  assert.throws(() => usvg.Tree.fromStr(TEXT, { defaultSize: { width: 40, height: 25 } }));
+  const gone = tiny_skia.Size.fromWh(1, 1);
+  gone.dispose();
+  assert.throws(() => usvg.Tree.fromStr(TEXT, { defaultSize: gone }), { code: 'Disposed' });
 });
 
 test('one field changes that field only', () => {

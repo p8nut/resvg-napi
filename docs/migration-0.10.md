@@ -415,10 +415,6 @@ What it found:
 - `nodeExtent` returns a plain `{ x, y, width, height }` rather than the
   `NonZeroRect`, so the helpers' option shapes (`crop`) and what callers read
   of a box did not move. `crop` takes a `Rect` or `NonZeroRect` too.
-- `test/helpers/exports.mjs` resolved nothing on Node 20.3, the oldest CI
-  runs: `import.meta.resolve` is unflagged from 20.6. The child now gets
-  `--experimental-import-meta-resolve` when the parent lacks it (a commit of
-  its own, for #196 and #197, which fail on it too).
 - `api-diff` against step 12 says breaking: 26 removed, 16 changed, 19
   added.
 

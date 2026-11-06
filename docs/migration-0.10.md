@@ -425,8 +425,8 @@ Still open after 13 (for 0.10's notes, step 14):
 - #191: what an `feImage` draws, the tree an `<image>` embeds (a nested
   owner), which face drew a glyph, `usvg.Font.families` (`&[FontFamily]`,
   a payload enum with a borrowed name).
-- `util.inspect` of a leased instance, and the inspection of the new
-  `Primitive` class's union getter.
+- ~~`util.inspect` of a leased instance~~: prints `Pixmap { leased: true }`
+  (or `consumed: true`) since 0.10.1; `Primitive`'s union getter prints fine.
 - Hand-written `.d.mts` of the helpers, which can drift: generate them from
   JSDoc with `tsc --allowJs --declaration` (asked during this step).
 

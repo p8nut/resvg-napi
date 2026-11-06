@@ -569,6 +569,37 @@ pub fn inspect<'e>(
     if depth.is_some_and(|d| d < 0.0) {
         return Ok(format!("[{class}]"));
     }
+    match shown(env, this, class, getters, methods, depth, options, inspect) {
+        Err(e) if e.status == Status::PendingException => {
+            // A getter threw. `Leased` and `Consumed` are states, printed as
+            // `disposed` is; anything else is thrown again.
+            let mut raw = std::ptr::null_mut();
+            unsafe { napi::sys::napi_get_and_clear_last_exception(env.raw(), &mut raw) };
+            let thrown = unsafe { Unknown::from_raw_unchecked(env.raw(), raw) };
+            let code = unsafe { thrown.cast::<Object>() }
+                .and_then(|o| o.get_named_property::<String>("code"))
+                .unwrap_or_default();
+            if ["Leased", "Consumed"].contains(&code.as_str()) {
+                return Ok(format!("{class} {{ {}: true }}", code.to_lowercase()));
+            }
+            unsafe { napi::sys::napi_throw(env.raw(), raw) };
+            Err(e)
+        }
+        other => other,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn shown<'e>(
+    env: &'e Env,
+    this: &Object<'e>,
+    class: &str,
+    getters: &[&str],
+    methods: &[&str],
+    depth: Option<f64>,
+    options: Object<'e>,
+    inspect: Function<'e, FnArgs<(Object<'e>, Object<'e>)>, String>,
+) -> Result<String> {
     // `disposed` is printed only once true, and alone: every other getter throws then.
     if getters.contains(&"disposed") && this.get_named_property::<bool>("disposed")? {
         return Ok(format!("{class} {{ disposed: true }}"));

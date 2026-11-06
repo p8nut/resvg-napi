@@ -77,6 +77,17 @@ pub struct ToyStepLine {
     pub r#type: String,
     pub value: (ToyVec2Object, ToyVec2Object),
 }
+#[doc = " A tag a filter matches on: a name it borrows, or any."]
+#[doc = ""]
+#[doc = " Passed in as the union it prints as: `{ type, value }`."]
+#[napi(object, object_to_js = false, js_name = "Tag", namespace = "toy")]
+pub struct ToyTag {
+    #[doc = " The variant."]
+    #[napi(ts_type = "'named' | 'any'")]
+    pub r#type: String,
+    #[doc = " The string the variant carries: required for `'named'`, ignored otherwise."]
+    pub value: Option<String>,
+}
 #[doc = " Names counted so far. Unlike [`Counter`] it is `Clone` and changes in"]
 #[doc = " place, which is the shape a binding copies on write."]
 #[doc = ""]
@@ -126,6 +137,15 @@ pub struct ToyOptions {
     pub step: Option<f64>,
     pub direction: Option<ToyDirection>,
 }
+#[doc = " What [`Tally::find`] looks for: a list it borrows."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(object, object_to_js = false, js_name = "Filter", namespace = "toy")]
+#[derive(Default)]
+pub struct ToyFilter {
+    pub tags: Option<Vec<ToyTag>>,
+    pub min_len: Option<u32>,
+}
 #[doc = " An immutable counter, shared behind an `Arc`."]
 #[doc = ""]
 #[doc = " A shared, read-only `toy::Counter`."]
@@ -164,6 +184,13 @@ pub struct ToyCanvas {
 #[napi(js_name = "Scene", namespace = "toy")]
 pub struct ToyScene {
     inner: napi_support::Slot<std::sync::Arc<toy::Scene>>,
+}
+#[doc = " An opaque key: no public field, `Copy`, printed as a number."]
+#[doc = ""]
+#[doc = " A `toy::Key`, held by value."]
+#[napi(js_name = "Key", namespace = "toy")]
+pub struct ToyKey {
+    inner: napi_support::Slot<toy::Key>,
 }
 #[doc = " A named list of items."]
 #[doc = ""]
@@ -270,6 +297,25 @@ fn toy_step_to_js(v: &toy::Step) -> Either3<ToyStepPlain, ToyStepJump, ToyStepLi
         }),
     }
 }
+impl ToyTag {
+    #[doc = " The upstream value, borrowing this one's string."]
+    fn to_upstream(&self) -> Result<toy::Tag<'_>, String> {
+        Ok(match self.r#type.as_str() {
+            "named" => {
+                toy::Tag::Named(self.value.as_deref().ok_or_else(|| {
+                    napi_support::thrown("InvalidArg", "Tag 'named' needs a value")
+                })?)
+            }
+            "any" => toy::Tag::Any,
+            t => {
+                return Err(napi_support::thrown(
+                    "InvalidArg",
+                    format!("invalid Tag type: {:?}", t),
+                ));
+            }
+        })
+    }
+}
 impl ToyReportOptions<'_> {
     #[doc = " The upstream value: `Default`, with what JS provided on top."]
     fn to_upstream(&self) -> Result<toy::ReportOptions, String> {
@@ -302,6 +348,37 @@ impl ToyOptions {
         }
         if let Some(v) = self.direction {
             o.direction = v.into();
+        }
+        Ok(o)
+    }
+}
+impl ToyFilter {
+    #[doc = " The lists the upstream value borrows, converted from JS's."]
+    fn lists<'s>(&'s self) -> Result<(Option<Vec<toy::Tag<'s>>>,), String> {
+        Ok((self
+            .tags
+            .as_ref()
+            .map(|v| {
+                v.iter()
+                    .map(ToyTag::to_upstream)
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .transpose()?,))
+    }
+    #[doc = " The upstream value: `Default`, with what JS provided on top,"]
+    #[doc = " borrowing `lists`."]
+    fn to_upstream<'s>(
+        &'s self,
+        lists: &'s (Option<Vec<toy::Tag<'s>>>,),
+    ) -> Result<toy::Filter<'s>, String> {
+        let mut o = <toy::Filter<'s>>::default();
+        if let Some(v) = &lists.0 {
+            o.tags = v.as_slice();
+        }
+        if let Some(v) = self.min_len {
+            o.min_len.0 = v
+                .try_into()
+                .map_err(|_| napi_support::invalid("minLen", v))?;
         }
         Ok(o)
     }
@@ -507,6 +584,60 @@ impl ToyTally {
         let __v = napi_support::contained("Tally::pairs", || __self.pairs())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|(x0, x1)| (x0.to_string(), *x1)).collect())
+    }
+    #[doc = " The key of the name at `place`: an opaque value, passed back to"]
+    #[doc = " [`Tally::named`]."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn key(&self, place: u32) -> Result<Option<ToyKey>, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::key", || __self.key(place))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| ToyKey::__from(__v)))
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn named(&self, key: &ToyKey) -> Result<Option<String>, String> {
+        let __key = *key.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::named", || __self.named(__key))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| __v.to_string()))
+    }
+    #[doc = " What a tag names: its own name, or the first one here for `Any`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn tag_name(&self, tag: ToyTag) -> Result<String, String> {
+        let __tag = tag.to_upstream()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::tag_name", || __self.tag_name(&__tag))
+            .map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " The key of the first name a filter accepts: borrowed lists in, as"]
+    #[doc = " a query is."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn find(&self, filter: Option<ToyFilter>) -> Result<Option<ToyKey>, String> {
+        let __filter_o = filter.unwrap_or_default();
+        let __filter_l = __filter_o.lists()?;
+        let __filter = __filter_o.to_upstream(&__filter_l)?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::find", || __self.find(&__filter))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| ToyKey::__from(__v)))
+    }
+    #[doc = " Runs `p` with the joined names' bytes and how many there are: the"]
+    #[doc = " data is lent, not returned."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn with_joined(&self) -> Result<(Buffer, u32), String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::with_joined", || {
+            __self.with_joined(|__a0: &[u8], __a1: u32| (__a0.to_vec(), __a1))
+        })
+        .map_err(napi_support::coded)?;
+        Ok((__v.0.into(), __v.1))
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -1022,6 +1153,52 @@ impl ToyScene {
         self.inner.disposed()
     }
 }
+impl ToyKey {
+    fn __from(inner: toy::Key) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy::Key, String> {
+        self.inner.get("Key")
+    }
+    fn __mut(&mut self) -> Result<&mut toy::Key, String> {
+        self.inner.get_mut("Key")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy::Key>, String> {
+        self.inner.lease("Key")
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyKey {
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn first() -> Result<Self, String> {
+        let __v = napi_support::contained("Key::first", <toy::Key>::first)
+            .map_err(napi_support::coded)?;
+        Ok(ToyKey::__from(__v))
+    }
+    #[doc = " The `Key` as Rust's `Display` writes it."]
+    #[napi]
+    pub fn to_string(&self) -> Result<String, String> {
+        Ok(self.__ref()?.to_string())
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Key")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
 impl From<&toy::Layer> for ToyLayer {
     fn from(v: &toy::Layer) -> Self {
         Self::__from(v.clone())
@@ -1515,6 +1692,7 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("toy"), "Color"),
         (Some("toy"), "Counter"),
         (Some("toy"), "Dot"),
+        (Some("toy"), "Key"),
         (Some("toy"), "Layer"),
         (Some("toy"), "Scene"),
         (Some("toy"), "Tally"),
@@ -1704,6 +1882,35 @@ impl ToyScene {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Scene".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyKey {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Key",
+            &["disposed"],
+            &["toString"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Key".to_string()
     }
 }
 #[napi(namespace = "toy")]

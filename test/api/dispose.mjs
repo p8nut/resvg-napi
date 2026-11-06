@@ -47,6 +47,7 @@ function everyClass() {
   return {
     'fontdb.Database': db,
     'fontdb.FaceInfo': db.faces()[0],
+    'fontdb.ID': db.faces()[0].id,
     'svgtypes.Color': svgtypes.Color.fromStr('red'),
     'tiny_skia.Color': tiny_skia.Color.fromRgba8(1, 2, 3, 4),
     'tiny_skia.IntSize': tiny_skia.IntSize.fromWh(1, 2),

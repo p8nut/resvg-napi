@@ -19,7 +19,9 @@ const GEN: Config = Config {
     // `ReportOptions` and `Options` become `toy.ReportOptions` and
     // `toy.Options`. `Counter` has no `Default`, so it is refused (it is a
     // class with a constructor instead).
-    option_objects: &["ReportOptions", "Options", "Counter"],
+    // `Filter` borrows a list of `Tag`s, an input enum: `toy.Filter` holds
+    // `toy.Tag` objects, converted for the call.
+    option_objects: &["ReportOptions", "Options", "Counter", "Filter"],
     // `ReportOptions::base` is supplied by a `toy.Tally`.
     providers: &[Provider {
         ty: "Arc<Tally>",
@@ -59,6 +61,7 @@ const GEN: Config = Config {
         ("toy", "Canvas"),
         ("toy::alt", "Color"),
         ("toy", "Scene"),
+        ("toy", "Key"),
     ],
     functions: &[
         ("toy", "report"),
@@ -140,7 +143,7 @@ fn main() {
     // each through the emitter the root crate uses for the same shape.
     let mut vocab = Vocab::default();
     // `Color` has two, so a member's bare `Color` names neither.
-    for (name, plain) in classes.by_value().filter(|(n, _)| *n != "Color") {
+    for (name, plain, _) in classes.by_value().filter(|(n, _, _)| *n != "Color") {
         vocab.classes.insert(name.to_string());
         if plain {
             vocab.plain.insert(name.to_string());
@@ -170,6 +173,17 @@ fn main() {
     let bounds = index_bounds(&files);
     assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
 
+    // `Tag`, the input enum: `{ type, value }`, borrowed for the call.
+    let mut tag = quote!();
+    for e in files.iter().flat_map(|f| &f.items).filter_map(|i| match i {
+        syn::Item::Enum(e) if is_enum_input(e) => Some(e),
+        _ => None,
+    }) {
+        assert_eq!(e.ident, "Tag", "Tag is the one input enum");
+        tag.extend(enum_input(e, modules, &root));
+    }
+    vocab.ints.insert("MinLen".into());
+
     // The option objects: `ReportOptions` with every field optional over
     // `Default`, `base` taken from a `toy.Tally` (a provider), `width`
     // through `width_from_js` (a converter), `style_index` clamped to
@@ -188,6 +202,11 @@ fn main() {
                     ),
                     _ => (&[], 0),
                 };
+                assert_eq!(
+                    has_input_lists(&files, name),
+                    *name == "Filter",
+                    "{name}: only Filter borrows lists"
+                );
                 assert_eq!(skipped, want, "{name}: what is left out");
                 assert_eq!(obj.bounded, bounded, "{name}: style_index is clamped");
                 options.extend(obj.code);
@@ -208,6 +227,7 @@ fn main() {
             Holding::Owned,
             Holding::Value,
             Holding::Shared,
+            Holding::Value,
             Holding::Projected,
             Holding::Projected,
         ],
@@ -225,7 +245,7 @@ fn main() {
         ["Color".to_string()].into(),
         "two namespaces have a Color"
     );
-    let mut toy_part = quote! { #enum_code #point #step #options };
+    let mut toy_part = quote! { #enum_code #point #step #tag #options };
     let mut alt_part = quote!();
     for (i, c) in classes.classes.iter().enumerate() {
         let (code, skipped) = classes.class(i, &vocab);

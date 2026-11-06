@@ -241,6 +241,90 @@ pub(crate) fn find_struct<'f>(files: &'f [syn::File], name: &str) -> Option<&'f 
     })
 }
 
+/// A function's callback parameters, by name: `P` bounded by
+/// `FnOnce(&[u8], u32) -> T` (inline or in the `where` clause) whose result
+/// is another type parameter, with its inputs and that parameter's name.
+fn callbacks(sig: &syn::Signature) -> BTreeMap<String, (Vec<Type>, String)> {
+    let params: BTreeSet<String> = sig
+        .generics
+        .type_params()
+        .map(|p| p.ident.to_string())
+        .collect();
+    let inline = sig
+        .generics
+        .type_params()
+        .map(|p| (p.ident.to_string(), &p.bounds));
+    let clause = sig
+        .generics
+        .where_clause
+        .iter()
+        .flat_map(|w| &w.predicates)
+        .filter_map(|p| match p {
+            syn::WherePredicate::Type(t) => Some((ty_str(&t.bounded_ty), &t.bounds)),
+            _ => None,
+        });
+    let mut out = BTreeMap::new();
+    for (name, bounds) in inline.chain(clause) {
+        for b in bounds {
+            let syn::TypeParamBound::Trait(t) = b else {
+                continue;
+            };
+            let Some(last) = t.path.segments.last() else {
+                continue;
+            };
+            let syn::PathArguments::Parenthesized(f) = &last.arguments else {
+                continue;
+            };
+            if !["FnOnce", "FnMut", "Fn"].contains(&last.ident.to_string().as_str()) {
+                continue;
+            }
+            if let ReturnType::Type(_, r) = &f.output
+                && let Some([result]) = segs(r).as_deref()
+                && params.contains(result)
+            {
+                out.insert(
+                    name.clone(),
+                    (
+                        f.inputs.iter().map(|a| a.ty.clone()).collect(),
+                        result.clone(),
+                    ),
+                );
+            }
+        }
+    }
+    out
+}
+
+/// The closure a callback gets, copying out each input it is handed (bytes,
+/// a string, a number), and the type it returns: the value, or a tuple of
+/// them. `None` when an input has no owned copy here.
+fn copy_out(inputs: &[Type]) -> Option<(TokenStream, Type)> {
+    let mut pats = Vec::new();
+    let (mut vals, mut tys): (Vec<TokenStream>, Vec<TokenStream>) = (Vec::new(), Vec::new());
+    for (i, ty) in inputs.iter().enumerate() {
+        let a = format_ident!("__a{i}");
+        let (r, inner) = deref(ty);
+        let (val, owned) = match (r, inner) {
+            (Some(false), Type::Slice(s)) if Prim::of(&s.elem) == Some(Prim::U8) => {
+                (quote!(#a.to_vec()), quote!(Vec<u8>))
+            }
+            (Some(false), _) if matches!(segs(inner).as_deref(), Some([s]) if s == "str") => {
+                (quote!(#a.to_string()), quote!(String))
+            }
+            (None, _) if Prim::of(inner).is_some() => (quote!(#a), quote!(#inner)),
+            _ => return None,
+        };
+        pats.push(quote!(#a: #ty));
+        vals.push(val);
+        tys.push(owned);
+    }
+    let (body, ty) = match (vals.as_slice(), tys.as_slice()) {
+        ([v], [t]) => (v.clone(), t.clone()),
+        _ => (quote!((#(#vals),*)), quote!((#(#tys),*))),
+    };
+    Some((quote!(|#(#pats),*| #body), syn::parse2(ty).ok()?))
+}
+
 pub(crate) fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
     files.iter().flat_map(|f| &f.items).find_map(|i| match i {
         Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
@@ -397,13 +481,19 @@ impl<'a> Classes<'a> {
     }
 
     /// The classes held by value (`Copy`), by upstream name, each with
-    /// whether it is plain data: what `Vocab::classes` and `Vocab::plain`
-    /// start from.
-    pub fn by_value(&self) -> impl Iterator<Item = (&str, bool)> {
+    /// whether it is plain data and the root of its source: what
+    /// `Vocab::classes` and `Vocab::plain` start from.
+    pub fn by_value(&self) -> impl Iterator<Item = (&str, bool, &str)> {
         self.classes
             .iter()
             .filter(|c| c.holding == Holding::Value)
-            .map(|c| (c.name.as_str(), !c.plain.is_empty()))
+            .map(|c| {
+                (
+                    c.name.as_str(),
+                    !c.plain.is_empty(),
+                    self.sources[c.source].root,
+                )
+            })
     }
 
     /// Whether `ty` (an upstream root-relative key such as `a::Ty` or `Ty`)
@@ -596,16 +686,41 @@ impl<'a> Classes<'a> {
         // An option object (`Config::option_objects`): optional, `Default`
         // under what JS provided.
         if r == Some(false) && config().option_objects.contains(&last.as_str()) {
-            self.resolve(ctx, &segs, |s| {
+            let s = self.resolve(ctx, &segs, |s| {
                 crate::sources::has_default(self.sources[s].files, last)
             })?;
             let o = format_ident!("{last}");
             let tmp = format_ident!("__{pat}");
-            return Some((
-                quote!(#pat: Option<#o>),
-                Some(quote! {
+            // One borrowing lists JS passed converts them first, and keeps
+            // both alive for the call.
+            let pre = if crate::emit::has_input_lists(self.sources[s].files, last) {
+                let (own, lists) = (format_ident!("__{pat}_o"), format_ident!("__{pat}_l"));
+                quote! {
+                    let #own = #pat.unwrap_or_default();
+                    let #lists = #own.lists()?;
+                    let #tmp = #own.to_upstream(&#lists)?;
+                }
+            } else {
+                quote! {
                     let #tmp = #pat.unwrap_or_default().to_upstream()?;
-                }),
+                }
+            };
+            return Some((quote!(#pat: Option<#o>), Some(pre), quote!(&#tmp)));
+        }
+        // An input enum (`emit::is_enum_input`), borrowed for the call from
+        // the `{ type, value }` JS passed.
+        if r == Some(false)
+            && self
+                .resolve(ctx, &segs, |s| {
+                    find_enum(self.sources[s].files, last).is_some_and(crate::emit::is_enum_input)
+                })
+                .is_some()
+        {
+            let e = format_ident!("{last}");
+            let tmp = format_ident!("__{pat}");
+            return Some((
+                quote!(#pat: #e),
+                Some(quote!(let #tmp = #pat.to_upstream()?;)),
                 quote!(&#tmp),
             ));
         }
@@ -697,16 +812,24 @@ impl<'a> Classes<'a> {
             };
             return Ok(Ret { ty: p.js(), conv });
         }
-        // A tuple of numbers, booleans or strings: an array, `[A, B]`.
+        // A tuple of numbers, booleans, strings or bytes: an array, `[A, B]`.
         if let (None, Type::Tuple(t)) = (r, inner)
-            && let Some(prims) = t.elems.iter().map(Prim::of).collect::<Option<Vec<_>>>()
-            && prims.len() > 1
+            && t.elems.len() > 1
+            && let Some(elems) = t
+                .elems
+                .iter()
+                .enumerate()
+                .map(|(i, e)| {
+                    let i = syn::Index::from(i);
+                    let at = quote!(#v.#i);
+                    if is(e, "Vec", 1) && Prim::of(args(e)[0]) == Some(Prim::U8) {
+                        return Some((quote!(Buffer), quote!(#at.into())));
+                    }
+                    Prim::of(e).map(|p| (p.js(), p.js_out(&at)))
+                })
+                .collect::<Option<Vec<_>>>()
         {
-            let tys = prims.iter().map(|p| p.js());
-            let convs = prims.iter().enumerate().map(|(i, p)| {
-                let i = syn::Index::from(i);
-                p.js_out(&quote!(#v.#i))
-            });
+            let (tys, convs): (Vec<_>, Vec<_>) = elems.into_iter().unzip();
             return Ok(Ret {
                 ty: quote!((#(#tys),*)),
                 conv: quote!((#(#convs),*)),
@@ -828,11 +951,27 @@ impl<'a> Classes<'a> {
             pre: Vec::new(),
             fwd: Vec::new(),
         };
+        let callbacks = callbacks(sig);
+        // The type a callback's result stands for: what its closure returns.
+        let mut copied: Option<(String, Type)> = None;
         for input in sig.inputs.iter().skip(usize::from(recv != Recv::None)) {
             let FnArg::Typed(t) = input else { continue };
             let syn::Pat::Ident(p) = &*t.pat else {
                 return skip(Reason::Arg, Some(ty_str(&t.ty)));
             };
+            // A callback whose result the function returns (`with_data(id,
+            // |data, index| ..)`): no JS argument; the closure copies out what
+            // it is handed, and that is what JS gets back.
+            if let Some([seg]) = segs(&t.ty).as_deref()
+                && let Some((inputs, result)) = callbacks.get(seg)
+            {
+                let Some((closure, ty)) = copy_out(inputs) else {
+                    return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                };
+                a.fwd.push(closure);
+                copied = Some((result.clone(), ty));
+                continue;
+            }
             let Some((param, pre, fwd)) = self.arg(ctx, this, &p.ident, &t.ty, &bounds) else {
                 return skip(Reason::Arg, Some(ty_str(&t.ty)));
             };
@@ -856,6 +995,13 @@ impl<'a> Classes<'a> {
             (args(&out)[0].clone(), true)
         } else {
             (out, false)
+        };
+        let out = match &copied {
+            Some((result, ty)) if matches!(segs(&out).as_deref(), Some([s]) if s == result) => {
+                ty.clone()
+            }
+            Some(_) => return skip(Reason::Returns, Some(ty_str(&out))),
+            None => out,
         };
         // Only a class's own constructor and factories build it from the
         // class they are called on.

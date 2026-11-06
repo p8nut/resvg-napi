@@ -12,6 +12,9 @@ export declare namespace fontdb {
   export interface FaceInfo {
     [Symbol.dispose](): void
   }
+  export interface ID {
+    [Symbol.dispose](): void
+  }
 }
 
 export declare namespace guard {

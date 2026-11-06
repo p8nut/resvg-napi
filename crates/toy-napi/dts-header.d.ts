@@ -24,6 +24,9 @@ export declare namespace toy {
   export interface Dot {
     [Symbol.dispose](): void
   }
+  export interface Key {
+    [Symbol.dispose](): void
+  }
   export interface Layer {
     [Symbol.dispose](): void
   }

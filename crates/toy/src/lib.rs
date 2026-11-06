@@ -118,6 +118,80 @@ impl Tally {
             .map(|(n, i)| (n.clone(), i))
             .collect()
     }
+
+    /// The key of the name at `place`: an opaque value, passed back to
+    /// [`Tally::named`].
+    pub fn key(&self, place: u32) -> Option<Key> {
+        ((place as usize) < self.names.len()).then_some(Key(place))
+    }
+
+    pub fn named(&self, key: Key) -> Option<&str> {
+        self.names.get(key.0 as usize).map(String::as_str)
+    }
+
+    /// What a tag names: its own name, or the first one here for `Any`.
+    pub fn tag_name<'a>(&'a self, tag: &'a Tag) -> &'a str {
+        match tag {
+            Tag::Named(n) => n,
+            Tag::Any => self.names.first().map_or("", String::as_str),
+        }
+    }
+
+    /// The key of the first name a filter accepts: borrowed lists in, as
+    /// a query is.
+    pub fn find(&self, filter: &Filter) -> Option<Key> {
+        let place = self.names.iter().position(|n| {
+            n.len() >= filter.min_len.0 as usize
+                && filter
+                    .tags
+                    .iter()
+                    .any(|t| matches!(t, Tag::Any) || *t == Tag::Named(n))
+        })?;
+        Some(Key(place as u32))
+    }
+
+    /// Runs `p` with the joined names' bytes and how many there are: the
+    /// data is lent, not returned.
+    pub fn with_joined<P, T>(&self, p: P) -> T
+    where
+        P: FnOnce(&[u8], u32) -> T,
+    {
+        p(self.joined().as_bytes(), self.names.len() as u32)
+    }
+}
+
+/// An opaque key: no public field, `Copy`, printed as a number.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Key(u32);
+
+impl Key {
+    pub fn first() -> Self {
+        Key(0)
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A tag a filter matches on: a name it borrows, or any.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tag<'a> {
+    Named(&'a str),
+    Any,
+}
+
+/// A shortest length, as a number newtype.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MinLen(pub u16);
+
+/// What [`Tally::find`] looks for: a list it borrows.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Filter<'a> {
+    pub tags: &'a [Tag<'a>],
+    pub min_len: MinLen,
 }
 
 /// The styles a report can take, indexed by [`ReportOptions::style_index`].

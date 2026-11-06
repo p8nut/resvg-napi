@@ -1,4 +1,3 @@
-FaceInfo member not exposed: id: ID
 FaceInfo member not exposed: source: Source
 FaceInfo: partial mapping, emitted as read-only class FaceInfo
 Font member not exposed: families: &[FontFamily]
@@ -7,14 +6,12 @@ Image: partial mapping, emitted as read-only class Image
 ImageKind::SVG carries Tree, which has no mappable data: emitted without a value
 Kind::Image carries filter::Image, which has no mappable data: emitted without a value
 Path: partial mapping, emitted as read-only class Path
-PositionedGlyph member not exposed: font: ID
 PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
 Primitive: partial mapping, emitted as read-only class Primitive
 Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
 TextChunk: partial mapping, emitted as read-only class TextChunk
 TextSpan: partial mapping, emitted as read-only class TextSpan
-data type ID skipped: nothing mappable on it
 data type filter::Image skipped: nothing mappable on it
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence
 names defined more than once across the sources, keyed by module: Image
@@ -85,15 +82,11 @@ usvg::Text is a projection, not a data type
 usvg::Tree is a class: Shared
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
 usvg::fontdb::Database is a class: SharedCow
-usvg::fontdb::Database member not in the class: face (arg: ID)
-usvg::fontdb::Database member not in the class: face_source (arg: ID)
-usvg::fontdb::Database member not in the class: family_name (arg: &'aFamily)
+usvg::fontdb::Database member not in the class: face_source (returns (Source,u32))
 usvg::fontdb::Database member not in the class: load_font_source (arg: Source)
-usvg::fontdb::Database member not in the class: make_face_data_unshared (arg: ID)
 usvg::fontdb::Database member not in the class: make_shared_face_data (unsafe)
 usvg::fontdb::Database member not in the class: push_face_info (arg: FaceInfo)
-usvg::fontdb::Database member not in the class: query (arg: &Query)
-usvg::fontdb::Database member not in the class: remove_face (arg: ID)
-usvg::fontdb::Database member not in the class: with_face_data (arg: ID)
+usvg::fontdb::Family is an input enum: { type, value }
+usvg::fontdb::ID is a class: Value
 vocabulary derived: 7 f32 newtypes, 7 type aliases
 wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database

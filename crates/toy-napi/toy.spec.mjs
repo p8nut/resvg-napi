@@ -44,7 +44,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
+    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Key', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
     'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync', 'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
   ]);
@@ -270,6 +270,43 @@ test('a tuple is an array: a list of pairs, a pair, a tuple payload', () => {
     { type: 'line', value: [{ x: 1, y: 0 }, { x: 4, y: 0 }] },
     { type: 'stop' },
   ]);
+});
+
+test('an opaque Copy class crosses JS and back: a key handed out, passed in', () => {
+  const t = new toy.toy.Tally();
+  t.push('ab');
+  t.push('cde');
+  const k = t.key(1);
+  assert.ok(k instanceof toy.toy.Key);
+  assert.equal(String(k), '1');
+  assert.equal(t.named(k), 'cde');
+  assert.equal(t.named(toy.toy.Key.first()), 'ab');
+  assert.equal(t.key(5), null);
+});
+
+test('a borrowed enum is passed as { type, value }, and a list of them in an option object', () => {
+  const t = new toy.toy.Tally();
+  t.push('ab');
+  t.push('cde');
+  assert.equal(t.tagName({ type: 'named', value: 'zz' }), 'zz');
+  assert.equal(t.tagName({ type: 'any' }), 'ab');
+  assert.throws(() => t.tagName({ type: 'named' }), { code: 'InvalidArg', message: "Tag 'named' needs a value" });
+  assert.throws(() => t.tagName({ type: 'nope' }), { code: 'InvalidArg', message: 'invalid Tag type: "nope"' });
+  assert.equal(String(t.find({ tags: [{ type: 'named', value: 'cde' }] })), '1');
+  assert.equal(String(t.find({ tags: [{ type: 'any' }], minLen: 3 })), '1');
+  assert.equal(t.find({ tags: [{ type: 'named', value: 'x' }] }), null);
+  assert.equal(t.find(), null, 'Default: no tags, nothing found');
+  assert.throws(() => t.find({ minLen: 70000 }), { code: 'InvalidArg', message: 'invalid minLen: 70000' });
+});
+
+test('a callback whose result is returned: JS gets what the closure was handed, copied', () => {
+  const t = new toy.toy.Tally();
+  t.push('ab');
+  t.push('c');
+  const [data, n] = t.withJoined();
+  assert.ok(Buffer.isBuffer(data));
+  assert.equal(data.toString(), 'ab,c');
+  assert.equal(n, 2);
 });
 
 test('the log functions of the prelude: a level, and a drain', () => {

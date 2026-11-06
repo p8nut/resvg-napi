@@ -420,8 +420,9 @@ What it found:
 
 Still open after 13 (for 0.10's notes, step 14):
 
-- #181: fontdb's `query`, `faceData`, `familyName`, `faceSource`, the face
-  `ID`s (`face`, `removeFace`, `makeFaceDataUnshared`). `families` is back.
+- #181: fontdb's `query`, `withFaceData`, `familyName`, the face `ID`s
+  (`face`, `removeFace`, `makeFaceDataUnshared`) and `families` are back;
+  `faceSource` (a `Source` union of shared bytes and paths) is not.
 - #191: what an `feImage` draws, the tree an `<image>` embeds (a nested
   owner), which face drew a glyph, `usvg.Font.families` (`&[FontFamily]`,
   a payload enum with a borrowed name).

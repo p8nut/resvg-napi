@@ -67,7 +67,7 @@ assert.equal(typeof prims[0].rect.width(), 'number');
 assert.equal(prims[0].colorInterpolation, 'linearRgb');
 const faces = tree.fontdb().faces();
 assert.ok(faces.length > 0);
-// FaceInfo maps only partially (ID and Source have no JS form), so the strict
+// FaceInfo maps only partially (Source has no JS form), so the strict
 // policy makes it a class with getters rather than a plain object.
 //
 // `stretch` arrived when the generator started reading a crate's public surface
@@ -77,7 +77,7 @@ assert.ok(faces.length > 0);
 const plumbing = ['constructor', 'dispose', 'disposed'];
 assert.deepEqual(
   Object.getOwnPropertyNames(Object.getPrototypeOf(faces[0])).filter((k) => !plumbing.includes(k)).sort(),
-  ['families', 'index', 'monospaced', 'postScriptName', 'stretch', 'style', 'weight'],
+  ['families', 'id', 'index', 'monospaced', 'postScriptName', 'stretch', 'style', 'weight'],
 );
 // The nine OS/2 width classes, spelled as usvg spells its own enums.
 assert.ok(['ultraCondensed', 'condensed', 'normal', 'expanded', 'ultraExpanded', 'semiCondensed',
@@ -131,10 +131,10 @@ assert.ok(tree.fontdb().len() > 0, 'resolved fontdb reachable from the tree');
   assert.equal(typeof face.weight, 'number');
   assert.equal(typeof face.index, 'number');
   assert.equal(typeof face.monospaced, 'boolean');
-  // `query`, `faceData`, `familyName`, `faceSource` and the face `ID` the
-  // 0.9 `FontDatabase` had by hand left with it (#181).
-  assert.equal(db.query, undefined);
-  assert.equal(db.faceData, undefined);
+  // `query`, `familyName` and the face `ID` are back through generic rules
+  // (#181; test/api/fontdb.mjs); `faceSource` is not yet.
+  assert.equal(typeof db.query, 'function');
+  assert.equal(db.faceSource, undefined);
 }
 
 // 9. a missing font file is an error from the OS. Neither half of the

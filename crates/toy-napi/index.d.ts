@@ -24,6 +24,9 @@ export declare namespace toy {
   export interface Dot {
     [Symbol.dispose](): void
   }
+  export interface Key {
+    [Symbol.dispose](): void
+  }
   export interface Layer {
     [Symbol.dispose](): void
   }
@@ -217,6 +220,29 @@ export declare namespace toy {
   }
   export type ToyDot = Dot
   /**
+   * An opaque key: no public field, `Copy`, printed as a number.
+   *
+   * A `toy::Key`, held by value.
+   */
+  export class Key {
+    static first(): toy.Key
+    /** The `Key` as Rust's `Display` writes it. */
+    toString(): string
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyKey = Key
+  /**
    * A named list of items.
    *
    * A `toy::Layer` borrowed from what it was reached from, which it keeps
@@ -303,6 +329,24 @@ export declare namespace toy {
     /** Each name with its place: a list of pairs. */
     pairs(): Array<[string, number]>
     /**
+     * The key of the name at `place`: an opaque value, passed back to
+     * [`Tally::named`].
+     */
+    key(place: number): toy.Key | null
+    named(key: toy.Key): string | null
+    /** What a tag names: its own name, or the first one here for `Any`. */
+    tagName(tag: toy.Tag): string
+    /**
+     * The key of the first name a filter accepts: borrowed lists in, as
+     * a query is.
+     */
+    find(filter?: toy.Filter | undefined | null): toy.Key | null
+    /**
+     * Runs `p` with the joined names' bytes and how many there are: the
+     * data is lent, not returned.
+     */
+    withJoined(): [Buffer, number]
+    /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
      * holds it.
@@ -372,6 +416,15 @@ export declare namespace toy {
   export const enum Direction {
     Up = 'up',
     Down = 'down',
+  }
+  /**
+   * What [`Tally::find`] looks for: a list it borrows.
+   *
+   * Every field is optional: one left out keeps the `Default` value.
+   */
+  export interface Filter {
+    tags?: Array<toy.Tag>
+    minLen?: number
   }
   /** `Item::Dot`. */
   export interface ItemDot {
@@ -486,6 +539,17 @@ export declare namespace toy {
   export interface StepPlain {
     /** Discriminant. Narrow on this. */
     type: 'stop'
+  }
+  /**
+   * A tag a filter matches on: a name it borrows, or any.
+   *
+   * Passed in as the union it prints as: `{ type, value }`.
+   */
+  export interface Tag {
+    /** The variant. */
+    type: 'named' | 'any'
+    /** The string the variant carries: required for `'named'`, ignored otherwise. */
+    value?: string
   }
   /** A `Vec2`'s public fields, as a plain object. */
   export interface Vec2Object {

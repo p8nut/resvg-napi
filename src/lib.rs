@@ -1848,6 +1848,62 @@ pub enum FontdbStretch {
     ExtraExpanded,
     UltraExpanded,
 }
+#[doc = " A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family)."]
+#[doc = ""]
+#[doc = " Passed in as the union it prints as: `{ type, value }`."]
+#[napi(object, object_to_js = false, js_name = "Family", namespace = "fontdb")]
+pub struct FontdbFamily {
+    #[doc = " The variant."]
+    #[napi(ts_type = "'name' | 'serif' | 'sansSerif' | 'cursive' | 'fantasy' | 'monospace'")]
+    pub r#type: String,
+    #[doc = " The string the variant carries: required for `'name'`, ignored otherwise."]
+    pub value: Option<String>,
+}
+#[doc = " A database query."]
+#[doc = ""]
+#[doc = " Mainly used by `Database::query()`."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(object, object_to_js = false, js_name = "Query", namespace = "fontdb")]
+#[derive(Default)]
+pub struct FontdbQuery {
+    #[doc = " A prioritized list of font family names or generic family names."]
+    #[doc = ""]
+    #[doc = " [font-family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family) in CSS."]
+    pub families: Option<Vec<FontdbFamily>>,
+    #[doc = " Specifies the weight of glyphs in the font, their degree of blackness or stroke thickness."]
+    #[doc = ""]
+    #[doc = " [font-weight](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-weight-prop) in CSS."]
+    pub weight: Option<u32>,
+    #[doc = " Selects a normal, condensed, or expanded face from a font family."]
+    #[doc = ""]
+    #[doc = " [font-stretch](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-stretch-prop) in CSS."]
+    pub stretch: Option<FontdbStretch>,
+    #[doc = " Allows italic or oblique faces to be selected."]
+    #[doc = ""]
+    #[doc = " [font-style](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-style-prop) in CSS."]
+    pub style: Option<FontdbStyle>,
+}
+#[doc = " A unique per database face ID."]
+#[doc = ""]
+#[doc = " Since `Database` is not global/unique, we cannot guarantee that a specific ID"]
+#[doc = " is actually from the same db instance. This is up to the caller."]
+#[doc = ""]
+#[doc = " ID overflow will cause a panic, but it's highly unlikely that someone would"]
+#[doc = " load more than 4 billion font faces."]
+#[doc = ""]
+#[doc = " Because the internal representation of ID is private, The `Display` trait"]
+#[doc = " implementation for this type only promise that unequal IDs will be displayed"]
+#[doc = " as different strings, but does not make any guarantees about format or"]
+#[doc = " content of the strings."]
+#[doc = ""]
+#[doc = " [`KeyData`]: https://docs.rs/slotmap/latest/slotmap/struct.KeyData.html"]
+#[doc = ""]
+#[doc = " A `usvg::fontdb::ID`, held by value."]
+#[napi(js_name = "ID", namespace = "fontdb")]
+pub struct FontdbID {
+    inner: napi_support::Slot<usvg::fontdb::ID>,
+}
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
@@ -6628,6 +6684,14 @@ impl UsvgPositionedGlyph {
             v.text.clone().to_string()
         })
     }
+    #[napi(getter)]
+    pub fn font(&self) -> Result<FontdbID, String> {
+        let __inner = self.inner.get("PositionedGlyph")?;
+        Ok({
+            let v = __inner;
+            FontdbID::__from(v.font)
+        })
+    }
 }
 impl UsvgPrimitive {
     fn wrap(inner: usvg::filter::Primitive) -> Self {
@@ -8080,6 +8144,64 @@ impl From<usvg::fontdb::Stretch> for FontdbStretch {
         }
     }
 }
+impl FontdbQuery {
+    #[doc = " The lists the upstream value borrows, converted from JS's."]
+    fn lists<'s>(&'s self) -> Result<(Option<Vec<usvg::fontdb::Family<'s>>>,), String> {
+        Ok((self
+            .families
+            .as_ref()
+            .map(|v| {
+                v.iter()
+                    .map(FontdbFamily::to_upstream)
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .transpose()?,))
+    }
+    #[doc = " The upstream value: `Default`, with what JS provided on top,"]
+    #[doc = " borrowing `lists`."]
+    fn to_upstream<'s>(
+        &'s self,
+        lists: &'s (Option<Vec<usvg::fontdb::Family<'s>>>,),
+    ) -> Result<usvg::fontdb::Query<'s>, String> {
+        let mut o = <usvg::fontdb::Query<'s>>::default();
+        if let Some(v) = &lists.0 {
+            o.families = v.as_slice();
+        }
+        if let Some(v) = self.weight {
+            o.weight.0 = v
+                .try_into()
+                .map_err(|_| napi_support::invalid("weight", v))?;
+        }
+        if let Some(v) = self.stretch {
+            o.stretch = v.into();
+        }
+        if let Some(v) = self.style {
+            o.style = v.into();
+        }
+        Ok(o)
+    }
+}
+impl FontdbFamily {
+    #[doc = " The upstream value, borrowing this one's string."]
+    fn to_upstream(&self) -> Result<usvg::fontdb::Family<'_>, String> {
+        Ok(match self.r#type.as_str() {
+            "name" => usvg::fontdb::Family::Name(self.value.as_deref().ok_or_else(|| {
+                napi_support::thrown("InvalidArg", "Family 'name' needs a value")
+            })?),
+            "serif" => usvg::fontdb::Family::Serif,
+            "sansSerif" => usvg::fontdb::Family::SansSerif,
+            "cursive" => usvg::fontdb::Family::Cursive,
+            "fantasy" => usvg::fontdb::Family::Fantasy,
+            "monospace" => usvg::fontdb::Family::Monospace,
+            t => {
+                return Err(napi_support::thrown(
+                    "InvalidArg",
+                    format!("invalid Family type: {:?}", t),
+                ));
+            }
+        })
+    }
+}
 impl FontdbDatabase {
     fn wrap(inner: std::sync::Arc<usvg::fontdb::Database>) -> Self {
         Self {
@@ -8233,6 +8355,22 @@ impl FontdbDatabase {
             signal,
         )
     }
+    #[doc = " Removes a font face by `id` from the database."]
+    #[doc = ""]
+    #[doc = " Returns `false` while attempting to remove a non-existing font face."]
+    #[doc = ""]
+    #[doc = " Useful when you want to ignore some specific font face(s)"]
+    #[doc = " after loading a large directory with fonts."]
+    #[doc = " Or a specific face from a font."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn remove_face(&mut self, id: &FontdbID) -> Result<(), String> {
+        let __id = *id.__ref()?;
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
+        napi_support::contained("Database::remove_face", || __self.remove_face(__id))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
     #[doc = " Returns `true` if the `Database` contains no font faces."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -8310,6 +8448,31 @@ impl FontdbDatabase {
         .map_err(napi_support::coded)?;
         Ok(())
     }
+    #[doc = " Returns the generic family name or the `Family::Name` itself."]
+    #[doc = ""]
+    #[doc = " Generic family names should be set via `Database::set_*_family` methods."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn family_name(&self, family: FontdbFamily) -> Result<String, String> {
+        let __family = family.to_upstream()?;
+        let __self = self.__ref()?;
+        let __v =
+            napi_support::contained("Database::family_name", || __self.family_name(&__family))
+                .map_err(napi_support::coded)?;
+        Ok(__v.to_string())
+    }
+    #[doc = " Performs a CSS-like query and returns the best matched font face."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn query(&self, query: Option<FontdbQuery>) -> Result<Option<FontdbID>, String> {
+        let __query_o = query.unwrap_or_default();
+        let __query_l = __query_o.lists()?;
+        let __query = __query_o.to_upstream(&__query_l)?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Database::query", || __self.query(&__query))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| FontdbID::__from(__v)))
+    }
     #[doc = " Returns an iterator over the internal storage."]
     #[doc = ""]
     #[doc = " This can be used for manual font matching."]
@@ -8323,6 +8486,74 @@ impl FontdbDatabase {
             .into_iter()
             .map(|x| FontdbFaceInfo::wrap(x.clone()))
             .collect())
+    }
+    #[doc = " Selects a `FaceInfo` by `id`."]
+    #[doc = ""]
+    #[doc = " Returns `None` if a face with such ID was already removed,"]
+    #[doc = " or this ID belong to the other `Database`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn face(&self, id: &FontdbID) -> Result<Option<FontdbFaceInfo>, String> {
+        let __id = *id.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Database::face", || __self.face(__id))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| FontdbFaceInfo::wrap(__v.clone())))
+    }
+    #[doc = " Executes a closure with a font's data."]
+    #[doc = ""]
+    #[doc = " We can't return a reference to a font binary data because of lifetimes."]
+    #[doc = " So instead, you can use this method to process font's data."]
+    #[doc = ""]
+    #[doc = " The closure accepts raw font data and font face index."]
+    #[doc = ""]
+    #[doc = " In case of `Source::File`, the font file will be memory mapped."]
+    #[doc = ""]
+    #[doc = " Returns `None` when font file loading failed."]
+    #[doc = ""]
+    #[doc = " # Example"]
+    #[doc = ""]
+    #[doc = " ```ignore"]
+    #[doc = " let is_variable = db.with_face_data(id, |font_data, face_index| {"]
+    #[doc = "     let font = ttf_parser::Face::from_slice(font_data, face_index).unwrap();"]
+    #[doc = "     font.is_variable()"]
+    #[doc = " })?;"]
+    #[doc = " ```"]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn with_face_data(&self, id: &FontdbID) -> Result<Option<(Buffer, u32)>, String> {
+        let __id = *id.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Database::with_face_data", || {
+            __self.with_face_data(__id, |__a0: &[u8], __a1: u32| (__a0.to_vec(), __a1))
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| (__v.0.into(), __v.1)))
+    }
+    #[doc = " Transfers ownership of shared font data back to the font database. This is the reverse operation"]
+    #[doc = " of [`Self::make_shared_face_data`]. If the font data belonging to the specified face is mapped"]
+    #[doc = " from a file on disk, then that mapping is closed and the data becomes private to the process again."]
+    #[napi]
+    #[cfg_attr(target_family = "wasm", allow(unused_variables))]
+    #[allow(clippy::redundant_closure)]
+    pub fn make_face_data_unshared(&mut self, id: &FontdbID) -> Result<(), String> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let __id = *id.__ref()?;
+            let __self = std::sync::Arc::make_mut(self.__mut()?);
+            napi_support::contained("Database::make_face_data_unshared", || {
+                __self.make_face_data_unshared(__id)
+            })
+            .map_err(napi_support::coded)?;
+            Ok(())
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            Err(napi_support::thrown(
+                "GenericFailure",
+                "makeFaceDataUnshared is not available on this target: its upstream feature is off here",
+            ))
+        }
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -8341,6 +8572,55 @@ impl FontdbDatabase {
         self.inner.disposed()
     }
 }
+impl FontdbID {
+    fn __from(inner: usvg::fontdb::ID) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&usvg::fontdb::ID, String> {
+        self.inner.get("ID")
+    }
+    fn __mut(&mut self) -> Result<&mut usvg::fontdb::ID, String> {
+        self.inner.get_mut("ID")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<usvg::fontdb::ID>, String> {
+        self.inner.lease("ID")
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbID {
+    #[doc = " Creates a dummy ID."]
+    #[doc = ""]
+    #[doc = " Should be used in tandem with [`Database::push_face_info`]."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn dummy() -> Result<Self, String> {
+        let __v = napi_support::contained("ID::dummy", <usvg::fontdb::ID>::dummy)
+            .map_err(napi_support::coded)?;
+        Ok(FontdbID::__from(__v))
+    }
+    #[doc = " The `ID` as Rust's `Display` writes it."]
+    #[napi]
+    pub fn to_string(&self) -> Result<String, String> {
+        Ok(self.__ref()?.to_string())
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("ID")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
 impl FontdbFaceInfo {
     fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
         Self {
@@ -8350,6 +8630,14 @@ impl FontdbFaceInfo {
 }
 #[napi(namespace = "fontdb")]
 impl FontdbFaceInfo {
+    #[napi(getter)]
+    pub fn id(&self) -> Result<FontdbID, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            FontdbID::__from(v.id)
+        })
+    }
     #[napi(getter)]
     pub fn index(&self) -> Result<u32, String> {
         let __inner = self.inner.get("FaceInfo")?;
@@ -8634,6 +8922,7 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
     let classes: &[(Option<&str>, &str)] = &[
         (Some("fontdb"), "Database"),
         (Some("fontdb"), "FaceInfo"),
+        (Some("fontdb"), "ID"),
         (Some("guard"), "FontResolver"),
         (Some("guard"), "ImageHrefResolver"),
         (Some("svgtypes"), "Color"),
@@ -9363,6 +9652,7 @@ impl UsvgPositionedGlyph {
                 "colrTransform",
                 "id",
                 "text",
+                "font",
                 "disposed",
             ],
             &[],
@@ -9644,6 +9934,35 @@ impl UsvgImageKindWebp {
     }
 }
 #[napi(namespace = "fontdb")]
+impl FontdbID {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "ID",
+            &["disposed"],
+            &["toString"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "ID".to_string()
+    }
+}
+#[napi(namespace = "fontdb")]
 impl FontdbFaceInfo {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -9660,6 +9979,7 @@ impl FontdbFaceInfo {
             &this,
             "FaceInfo",
             &[
+                "id",
                 "index",
                 "families",
                 "postScriptName",

@@ -117,7 +117,8 @@ test('fontdb.Database: Rust methods in camelCase, the &mut ones included', () =>
   for (const m of [
     'loadFontData', 'loadFontFile', 'loadFontsDir', 'loadSystemFonts', 'isEmpty', 'len',
     'setSerifFamily', 'setSansSerifFamily', 'setCursiveFamily', 'setFantasyFamily',
-    'setMonospaceFamily', 'faces',
+    'setMonospaceFamily', 'faces', 'face', 'query', 'familyName', 'withFaceData', 'removeFace',
+    'makeFaceDataUnshared',
   ]) {
     assert.ok(methods.includes(m), `declared: ${m}`);
     assert.equal(typeof Database.prototype[m], 'function', `fontdb.Database.prototype.${m}`);
@@ -130,7 +131,7 @@ test('fontdb.Database: Rust methods in camelCase, the &mut ones included', () =>
 
 test('fontdb.FaceInfo: a read-only class of getters', () => {
   const proto = binding.fontdb.FaceInfo.prototype;
-  for (const g of ['families', 'index', 'postScriptName', 'style', 'weight', 'stretch', 'monospaced']) {
+  for (const g of ['id', 'families', 'index', 'postScriptName', 'style', 'weight', 'stretch', 'monospaced']) {
     const d = Object.getOwnPropertyDescriptor(proto, g);
     assert.equal(typeof d?.get, 'function', `get ${g}`);
     assert.equal(d.set, undefined, `no setter for ${g}`);

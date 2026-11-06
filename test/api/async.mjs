@@ -144,6 +144,8 @@ const transform = tiny_skia.Transform.identity();
   const pending = resvg.renderAsync(tree, transform, pixmap);
   assert.throws(() => pixmap.width(), inUse);
   assert.throws(() => pixmap.data(), inUse);
+  const { inspect } = await import('node:util');
+  assert.equal(inspect(pixmap), 'Pixmap { leased: true }', 'console.log does not throw');
   assert.throws(() => pixmap.encodePng(), inUse);
   assert.throws(() => resvg.render(tree, transform, pixmap), inUse, 'a sync render');
   assert.throws(() => resvg.renderAsync(tree, transform, pixmap), inUse, 'a second async render');

@@ -1,0 +1,8 @@
+[package]
+name = "toy-dep"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0 OR MIT"
+description = "A dependency the toy crate re-exports an enum of: napi-gen reads it as the toy's own"
+publish = false

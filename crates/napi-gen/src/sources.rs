@@ -256,6 +256,86 @@ pub fn parse_crate(dir: &Path) -> Vec<(PathBuf, syn::File)> {
         .collect()
 }
 
+/// Enums another crate defines and this one re-exports by name (`pub use
+/// dep::Shade;`), copied into the file that re-exports them, under the name
+/// the export gives: to everything after, they are this crate's, reachable
+/// at the re-export's path, which is the path the generated code spells.
+/// Enums only: a re-exported struct is that crate's class or data, already
+/// read where it is defined. `load` hands back a dependency's files by the
+/// crate name the `use` starts with, or None for one not available. Returns
+/// the names copied.
+pub fn inline_reexported_enums(
+    parsed: &mut [(PathBuf, syn::File)],
+    load: &mut dyn FnMut(&str) -> Option<Vec<syn::File>>,
+) -> Vec<String> {
+    let local: BTreeSet<String> = parsed
+        .iter()
+        .flat_map(|(_, f)| &f.items)
+        .filter_map(|i| match i {
+            Item::Mod(m) => Some(m.ident.to_string()),
+            _ => None,
+        })
+        .collect();
+    let mut loaded: BTreeMap<String, Option<Vec<syn::File>>> = BTreeMap::new();
+    let mut out = Vec::new();
+    for (_, file) in parsed.iter_mut() {
+        let mut added = Vec::new();
+        for item in &file.items {
+            let Item::Use(u) = item else { continue };
+            if !is_pub(&u.vis) {
+                continue;
+            }
+            // (crate, name, as) for each `crate::..::Name [as K]` leaf.
+            fn leaves(
+                t: &syn::UseTree,
+                path: &mut Vec<String>,
+                out: &mut Vec<(String, String, String)>,
+            ) {
+                match t {
+                    syn::UseTree::Path(p) => {
+                        path.push(p.ident.to_string());
+                        leaves(&p.tree, path, out);
+                        path.pop();
+                    }
+                    syn::UseTree::Name(n) if !path.is_empty() && n.ident != "self" => {
+                        out.push((path[0].clone(), n.ident.to_string(), n.ident.to_string()));
+                    }
+                    syn::UseTree::Rename(r) if !path.is_empty() && r.ident != "self" => {
+                        out.push((path[0].clone(), r.ident.to_string(), r.rename.to_string()));
+                    }
+                    syn::UseTree::Group(g) => g.items.iter().for_each(|i| leaves(i, path, out)),
+                    _ => {}
+                }
+            }
+            let mut found = Vec::new();
+            leaves(&u.tree, &mut Vec::new(), &mut found);
+            for (krate, name, alias) in found {
+                if ["crate", "self", "super"].contains(&krate.as_str()) || local.contains(&krate) {
+                    continue;
+                }
+                let files = loaded.entry(krate.clone()).or_insert_with(|| load(&krate));
+                let Some(e) = files
+                    .iter()
+                    .flatten()
+                    .flat_map(|f| &f.items)
+                    .find_map(|i| match i {
+                        Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
+                        _ => None,
+                    })
+                else {
+                    continue;
+                };
+                let mut e = e.clone();
+                e.ident = Ident::new(&alias, e.ident.span());
+                added.push(Item::Enum(e));
+                out.push(alias);
+            }
+        }
+        file.items.extend(added);
+    }
+    out
+}
+
 /// A crate's module tree, read the way rustc reads it: from `lib.rs`, through
 /// `mod x;` (to `x.rs` or `x/mod.rs`), with `pub use` resolved --
 /// globs, names, renames, `self::`/`crate::`/`super::`. A type's public module

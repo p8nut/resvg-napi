@@ -96,9 +96,9 @@ test('the Rust names, and nothing else at the root', () => {
 // The usvg classes the flat surface had copies of, under other names until
 // those went with the flat node classes (step 7b of the migration).
 const USVG_CLASSES = [
-  'ClipPath', 'Filter', 'Font', 'Image', 'ImageKindGif', 'ImageKindJpeg', 'ImageKindPng',
+  'ClipPath', 'Filter', 'FilterImage', 'Image', 'ImageKindGif', 'ImageKindJpeg', 'ImageKindPng',
   'ImageKindWebp', 'LinearGradient', 'Mask', 'Pattern', 'PositionedGlyph', 'RadialGradient',
-  'Span', 'Text', 'TextChunk', 'TextSpan',
+  'Span', 'Text',
 ];
 
 test('the usvg classes are namespaced, with no flat copy left', () => {
@@ -117,7 +117,8 @@ test('fontdb.Database: Rust methods in camelCase, the &mut ones included', () =>
   for (const m of [
     'loadFontData', 'loadFontFile', 'loadFontsDir', 'loadSystemFonts', 'isEmpty', 'len',
     'setSerifFamily', 'setSansSerifFamily', 'setCursiveFamily', 'setFantasyFamily',
-    'setMonospaceFamily', 'faces',
+    'setMonospaceFamily', 'faces', 'face', 'query', 'familyName', 'withFaceData', 'removeFace',
+    'makeFaceDataUnshared',
   ]) {
     assert.ok(methods.includes(m), `declared: ${m}`);
     assert.equal(typeof Database.prototype[m], 'function', `fontdb.Database.prototype.${m}`);
@@ -130,7 +131,7 @@ test('fontdb.Database: Rust methods in camelCase, the &mut ones included', () =>
 
 test('fontdb.FaceInfo: a read-only class of getters', () => {
   const proto = binding.fontdb.FaceInfo.prototype;
-  for (const g of ['families', 'index', 'postScriptName', 'style', 'weight', 'stretch', 'monospaced']) {
+  for (const g of ['id', 'families', 'index', 'postScriptName', 'style', 'weight', 'stretch', 'monospaced']) {
     const d = Object.getOwnPropertyDescriptor(proto, g);
     assert.equal(typeof d?.get, 'function', `get ${g}`);
     assert.equal(d.set, undefined, `no setter for ${g}`);

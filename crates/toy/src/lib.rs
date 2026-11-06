@@ -8,6 +8,9 @@ use std::sync::Arc;
 
 pub mod alt;
 
+/// Another crate's enum, re-exported: `toy::Shade` to a caller.
+pub use toy_dep::Shade;
+
 /// Which way a counter counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Direction {
@@ -118,6 +121,80 @@ impl Tally {
             .map(|(n, i)| (n.clone(), i))
             .collect()
     }
+
+    /// The key of the name at `place`: an opaque value, passed back to
+    /// [`Tally::named`].
+    pub fn key(&self, place: u32) -> Option<Key> {
+        ((place as usize) < self.names.len()).then_some(Key(place))
+    }
+
+    pub fn named(&self, key: Key) -> Option<&str> {
+        self.names.get(key.0 as usize).map(String::as_str)
+    }
+
+    /// What a tag names: its own name, or the first one here for `Any`.
+    pub fn tag_name<'a>(&'a self, tag: &'a Tag) -> &'a str {
+        match tag {
+            Tag::Named(n) => n,
+            Tag::Any => self.names.first().map_or("", String::as_str),
+        }
+    }
+
+    /// The key of the first name a filter accepts: borrowed lists in, as
+    /// a query is.
+    pub fn find(&self, filter: &Filter) -> Option<Key> {
+        let place = self.names.iter().position(|n| {
+            n.len() >= filter.min_len.0 as usize
+                && filter
+                    .tags
+                    .iter()
+                    .any(|t| matches!(t, Tag::Any) || *t == Tag::Named(n))
+        })?;
+        Some(Key(place as u32))
+    }
+
+    /// Runs `p` with the joined names' bytes and how many there are: the
+    /// data is lent, not returned.
+    pub fn with_joined<P, T>(&self, p: P) -> T
+    where
+        P: FnOnce(&[u8], u32) -> T,
+    {
+        p(self.joined().as_bytes(), self.names.len() as u32)
+    }
+}
+
+/// An opaque key: no public field, `Copy`, printed as a number.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Key(u32);
+
+impl Key {
+    pub fn first() -> Self {
+        Key(0)
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A tag a filter matches on: a name it borrows, or any.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tag<'a> {
+    Named(&'a str),
+    Any,
+}
+
+/// A shortest length, as a number newtype.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MinLen(pub u16);
+
+/// What [`Tally::find`] looks for: a list it borrows.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Filter<'a> {
+    pub tags: &'a [Tag<'a>],
+    pub min_len: MinLen,
 }
 
 /// The styles a report can take, indexed by [`ReportOptions::style_index`].
@@ -428,6 +505,7 @@ pub struct Scene {
     /// Dots shared by name, a table of `Arc`s beside the tree.
     marks: Vec<Arc<Dot>>,
     trail: Trail,
+    contents: Vec<Content>,
 }
 
 impl Scene {
@@ -469,6 +547,17 @@ impl Scene {
                     Step::Stop,
                 ],
             },
+            contents: vec![
+                Content::Empty,
+                Content::Canvas(Canvas::new(2, 1).expect("a 2x1 canvas")),
+                Content::Frame(Frame {
+                    layer: Layer {
+                        name: "framed".into(),
+                        items: vec![dot("f", 5.0)],
+                    },
+                    shades: vec![Shade::Plain, Shade::Named("teal".into())],
+                }),
+            ],
         })
     }
 
@@ -489,6 +578,39 @@ impl Scene {
     /// The way through the scene: a jump to `a`, a line to `d`, a stop.
     pub fn trail(&self) -> &Trail {
         &self.trail
+    }
+
+    /// What the scene's slots hold: nothing, a 2x1 canvas, and a frame
+    /// around the layer `framed` (the dot `f`).
+    pub fn contents(&self) -> &[Content] {
+        &self.contents
+    }
+}
+
+/// A slot's content: a variant may carry a class (`Canvas`), or a value
+/// that only partly maps (`Frame`).
+#[derive(Clone, Debug)]
+pub enum Content {
+    Empty,
+    Canvas(Canvas),
+    Frame(Frame),
+}
+
+/// A layer, framed: its members borrow a projected class (a copy is handed
+/// out) and a re-exported enum.
+#[derive(Clone, Debug)]
+pub struct Frame {
+    layer: Layer,
+    shades: Vec<Shade>,
+}
+
+impl Frame {
+    pub fn layer(&self) -> &Layer {
+        &self.layer
+    }
+
+    pub fn shades(&self) -> &[Shade] {
+        &self.shades
     }
 }
 

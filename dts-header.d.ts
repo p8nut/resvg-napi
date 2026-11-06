@@ -12,6 +12,9 @@ export declare namespace fontdb {
   export interface FaceInfo {
     [Symbol.dispose](): void
   }
+  export interface ID {
+    [Symbol.dispose](): void
+  }
 }
 
 export declare namespace guard {
@@ -63,7 +66,7 @@ export declare namespace usvg {
   export interface Filter {
     [Symbol.dispose](): void
   }
-  export interface Font {
+  export interface FilterImage {
     [Symbol.dispose](): void
   }
   export interface Group {
@@ -109,12 +112,6 @@ export declare namespace usvg {
     [Symbol.dispose](): void
   }
   export interface Text {
-    [Symbol.dispose](): void
-  }
-  export interface TextChunk {
-    [Symbol.dispose](): void
-  }
-  export interface TextSpan {
     [Symbol.dispose](): void
   }
   export interface Tree {

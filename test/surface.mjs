@@ -111,11 +111,18 @@ for (const id of ['grp', 'r', 't', 'v', 'im']) walk(tree.nodeById(id), 0);
 // The members the review found untested anywhere, by class: each must have
 // been reached, or the document above stopped exercising it.
 const wanted = [
-  'TextSpan.letterSpacing', 'TextSpan.wordSpacing', 'TextSpan.smallCaps', 'TextSpan.applyKerning',
-  'TextSpan.dominantBaseline', 'TextSpan.alignmentBaseline', 'TextSpan.paintOrder', 'Font.variations',
-  'TextChunk.textFlow', 'Text.dy', 'Text.writingMode',
+  'Text.dy', 'Text.writingMode',
   'PositionedGlyph.outlineTransform', 'PositionedGlyph.svgTransform', 'PositionedGlyph.colrTransform',
   'RadialGradient.fx', 'RadialGradient.fy', 'Image.isVisible',
 ];
 const missed = wanted.filter((m) => !read.has(m));
 assert.deepEqual(missed, [], 'getters the walk should have reached');
+// `TextChunk`, `TextSpan` and `Font` are plain objects (every member maps,
+// `Font.families` included): their members are properties, read here.
+const [chunk] = tree.nodeById('t').value.chunks();
+const [span] = chunk.spans;
+for (const k of ['letterSpacing', 'wordSpacing', 'smallCaps', 'applyKerning', 'dominantBaseline',
+  'alignmentBaseline', 'paintOrder']) assert.ok(k in span, `TextSpan.${k}`);
+assert.ok('textFlow' in chunk, 'TextChunk.textFlow');
+assert.deepEqual(span.font.variations, [{ tag: 'wght', value: 500 }]);
+assert.ok(span.font.families.length > 0, 'Font.families');

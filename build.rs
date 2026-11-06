@@ -123,7 +123,19 @@ fn main() {
             if i == 0 {
                 report!("{} sources: {}", u.root, dir.display());
             }
-            let all = parse_crate(&dir);
+            let mut all = parse_crate(&dir);
+            // What it re-exports of a dependency's enums is its own
+            // (`usvg::FontFamily`, defined by svgtypes).
+            let mut load = |krate: &str| {
+                let pkg = [krate.to_string(), krate.replace('_', "-")]
+                    .into_iter()
+                    .find(|p| locked.get(p).is_some_and(|v| v.len() == 1))?;
+                let dir = locate(&pkg, "lib.rs", &locked);
+                Some(parse_crate(&dir).into_iter().map(|(_, f)| f).collect())
+            };
+            for name in inline_reexported_enums(&mut all, &mut load) {
+                report!("{} re-exports enum {name}: read as its own", u.root);
+            }
             let tree = ModTree::load(&dir, &all);
             let parsed = tree.public_view(&all, &dir);
             Source {
@@ -203,7 +215,13 @@ fn main() {
     let mut referenced: BTreeSet<String> = GEN
         .option_objects
         .iter()
-        .flat_map(|o| struct_field_types(primary_files, o))
+        .flat_map(|o| {
+            sources
+                .iter()
+                .find(|s| struct_fields_opt(&s.files, o).is_some())
+                .map(|s| struct_field_types(&s.files, o))
+                .unwrap_or_default()
+        })
         .collect();
     referenced.extend(returned_types(primary_files));
     for src in &sources[1..] {
@@ -382,22 +400,34 @@ fn main() {
             }))
             .collect(),
     );
-    // By its upstream name, unless a wrapped crate defines that name itself
-    // (`usvg::Color` is not `tiny_skia.Color`).
-    for (name, plain) in classes.by_value() {
+    // By its upstream name, unless another wrapped crate defines that name
+    // (`usvg::Color` is not `tiny_skia.Color`). A wrapped crate's own class
+    // (`fontdb::ID`) is the type its members name.
+    for (name, plain, root) in classes.by_value() {
         let enum_here = sources.iter().any(|s| {
             s.files
                 .iter()
                 .flat_map(|f| &f.items)
                 .any(|i| matches!(i, Item::Enum(e) if e.ident == name && is_pub(&e.vis)))
         });
-        if defines(name).is_none() && !enum_here {
+        if defines(name).is_none_or(|s| s.root_str == root) && !enum_here {
             vocab.classes.insert(name.to_string());
             if plain {
                 vocab.plain.insert(name.to_string());
             }
         }
     }
+    // The classes a borrowed member hands out a copy of (`usvg.Tree` in an
+    // image, the `usvg.Group` of an `feImage`), under the same rule.
+    for (name, root) in classes.by_clone() {
+        if defines(name).is_none_or(|s| s.root_str == root) {
+            vocab.owned.insert(name.to_string());
+        }
+    }
+    report!(
+        "classes a borrowing member copies: {}",
+        vocab.owned.iter().cloned().collect::<Vec<_>>().join(", ")
+    );
 
     // Every source, not just usvg: fontdb defines enums too -- `Style` is
     // Normal/Italic/Oblique -- and a usvg-only pass left them to the object
@@ -578,12 +608,28 @@ fn main() {
     // The option structs as plain objects (`usvg.Options`,
     // `usvg.WriteOptions`): every field optional over `Default`, the font
     // database supplied by a `fontdb.Database`.
+    // Each from the source that defines it, the primary first.
     for name in GEN.option_objects {
-        let Some(obj) = option_object(primary_files, name, &vocab, modules, &primary.root, &bounds)
-        else {
+        let src = sources
+            .iter()
+            .find(|s| {
+                s.files
+                    .iter()
+                    .flat_map(|f| &f.items)
+                    .any(|i| matches!(i, Item::Struct(st) if st.ident == name && is_pub(&st.vis)))
+            })
+            .unwrap_or(primary);
+        let Some(obj) = option_object(
+            &src.files,
+            name,
+            &vocab,
+            &src.tree.paths,
+            &src.root,
+            &bounds,
+        ) else {
             report!(
                 "{}::{name} not an option object: no Default to fill it from",
-                primary.root_str
+                src.root_str
             );
             continue;
         };
@@ -601,13 +647,35 @@ fn main() {
         for s in obj.skipped {
             report!(
                 "{}::{name} field not in the option object: {s}",
-                primary.root_str
+                src.root_str
             );
         }
-        mirrored
-            .entry(primary.root_str)
-            .or_default()
-            .extend(obj.code);
+        mirrored.entry(src.root_str).or_default().extend(obj.code);
+    }
+
+    // Enums JS passes in, borrowed for the call (`fontdb::Family`): their
+    // `{ type, value }` input form.
+    for src in &sources {
+        for e in src
+            .files
+            .iter()
+            .flat_map(|f| &f.items)
+            .filter_map(|i| match i {
+                Item::Enum(e) if is_pub(&e.vis) && is_enum_input(e) => Some(e),
+                _ => None,
+            })
+        {
+            report!(
+                "{}::{} is an input enum: {{ type, value }}",
+                src.root_str,
+                e.ident
+            );
+            mirrored.entry(src.root_str).or_default().extend(enum_input(
+                e,
+                &src.tree.paths,
+                &src.root,
+            ));
+        }
     }
 
     // Fixpoint: start from the handle types the wrapped impls return, generate a
@@ -731,6 +799,12 @@ fn main() {
     // be one of the data types settled just above.
     let mut unions: Vec<String> = Vec::new();
     for (name, info) in &vocab.payload {
+        // A converter is that type's JS form (`usvg::Indent`, read by
+        // `indent_from_js`): no union of its own beside it.
+        if GEN.converters.iter().any(|c| c.ty == name) {
+            report!("payload enum {name} not mapped: a converter reads it");
+            continue;
+        }
         if let Some(why) = info.payload_blocker(&vocab) {
             report!("payload enum {name} not mapped: {why}");
             continue;

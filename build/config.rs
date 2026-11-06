@@ -62,7 +62,9 @@ pub const GEN: Config = Config {
     // `usvg.WriteOptions` (ADR 0002, Q15): every field optional, the rest from
     // usvg's `Default` -- an empty font database, Times New Roman, the default
     // resolvers. The raw API follows Rust (Q10, Q27).
-    option_objects: &[PARSE_OPTIONS, WRITE_OPTIONS],
+    // `fontdb.Query` too, the same shape: `Database.query` takes one, its
+    // `families` a list of `fontdb.Family` (`{ type, value }`).
+    option_objects: &[PARSE_OPTIONS, WRITE_OPTIONS, "Query"],
     // Option fields with no JS form, supplied by a class instance (Q26, Q27).
     // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
     // copied. The resolvers take the hand-written `guard` providers
@@ -170,6 +172,7 @@ pub const GEN: Config = Config {
     classes: &[
         ("usvg", "Tree"),
         ("usvg::fontdb", "Database"),
+        ("usvg::fontdb", "ID"),
         ("tiny_skia", "Pixmap"),
         ("tiny_skia", "Color"),
         ("tiny_skia", "IntSize"),

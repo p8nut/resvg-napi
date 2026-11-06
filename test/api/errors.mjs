@@ -3,6 +3,7 @@
 // and `message`, its `Display` unchanged; `new` returning `None` throws.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { gzipSync } from 'node:zlib';
 import binding from '../../index.js';
 
@@ -70,6 +71,7 @@ test('a consumed pixmap throws on every later call', () => {
     () => pixmap.fill(tiny_skia.Color.fromRgba8(0, 0, 0, 0))]) {
     throwsCoded(call, 'Consumed', 'this Pixmap was consumed by an earlier call');
   }
+  assert.equal(inspect(pixmap), 'Pixmap { consumed: true }');
 });
 
 test('a number that does not fit the upstream integer throws, never wraps', () => {

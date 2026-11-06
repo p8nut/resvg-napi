@@ -133,6 +133,11 @@ pub fn js_conv(
             };
             plain(quote!(#c), quote!(#c::__from(#v)))
         }
+        // A copy of the borrowed value, wrapped as the class wraps its own.
+        (Js::Owned(t), Getter | Method | Carried) => {
+            let c = format_ident!("{t}");
+            plain(quote!(#c), quote!(#c::__from((#d).clone())))
+        }
         (Js::OptClass(t), Getter | Method) => {
             let c = format_ident!("{t}");
             let f = if src_ty.contains("Option<&") {
@@ -181,6 +186,12 @@ pub fn js_conv(
         (Js::Value(t), Getter | Method) => {
             let c = data_ident(t);
             reaching(quote!(#c), quote!(#c::wrap(#a.clone())), t)
+        }
+        // Carried alone by a union variant, which is then an output-only
+        // object (`payload_enum_code`).
+        (Js::Value(t), Carried) => {
+            let c = data_ident(t);
+            reaching(quote!(#c), quote!(#c::wrap((*#a).clone())), t)
         }
         (Js::ValueList(t), Getter) => {
             let c = data_ident(t);
@@ -404,6 +415,31 @@ pub fn payload_enum_code(
                 arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: v.clone() }),));
                 continue;
             }
+            // A class carried alone: an output-only object holding it, which
+            // napi does not require to be `Clone`.
+            Payload::Value(ty)
+                if matches!(vocab.classify(ty), Some(Js::Owned(_) | Js::Value(_))) =>
+            {
+                let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(v)) else {
+                    return Err(format!("{name}::{n} carries {ty}, which cannot be carried"));
+                };
+                let doc = format!(" `{name}::{n}`.");
+                items.extend(quote! {
+                    #[doc = #doc]
+                    #[napi(object, object_from_js = false)]
+                    pub struct #sid {
+                        #[doc = " Discriminant. Narrow on this."]
+                        #[napi(ts_type = #ts)]
+                        pub r#type: String,
+                        pub value: #fty,
+                    }
+                });
+                arms.push(quote!(#up::#vid(v) => #arm(#sid {
+                    r#type: #tag.to_string(),
+                    value: #expr,
+                }),));
+                continue;
+            }
             Payload::Value(ty) => {
                 let access = quote!(v);
                 let Some((hint, fty, expr)) = carried_field(vocab, ty, &access) else {
@@ -580,9 +616,14 @@ pub fn option_object(
     if !has_default(files, ty) || st.generics.type_params().next().is_some() {
         return None;
     }
-    let lifetimes = st.generics.lifetimes().map(|_| quote!('static));
+    // A field borrowing a list JS passes (`&'a [Family<'a>]`) ties the
+    // upstream value to the lists it points into: `'s`, not `'static`.
+    let lists = has_input_lists(files, ty);
+    let life = if lists { quote!('s) } else { quote!('static) };
+    let lifetimes = st.generics.lifetimes().map(|_| life.clone());
     let upstream = upstream_path(ty, modules, root);
     let upstream = quote!(#upstream<#(#lifetimes),*>);
+    let (mut list_tys, mut list_inits) = (Vec::new(), Vec::new());
     let name = format_ident!("{ty}");
     let struct_doc = docs(&st.attrs);
 
@@ -635,6 +676,22 @@ pub fn option_object(
             );
             continue;
         }
+        if let Some(e) = input_list(files, &f.ty) {
+            let input = format_ident!("{}", e.ident);
+            let lt = e.generics.lifetimes().map(|_| quote!('s));
+            let up = upstream_path(&e.ident.to_string(), modules, root);
+            let k = syn::Index::from(list_tys.len());
+            decls.push(quote! { #(#doc)* pub #ident: Option<Vec<#input>>, });
+            list_tys.push(quote!(Option<Vec<#up<#(#lt),*>>>));
+            list_inits.push(quote! {
+                self.#ident
+                    .as_ref()
+                    .map(|v| v.iter().map(#input::to_upstream).collect::<Result<Vec<_>, String>>())
+                    .transpose()?
+            });
+            assigns.push(quote! { if let Some(v) = &lists.#k { o.#ident = v.as_slice(); } });
+            continue;
+        }
         match map_field(f, vocab, bounds, &mut bounded) {
             Some(m) => {
                 decls.push(m.decl);
@@ -648,6 +705,35 @@ pub fn option_object(
     } else {
         (TokenStream::new(), TokenStream::new())
     };
+    let to_upstream = if lists {
+        quote! {
+            impl #name #anon {
+                #[doc = " The lists the upstream value borrows, converted from JS's."]
+                fn lists<'s>(&'s self) -> Result<(#(#list_tys,)*), String> {
+                    Ok((#(#list_inits,)*))
+                }
+
+                #[doc = " The upstream value: `Default`, with what JS provided on top,"]
+                #[doc = " borrowing `lists`."]
+                fn to_upstream<'s>(&'s self, lists: &'s (#(#list_tys,)*)) -> Result<#upstream, String> {
+                    let mut o = <#upstream>::default();
+                    #(#assigns)*
+                    Ok(o)
+                }
+            }
+        }
+    } else {
+        quote! {
+            impl #name #anon {
+                #[doc = " The upstream value: `Default`, with what JS provided on top."]
+                fn to_upstream(&self) -> Result<#upstream, String> {
+                    let mut o = <#upstream>::default();
+                    #(#assigns)*
+                    Ok(o)
+                }
+            }
+        }
+    };
     let code = quote! {
         #(#struct_doc)*
         #[doc = ""]
@@ -658,14 +744,7 @@ pub fn option_object(
             #(#decls)*
         }
 
-        impl #name #anon {
-            #[doc = " The upstream value: `Default`, with what JS provided on top."]
-            fn to_upstream(&self) -> Result<#upstream, String> {
-                let mut o = <#upstream>::default();
-                #(#assigns)*
-                Ok(o)
-            }
-        }
+        #to_upstream
     };
     Some(OptionObject {
         code,
@@ -760,6 +839,18 @@ fn map_field(
                     quote! { if let Some(v) = self.#ident { o.#ident = v.into(); } },
                 ))
             }
+            // `Weight(pub u16)`: a number, refused when it does not fit.
+            Some(Js::IntNewtype(_)) => {
+                let label = lower_camel(&name);
+                Some(field(
+                    &ident,
+                    &doc,
+                    quote!(u32),
+                    quote! { if let Some(v) = self.#ident {
+                        o.#ident.0 = v.try_into().map_err(|_| napi_support::invalid(#label, v))?;
+                    } },
+                ))
+            }
             // A class instance is a `Config::providers` entry, checked before
             // this; nested objects belong on methods, not in a flat config
             // object.
@@ -772,7 +863,6 @@ fn map_field(
             // Unreached by any upstream option field today.
             | Some(Js::U32)
             | Some(Js::Scalar)
-            | Some(Js::IntNewtype(_))
             // Read-only: a union describes what a document holds, never what a
             // render option sets.
             | Some(Js::U16)
@@ -787,6 +877,7 @@ fn map_field(
             | Some(Js::Object(_))
             | Some(Js::ObjectList(_))
             | Some(Js::Value(_))
+            | Some(Js::Owned(_))
             | Some(Js::ValueList(_))
             | Some(Js::OptObject(_))
             | Some(Js::OptValue(_))
@@ -936,11 +1027,13 @@ pub fn data_members(
             return;
         }
         let peeled = peel_type(ty_s);
-        if config().node_types.contains(&bare(peeled)) {
+        let js = vocab.classify(ty_s);
+        // A node type a listed class copies (`Js::Owned`) is that class, and
+        // reaches nothing behind it.
+        if config().node_types.contains(&bare(peeled)) && !matches!(js, Some(Js::Owned(_))) {
             return;
         }
         let id = format_ident!("{}", name);
-        let js = vocab.classify(ty_s);
         // `Image` was a read-only class only because `size` did not map;
         // mapping it promoted Image to an object holding `ImageKind`, whose
         // byte variants are classes. Say so instead of relying on luck.
@@ -1035,7 +1128,7 @@ pub fn data_members(
     // Accessors first so a name they share with a field resolves to the
     // accessor, which is the one upstream means to be read.
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for imp in inherent_impls(files, ty) {
+    for imp in inherent_impls(files, bare(ty)) {
         for it in &imp.items {
             let ImplItem::Fn(f) = it else { continue };
             if !is_pub(&f.vis) || f.sig.inputs.len() != 1 {
@@ -1049,7 +1142,7 @@ pub fn data_members(
             push(&id.to_string(), &ty_str(o), quote!(v.#id()));
         }
     }
-    if let Some(Fields::Named(named)) = struct_fields_opt(files, ty) {
+    if let Some(Fields::Named(named)) = struct_fields_opt(files, bare(ty)) {
         for f in &named.named {
             if !is_pub(&f.vis) {
                 continue;
@@ -1960,4 +2053,124 @@ fn rename_idents(
         }
     }
     out.into_iter().collect()
+}
+
+/// Whether JS can pass a value of payload enum `e`: every variant is unit or
+/// carries one borrowed string (`Name(&'a str)`). Such an enum is an argument
+/// type, borrowed for the call, and has no owned form upstream to mirror; its
+/// input form ([`enum_input`]) is the `{ type, value }` a union prints as.
+pub fn is_enum_input(e: &syn::ItemEnum) -> bool {
+    let borrowed_str = |t: &syn::Type| matches!(t, syn::Type::Reference(r) if r.mutability.is_none() && ty_str(&r.elem) == "str");
+    e.generics.type_params().next().is_none()
+        && e.variants.iter().any(|v| !matches!(v.fields, Fields::Unit))
+        && e.variants.iter().all(|v| match &v.fields {
+            Fields::Unit => true,
+            Fields::Unnamed(f) => f.unnamed.len() == 1 && borrowed_str(&f.unnamed[0].ty),
+            Fields::Named(_) => false,
+        })
+}
+
+/// The input form of an [`is_enum_input`] enum, named as upstream for
+/// [`namespaced`] to prefix: `{ type: 'name', value: 'Arial' }` or
+/// `{ type: 'serif' }`, and the `to_upstream` that borrows it back.
+pub fn enum_input(
+    e: &syn::ItemEnum,
+    modules: &BTreeMap<String, String>,
+    root: &TokenStream,
+) -> TokenStream {
+    let name = e.ident.to_string();
+    let ident = format_ident!("{name}");
+    let up = upstream_path(&name, modules, root);
+    let lifetimes = e.generics.lifetimes().map(|_| quote!('_));
+    let up_ty = quote!(#up<#(#lifetimes),*>);
+    let doc = docs(&e.attrs);
+    let tags: Vec<String> = e
+        .variants
+        .iter()
+        .map(|v| lower_camel(&v.ident.to_string()))
+        .collect();
+    let ts = tags
+        .iter()
+        .map(|t| format!("'{t}'"))
+        .collect::<Vec<_>>()
+        .join(" | ");
+    let carrying: Vec<&String> = e
+        .variants
+        .iter()
+        .zip(&tags)
+        .filter(|(v, _)| !matches!(v.fields, Fields::Unit))
+        .map(|(_, t)| t)
+        .collect();
+    let value_doc = format!(
+        " The string the variant carries: required for {}, ignored otherwise.",
+        carrying
+            .iter()
+            .map(|t| format!("`'{t}'`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let arms = e.variants.iter().zip(&tags).map(|(v, tag)| {
+        let vid = &v.ident;
+        match v.fields {
+            Fields::Unit => quote!(#tag => #up::#vid,),
+            _ => {
+                let missing = format!("{name} '{tag}' needs a value");
+                quote!(#tag => #up::#vid(
+                    self.value.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #missing))?
+                ),)
+            }
+        }
+    });
+    let invalid = format!("invalid {name} type: {{:?}}");
+    quote! {
+        #(#doc)*
+        #[doc = ""]
+        #[doc = " Passed in as the union it prints as: `{ type, value }`."]
+        #[napi(object, object_to_js = false)]
+        pub struct #ident {
+            #[doc = " The variant."]
+            #[napi(ts_type = #ts)]
+            pub r#type: String,
+            #[doc = #value_doc]
+            pub value: Option<String>,
+        }
+
+        impl #ident {
+            #[doc = " The upstream value, borrowing this one's string."]
+            fn to_upstream(&self) -> Result<#up_ty, String> {
+                Ok(match self.r#type.as_str() {
+                    #(#arms)*
+                    t => return Err(napi_support::thrown("InvalidArg", format!(#invalid, t))),
+                })
+            }
+        }
+    }
+}
+
+/// The input enum a field `&'a [E<'a>]` lists, when `E` is one
+/// ([`is_enum_input`]).
+fn input_list<'f>(files: &'f [syn::File], ty: &syn::Type) -> Option<&'f syn::ItemEnum> {
+    let syn::Type::Reference(r) = ty else {
+        return None;
+    };
+    let syn::Type::Slice(sl) = &*r.elem else {
+        return None;
+    };
+    if r.mutability.is_some() {
+        return None;
+    }
+    let name = crate::class::segs(&sl.elem)?.pop()?;
+    crate::class::find_enum(files, &name).filter(|e| is_enum_input(e))
+}
+
+/// Whether option object `ty` has a field listing input enums: its
+/// `to_upstream` then borrows what its `lists` converted.
+pub fn has_input_lists(files: &[syn::File], ty: &str) -> bool {
+    files.iter().flat_map(|f| &f.items).any(|i| match i {
+        Item::Struct(st) if st.ident == ty && is_pub(&st.vis) => st
+            .fields
+            .iter()
+            .any(|f| is_pub(&f.vis) && input_list(files, &f.ty).is_some()),
+        _ => false,
+    })
 }

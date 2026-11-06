@@ -23,7 +23,7 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.
     <pattern id="p" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="2"/></pattern>
     <clipPath id="c"><rect width="50" height="50"/></clipPath>
     <mask id="m"><rect width="50" height="50" fill="white"/></mask>
-    <filter id="f"><feGaussianBlur stdDeviation="1"/></filter>
+    <filter id="f"><feGaussianBlur stdDeviation="1"/><feImage xlink:href="#r"/></filter>
   </defs>
   <g id="g" clip-path="url(#c)" mask="url(#m)" filter="url(#f)">
     <rect id="r" width="10" height="10" fill="url(#lg)" stroke="url(#rg)"/>
@@ -42,11 +42,12 @@ function everyClass() {
   const text = node('t');
   // usvg wraps an `<image>` in a group, which takes its id.
   const image = node('i').children()[0].value;
-  const [chunk] = text.chunks();
   const [span] = text.layouted();
+  const [feImage] = tree.filters().flatMap((f) => f.primitives()).filter((p) => p.kind.type === 'image');
   return {
     'fontdb.Database': db,
     'fontdb.FaceInfo': db.faces()[0],
+    'fontdb.ID': db.faces()[0].id,
     'svgtypes.Color': svgtypes.Color.fromStr('red'),
     'tiny_skia.Color': tiny_skia.Color.fromRgba8(1, 2, 3, 4),
     'tiny_skia.IntSize': tiny_skia.IntSize.fromWh(1, 2),
@@ -68,9 +69,7 @@ function everyClass() {
     'usvg.Primitive': tree.filters()[0].primitives()[0],
     'usvg.LinearGradient': tree.linearGradients()[0],
     'usvg.RadialGradient': tree.radialGradients()[0],
-    'usvg.TextChunk': chunk,
-    'usvg.TextSpan': chunk.spans[0],
-    'usvg.Font': chunk.spans[0].font,
+    'usvg.FilterImage': feImage.kind.value,
     'usvg.Span': span,
     'usvg.PositionedGlyph': span.positionedGlyphs[0],
     'usvg.ImageKindPng': image.kind(),

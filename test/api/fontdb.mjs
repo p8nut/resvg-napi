@@ -65,7 +65,12 @@ test('withFaceData: the font file and its face index, copied out', () => {
 test('removeFace and makeFaceDataUnshared take an ID', () => {
   const db = database();
   const id = db.faces()[0].id;
-  db.makeFaceDataUnshared(id);
+  // fontdb's `memmap` is off on WASI: the member throws there, by design.
+  if (binding.__napiBindingTarget?.startsWith('wasm32')) {
+    assert.throws(() => db.makeFaceDataUnshared(id), /upstream feature is off/);
+  } else {
+    db.makeFaceDataUnshared(id);
+  }
   assert.equal(db.len(), 1);
   db.removeFace(id);
   assert.equal(db.len(), 0);

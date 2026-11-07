@@ -141,6 +141,7 @@ jobs:
       # so the build job's drift check compares against the versioned tree.
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash # Windows runners default to pwsh, which has no ${VAR#v}
         run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
       # `npm install`, not `npm ci`: the resvg-napi-<platform>
       # optionalDependencies name 0.0.0, or on a tag a version the publish job
@@ -363,6 +364,7 @@ jobs:
       # so the build job's drift check compares against the versioned tree.
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash # Windows runners default to pwsh, which has no ${VAR#v}
         run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
       - run: npm install  # not `npm ci` -- see the build job
       # The root tarball and every manifest. Needs no artifacts: the root
@@ -463,6 +465,7 @@ jobs:
       # so the build job's drift check compares against the versioned tree.
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash # Windows runners default to pwsh, which has no ${VAR#v}
         run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
       - run: npm install  # not `npm ci` -- see the build job
       # Trusted publishing: npm trades this job's OIDC token (id-token: write

@@ -1,6 +1,6 @@
 {
   "name": "resvg-napi",
-  "version": "0.11.0",
+  "version": "0.0.0",
   "description": "Render SVG to PNG in Node — and read back the resolved tree, text metrics and fonts. Powered by resvg.",
   "keywords": [
     "svg",
@@ -40,7 +40,6 @@
     "test:examples": "node demo/render.mjs examples/roster.svg --strict && node demo/render.mjs examples/badge-sheet.svg --strict && node demo/render.mjs examples/photo-card.svg --strict && node demo/render.mjs examples/sheet.svg --lang fr --strict",
     "typecheck": "tsc",
     "create-npm-dirs": "napi create-npm-dirs",
-    "version": "napi version",
     "demo": "npm run demo:build && node demo/serve.mjs",
     "demo:build": "npm run demo:wasm && node demo/build.mjs",
     "demo:wasm": "napi build --platform --release --target wasm32-wasip1-threads",
@@ -113,19 +112,19 @@
     "url": "git+https://github.com/p8nut/resvg-napi.git"
   },
   "optionalDependencies": {
-    "resvg-napi-android-arm-eabi": "0.11.0",
-    "resvg-napi-android-arm64": "0.11.0",
-    "resvg-napi-darwin-arm64": "0.11.0",
-    "resvg-napi-darwin-x64": "0.11.0",
-    "resvg-napi-linux-arm-gnueabihf": "0.11.0",
-    "resvg-napi-linux-arm64-gnu": "0.11.0",
-    "resvg-napi-linux-arm64-musl": "0.11.0",
-    "resvg-napi-linux-x64-gnu": "0.11.0",
-    "resvg-napi-linux-x64-musl": "0.11.0",
-    "resvg-napi-wasm32-wasi": "0.11.0",
-    "resvg-napi-win32-arm64-msvc": "0.11.0",
-    "resvg-napi-win32-ia32-msvc": "0.11.0",
-    "resvg-napi-win32-x64-msvc": "0.11.0"
+    "resvg-napi-android-arm-eabi": "0.0.0",
+    "resvg-napi-android-arm64": "0.0.0",
+    "resvg-napi-darwin-arm64": "0.0.0",
+    "resvg-napi-darwin-x64": "0.0.0",
+    "resvg-napi-linux-arm-gnueabihf": "0.0.0",
+    "resvg-napi-linux-arm64-gnu": "0.0.0",
+    "resvg-napi-linux-arm64-musl": "0.0.0",
+    "resvg-napi-linux-x64-gnu": "0.0.0",
+    "resvg-napi-linux-x64-musl": "0.0.0",
+    "resvg-napi-wasm32-wasi": "0.0.0",
+    "resvg-napi-win32-arm64-msvc": "0.0.0",
+    "resvg-napi-win32-ia32-msvc": "0.0.0",
+    "resvg-napi-win32-x64-msvc": "0.0.0"
   },
   "dependencies": {
     "@emnapi/core": "2.0.0-beta.3",
@@ -138,7 +137,7 @@
     "provenance": true
   },
   "peerDependencies": {
-    "resvg-napi-wasm32-wasi": "0.11.0"
+    "resvg-napi-wasm32-wasi": "0.0.0"
   },
   "peerDependenciesMeta": {
     "resvg-napi-wasm32-wasi": {

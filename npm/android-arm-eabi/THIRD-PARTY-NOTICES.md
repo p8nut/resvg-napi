@@ -229,7 +229,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### smallvec 1.16.4
+### smallvec 1.16.5
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 The Servo Project Developers
 

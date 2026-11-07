@@ -438,7 +438,7 @@ Still open after 13 (for 0.10's notes, step 14):
   `TextChunk` plain objects (every member maps). `PositionedGlyph.font` is
   the `fontdb.ID` of the face that drew the glyph (#181).
 - ~~`util.inspect` of a leased instance~~: prints `Pixmap { leased: true }`
-  (or `consumed: true`) since 0.10.1; `Primitive`'s union getter prints fine.
+  (or `consumed: true`) since 0.11.0; `Primitive`'s union getter prints fine.
 - Hand-written `.d.mts` of the helpers, which can drift: generate them from
   JSDoc with `tsc --allowJs --declaration` (asked during this step).
 

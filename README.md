@@ -310,10 +310,12 @@ shares the database rather than copying it; writing to it afterwards copies
 it first. The helpers' `pendingFonts` names the families a document wanted
 and did not get; `pendingImages` does the same for hrefs.
 
-Not reachable yet, because their Rust signatures borrow or take a closure:
-`query`, `faceData`, `familyName`, `faceSource`, the face `ID`s, and which
-face drew each glyph ([#181](https://github.com/p8nut/resvg-napi/issues/181),
-[#191](https://github.com/p8nut/resvg-napi/issues/191)).
+A face is named by its `fontdb.ID` (`face.id`): `db.face(id)`,
+`removeFace(id)`, `withFaceData(id)` (`[bytes, index]`), `faceSource(id)`.
+`db.query({ families: [{ type: 'name', value: 'IBM Plex Sans' }], weight: 700 })`
+returns the best match's `ID`, `familyName(family)` resolves a generic family,
+and `loadFontSource({ type: 'binary', bytes })` loads and returns the new
+`ID`s. A rendered glyph's `font` is the `ID` of the face that drew it.
 
 ## Paint servers
 
@@ -525,6 +527,12 @@ one running the native addon, and reports what `NAPI_RS_NATIVE_LIBRARY_PATH`
 resolved to when it is set, since the loader adopts the override's own target
 rather than claiming `'native'`.
 
+## Upgrading from 0.10
+
+0.11 maps `usvg.Font.families`, so `usvg.Font`, `usvg.TextSpan` and
+`usvg.TextChunk` are plain objects now: the same properties, read the same
+way, but no `instanceof`, `dispose()` or `disposed`.
+
 ## Upgrading from 0.9
 
 0.10 removed the hand-written `Resvg` class and the other flat exports
@@ -543,7 +551,7 @@ rather than claiming `'native'`.
 | `doc.takeLogs()` (per document) | `takeLogs()`, global |
 | `doc.dispose()` | `tree.dispose()`, on every class |
 | `FontDatabase` · `FontFace` | `fontdb.Database` · `fontdb.FaceInfo` (`families` are `[name, language]` pairs) |
-| `FontDatabase.query` · `faceData` · `familyName` · `faceSource` | not yet ([#181](https://github.com/p8nut/resvg-napi/issues/181)) |
+| `FontDatabase.query` · `faceData` · `familyName` · `faceSource` | `query` · `withFaceData` · `familyName` · `faceSource` (0.11), by `fontdb.ID` |
 | `RenderOptions` · `WriteOptions` | `usvg.Options` · `usvg.WriteOptions`; `defaultSizeWidth`/`Height` is `defaultSize: tiny_skia.Size.fromWh(w, h)` |
 | `RenderParams` · `RawImage` | the helpers' `RenderParams` · `RawImage` |
 | `BBox` · `Dimensions` · `Matrix` | `tiny_skia.NonZeroRect` or `Rect` · `tiny_skia.Size` · `tiny_skia.Transform` |

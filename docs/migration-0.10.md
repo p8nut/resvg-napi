@@ -418,9 +418,10 @@ What it found:
 - `api-diff` against step 12 says breaking: 26 removed, 16 changed, 19
   added.
 
-Still open after 13 (for 0.10's notes, step 14):
+Still open after 13 (for 0.10's notes, step 14), all but the last shipped
+in 0.11.0:
 
-- ~~#181~~: fontdb's `query`, `withFaceData`, `familyName`, the face `ID`s
+- ~~#181~~ (#204, #207): fontdb's `query`, `withFaceData`, `familyName`, the face `ID`s
   (`face`, `removeFace`, `makeFaceDataUnshared`) and `families` are back,
   and `Source` with them: `FaceInfo.source` and `faceSource(id)` hand out a
   union (`binary`: a read-only class whose `bytes` copies the shared bytes;
@@ -429,7 +430,7 @@ Still open after 13 (for 0.10's notes, step 14):
   is), and `loadFontSource` takes `{ type: 'binary', bytes }` or
   `{ type: 'file', value }`, returning the new `ID`s. `sharedFile` is
   refused as input: a file mapping is fontdb's to make.
-- ~~#191~~: back through generic rules. A union variant carrying a class
+- ~~#191~~ (#205): back through generic rules. A union variant carrying a class
   is an output-only object holding a copy: `ImageKind`'s `svg` variant holds
   the embedded `usvg.Tree`, `Kind`'s `image` a `usvg.FilterImage` whose
   `root` is a copy of the group the `feImage` draws. An enum a crate
@@ -440,7 +441,7 @@ Still open after 13 (for 0.10's notes, step 14):
 - ~~`util.inspect` of a leased instance~~: prints `Pixmap { leased: true }`
   (or `consumed: true`) since 0.11.0; `Primitive`'s union getter prints fine.
 - Hand-written `.d.mts` of the helpers, which can drift: generate them from
-  JSDoc with `tsc --allowJs --declaration` (asked during this step).
+  JSDoc with `tsc --allowJs --declaration`. An idea, not decided.
 
 ## Status
 

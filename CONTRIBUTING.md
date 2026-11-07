@@ -707,47 +707,32 @@ previous one.
 
 ## Releasing
 
-One version lives in seven places, and every one of them has failed a release
-at least once:
+A release is a tag, nothing else:
 
 ```bash
-npm pkg set version=X.Y.Z
-npm run version        # napi version -> the thirteen npm/* manifests
-npm pkg set optionalDependencies.resvg-napi-linux-x64-gnu=X.Y.Z   # ...and the twelve others
-npm pkg set peerDependencies.resvg-napi-wasm32-wasi=X.Y.Z
-sed -i 's/^version = ".*"/version = "X.Y.Z"/' Cargo.toml           # the crate, and Cargo.lock with it
-npm run build          # index.js embeds the version in its binding checks
-npm install --package-lock-only
+git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z
 ```
 
-`napi version` touches the thirteen manifests and nothing else. The dependency
-maps that name those packages are left alone: `napi pre-publish` rewrites
-`optionalDependencies` inside the publish job, but `check:package` reads the
-committed manifest and fails a release whose root still points at the previous
-version -- and `peerDependencies` is rewritten by nobody at all, which is how
-0.3.0 shipped asking for the 0.2.0 wasm package and answering ERESOLVE to
-anyone who installed both.
+The repository stays at version 0.0.0. On a `v*` tag, CI runs
+`scripts/set-version.mjs` with the tag's version before it builds, packs and
+publishes. That one script writes the version into the seven places it
+lives, and every one of them has failed a release at least once:
+- `package.json`, its `optionalDependencies` and the wasm `peerDependencies`
+  (0.3.0 shipped asking for the 0.2.0 wasm package);
+- the thirteen `npm/*` manifests;
+- `Cargo.toml` and `Cargo.lock`. `CARGO_PKG_VERSION` is hashed into every
+  class's napi type tag, so two releases sharing a crate version accept each
+  other's objects without an error;
+- `index.js`, whose binding checks name the version.
 
-`index.js` carries the version in fifty-four generated strings (`expected X.Y.Z
-but got ...`), so a bump without a rebuild trips the drift check. `Cargo.toml`
-is the one that looks cosmetic and is not: `CARGO_PKG_VERSION` is hashed into
-every class's napi type tag, so two releases sharing a crate version stamp
-identical tags and accept each other's objects without an error.
+The build job then checks that `napi build` reproduces exactly what the script
+wrote. Nothing is committed: no release pull request, and no lockfile pull
+request after it. The platform packages are never in `package-lock.json`,
+which CI's `npm install` tolerates.
 
-Commit all of it, then push a `v*` tag. CI builds
-every target, publishes the platform packages before the root one, and creates
-the GitHub release with the pull requests merged since the last tag as its body.
-
-Then one more commit, once the packages are on npm:
-
-```bash
-npm install --package-lock-only   # the platform packages, at the new version
-```
-
-The bump ran that command before the new version existed, so npm left the
-thirteen `node_modules/resvg-napi-*` entries out of the lockfile, and `npm ci`
-fails on `main` until they are back (0.6.0 shipped that way; #122 restored
-them).
+CI builds every target, publishes the platform packages before the root one,
+and creates the GitHub release with the pull requests merged since the last
+tag as its body.
 
 There is no `CHANGELOG.md` any more. It was a file to remember at every pull
 request, and it recorded what a release body is for. The generated list of pull

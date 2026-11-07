@@ -136,13 +136,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      # `npm install`, not `npm ci`: `npm version` moves the resvg-napi-<platform>
-      # optionalDependencies to the new version before the publish job below
-      # has put it on the registry, so on a release commit they cannot be in
-      # the lock file. `npm ci` refuses on that mismatch; `npm install`
-      # tolerates an unresolvable *optional* dep. This is permanent, not a
-      # pre-0.1.0 leftover: locking them between releases would only move the
-      # failure onto the tag.
+      # A release is a `v*` tag alone: the repository stays at 0.0.0 and the
+      # version comes from the tag's name (CONTRIBUTING.md, Releasing). Staged,
+      # so the build job's drift check compares against the versioned tree.
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
+      # `npm install`, not `npm ci`: the resvg-napi-<platform>
+      # optionalDependencies name 0.0.0, or on a tag a version the publish job
+      # has not put on the registry yet, so they are never in the lock file.
+      # `npm ci` refuses on that mismatch; `npm install` tolerates an
+      # unresolvable *optional* dep.
       - run: npm install
       # musl cross-compiles through zig (`-x`). The previous `--use-cross`
       # needed a `cross` binary that no step ever installed, so both musl
@@ -209,12 +213,13 @@ jobs:
       # build left changed -- or added -- means the checked-in files no longer
       # match what the pinned versions produce. The whole tree rather than a
       # list of paths, so a newly generated file cannot slip past.
-      # package-lock.json is the exception: `npm install` above may rewrite it
-      # on a release commit, as explained there.
+      # package-lock.json is the exception: `npm install` above may rewrite it,
+      # as explained there. Compared with the index, not HEAD: on a tag the
+      # index holds the versioned tree, which the build must reproduce.
       - name: Generated files are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'wasm32-wasip1-threads'
         run: |
-          changed=$(git status --porcelain -- . ':!package-lock.json')
+          changed=$(git diff --name-only -- . ':!package-lock.json'; git ls-files --others --exclude-standard)
           if [ -n "$changed" ]; then
             echo "$changed"
             git diff -- . ':!package-lock.json'
@@ -353,6 +358,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # A release is a `v*` tag alone: the repository stays at 0.0.0 and the
+      # version comes from the tag's name (CONTRIBUTING.md, Releasing). Staged,
+      # so the build job's drift check compares against the versioned tree.
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
       - run: npm install  # not `npm ci` -- see the build job
       # The root tarball and every manifest. Needs no artifacts: the root
       # package holds no platform binary.
@@ -447,6 +458,12 @@ jobs:
           registry-url: https://registry.npmjs.org
           # No `cache: npm` here, unlike every other job: this one holds
           # id-token and contents write, so it installs from a clean state.
+      # A release is a `v*` tag alone: the repository stays at 0.0.0 and the
+      # version comes from the tag's name (CONTRIBUTING.md, Releasing). Staged,
+      # so the build job's drift check compares against the versioned tree.
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
       - run: npm install  # not `npm ci` -- see the build job
       # Trusted publishing: npm trades this job's OIDC token (id-token: write
       # above) for a short-lived publish credential, so no long-lived npm

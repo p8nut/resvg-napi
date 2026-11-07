@@ -252,14 +252,15 @@ jobs:
       # `--target` downloads the whole graph.
       #
       # The script rewrites the notice and its copies in every npm/* package,
-      # with their files[] entries; status rather than diff, so a copy written
+      # with their files[] entries; untracked files count, so a copy written
       # where none was committed fails too.
       - name: Third-party notices are up to date
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           cargo fetch --locked
           npm run licenses
-          changed=$(git status --porcelain -- THIRD-PARTY-NOTICES.md npm)
+          # Against the index, as the drift check: on a tag it holds the versioned tree.
+          changed=$(git diff --name-only -- THIRD-PARTY-NOTICES.md npm; git ls-files --others --exclude-standard -- THIRD-PARTY-NOTICES.md npm)
           if [ -n "$changed" ]; then
             echo "$changed"
             git diff -- THIRD-PARTY-NOTICES.md npm

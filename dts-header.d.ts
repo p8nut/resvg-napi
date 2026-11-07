@@ -15,6 +15,12 @@ export declare namespace fontdb {
   export interface ID {
     [Symbol.dispose](): void
   }
+  export interface SourceBinary {
+    [Symbol.dispose](): void
+  }
+  export interface SourceSharedFile {
+    [Symbol.dispose](): void
+  }
 }
 
 export declare namespace guard {

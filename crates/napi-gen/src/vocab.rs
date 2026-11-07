@@ -39,6 +39,9 @@ pub enum Js {
     Str,
     OptStr,
     OptPath,
+    // `PathBuf` / `&Path`: a string on the JS side, lossy where the OS
+    // path is not UTF-8.
+    Path,
     StrList,
     Bytes,
     TryUnit,
@@ -105,6 +108,14 @@ pub enum Payload {
 }
 
 impl Payload {
+    /// Whether it carries bytes: the variant is then a read-only class, a
+    /// getter being the one place a `Buffer` can go (`payload_enum_code`).
+    pub fn carries_bytes(&self, vocab: &Vocab) -> bool {
+        self.carried()
+            .iter()
+            .any(|t| matches!(vocab.classify(t), Some(Js::Bytes)))
+    }
+
     /// The types it carries.
     pub fn carried(&self) -> Vec<&String> {
         match self {
@@ -131,6 +142,10 @@ pub struct PayloadEnum {
     /// `a::b`. Carried on the type because the emitter used to assume the
     /// first crate, which stops being true at the next one.
     pub root: String,
+    /// The `#[cfg]`s of the variants that carry any: a variant upstream builds
+    /// only under one of its features has its arm built under the same cfg
+    /// (`cfg::of`), or the match names a variant that is not there.
+    pub cfgs: BTreeMap<String, Vec<syn::Attribute>>,
 }
 
 impl PayloadEnum {
@@ -138,11 +153,13 @@ impl PayloadEnum {
     /// A class is not `Clone`, so no `#[napi(object)]` field can hold the
     /// union: its holder has to stay a read-only class.
     pub fn holds_class(&self, vocab: &Vocab) -> bool {
-        self.variants.iter().any(|(_, p)| {
-            matches!(p, Payload::Value(ty) if matches!(
+        self.variants.iter().any(|(_, p)| match p {
+            Payload::Value(ty) => matches!(
                 vocab.classify(ty),
                 Some(Js::Bytes | Js::Owned(_) | Js::Value(_))
-            ))
+            ),
+            Payload::Tuple(_) => p.carries_bytes(vocab),
+            _ => false,
         })
     }
 
@@ -271,6 +288,7 @@ impl PayloadEnum {
                     | Js::Scalar
                     | Js::Bool
                     | Js::Enum
+                    | Js::Path
                     | Js::Object(_),
                 ) => Ok(()),
                 // A class carried alone: the variant is an output-only
@@ -309,7 +327,8 @@ impl PayloadEnum {
                 Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
                 p => p.carried().into_iter().map(|t| (None, t)).collect(),
             };
-            let sole = matches!(p, Payload::Value(_));
+            // A tuple is one getter too (`value`), so bytes may sit in it.
+            let sole = matches!(p, Payload::Value(_) | Payload::Tuple(_));
             carried.into_iter().find_map(|(field, t)| {
                 field_of(vocab, t, sole).err().map(|why| match field {
                     Some(f) => format!("{n}.{f} carries {t}, and {why}"),
@@ -317,6 +336,19 @@ impl PayloadEnum {
                 })
             })
         })
+    }
+
+    /// `#[cfg(..)]` for the arm of variant `n`, translated (`cfg::of`), or
+    /// nothing when it is built wherever the enum is.
+    pub fn gate(&self, n: &str) -> TokenStream {
+        match self
+            .cfgs
+            .get(n)
+            .map(|a| crate::cfg::gate(&crate::cfg::of(a)))
+        {
+            Some(crate::cfg::Gate::When(on, _)) => quote!(#[cfg(#on)]),
+            _ => quote!(),
+        }
     }
 
     pub fn conv_ident(&self, name: &str) -> proc_macro2::Ident {
@@ -433,11 +465,25 @@ pub fn payload_enums(
         };
         let usable = variants.iter().any(|(_, p)| !matches!(p, Payload::None));
         if usable {
+            let cfgs = e
+                .variants
+                .iter()
+                .filter_map(|v| {
+                    let c: Vec<syn::Attribute> = v
+                        .attrs
+                        .iter()
+                        .filter(|a| a.path().is_ident("cfg"))
+                        .cloned()
+                        .collect();
+                    (!c.is_empty()).then(|| (v.ident.to_string(), c))
+                })
+                .collect();
             out.insert(
                 e.ident.to_string(),
                 PayloadEnum {
                     variants,
                     root: root.to_string(),
+                    cfgs,
                 },
             );
         }
@@ -692,6 +738,7 @@ pub fn classify(
         "String" | "&str" => Js::Str,
         "Option<String>" => Js::OptStr,
         "Option<std::path::PathBuf>" | "Option<PathBuf>" => Js::OptPath,
+        "std::path::PathBuf" | "PathBuf" | "&std::path::Path" | "&Path" => Js::Path,
         "Vec<String>" => Js::StrList,
         "Vec<f32>" | "&[f32]" | "[f32]" | "Vec<f64>" | "&[f64]" | "[f64]" => Js::F32List,
         // An Arc around bytes is shared *data*, not a shared entity: it has no
@@ -700,6 +747,7 @@ pub fn classify(
         "Vec<u8>" | "&[u8]" | "Arc<Vec<u8>>" | "&Arc<Vec<u8>>" | "std::sync::Arc<Vec<u8>>" => {
             Js::Bytes
         }
+        s if shared_bytes(s) => Js::Bytes,
         s if s.starts_with("Result<(),") => Js::TryUnit,
         // Arc-held definitions can be owned by a wrapper class.
         s if s.starts_with("&[Arc<") && s.ends_with(">]") => {
@@ -716,6 +764,36 @@ pub fn classify(
         other if scalars.contains(other) => Js::Scalar,
         _ => return None,
     })
+}
+
+/// `Arc<dyn AsRef<[u8]> + Send + Sync>`, by any path to `Arc` and in any
+/// marker order: bytes a crate shares without saying what holds them (a
+/// `Vec`, a file mapping). Read through `AsRef`, as any bytes are.
+pub fn shared_bytes(ty: &str) -> bool {
+    let t = ty.trim_start_matches('&');
+    let t = ["alloc::sync::", "std::sync::"]
+        .iter()
+        .find_map(|p| t.strip_prefix(p))
+        .unwrap_or(t);
+    t.strip_prefix("Arc<dynAsRef<[u8]>")
+        .and_then(|r| r.strip_suffix('>'))
+        .is_some_and(|markers| {
+            markers
+                .split('+')
+                .all(|m| ["", "Send", "Sync", "'static"].contains(&m))
+        })
+}
+
+/// A type string as `ty_str` left it, made Rust again where dropping the
+/// spaces fused two words (`dynAsRef`), with `Arc` spelled out in full: the
+/// generated file imports neither `alloc` nor `std::sync`.
+pub fn rust_src(ty: &str) -> String {
+    let t = ty
+        .replace("alloc::sync::Arc<", "Arc<")
+        .replace("std::sync::Arc<", "Arc<");
+    t.replace("Arc<", "std::sync::Arc<")
+        .replace("<dyn", "<dyn ")
+        .replace("&dyn", "&dyn ")
 }
 
 /// Second classification pass, for types that need the object registry: it is

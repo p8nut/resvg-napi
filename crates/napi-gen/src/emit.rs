@@ -109,6 +109,7 @@ pub fn js_conv(
         (Js::Count, Carried) => return None,
         (Js::Count, _) => plain(quote!(u32), saturating),
         (Js::Str, _) => plain(quote!(String), quote!(#a.to_string())),
+        (Js::Path, _) => plain(quote!(String), quote!(#a.to_string_lossy().into_owned())),
         (Js::Scalar, _) => plain(quote!(f64), quote!(f64::from(#a.get()))),
         (Js::IntNewtype(_), Carried) => return None,
         (Js::IntNewtype(_), _) => plain(quote!(u32), quote!(u32::from(#a.0))),
@@ -339,7 +340,8 @@ pub fn payload_enum_code(
         {
             let vid = format_ident!("{}", n);
             let tag = lower_camel(n);
-            arms.push(quote!(#up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
+            let g = info.gate(n);
+            arms.push(quote!(#g #up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
         }
         i = 1;
     }
@@ -353,6 +355,7 @@ pub fn payload_enum_code(
         let tag = lower_camel(n);
         let ts = format!("'{tag}'");
         let arm = info.either_arm(name, i);
+        let g = info.gate(n);
         i += 1;
 
         // What the struct declares, how the arm binds it, and how each field is
@@ -371,10 +374,10 @@ pub fn payload_enum_code(
             // variant becomes a read-only class. Narrowing still works -- the
             // discriminant is a getter with a literal return type.
             Payload::Value(ty) if matches!(vocab.classify(ty), Some(Js::Bytes)) => {
-                let doc = format!(" `{name}::{n}`. The bytes are the document's own.");
+                let doc = format!(" `{name}::{n}`.");
                 let bytes_doc = format!(
-                    " The encoded bytes, exactly as the document supplied them: \
-{} does not decode them, and neither does this.",
+                    " The bytes, as {} holds them: it does not decode them, and neither \
+does this. Copied out on each read.",
                     info.root
                 );
                 // The payload's own type, not `Vec<u8>`: upstream may hold these
@@ -385,7 +388,7 @@ pub fn payload_enum_code(
                 // Qualified: the generated file imports the napi prelude and the
                 // wrapped crates, not `std::sync`, and the rest of it spells
                 // `Arc` out in full.
-                let raw_src = ty.replace("Arc<", "std::sync::Arc<");
+                let raw_src = rust_src(ty);
                 let raw_ty: syn::Type = syn::parse_str(&raw_src)
                     .unwrap_or_else(|e| panic!("{name}::{n} carries {ty}, unparseable: {e}"));
                 items.extend(quote! {
@@ -408,11 +411,11 @@ pub fn payload_enum_code(
                         #[doc = #bytes_doc]
                         #[napi(getter)]
                         pub fn bytes(&self) -> Buffer {
-                            self.raw.as_slice().into()
+                            napi_support::copied(&self.raw)
                         }
                     }
                 });
-                arms.push(quote!(#up::#vid(v) => #arm(#sid { raw: v.clone() }),));
+                arms.push(quote!(#g #up::#vid(v) => #arm(#sid { raw: v.clone() }),));
                 continue;
             }
             // A class carried alone: an output-only object holding it, which
@@ -434,7 +437,7 @@ pub fn payload_enum_code(
                         pub value: #fty,
                     }
                 });
-                arms.push(quote!(#up::#vid(v) => #arm(#sid {
+                arms.push(quote!(#g #up::#vid(v) => #arm(#sid {
                     r#type: #tag.to_string(),
                     value: #expr,
                 }),));
@@ -451,6 +454,63 @@ pub fn payload_enum_code(
                     quote!(#up::#vid(v)),
                     vec![quote!(#field: #expr,)],
                 )
+            }
+            // A tuple holding bytes: a read-only class, as bytes alone are,
+            // whose `value` getter builds the array. It keeps the payload's
+            // own values -- an `Arc` around the bytes is a refcount bump --
+            // and copies the bytes out only when read.
+            Payload::Tuple(tys) if payload.carries_bytes(vocab) => {
+                let doc = format!(" `{name}::{n}`.");
+                // One field, a tuple: `dispose::slotted` puts a class's one
+                // field in a slot.
+                let (mut raw_tys, mut binds, mut jstys, mut convs) =
+                    (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+                for (j, ty) in tys.iter().enumerate() {
+                    let b = format_ident!("v{j}");
+                    let raw_ty: syn::Type = syn::parse_str(&rust_src(ty)).unwrap_or_else(|e| {
+                        panic!("{name}::{n}.{j} carries {ty}, unparseable: {e}")
+                    });
+                    // Each bound by reference, as a union's payload is.
+                    let (jty, conv) = if matches!(vocab.classify(ty), Some(Js::Bytes)) {
+                        (quote!(Buffer), quote!(napi_support::copied(#b)))
+                    } else {
+                        let Some((_, jty, conv)) = carried_field(vocab, ty, &quote!(#b)) else {
+                            return Err(format!(
+                                "{name}::{n}.{j} carries {ty}, which cannot be a field"
+                            ));
+                        };
+                        (jty, conv)
+                    };
+                    raw_tys.push(raw_ty);
+                    binds.push(b);
+                    jstys.push(jty);
+                    convs.push(conv);
+                }
+                items.extend(quote! {
+                    #[doc = #doc]
+                    #[napi]
+                    pub struct #sid {
+                        raw: (#(#raw_tys,)*),
+                    }
+                    #[napi]
+                    impl #sid {
+                        #[doc = " Discriminant. Narrow on this."]
+                        #[napi(getter, js_name = "type", ts_return_type = #ts)]
+                        pub fn kind_tag(&self) -> &'static str {
+                            #tag
+                        }
+                        #[doc = " What the variant carries, in order. Bytes are copied out on each read."]
+                        #[napi(getter)]
+                        pub fn value(&self) -> (#(#jstys),*) {
+                            let (#(#binds,)*) = &self.raw;
+                            (#(#convs),*)
+                        }
+                    }
+                });
+                arms.push(quote!(#g #up::#vid(#(#binds),*) => #arm(#sid {
+                    raw: (#(#binds.clone(),)*),
+                }),));
+                continue;
             }
             // Several unnamed fields: `value` is a tuple of them, an array
             // in JS.
@@ -505,7 +565,7 @@ pub fn payload_enum_code(
                 #(#decls)*
             }
         });
-        arms.push(quote!(#pattern => #arm(#sid {
+        arms.push(quote!(#g #pattern => #arm(#sid {
             r#type: #tag.to_string(),
             #(#inits)*
         }),));
@@ -855,6 +915,7 @@ fn map_field(
             // this; nested objects belong on methods, not in a flat config
             // object.
             Some(Js::Bytes)
+            | Some(Js::Path)
             | Some(Js::Count)
             | Some(Js::TryUnit)
             | Some(Js::Class(_))
@@ -2055,24 +2116,129 @@ fn rename_idents(
     out.into_iter().collect()
 }
 
-/// Whether JS can pass a value of payload enum `e`: every variant is unit or
-/// carries one borrowed string (`Name(&'a str)`). Such an enum is an argument
-/// type, borrowed for the call, and has no owned form upstream to mirror; its
-/// input form ([`enum_input`]) is the `{ type, value }` a union prints as.
+/// What one variant of an input enum takes from JS ([`is_enum_input`]).
+enum InputField {
+    /// `&'a str`, borrowed from `value` for the call.
+    BorrowedStr,
+    /// `String`, `PathBuf`: `value`, converted with `Into`.
+    Str,
+    /// `Vec<u8>`: a copy of `bytes`.
+    Bytes,
+    /// `Arc<Vec<u8>>`, `Arc<dyn AsRef<[u8]> + ..>`: a copy of `bytes`, shared.
+    SharedBytes,
+}
+
+fn input_field(t: &syn::Type) -> Option<InputField> {
+    if let syn::Type::Reference(r) = t
+        && r.mutability.is_none()
+        && ty_str(&r.elem) == "str"
+    {
+        return Some(InputField::BorrowedStr);
+    }
+    let s = ty_str(t);
+    let arc = ["alloc::sync::", "std::sync::"]
+        .iter()
+        .find_map(|p| s.strip_prefix(p))
+        .unwrap_or(&s);
+    match s.as_str() {
+        "String" | "PathBuf" | "std::path::PathBuf" => Some(InputField::Str),
+        "Vec<u8>" => Some(InputField::Bytes),
+        _ if arc == "Arc<Vec<u8>>" || shared_bytes(&s) => Some(InputField::SharedBytes),
+        _ => None,
+    }
+}
+
+/// Whether a variant's fields are all something JS can give, several of
+/// them (a tuple): such a variant is in the input enum's type, and refused
+/// when passed, there being no one `value` to build it from.
+fn input_tuple(f: &syn::FieldsUnnamed) -> bool {
+    f.unnamed.len() > 1 && f.unnamed.iter().all(|x| input_field(&x.ty).is_some())
+}
+
+/// Whether JS can pass a value of payload enum `e`: every variant is unit,
+/// carries one string, path or run of bytes (`Name(&'a str)`, `File(PathBuf)`,
+/// `Binary(Arc<dyn AsRef<[u8]>>)`), or a tuple of them. Such an enum is an
+/// argument type; its input form ([`enum_input`]) is the `{ type, value }` /
+/// `{ type, bytes }` its union prints as, converted for the call.
 pub fn is_enum_input(e: &syn::ItemEnum) -> bool {
-    let borrowed_str = |t: &syn::Type| matches!(t, syn::Type::Reference(r) if r.mutability.is_none() && ty_str(&r.elem) == "str");
     e.generics.type_params().next().is_none()
-        && e.variants.iter().any(|v| !matches!(v.fields, Fields::Unit))
+        && e.variants.iter().any(|v| {
+            matches!(&v.fields, Fields::Unnamed(f) if f.unnamed.len() == 1 && input_field(&f.unnamed[0].ty).is_some())
+        })
         && e.variants.iter().all(|v| match &v.fields {
             Fields::Unit => true,
-            Fields::Unnamed(f) => f.unnamed.len() == 1 && borrowed_str(&f.unnamed[0].ty),
+            Fields::Unnamed(f) if f.unnamed.len() == 1 => input_field(&f.unnamed[0].ty).is_some(),
+            Fields::Unnamed(f) => input_tuple(f),
             Fields::Named(_) => false,
         })
 }
 
+/// The [`is_enum_input`] enums of `files` that JS has somewhere to pass: an
+/// argument of a function, or a list in an option object
+/// (`Config::option_objects`). The rest would be types nothing takes.
+pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
+    let mut taken = BTreeSet::new();
+    let take = |taken: &mut BTreeSet<String>, sig: &syn::Signature| {
+        for i in &sig.inputs {
+            if let syn::FnArg::Typed(t) = i {
+                let mut ty = &*t.ty;
+                while let syn::Type::Reference(r) = ty {
+                    ty = &r.elem;
+                }
+                if let Some(n) = crate::class::segs(ty).and_then(|mut v| v.pop()) {
+                    taken.insert(n);
+                }
+            }
+        }
+    };
+    for item in files.iter().flat_map(|f| &f.items) {
+        match item {
+            Item::Fn(f) if is_pub(&f.vis) => take(&mut taken, &f.sig),
+            // A method of an enum is not emitted: a union is plain data.
+            Item::Impl(imp)
+                if !self_ident(imp)
+                    .is_some_and(|i| crate::class::find_enum(files, &i.to_string()).is_some()) =>
+            {
+                imp.items.iter().for_each(|it| {
+                    if let ImplItem::Fn(f) = it
+                        && is_pub(&f.vis)
+                    {
+                        take(&mut taken, &f.sig);
+                    }
+                })
+            }
+            Item::Struct(st)
+                if config()
+                    .option_objects
+                    .contains(&st.ident.to_string().as_str()) =>
+            {
+                for f in &st.fields {
+                    if let Some(e) = input_list(files, &f.ty) {
+                        taken.insert(e.ident.to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    files
+        .iter()
+        .flat_map(|f| &f.items)
+        .filter_map(|i| match i {
+            Item::Enum(e)
+                if is_pub(&e.vis) && is_enum_input(e) && taken.contains(&e.ident.to_string()) =>
+            {
+                Some(e)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The input form of an [`is_enum_input`] enum, named as upstream for
-/// [`namespaced`] to prefix: `{ type: 'name', value: 'Arial' }` or
-/// `{ type: 'serif' }`, and the `to_upstream` that borrows it back.
+/// [`namespaced`] to prefix: `{ type: 'name', value: 'Arial' }`,
+/// `{ type: 'binary', bytes }` or `{ type: 'serif' }`, and the `to_upstream`
+/// that converts it, borrowing its strings.
 pub fn enum_input(
     e: &syn::ItemEnum,
     modules: &BTreeMap<String, String>,
@@ -2094,30 +2260,75 @@ pub fn enum_input(
         .map(|t| format!("'{t}'"))
         .collect::<Vec<_>>()
         .join(" | ");
-    let carrying: Vec<&String> = e
-        .variants
-        .iter()
-        .zip(&tags)
-        .filter(|(v, _)| !matches!(v.fields, Fields::Unit))
-        .map(|(_, t)| t)
-        .collect();
-    let value_doc = format!(
-        " The string the variant carries: required for {}, ignored otherwise.",
-        carrying
+    let one = |v: &syn::Variant| match &v.fields {
+        Fields::Unnamed(f) if f.unnamed.len() == 1 => input_field(&f.unnamed[0].ty),
+        _ => None,
+    };
+    let listed = |bytes: bool| -> Vec<String> {
+        e.variants
             .iter()
-            .map(|t| format!("`'{t}'`"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
+            .zip(&tags)
+            .filter(|(v, _)| {
+                matches!(
+                    (one(v), bytes),
+                    (Some(InputField::BorrowedStr | InputField::Str), false)
+                        | (Some(InputField::Bytes | InputField::SharedBytes), true)
+                )
+            })
+            .map(|(_, t)| format!("`'{t}'`"))
+            .collect()
+    };
+    let (strs, bytes) = (listed(false), listed(true));
+    let mut fields = Vec::new();
+    if !strs.is_empty() {
+        let d = format!(
+            " The string the variant carries: required for {}, ignored otherwise.",
+            strs.join(", ")
+        );
+        fields.push(quote!(#[doc = #d] pub value: Option<String>,));
+    }
+    if !bytes.is_empty() {
+        let d = format!(
+            " The bytes the variant carries, copied: required for {}, ignored otherwise.",
+            bytes.join(", ")
+        );
+        fields.push(quote!(#[doc = #d] pub bytes: Option<Uint8Array>,));
+    }
     let arms = e.variants.iter().zip(&tags).map(|(v, tag)| {
         let vid = &v.ident;
-        match v.fields {
-            Fields::Unit => quote!(#tag => #up::#vid,),
+        let g = match crate::cfg::gate(&crate::cfg::of(&v.attrs)) {
+            crate::cfg::Gate::When(on, _) => quote!(#[cfg(#on)]),
+            crate::cfg::Gate::Always => quote!(),
+        };
+        let missing = |what: &str| format!("{name} '{tag}' needs {what}");
+        let value = |m: String| {
+            quote!(self.value.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #m))?)
+        };
+        let bytes = |m: String| {
+            quote!(self.bytes.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #m))?.to_vec())
+        };
+        match (&v.fields, one(v)) {
+            (Fields::Unit, _) => quote!(#g #tag => #up::#vid,),
+            (_, Some(InputField::BorrowedStr)) => {
+                let x = value(missing("a value"));
+                quote!(#g #tag => #up::#vid(#x),)
+            }
+            (_, Some(InputField::Str)) => {
+                let x = value(missing("a value"));
+                quote!(#g #tag => #up::#vid(#x.into()),)
+            }
+            (_, Some(InputField::Bytes)) => {
+                let x = bytes(missing("bytes"));
+                quote!(#g #tag => #up::#vid(#x),)
+            }
+            (_, Some(InputField::SharedBytes)) => {
+                let x = bytes(missing("bytes"));
+                quote!(#g #tag => #up::#vid(std::sync::Arc::new(#x)),)
+            }
             _ => {
-                let missing = format!("{name} '{tag}' needs a value");
-                quote!(#tag => #up::#vid(
-                    self.value.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #missing))?
-                ),)
+                // Ungated: it names no variant, and says the same everywhere.
+                let m = format!("{name} '{tag}' cannot be passed in: it carries several values");
+                quote!(#tag => return Err(napi_support::thrown("InvalidArg", #m)),)
             }
         }
     });
@@ -2125,18 +2336,17 @@ pub fn enum_input(
     quote! {
         #(#doc)*
         #[doc = ""]
-        #[doc = " Passed in as the union it prints as: `{ type, value }`."]
+        #[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
         #[napi(object, object_to_js = false)]
         pub struct #ident {
             #[doc = " The variant."]
             #[napi(ts_type = #ts)]
             pub r#type: String,
-            #[doc = #value_doc]
-            pub value: Option<String>,
+            #(#fields)*
         }
 
         impl #ident {
-            #[doc = " The upstream value, borrowing this one's string."]
+            #[doc = " The upstream value, borrowing this one's strings."]
             fn to_upstream(&self) -> Result<#up_ty, String> {
                 Ok(match self.r#type.as_str() {
                     #(#arms)*

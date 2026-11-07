@@ -720,9 +720,10 @@ impl<'a> Classes<'a> {
             };
             return Some((quote!(#pat: Option<#o>), Some(pre), quote!(&#tmp)));
         }
-        // An input enum (`emit::is_enum_input`), borrowed for the call from
-        // the `{ type, value }` JS passed.
-        if r == Some(false)
+        // An input enum (`emit::is_enum_input`), converted for the call from
+        // the `{ type, value }` JS passed: lent where upstream borrows it,
+        // given where it takes it.
+        if r != Some(true)
             && self
                 .resolve(ctx, &segs, |s| {
                     find_enum(self.sources[s].files, last).is_some_and(crate::emit::is_enum_input)
@@ -734,7 +735,11 @@ impl<'a> Classes<'a> {
             return Some((
                 quote!(#pat: #e),
                 Some(quote!(let #tmp = #pat.to_upstream()?;)),
-                quote!(&#tmp),
+                if r.is_some() {
+                    quote!(&#tmp)
+                } else {
+                    quote!(#tmp)
+                },
             ));
         }
         None
@@ -838,7 +843,16 @@ impl<'a> Classes<'a> {
                     if is(e, "Vec", 1) && Prim::of(args(e)[0]) == Some(Prim::U8) {
                         return Some((quote!(Buffer), quote!(#at.into())));
                     }
-                    Prim::of(e).map(|p| (p.js(), p.js_out(&at)))
+                    if let Some(p) = Prim::of(e) {
+                        return Some((p.js(), p.js_out(&at)));
+                    }
+                    // Anything else the vocabulary maps for a getter: a
+                    // union, a class held by value.
+                    let t = ty_str(e);
+                    let js = vocab.classify(&t)?;
+                    js_conv(&js, &t, vocab, &at, Site::Getter)
+                        .filter(|c| !c.is_result)
+                        .map(|c| (c.ty, c.expr))
                 })
                 .collect::<Option<Vec<_>>>()
         {
@@ -867,6 +881,28 @@ impl<'a> Classes<'a> {
             return Ok(Ret {
                 ty: quote!(#id),
                 conv: quote!(#id::wrap(#arc)),
+            });
+        }
+        // Several values of a class held by value: a `Vec<T>`, or an inline
+        // vector over an array (`X<[T; N]>`). Either iterates by value.
+        if r.is_none()
+            && let [elem] = args(inner)[..]
+            && let Some(item) = match elem {
+                Type::Array(a) => Some(&*a.elem),
+                _ if is(inner, "Vec", 1) => Some(elem),
+                _ => None,
+            }
+            && let Some(c) = self.class_of(ctx, this, item)
+            && self.classes[c].holding == Holding::Value
+        {
+            if self.classes[c].shared_name && !own {
+                return Err(Reason::SharedName);
+            }
+            let id = self.ident(c);
+            let each = self.wrapped(c, &quote!(x));
+            return Ok(Ret {
+                ty: quote!(Vec<#id>),
+                conv: quote!(#v.into_iter().map(|x| #each).collect()),
             });
         }
         if let Some(c) = self.class_of(ctx, this, inner) {

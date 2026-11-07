@@ -1,14 +1,17 @@
 // fontdb's members that take or hand out a face ID, a query or a callback
 // (#181): `fontdb.ID` is an opaque class held by value, `fontdb.Query` an
-// option object borrowing a list of `fontdb.Family` (`{ type, value }`), and
-// `withFaceData` returns what its closure was handed, copied.
+// option object borrowing a list of `fontdb.Family` (`{ type, value }`),
+// `withFaceData` returns what its closure was handed, copied, and a face's
+// `fontdb.Source` is a union out and an input enum in.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import binding from '../../index.js';
 
 const { fontdb, usvg } = binding;
-const FONT = readFileSync(new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url));
+const FONT_URL = new URL('../../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url);
+const FONT = readFileSync(FONT_URL);
 const FAMILY = 'IBM Plex Sans';
 
 function database() {
@@ -84,4 +87,44 @@ test('PositionedGlyph.font is the ID of the face that drew it', () => {
   const [glyph] = tree.nodeById('t').value.layouted()[0].positionedGlyphs;
   assert.ok(glyph.font instanceof fontdb.ID);
   assert.equal(db.face(glyph.font).postScriptName, 'IBMPlexSans-Regular');
+});
+
+test('Source out: a face\'s bytes, or the file it is read from', () => {
+  const db = database();
+  const [info] = db.faces();
+  assert.equal(info.source.type, 'binary');
+  assert.ok(info.source.bytes.equals(FONT));
+  const [source, index] = db.faceSource(info.id);
+  assert.equal(source.type, 'binary');
+  assert.ok(source.bytes.equals(FONT));
+  assert.equal(index, 0);
+  assert.equal(db.faceSource(fontdb.ID.dummy()), null);
+
+  const path = fileURLToPath(FONT_URL);
+  const files = new fontdb.Database();
+  files.loadFontFile(path);
+  assert.deepEqual(files.faces()[0].source, { type: 'file', value: path });
+});
+
+test('Source in: loadFontSource takes { type, bytes } or { type, value }', () => {
+  const db = new fontdb.Database();
+  const [id] = db.loadFontSource({ type: 'binary', bytes: FONT });
+  assert.ok(id instanceof fontdb.ID);
+  assert.ok(db.face(id).source.bytes.equals(FONT));
+  // What faceSource hands out goes back in.
+  const ids = db.loadFontSource(db.faceSource(id)[0]);
+  assert.equal(ids.length, 1);
+  assert.equal(db.len(), 2);
+
+  const path = fileURLToPath(FONT_URL);
+  const [fid] = db.loadFontSource({ type: 'file', value: path });
+  assert.deepEqual(db.face(fid).source, { type: 'file', value: path });
+  assert.ok(db.withFaceData(fid)[0].equals(FONT), 'read from the file');
+  assert.deepEqual(db.loadFontSource({ type: 'binary', bytes: new Uint8Array([1, 2, 3]) }), [], 'not a font: no face');
+
+  assert.throws(() => db.loadFontSource({ type: 'binary' }), { code: 'InvalidArg', message: "Source 'binary' needs bytes" });
+  assert.throws(() => db.loadFontSource({ type: 'file' }), { code: 'InvalidArg', message: "Source 'file' needs a value" });
+  assert.throws(() => db.loadFontSource({ type: 'sharedFile', value: path, bytes: FONT }),
+    { code: 'InvalidArg', message: "Source 'sharedFile' cannot be passed in: it carries several values" });
+  assert.throws(() => db.loadFontSource({ type: 'nope' }), { code: 'InvalidArg' });
 });

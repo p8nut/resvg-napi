@@ -546,6 +546,16 @@ impl FromNapiValue for Signal {
     }
 }
 
+/// Bytes behind any pointer to them -- `Vec<u8>`, `Arc<Vec<u8>>`,
+/// `Arc<dyn AsRef<[u8]>>` -- copied into a `Buffer`: the one copy, made
+/// when JS reads them.
+pub fn copied<D: std::ops::Deref>(d: &D) -> Buffer
+where
+    D::Target: AsRef<[u8]>,
+{
+    Buffer::from(d.deref().as_ref())
+}
+
 /// The body of a class's `[Symbol.for('nodejs.util.inspect.custom')]`:
 /// `Name { key: value, .. }`, formatted by the `inspect` Node passes in, so
 /// colours, `depth` and nesting behave like any other object. Without it a

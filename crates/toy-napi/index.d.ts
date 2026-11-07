@@ -33,6 +33,12 @@ export declare namespace toy {
   export interface Layer {
     [Symbol.dispose](): void
   }
+  export interface OriginInline {
+    [Symbol.dispose](): void
+  }
+  export interface OriginPinned {
+    [Symbol.dispose](): void
+  }
   export interface Scene {
     [Symbol.dispose](): void
   }
@@ -286,6 +292,42 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyLayer = Layer
+  /** `Origin::Inline`. */
+  export class OriginInline {
+    /** Discriminant. Narrow on this. */
+    get type(): 'inline'
+    /** The bytes, as toy holds them: it does not decode them, and neither does this. Copied out on each read. */
+    get bytes(): Buffer
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyOriginInline = OriginInline
+  /** `Origin::Pinned`. */
+  export class OriginPinned {
+    /** Discriminant. Narrow on this. */
+    get type(): 'pinned'
+    /** What the variant carries, in order. Bytes are copied out on each read. */
+    get value(): [string, Buffer]
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyOriginPinned = OriginPinned
   /**
    * A tree of layers and dots, shared behind an `Arc`: its nodes are only
    * ever borrowed from it, the shape a binding projects.
@@ -365,6 +407,20 @@ export declare namespace toy {
      * a query is.
      */
     find(filter?: toy.Filter | undefined | null): toy.Key | null
+    /**
+     * Keeps where some bytes come from, under a key of its own (keys of
+     * origins count apart from names'): a few keys, held inline.
+     */
+    stamp(origin: toy.Origin): Array<toy.Key>
+    /**
+     * Keeps `bytes` pinned to `path`: the origin no JS value builds, on
+     * the targets that have it.
+     */
+    pin(path: string, bytes: Uint8Array): toy.Key
+    /** The origin under `key` and how many bytes it holds, if any. */
+    origin(key: toy.Key): [toy.OriginInline | toy.OriginPath | toy.OriginPinned, number] | null
+    /** The origins kept, in order. */
+    origins(): Array<toy.OriginInline | toy.OriginPath | toy.OriginPinned>
     /**
      * Runs `p` with the joined names' bytes and how many there are: the
      * data is lent, not returned.
@@ -492,6 +548,26 @@ export declare namespace toy {
     direction?: toy.Direction
   }
   /**
+   * Where some bytes come from: shared bytes, a path, or both. The last is
+   * built on some targets only, as a crate gates a variant on a feature.
+   *
+   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
+   */
+  export interface Origin {
+    /** The variant. */
+    type: 'inline' | 'path' | 'pinned'
+    /** The string the variant carries: required for `'path'`, ignored otherwise. */
+    value?: string
+    /** The bytes the variant carries, copied: required for `'inline'`, ignored otherwise. */
+    bytes?: Uint8Array
+  }
+  /** `Origin::Path`. */
+  export interface OriginPath {
+    /** Discriminant. Narrow on this. */
+    type: 'path'
+    value: string
+  }
+  /**
    * Paints the byte at `at` with the colour's red channel, and returns its
    * index.
    */
@@ -595,7 +671,7 @@ export declare namespace toy {
   /**
    * A tag a filter matches on: a name it borrows, or any.
    *
-   * Passed in as the union it prints as: `{ type, value }`.
+   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
    */
   export interface Tag {
     /** The variant. */

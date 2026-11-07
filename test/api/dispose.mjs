@@ -48,6 +48,7 @@ function everyClass() {
     'fontdb.Database': db,
     'fontdb.FaceInfo': db.faces()[0],
     'fontdb.ID': db.faces()[0].id,
+    'fontdb.SourceBinary': db.faces()[0].source,
     'svgtypes.Color': svgtypes.Color.fromStr('red'),
     'tiny_skia.Color': tiny_skia.Color.fromRgba8(1, 2, 3, 4),
     'tiny_skia.IntSize': tiny_skia.IntSize.fromWh(1, 2),
@@ -112,8 +113,10 @@ test('every class has dispose(), and the test reaches every one', () => {
     assert.equal(typeof cls.prototype.dispose, 'function', key);
     assert.ok(Object.getOwnPropertyDescriptor(cls.prototype, 'disposed')?.get, key);
   }
-  // ImageKindJpeg, Gif and Webp are the same generated shape as Png.
-  const unreached = ['usvg.ImageKindGif', 'usvg.ImageKindJpeg', 'usvg.ImageKindWebp'];
+  // ImageKindJpeg, Gif and Webp are the same generated shape as Png. A
+  // SharedFile source comes only from fontdb's unsafe make_shared_face_data,
+  // which has no JS form; the toy covers its shape (a tuple with bytes).
+  const unreached = ['usvg.ImageKindGif', 'usvg.ImageKindJpeg', 'usvg.ImageKindWebp', 'fontdb.SourceSharedFile'];
   assert.deepEqual(
     Object.keys(classes).filter((k) => !unreached.includes(k)).sort(),
     Object.keys(everyClass()).sort(),

@@ -15,6 +15,12 @@ export declare namespace fontdb {
   export interface ID {
     [Symbol.dispose](): void
   }
+  export interface SourceBinary {
+    [Symbol.dispose](): void
+  }
+  export interface SourceSharedFile {
+    [Symbol.dispose](): void
+  }
 }
 
 export declare namespace guard {
@@ -167,6 +173,13 @@ export declare namespace fontdb {
      */
     loadFontData(data: Uint8Array): void
     /**
+     * Loads a font from the given source into the `Database` and returns
+     * the ID of the loaded font.
+     *
+     * Will load all font faces in case of a font collection.
+     */
+    loadFontSource(source: fontdb.Source): Array<fontdb.ID>
+    /**
      * Loads a font file into the `Database`.
      *
      * Will load all font faces in case of a font collection.
@@ -261,6 +274,8 @@ export declare namespace fontdb {
      * or this ID belong to the other `Database`.
      */
     face(id: fontdb.ID): fontdb.FaceInfo | null
+    /** Returns font face storage and the face index by `ID`. */
+    faceSource(id: fontdb.ID): [fontdb.SourceBinary | fontdb.SourceFile | fontdb.SourceSharedFile, number] | null
     /**
      * Executes a closure with a font's data.
      *
@@ -307,6 +322,7 @@ export declare namespace fontdb {
   /** Read-only view of a `FaceInfo`. */
   export class FaceInfo {
     get id(): fontdb.ID
+    get source(): fontdb.SourceBinary | fontdb.SourceFile | fontdb.SourceSharedFile
     get index(): number
     get families(): Array<[string, fontdb.Language]>
     get postScriptName(): string
@@ -367,10 +383,46 @@ export declare namespace fontdb {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type FontdbID = ID
+  /** `Source::Binary`. */
+  export class SourceBinary {
+    /** Discriminant. Narrow on this. */
+    get type(): 'binary'
+    /** The bytes, as usvg::fontdb holds them: it does not decode them, and neither does this. Copied out on each read. */
+    get bytes(): Buffer
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type FontdbSourceBinary = SourceBinary
+  /** `Source::SharedFile`. */
+  export class SourceSharedFile {
+    /** Discriminant. Narrow on this. */
+    get type(): 'sharedFile'
+    /** What the variant carries, in order. Bytes are copied out on each read. */
+    get value(): [string, Buffer]
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type FontdbSourceSharedFile = SourceSharedFile
   /**
    * A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family).
    *
-   * Passed in as the union it prints as: `{ type, value }`.
+   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
    */
   export interface Family {
     /** The variant. */
@@ -418,6 +470,29 @@ export declare namespace fontdb {
      * [font-style](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-style-prop) in CSS.
      */
     style?: fontdb.Style
+  }
+  /**
+   * A font source.
+   *
+   * Either a raw binary data or a file path.
+   *
+   * Stores the whole font and not just a single face.
+   *
+   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
+   */
+  export interface Source {
+    /** The variant. */
+    type: 'binary' | 'file' | 'sharedFile'
+    /** The string the variant carries: required for `'file'`, ignored otherwise. */
+    value?: string
+    /** The bytes the variant carries, copied: required for `'binary'`, ignored otherwise. */
+    bytes?: Uint8Array
+  }
+  /** `Source::File`. */
+  export interface SourceFile {
+    /** Discriminant. Narrow on this. */
+    type: 'file'
+    value: string
   }
   /** A face [width](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#uswidthclass). */
   export type Stretch = 'ultraCondensed' | 'extraCondensed' | 'condensed' | 'semiCondensed' | 'normal' | 'semiExpanded' | 'expanded' | 'extraExpanded' | 'ultraExpanded'
@@ -1590,11 +1665,11 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgImage = Image
-  /** `ImageKind::GIF`. The bytes are the document's own. */
+  /** `ImageKind::GIF`. */
   export class ImageKindGif {
     /** Discriminant. Narrow on this. */
     get type(): 'gif'
-    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    /** The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read. */
     get bytes(): Buffer
     /**
      * Drops this instance's value now, not at garbage collection: every later
@@ -1608,11 +1683,11 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgImageKindGif = ImageKindGif
-  /** `ImageKind::JPEG`. The bytes are the document's own. */
+  /** `ImageKind::JPEG`. */
   export class ImageKindJpeg {
     /** Discriminant. Narrow on this. */
     get type(): 'jpeg'
-    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    /** The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read. */
     get bytes(): Buffer
     /**
      * Drops this instance's value now, not at garbage collection: every later
@@ -1626,11 +1701,11 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgImageKindJpeg = ImageKindJpeg
-  /** `ImageKind::PNG`. The bytes are the document's own. */
+  /** `ImageKind::PNG`. */
   export class ImageKindPng {
     /** Discriminant. Narrow on this. */
     get type(): 'png'
-    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    /** The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read. */
     get bytes(): Buffer
     /**
      * Drops this instance's value now, not at garbage collection: every later
@@ -1644,11 +1719,11 @@ export declare namespace usvg {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type UsvgImageKindPng = ImageKindPng
-  /** `ImageKind::WEBP`. The bytes are the document's own. */
+  /** `ImageKind::WEBP`. */
   export class ImageKindWebp {
     /** Discriminant. Narrow on this. */
     get type(): 'webp'
-    /** The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this. */
+    /** The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read. */
     get bytes(): Buffer
     /**
      * Drops this instance's value now, not at garbage collection: every later

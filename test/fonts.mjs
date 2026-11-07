@@ -77,9 +77,9 @@ if (file) {
   skip('loading a font from a file', 'no font file found on this host');
 }
 
-// Which face drew a glyph (`faceOf`, `glyph.font`), which families a span
-// asked for (`font.families`), and fontdb's `query`, `faceData`,
-// `familyName`, `faceSource` and face `ID`s have no form yet: #181, #191.
+// Which face drew a glyph (`glyph.font`), which families a span asked for
+// (`font.families`), and fontdb's `query`, `withFaceData`, `familyName`,
+// `faceSource` and face `ID`s: test/api/fontdb.mjs, test/api/nested.mjs.
 
 // The database is shared with the parses that used it and copied on the
 // first write, so changing it afterwards leaves a parsed document alone.

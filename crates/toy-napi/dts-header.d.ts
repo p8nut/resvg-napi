@@ -33,6 +33,12 @@ export declare namespace toy {
   export interface Layer {
     [Symbol.dispose](): void
   }
+  export interface OriginInline {
+    [Symbol.dispose](): void
+  }
+  export interface OriginPinned {
+    [Symbol.dispose](): void
+  }
   export interface Scene {
     [Symbol.dispose](): void
   }

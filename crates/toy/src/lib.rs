@@ -86,6 +86,7 @@ impl Counter {
 #[derive(Clone, Debug, Default)]
 pub struct Tally {
     names: Vec<String>,
+    origins: Vec<Origin>,
 }
 
 impl Tally {
@@ -153,6 +154,43 @@ impl Tally {
         Some(Key(place as u32))
     }
 
+    /// Keeps where some bytes come from, under a key of its own (keys of
+    /// origins count apart from names'): a few keys, held inline.
+    pub fn stamp(&mut self, origin: Origin) -> Few<[Key; 4]> {
+        self.origins.push(origin);
+        let key = Key(self.origins.len() as u32 - 1);
+        Few {
+            items: [key; 4],
+            len: 1,
+        }
+    }
+
+    /// Keeps `bytes` pinned to `path`: the origin no JS value builds, on
+    /// the targets that have it.
+    #[cfg(unix)]
+    pub fn pin(&mut self, path: &str, bytes: &[u8]) -> Key {
+        self.origins
+            .push(Origin::Pinned(path.into(), Arc::new(bytes.to_vec())));
+        Key(self.origins.len() as u32 - 1)
+    }
+
+    /// The origin under `key` and how many bytes it holds, if any.
+    pub fn origin(&self, key: Key) -> Option<(Origin, u32)> {
+        let o = self.origins.get(key.0 as usize)?.clone();
+        let len = match &o {
+            Origin::Inline(b) => b.as_ref().as_ref().len(),
+            Origin::Path(_) => 0,
+            #[cfg(unix)]
+            Origin::Pinned(_, b) => b.as_ref().as_ref().len(),
+        };
+        Some((o, len as u32))
+    }
+
+    /// The origins kept, in order.
+    pub fn origins(&self) -> &[Origin] {
+        &self.origins
+    }
+
     /// Runs `p` with the joined names' bytes and how many there are: the
     /// data is lent, not returned.
     pub fn with_joined<P, T>(&self, p: P) -> T
@@ -161,6 +199,51 @@ impl Tally {
     {
         p(self.joined().as_bytes(), self.names.len() as u32)
     }
+}
+
+/// Where some bytes come from: shared bytes, a path, or both. The last is
+/// built on some targets only, as a crate gates a variant on a feature.
+#[derive(Clone)]
+pub enum Origin {
+    Inline(Arc<dyn AsRef<[u8]> + Send + Sync>),
+    Path(std::path::PathBuf),
+    #[cfg(unix)]
+    Pinned(std::path::PathBuf, Arc<dyn AsRef<[u8]> + Send + Sync>),
+}
+
+impl fmt::Debug for Origin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Origin::Inline(_) => f.write_str("Inline"),
+            Origin::Path(p) => write!(f, "Path({p:?})"),
+            #[cfg(unix)]
+            Origin::Pinned(p, _) => write!(f, "Pinned({p:?})"),
+        }
+    }
+}
+
+/// A few values held inline, up to the array's length, as a small-vector
+/// crate holds them: a list to JS.
+pub struct Few<A> {
+    items: A,
+    len: usize,
+}
+
+impl<T, const N: usize> IntoIterator for Few<[T; N]> {
+    type Item = T;
+    type IntoIter = std::iter::Take<std::array::IntoIter<T, N>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter().take(self.len)
+    }
+}
+
+/// A label a step may be checked against: an input enum's shape, but taken
+/// only by a method of an enum, which no binding emits.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Label {
+    Unnamed,
+    Text(String),
 }
 
 /// An opaque key: no public field, `Copy`, printed as a number.
@@ -620,6 +703,13 @@ pub enum Step {
     Jump(Vec2),
     Line(Vec2, Vec2),
     Stop,
+}
+
+impl Step {
+    /// Whether this step is the one `label` names: only `Stop` is labelled.
+    pub fn labelled(&self, label: &Label) -> bool {
+        matches!((self, label), (Step::Stop, Label::Unnamed))
+    }
 }
 
 /// Steps held as a stream, not a list: its content is what

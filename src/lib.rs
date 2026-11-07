@@ -1480,22 +1480,22 @@ pub struct UsvgTurbulence {
 pub struct UsvgFilterImage {
     inner: napi_support::Slot<usvg::filter::Image>,
 }
-#[doc = " `ImageKind::JPEG`. The bytes are the document's own."]
+#[doc = " `ImageKind::JPEG`."]
 #[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
 pub struct UsvgImageKindJpeg {
     raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
-#[doc = " `ImageKind::PNG`. The bytes are the document's own."]
+#[doc = " `ImageKind::PNG`."]
 #[napi(js_name = "ImageKindPng", namespace = "usvg")]
 pub struct UsvgImageKindPng {
     raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
-#[doc = " `ImageKind::GIF`. The bytes are the document's own."]
+#[doc = " `ImageKind::GIF`."]
 #[napi(js_name = "ImageKindGif", namespace = "usvg")]
 pub struct UsvgImageKindGif {
     raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
 }
-#[doc = " `ImageKind::WEBP`. The bytes are the document's own."]
+#[doc = " `ImageKind::WEBP`."]
 #[napi(js_name = "ImageKindWebp", namespace = "usvg")]
 pub struct UsvgImageKindWebp {
     raw: napi_support::Slot<std::sync::Arc<Vec<u8>>>,
@@ -1912,7 +1912,7 @@ pub enum FontdbStretch {
 }
 #[doc = " A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family)."]
 #[doc = ""]
-#[doc = " Passed in as the union it prints as: `{ type, value }`."]
+#[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
 #[napi(object, object_to_js = false, js_name = "Family", namespace = "fontdb")]
 pub struct FontdbFamily {
     #[doc = " The variant."]
@@ -1946,6 +1946,23 @@ pub struct FontdbQuery {
     #[doc = " [font-style](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-style-prop) in CSS."]
     pub style: Option<FontdbStyle>,
 }
+#[doc = " A font source."]
+#[doc = ""]
+#[doc = " Either a raw binary data or a file path."]
+#[doc = ""]
+#[doc = " Stores the whole font and not just a single face."]
+#[doc = ""]
+#[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
+#[napi(object, object_to_js = false, js_name = "Source", namespace = "fontdb")]
+pub struct FontdbSource {
+    #[doc = " The variant."]
+    #[napi(ts_type = "'binary' | 'file' | 'sharedFile'")]
+    pub r#type: String,
+    #[doc = " The string the variant carries: required for `'file'`, ignored otherwise."]
+    pub value: Option<String>,
+    #[doc = " The bytes the variant carries, copied: required for `'binary'`, ignored otherwise."]
+    pub bytes: Option<Uint8Array>,
+}
 #[doc = " A unique per database face ID."]
 #[doc = ""]
 #[doc = " Since `Database` is not global/unique, we cannot guarantee that a specific ID"]
@@ -1970,6 +1987,28 @@ pub struct FontdbID {
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
     inner: napi_support::Slot<usvg::fontdb::FaceInfo>,
+}
+#[doc = " `Source::Binary`."]
+#[napi(js_name = "SourceBinary", namespace = "fontdb")]
+pub struct FontdbSourceBinary {
+    raw: napi_support::Slot<std::sync::Arc<dyn AsRef<[u8]> + Sync + Send>>,
+}
+#[doc = " `Source::File`."]
+#[napi(object, js_name = "SourceFile", namespace = "fontdb")]
+#[derive(Clone)]
+pub struct FontdbSourceFile {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'file'")]
+    pub r#type: String,
+    pub value: String,
+}
+#[doc = " `Source::SharedFile`."]
+#[napi(js_name = "SourceSharedFile", namespace = "fontdb")]
+pub struct FontdbSourceSharedFile {
+    raw: napi_support::Slot<(
+        std::path::PathBuf,
+        std::sync::Arc<dyn AsRef<[u8]> + Sync + Send>,
+    )>,
 }
 #[doc = " Renders a tree onto the pixmap."]
 #[doc = ""]
@@ -7152,11 +7191,11 @@ impl UsvgImageKindJpeg {
         self.raw.get("ImageKindJpeg")?;
         Ok("jpeg")
     }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[doc = " The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read."]
     #[napi(getter)]
     pub fn bytes(&self) -> Result<Buffer, String> {
         let __raw = self.raw.get("ImageKindJpeg")?;
-        Ok((*__raw).as_slice().into())
+        Ok(napi_support::copied(__raw))
     }
 }
 #[napi(namespace = "usvg")]
@@ -7167,11 +7206,11 @@ impl UsvgImageKindPng {
         self.raw.get("ImageKindPng")?;
         Ok("png")
     }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[doc = " The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read."]
     #[napi(getter)]
     pub fn bytes(&self) -> Result<Buffer, String> {
         let __raw = self.raw.get("ImageKindPng")?;
-        Ok((*__raw).as_slice().into())
+        Ok(napi_support::copied(__raw))
     }
 }
 #[napi(namespace = "usvg")]
@@ -7182,11 +7221,11 @@ impl UsvgImageKindGif {
         self.raw.get("ImageKindGif")?;
         Ok("gif")
     }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[doc = " The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read."]
     #[napi(getter)]
     pub fn bytes(&self) -> Result<Buffer, String> {
         let __raw = self.raw.get("ImageKindGif")?;
-        Ok((*__raw).as_slice().into())
+        Ok(napi_support::copied(__raw))
     }
 }
 #[napi(namespace = "usvg")]
@@ -7197,11 +7236,11 @@ impl UsvgImageKindWebp {
         self.raw.get("ImageKindWebp")?;
         Ok("webp")
     }
-    #[doc = " The encoded bytes, exactly as the document supplied them: usvg does not decode them, and neither does this."]
+    #[doc = " The bytes, as usvg holds them: it does not decode them, and neither does this. Copied out on each read."]
     #[napi(getter)]
     pub fn bytes(&self) -> Result<Buffer, String> {
         let __raw = self.raw.get("ImageKindWebp")?;
-        Ok((*__raw).as_slice().into())
+        Ok(napi_support::copied(__raw))
     }
 }
 fn usvg_image_kind_to_js(
@@ -8070,8 +8109,43 @@ impl FontdbQuery {
         Ok(o)
     }
 }
+impl FontdbSource {
+    #[doc = " The upstream value, borrowing this one's strings."]
+    fn to_upstream(&self) -> Result<usvg::fontdb::Source, String> {
+        Ok(match self.r#type.as_str() {
+            "binary" => usvg::fontdb::Source::Binary(std::sync::Arc::new(
+                self.bytes
+                    .as_deref()
+                    .ok_or_else(|| {
+                        napi_support::thrown("InvalidArg", "Source 'binary' needs bytes")
+                    })?
+                    .to_vec(),
+            )),
+            "file" => usvg::fontdb::Source::File(
+                self.value
+                    .as_deref()
+                    .ok_or_else(|| {
+                        napi_support::thrown("InvalidArg", "Source 'file' needs a value")
+                    })?
+                    .into(),
+            ),
+            "sharedFile" => {
+                return Err(napi_support::thrown(
+                    "InvalidArg",
+                    "Source 'sharedFile' cannot be passed in: it carries several values",
+                ));
+            }
+            t => {
+                return Err(napi_support::thrown(
+                    "InvalidArg",
+                    format!("invalid Source type: {:?}", t),
+                ));
+            }
+        })
+    }
+}
 impl FontdbFamily {
-    #[doc = " The upstream value, borrowing this one's string."]
+    #[doc = " The upstream value, borrowing this one's strings."]
     fn to_upstream(&self) -> Result<usvg::fontdb::Family<'_>, String> {
         Ok(match self.r#type.as_str() {
             "name" => usvg::fontdb::Family::Name(self.value.as_deref().ok_or_else(|| {
@@ -8142,6 +8216,21 @@ impl FontdbDatabase {
         })
         .map_err(napi_support::coded)?;
         Ok(())
+    }
+    #[doc = " Loads a font from the given source into the `Database` and returns"]
+    #[doc = " the ID of the loaded font."]
+    #[doc = ""]
+    #[doc = " Will load all font faces in case of a font collection."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn load_font_source(&mut self, source: FontdbSource) -> Result<Vec<FontdbID>, String> {
+        let __source = source.to_upstream()?;
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
+        let __v = napi_support::contained("Database::load_font_source", || {
+            __self.load_font_source(__source)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.into_iter().map(|x| FontdbID::__from(x)).collect())
     }
     #[doc = " Loads a font file into the `Database`."]
     #[doc = ""]
@@ -8389,6 +8478,25 @@ impl FontdbDatabase {
             .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| FontdbFaceInfo::wrap(__v.clone())))
     }
+    #[doc = " Returns font face storage and the face index by `ID`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn face_source(
+        &self,
+        id: &FontdbID,
+    ) -> Result<
+        Option<(
+            Either3<FontdbSourceBinary, FontdbSourceFile, FontdbSourceSharedFile>,
+            u32,
+        )>,
+        String,
+    > {
+        let __id = *id.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Database::face_source", || __self.face_source(__id))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| (fontdb_source_to_js(&__v.0), __v.1)))
+    }
     #[doc = " Executes a closure with a font's data."]
     #[doc = ""]
     #[doc = " We can't return a reference to a font binary data because of lifetimes."]
@@ -8528,6 +8636,16 @@ impl FontdbFaceInfo {
         })
     }
     #[napi(getter)]
+    pub fn source(
+        &self,
+    ) -> Result<Either3<FontdbSourceBinary, FontdbSourceFile, FontdbSourceSharedFile>, String> {
+        let __inner = self.inner.get("FaceInfo")?;
+        Ok({
+            let v = __inner;
+            fontdb_source_to_js(&v.source.clone())
+        })
+    }
+    #[napi(getter)]
     pub fn index(&self) -> Result<u32, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
@@ -8586,6 +8704,56 @@ impl FontdbFaceInfo {
             let v = __inner;
             v.monospaced
         })
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbSourceBinary {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'binary'")]
+    pub fn kind_tag(&self) -> Result<&'static str, String> {
+        self.raw.get("SourceBinary")?;
+        Ok("binary")
+    }
+    #[doc = " The bytes, as usvg::fontdb holds them: it does not decode them, and neither does this. Copied out on each read."]
+    #[napi(getter)]
+    pub fn bytes(&self) -> Result<Buffer, String> {
+        let __raw = self.raw.get("SourceBinary")?;
+        Ok(napi_support::copied(__raw))
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbSourceSharedFile {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(getter, js_name = "type", ts_return_type = "'sharedFile'")]
+    pub fn kind_tag(&self) -> Result<&'static str, String> {
+        self.raw.get("SourceSharedFile")?;
+        Ok("sharedFile")
+    }
+    #[doc = " What the variant carries, in order. Bytes are copied out on each read."]
+    #[napi(getter)]
+    pub fn value(&self) -> Result<(String, Buffer), String> {
+        let __raw = self.raw.get("SourceSharedFile")?;
+        Ok({
+            let (v0, v1) = __raw;
+            (v0.to_string_lossy().into_owned(), napi_support::copied(v1))
+        })
+    }
+}
+fn fontdb_source_to_js(
+    v: &usvg::fontdb::Source,
+) -> Either3<FontdbSourceBinary, FontdbSourceFile, FontdbSourceSharedFile> {
+    match v {
+        usvg::fontdb::Source::Binary(v) => Either3::A(FontdbSourceBinary {
+            raw: napi_support::Slot::new(v.clone()),
+        }),
+        usvg::fontdb::Source::File(v) => Either3::B(FontdbSourceFile {
+            r#type: "file".to_string(),
+            value: v.to_string_lossy().into_owned(),
+        }),
+        #[cfg(not(target_family = "wasm"))]
+        usvg::fontdb::Source::SharedFile(v0, v1) => Either3::C(FontdbSourceSharedFile {
+            raw: napi_support::Slot::new((v0.clone(), v1.clone())),
+        }),
     }
 }
 #[napi(namespace = "usvg")]
@@ -8768,6 +8936,36 @@ impl FontdbFaceInfo {
         self.inner.disposed()
     }
 }
+#[napi(namespace = "fontdb")]
+impl FontdbSourceBinary {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.raw.dispose("SourceBinary")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.raw.disposed()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbSourceSharedFile {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.raw.dispose("SourceSharedFile")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.raw.disposed()
+    }
+}
 #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
 #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
 #[doc = " the whole module without it. The `.d.ts` header declares it."]
@@ -8782,6 +8980,8 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         (Some("fontdb"), "Database"),
         (Some("fontdb"), "FaceInfo"),
         (Some("fontdb"), "ID"),
+        (Some("fontdb"), "SourceBinary"),
+        (Some("fontdb"), "SourceSharedFile"),
         (Some("guard"), "FontResolver"),
         (Some("guard"), "ImageHrefResolver"),
         (Some("svgtypes"), "Color"),
@@ -9758,6 +9958,7 @@ impl FontdbFaceInfo {
             "FaceInfo",
             &[
                 "id",
+                "source",
                 "index",
                 "families",
                 "postScriptName",
@@ -9777,6 +9978,64 @@ impl FontdbFaceInfo {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "FaceInfo".to_string()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbSourceBinary {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "SourceBinary",
+            &["type", "bytes", "disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "SourceBinary".to_string()
+    }
+}
+#[napi(namespace = "fontdb")]
+impl FontdbSourceSharedFile {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "SourceSharedFile",
+            &["type", "value", "disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "SourceSharedFile".to_string()
     }
 }
 #[napi(namespace = "guard")]

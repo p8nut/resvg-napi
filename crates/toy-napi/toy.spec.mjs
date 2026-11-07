@@ -44,8 +44,9 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'PaintErrorCode', 'ParseErrorCode',
-    'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync', 'report', 'share', 'shared',
+    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'OriginInline', 'OriginPinned',
+    'PaintErrorCode', 'ParseErrorCode', 'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync',
+    'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
   ]);
   assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
@@ -297,6 +298,42 @@ test('a borrowed enum is passed as { type, value }, and a list of them in an opt
   assert.equal(t.find({ tags: [{ type: 'named', value: 'x' }] }), null);
   assert.equal(t.find(), null, 'Default: no tags, nothing found');
   assert.throws(() => t.find({ minLen: 70000 }), { code: 'InvalidArg', message: 'invalid minLen: 70000' });
+});
+
+test('an owned enum in and out: shared bytes, a path, a tuple holding bytes, an inline list', () => {
+  const t = new toy.toy.Tally();
+  const ids = t.stamp({ type: 'inline', bytes: Buffer.from('abc') });
+  assert.equal(ids.length, 1, 'an inline vector over [Key; 4] holding one: an array of one');
+  assert.ok(ids[0] instanceof toy.toy.Key);
+  const [inline, len] = t.origin(ids[0]);
+  assert.ok(inline instanceof toy.toy.OriginInline, 'bytes: a read-only class');
+  assert.equal(inline.type, 'inline');
+  assert.equal(inline.bytes.toString(), 'abc');
+  assert.equal(len, 3);
+  // What it handed out goes back in.
+  const [again] = t.stamp(inline);
+  assert.equal(t.origin(again)[0].bytes.toString(), 'abc');
+  const [p] = t.stamp({ type: 'path', value: '/x/y' });
+  assert.deepEqual(t.origin(p), [{ type: 'path', value: '/x/y' }, 0], 'a path: a string');
+  assert.equal(t.origin(toy.toy.Key.first()).length, 2);
+  assert.deepEqual(t.origins().map((o) => o.type), ['inline', 'inline', 'path']);
+  assert.throws(() => t.stamp({ type: 'inline' }), { code: 'InvalidArg', message: "Origin 'inline' needs bytes" });
+  assert.throws(() => t.stamp({ type: 'path' }), { code: 'InvalidArg', message: "Origin 'path' needs a value" });
+  // A tuple variant: out as a read-only class whose `value` is the array;
+  // never in. It is `#[cfg(unix)]`, as a feature gates one upstream.
+  assert.throws(() => t.stamp({ type: 'pinned', value: '/p', bytes: Buffer.from('z') }),
+    { code: 'InvalidArg', message: "Origin 'pinned' cannot be passed in: it carries several values" });
+  if (process.platform !== 'win32') {
+    const [pinned, n] = t.origin(t.pin('/p', Buffer.from('zz')));
+    assert.ok(pinned instanceof toy.toy.OriginPinned);
+    assert.equal(pinned.type, 'pinned');
+    const [path, bytes] = pinned.value;
+    assert.equal(path, '/p');
+    assert.ok(Buffer.isBuffer(bytes) && bytes.toString() === 'zz');
+    assert.equal(n, 2);
+  } else {
+    assert.throws(() => t.pin('/p', Buffer.from('zz')), /not available on this target/);
+  }
 });
 
 test('a callback whose result is returned: JS gets what the closure was handed, copied', () => {

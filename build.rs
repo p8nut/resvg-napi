@@ -656,15 +656,7 @@ fn main() {
     // Enums JS passes in, borrowed for the call (`fontdb::Family`): their
     // `{ type, value }` input form.
     for src in &sources {
-        for e in src
-            .files
-            .iter()
-            .flat_map(|f| &f.items)
-            .filter_map(|i| match i {
-                Item::Enum(e) if is_pub(&e.vis) && is_enum_input(e) => Some(e),
-                _ => None,
-            })
-        {
+        for e in input_enums(&src.files) {
             report!(
                 "{}::{} is an input enum: {{ type, value }}",
                 src.root_str,

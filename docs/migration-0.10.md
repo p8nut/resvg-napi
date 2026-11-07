@@ -420,9 +420,15 @@ What it found:
 
 Still open after 13 (for 0.10's notes, step 14):
 
-- #181: fontdb's `query`, `withFaceData`, `familyName`, the face `ID`s
-  (`face`, `removeFace`, `makeFaceDataUnshared`) and `families` are back;
-  `faceSource` (a `Source` union of shared bytes and paths) is not.
+- ~~#181~~: fontdb's `query`, `withFaceData`, `familyName`, the face `ID`s
+  (`face`, `removeFace`, `makeFaceDataUnshared`) and `families` are back,
+  and `Source` with them: `FaceInfo.source` and `faceSource(id)` hand out a
+  union (`binary`: a read-only class whose `bytes` copies the shared bytes;
+  `file`: `{ type, value: path }`; `sharedFile`: a read-only class whose
+  `value` is `[path, bytes]`, its arm built only where fontdb's `memmap`
+  is), and `loadFontSource` takes `{ type: 'binary', bytes }` or
+  `{ type: 'file', value }`, returning the new `ID`s. `sharedFile` is
+  refused as input: a file mapping is fontdb's to make.
 - ~~#191~~: back through generic rules. A union variant carrying a class
   is an output-only object holding a copy: `ImageKind`'s `svg` variant holds
   the embedded `usvg.Tree`, `Kind`'s `image` a `usvg.FilterImage` whose

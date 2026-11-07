@@ -1,4 +1,3 @@
-FaceInfo member not exposed: source: Source
 FaceInfo: partial mapping, emitted as read-only class FaceInfo
 Image: partial mapping, emitted as read-only class Image
 Path: partial mapping, emitted as read-only class Path
@@ -20,14 +19,12 @@ object BaselineShift skipped: not a public struct
 object FontFamily skipped: not a public struct
 object Input skipped: not a public struct
 object Node skipped: not a public struct
-object Source skipped: not a public struct
 object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None
 payload enum Indent not mapped: a converter reads it
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
-payload enum Source not mapped: Binary carries alloc::sync::Arc<dynAsRef<[u8]>+Sync+Send>, and it maps to None
-payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, FontFamily, ImageKind, Input, Kind, LightSource, Paint, PathSegment, TextFlow, TransferFunction
+payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, FontFamily, ImageKind, Input, Kind, LightSource, Paint, PathSegment, Source, TextFlow, TransferFunction
 payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), FontFamily(6), ImageKind(5), Indent(3), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
 svgtypes::Color is a class: Value, plain data, a JS name another namespace has
 tiny_skia::Color is a class: Value, a JS name another namespace has
@@ -80,11 +77,10 @@ usvg::Text is a projection, not a data type
 usvg::Tree is a class: Shared
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
 usvg::fontdb::Database is a class: SharedCow
-usvg::fontdb::Database member not in the class: face_source (returns (Source,u32))
-usvg::fontdb::Database member not in the class: load_font_source (arg: Source)
 usvg::fontdb::Database member not in the class: make_shared_face_data (unsafe)
 usvg::fontdb::Database member not in the class: push_face_info (arg: FaceInfo)
 usvg::fontdb::Family is an input enum: { type, value }
 usvg::fontdb::ID is a class: Value
+usvg::fontdb::Source is an input enum: { type, value }
 vocabulary derived: 7 f32 newtypes, 7 type aliases
 wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database

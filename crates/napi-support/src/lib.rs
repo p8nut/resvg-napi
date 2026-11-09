@@ -585,8 +585,10 @@ pub fn inspect<'e>(
             // `disposed` is; anything else is thrown again.
             let take = || {
                 let mut raw = std::ptr::null_mut();
-                check_status!(unsafe { napi::sys::napi_get_and_clear_last_exception(env.raw(), &mut raw) })
-                    .map(|()| raw)
+                check_status!(unsafe {
+                    napi::sys::napi_get_and_clear_last_exception(env.raw(), &mut raw)
+                })
+                .map(|()| raw)
             };
             let raw = take()?;
             let thrown = unsafe { Unknown::from_raw_unchecked(env.raw(), raw) };

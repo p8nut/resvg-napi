@@ -1,6 +1,7 @@
 // What 0.10 left out of the old `SvgNode` surface (#191), back through generic
-// rules: a payload variant carrying a class hands out a copy of it (the tree an
-// `<image>` embeds, what an `feImage` draws), `usvg.Font.families` is read
+// rules: a payload variant carrying a class hands it out, borrowed from the
+// document rather than copied (the tree an `<image>` embeds, what an `feImage`
+// draws), `usvg.Font.families` is read
 // from the enum usvg re-exports from svgtypes, and a glyph's `font` is the
 // `fontdb.ID` of the face that drew it.
 import { test } from 'node:test';
@@ -44,7 +45,8 @@ test('an <image> of an SVG: kind().value is the tree it embeds', () => {
   assert.ok(kind.value instanceof usvg.Tree);
   assert.equal(kind.value.size().width(), 4);
   assert.equal(kind.value.nodeById('r').kind, 'path');
-  // A tree like any other: it renders, and outlives the document it came from.
+  // A tree like any other: it renders, and keeps the document it is borrowed
+  // from alive.
   tree.dispose();
   const pixmap = new tiny_skia.Pixmap(4, 4);
   resvg.render(kind.value, tiny_skia.Transform.identity(), pixmap);
@@ -63,7 +65,9 @@ test('an feImage: kind.value.root is the group it draws', () => {
   const root = kind.value.root;
   assert.ok(root instanceof usvg.Group);
   assert.deepEqual(root.children().map((n) => n.kind), ['path']);
-  // A copy of what it draws: its rect renders on its own.
+  // Borrowed from the document, which it keeps alive: its rect renders after
+  // the document's own handle is gone.
+  tree.dispose();
   const pixmap = new tiny_skia.Pixmap(10, 10);
   resvg.renderNode(root.children()[0], tiny_skia.Transform.identity(), pixmap);
   assert.deepEqual([...pixmap.data().subarray(0, 4)], [0, 0, 255, 255]);

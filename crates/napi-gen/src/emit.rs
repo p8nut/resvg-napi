@@ -11,7 +11,7 @@
 
 use convert_case::Casing;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType};
 
@@ -223,6 +223,21 @@ pub fn js_conv(
             let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
             plain(quote!(Vec<#ety>), quote!(#a.iter().map(#conv).collect()))
         }
+        // A union made from a projection, where there is none to step from:
+        // one of its own, over the value (a copy of it, when borrowed).
+        (Js::PayloadEnum(t), Getter | Field) if vocab.payload[t].projects(vocab) => {
+            let info = &vocab.payload[t];
+            let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
+            let own = if src_ty.starts_with('&') {
+                quote!(#a.clone())
+            } else {
+                quote!(#a)
+            };
+            plain(
+                quote!(#ety),
+                quote!(#conv(napi_support::Projection::owned(#own))),
+            )
+        }
         (Js::PayloadEnum(t), Getter | Field) => {
             let info = &vocab.payload[t];
             let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
@@ -278,6 +293,29 @@ pub fn js_conv(
             )
         },
         _ => return None,
+    })
+}
+
+/// A value `Vocab::steps_into` hands out as a projection: its JS type, and
+/// what makes it from a `napi_support::Projection` of the upstream value.
+pub fn stepped(js: &Js, vocab: &Vocab) -> Option<(TokenStream, TokenStream)> {
+    if !vocab.steps_into(js) {
+        return None;
+    }
+    Some(match js {
+        Js::Owned(t) => {
+            let c = format_ident!("{t}");
+            (quote!(#c), quote!(#c::__proj))
+        }
+        Js::Value(t) => {
+            let c = data_ident(t);
+            (quote!(#c), quote!(#c::__proj))
+        }
+        Js::PayloadEnum(t) => {
+            let info = &vocab.payload[t];
+            (info.either_ty(t), info.conv_ident(t).into_token_stream())
+        }
+        _ => unreachable!("steps_into answers these only"),
     })
 }
 
@@ -423,7 +461,18 @@ does this. Copied out on each read.",
             Payload::Value(ty)
                 if matches!(vocab.classify(ty), Some(Js::Owned(_) | Js::Value(_))) =>
             {
-                let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(v)) else {
+                // Borrowed from the enum, when the union is made from a
+                // projection of it (`projects`): the variant found again.
+                let step = vocab.classify(ty).and_then(|js| stepped(&js, vocab));
+                let bind = if step.is_some() { quote!(_) } else { quote!(v) };
+                let carried = match step {
+                    Some((fty, conv)) => {
+                        let p = quote!(p.then(|__e| match __e { #up::#vid(__v) => Some(__v), _ => None }));
+                        Some((fty, quote!(#conv(#p.expect("the variant matched")))))
+                    }
+                    None => carried_field(vocab, ty, &quote!(v)).map(|(_, fty, expr)| (fty, expr)),
+                };
+                let Some((fty, expr)) = carried else {
                     return Err(format!("{name}::{n} carries {ty}, which cannot be carried"));
                 };
                 let doc = format!(" `{name}::{n}`.");
@@ -437,7 +486,7 @@ does this. Copied out on each read.",
                         pub value: #fty,
                     }
                 });
-                arms.push(quote!(#g #up::#vid(v) => #arm(#sid {
+                arms.push(quote!(#g #up::#vid(#bind) => #arm(#sid {
                     r#type: #tag.to_string(),
                     value: #expr,
                 }),));
@@ -573,9 +622,19 @@ does this. Copied out on each read.",
 
     let conv = info.conv_ident(name);
     let ety = info.either_ty(name);
-    items.extend(quote! {
-        fn #conv(v: &#up) -> #ety {
-            match v { #(#arms)* }
+    // A union carrying a value it can borrow is made from a projection of
+    // the enum, which that value steps into; the rest read the enum through it.
+    items.extend(if info.projects(vocab) {
+        quote! {
+            fn #conv(p: napi_support::Projection<#up>) -> #ety {
+                match p.get() { #(#arms)* }
+            }
+        }
+    } else {
+        quote! {
+            fn #conv(v: &#up) -> #ety {
+                match v { #(#arms)* }
+            }
         }
     });
     Ok(items)
@@ -1010,11 +1069,13 @@ pub fn map_enums(
 }
 
 /// One mappable member of a data type: its JS name, its JS type, and the
-/// expression that produces it from a binding named `v`.
+/// expression that produces it from a binding named `v`, or, `stepped`, from
+/// `__p`, the read-only class's projection of the value.
 pub struct Member {
     pub id: proc_macro2::Ident,
     pub jsty: TokenStream,
     pub value: TokenStream,
+    pub stepped: bool,
 }
 
 /// The TypeScript type to force, when napi would rewrite it from the name alone.
@@ -1083,7 +1144,9 @@ pub fn data_members(
     // A type rule rather than the two member names, because the next one to
     // return a Group should need no edit here: `Config::node_types`.
 
-    let mut push = |name: &str, ty_s: &str, access: TokenStream| {
+    // `step` borrows the member from `__v`, a reference to the value, when
+    // it can be borrowed (a field, an accessor returning a reference).
+    let mut push = |name: &str, ty_s: &str, access: TokenStream, step: Option<TokenStream>| {
         if config().not_data.contains(&name) {
             return;
         }
@@ -1105,6 +1168,23 @@ pub fn data_members(
             skipped.push(Skip::new(name, Some(ty_s), Reason::UnionWithClasses));
             return;
         }
+        // A read-only class holds a projection of its value: a member it can
+        // borrow and hand out as a projection is one step further, not a copy.
+        if nested_values
+            && let (Some(js), Some(step)) = (&js, &step)
+            && let Some((jsty, conv)) = stepped(js, vocab)
+        {
+            if let Js::Value(t) = js {
+                reached.insert(t.clone());
+            }
+            out.push(Member {
+                id,
+                jsty,
+                value: quote!(#conv(__p.then(|__v| Some(#step)).expect("a borrow resolves"))),
+                stepped: true,
+            });
+            return;
+        }
         let site = if nested_values {
             Site::Getter
         } else {
@@ -1119,6 +1199,7 @@ pub fn data_members(
                 id,
                 jsty: c.ty,
                 value: c.expr,
+                stepped: false,
             });
             return;
         }
@@ -1138,6 +1219,7 @@ pub fn data_members(
                     id,
                     jsty: quote!(Option<f64>),
                     value: quote!(#access.map(f64::from)),
+                    stepped: false,
                 });
             }
             Some((_, Js::Scalar)) => {
@@ -1145,6 +1227,7 @@ pub fn data_members(
                     id,
                     jsty: quote!(Option<f64>),
                     value: quote!(#access.map(|x| f64::from(x.get()))),
+                    stepped: false,
                 });
             }
             Some((_, Js::F32List)) => {
@@ -1154,6 +1237,7 @@ pub fn data_members(
                     value: quote!(
                         #access.map(|v| v.iter().map(|x| f64::from(*x)).collect())
                     ),
+                    stepped: false,
                 });
             }
             Some((_, Js::Object(t))) => {
@@ -1168,6 +1252,7 @@ pub fn data_members(
                     id,
                     jsty: quote!(Option<#o>),
                     value,
+                    stepped: false,
                 });
             }
             _ => {
@@ -1200,7 +1285,9 @@ pub fn data_members(
             };
             let id = &f.sig.ident;
             seen.insert(id.to_string());
-            push(&id.to_string(), &ty_str(o), quote!(v.#id()));
+            let out = ty_str(o);
+            let step = out.starts_with('&').then(|| quote!(__v.#id()));
+            push(&id.to_string(), &out, quote!(v.#id()), step);
         }
     }
     if let Some(Fields::Named(named)) = struct_fields_opt(files, bare(ty)) {
@@ -1239,7 +1326,7 @@ pub fn data_members(
             } else {
                 quote!(v.#id.clone())
             };
-            push(&id.to_string(), &ty_s, access);
+            push(&id.to_string(), &ty_s, access, Some(quote!(&__v.#id)));
         }
     }
     (out, skipped, reached)
@@ -1312,10 +1399,12 @@ pub fn value_class(
             Some((_, ret_ty)) => quote!(#[napi(getter, ts_return_type = #ret_ty)]),
             None => quote!(#[napi(getter)]),
         };
+        let v = (!m.stepped).then(|| quote!(let v = __p.get();));
         quote! {
             #attr
             pub fn #id(&self) -> #t {
-                let v = &self.inner;
+                let __p = &self.inner;
+                #v
                 #e
             }
         }
@@ -1328,15 +1417,20 @@ pub fn value_class(
         "a"
     };
     let doc = format!(" Read-only view of {article} `{ty}`.");
+    // A projection: of a value of its own (`wrap`), or of one borrowed from
+    // what it was reached from, which it keeps alive (`__proj`).
     let code = quote! {
         #[doc = #doc]
         #[napi]
         pub struct #name {
-            inner: #up,
+            inner: napi_support::Projection<#up>,
         }
 
         impl #name {
             fn wrap(inner: #up) -> Self {
+                Self::__proj(napi_support::Projection::owned(inner))
+            }
+            fn __proj(inner: napi_support::Projection<#up>) -> Self {
                 Self { inner }
             }
         }
@@ -1604,6 +1698,31 @@ pub fn map_methods(
             // The JS type and the expression producing it: the one table.
             let (ret_ty, value, already_result) = match &ret {
                 None => (quote!(()), quote!(#call), false),
+                // A read-only class borrowed from a read-only `Arc`: a step
+                // into it, as `Classes::projected` takes one, not a copy.
+                Some((Js::Value(t), ty)) | Some((Js::ValueList(t), ty))
+                    if readonly && !mutable && fwd.is_empty() && ty.starts_with('&') =>
+                {
+                    let c = data_ident(t);
+                    let b = quote!(napi_support::Projection::of(#receiver.clone()));
+                    let value = if ty.starts_with("&[") {
+                        quote!({
+                            let __b = #b;
+                            (0..__b.get().#ident().len())
+                                .filter_map(|__i| __b.then(move |__s| __s.#ident().get(__i)))
+                                .map(#c::__proj)
+                                .collect()
+                        })
+                    } else {
+                        quote!(#c::__proj(#b.then(|__s| Some(__s.#ident())).expect("a borrow resolves")))
+                    };
+                    let ty = if ty.starts_with("&[") {
+                        quote!(Vec<#c>)
+                    } else {
+                        quote!(#c)
+                    };
+                    (ty, value, false)
+                }
                 Some((js, ty)) => {
                     let c = js_conv(js, ty, vocab, &call, Site::Method).expect("checked above");
                     (c.ty, c.expr, c.is_result)

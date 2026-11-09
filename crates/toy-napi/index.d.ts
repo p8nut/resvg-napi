@@ -12,6 +12,9 @@ export declare namespace alt {
 }
 
 export declare namespace toy {
+  export interface Album {
+    [Symbol.dispose](): void
+  }
   export interface Canvas {
     [Symbol.dispose](): void
   }
@@ -110,6 +113,23 @@ export declare namespace alt {
 }
 
 export declare namespace toy {
+  /** Read-only handle on a `toy::Album`. */
+  export class Album {
+    frames(): Array<toy.Frame>
+    /** The first frame. */
+    cover(): toy.Frame
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type ToyAlbum = Album
   /**
    * A grid of bytes, owned and written in place.
    *
@@ -139,6 +159,11 @@ export declare namespace toy {
      */
     fillAsync(color: toy.Color, signal?: AbortSignal | undefined | null): Promise<void>
     data(): Buffer
+    /**
+     * A copy of the canvas in a frame of its own: a union made, not
+     * borrowed from anything.
+     */
+    framed(): toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
     /** The bytes, the canvas consumed. */
     intoData(): Buffer
     /**
@@ -208,8 +233,8 @@ export declare namespace toy {
   /**
    * A named point.
    *
-   * A `toy::Dot` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `toy::Dot` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Dot {
     name(): string
@@ -232,6 +257,7 @@ export declare namespace toy {
   export class Frame {
     get layer(): toy.Layer
     get shades(): Array<toy.ShadePlain | toy.ShadeNamed>
+    get content(): toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
@@ -270,8 +296,8 @@ export declare namespace toy {
   /**
    * A named list of items.
    *
-   * A `toy::Layer` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `toy::Layer` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Layer {
     name(): string
@@ -348,10 +374,14 @@ export declare namespace toy {
     /** The way through the scene: a jump to `a`, a line to `d`, a stop. */
     trail(): Array<toy.StepPlain | toy.StepJump | toy.StepLine>
     /**
-     * What the scene's slots hold: nothing, a 2x1 canvas, and a frame
-     * around the layer `framed` (the dot `f`).
+     * What the scene's slots hold: nothing, a 2x1 canvas, a frame around
+     * the layer `framed` (the dot `f`), and the layer `held` (the dot `h`).
      */
-    contents(): Array<toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame>
+    contents(): Array<toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer>
+    /** The frames, as a table of values: the one around `framed`. */
+    frames(): Array<toy.Frame>
+    /** The same frames, behind an `Arc` of their own. */
+    album(): toy.Album
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -496,11 +526,19 @@ export declare namespace toy {
     type: 'frame'
     value: toy.Frame
   }
+  /** `Content::Layer`. */
+  export interface ContentLayer {
+    /** Discriminant. Narrow on this. */
+    type: 'layer'
+    value: toy.Layer
+  }
   /** The payload-free variants of `Content`. */
   export interface ContentPlain {
     /** Discriminant. Narrow on this. */
     type: 'empty'
   }
+  /** How many times a [`Layer`] was copied so far. */
+  export function copies(): number
   /** How many dots `item` holds, itself included. */
   export function count(item: toy.ItemLayer | toy.ItemDot): number
   /**

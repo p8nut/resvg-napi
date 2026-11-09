@@ -170,7 +170,6 @@ pub const GEN: Config = Config {
     // (Q21); `NonZeroRect` is what usvg's boxes are, and `Point` what a path
     // segment holds; `svgtypes.Color` parses CSS colours (Q33).
     classes: &[
-        ("usvg", "Tree"),
         ("usvg::fontdb", "Database"),
         ("usvg::fontdb", "ID"),
         ("tiny_skia", "Pixmap"),
@@ -199,7 +198,11 @@ pub const GEN: Config = Config {
     // The definitions owning content are reached the same way, from the
     // tree's tables or from what refers to them (`group.clipPath()`), and
     // their `root()` is a group of the same tree.
+    // `usvg.Tree` too: one parsed holds a tree of its own, and the tree an
+    // image embeds (`ImageKind::SVG`) is borrowed from the image's, as the
+    // `feImage` group of a filter is, instead of copied out on each read.
     projections: &[
+        ("usvg", "Tree"),
         ("usvg", "Node"),
         ("usvg", "Group"),
         ("usvg", "Path"),

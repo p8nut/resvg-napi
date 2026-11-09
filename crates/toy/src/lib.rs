@@ -5,6 +5,7 @@
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub mod alt;
 
@@ -528,6 +529,16 @@ impl Canvas {
         &self.data
     }
 
+    /// A copy of the canvas in a frame of its own: a union made, not
+    /// borrowed from anything.
+    pub fn framed(&self) -> Content {
+        Content::Frame(Frame {
+            layer: Layer::new("canvas", Vec::new()),
+            shades: Vec::new(),
+            content: Box::new(Content::Canvas(self.clone())),
+        })
+    }
+
     /// A writable view of the bytes, for [`paint`].
     pub fn as_view(&mut self) -> CanvasView<'_> {
         CanvasView {
@@ -589,6 +600,8 @@ pub struct Scene {
     marks: Vec<Arc<Dot>>,
     trail: Trail,
     contents: Vec<Content>,
+    frames: Vec<Frame>,
+    album: Arc<Album>,
 }
 
 impl Scene {
@@ -601,15 +614,16 @@ impl Scene {
                 at: Vec2::new(x, 0.0),
             })
         };
-        let layer = |name: &str, items| {
-            Item::Layer(Box::new(Layer {
-                name: name.into(),
-                items,
-            }))
+        let layer = |name: &str, items| Item::Layer(Box::new(Layer::new(name, items)));
+        let frame = Frame {
+            layer: Layer::new("framed", vec![dot("f", 5.0)]),
+            shades: vec![Shade::Plain, Shade::Named("teal".into())],
+            content: Box::new(Content::Layer(Layer::new("inset", vec![dot("i", 7.0)]))),
         };
         Arc::new(Scene {
             root: Layer {
                 name: "root".into(),
+                copies: Copies,
                 items: vec![
                     dot("a", 1.0),
                     layer(
@@ -633,14 +647,13 @@ impl Scene {
             contents: vec![
                 Content::Empty,
                 Content::Canvas(Canvas::new(2, 1).expect("a 2x1 canvas")),
-                Content::Frame(Frame {
-                    layer: Layer {
-                        name: "framed".into(),
-                        items: vec![dot("f", 5.0)],
-                    },
-                    shades: vec![Shade::Plain, Shade::Named("teal".into())],
-                }),
+                Content::Frame(frame.clone()),
+                Content::Layer(Layer::new("held", vec![dot("h", 6.0)])),
             ],
+            frames: vec![frame.clone()],
+            album: Arc::new(Album {
+                frames: vec![frame],
+            }),
         })
     }
 
@@ -663,28 +676,58 @@ impl Scene {
         &self.trail
     }
 
-    /// What the scene's slots hold: nothing, a 2x1 canvas, and a frame
-    /// around the layer `framed` (the dot `f`).
+    /// What the scene's slots hold: nothing, a 2x1 canvas, a frame around
+    /// the layer `framed` (the dot `f`), and the layer `held` (the dot `h`).
     pub fn contents(&self) -> &[Content] {
         &self.contents
     }
+
+    /// The frames, as a table of values: the one around `framed`.
+    pub fn frames(&self) -> &[Frame] {
+        &self.frames
+    }
+
+    /// The same frames, behind an `Arc` of their own.
+    pub fn album(&self) -> &Arc<Album> {
+        &self.album
+    }
 }
 
-/// A slot's content: a variant may carry a class (`Canvas`), or a value
-/// that only partly maps (`Frame`).
+/// Frames shared behind an `Arc`: a type no binding lists, handed out as
+/// the read-only handle its `Arc` makes it.
+#[derive(Debug)]
+pub struct Album {
+    frames: Vec<Frame>,
+}
+
+impl Album {
+    pub fn frames(&self) -> &[Frame] {
+        &self.frames
+    }
+
+    /// The first frame.
+    pub fn cover(&self) -> &Frame {
+        &self.frames[0]
+    }
+}
+
+/// A slot's content: a variant may carry a class JS can write (`Canvas`),
+/// a value that only partly maps (`Frame`), or a projected class (`Layer`).
 #[derive(Clone, Debug)]
 pub enum Content {
     Empty,
     Canvas(Canvas),
     Frame(Frame),
+    Layer(Layer),
 }
 
-/// A layer, framed: its members borrow a projected class (a copy is handed
-/// out) and a re-exported enum.
+/// A layer, framed: its members borrow a projected class, a re-exported
+/// enum, and a union.
 #[derive(Clone, Debug)]
 pub struct Frame {
     layer: Layer,
     shades: Vec<Shade>,
+    content: Box<Content>,
 }
 
 impl Frame {
@@ -694,6 +737,11 @@ impl Frame {
 
     pub fn shades(&self) -> &[Shade] {
         &self.shades
+    }
+
+    /// What the frame holds: the layer `inset` (the dot `i`).
+    pub fn content(&self) -> &Content {
+        &self.content
     }
 }
 
@@ -746,9 +794,20 @@ impl Item {
 pub struct Layer {
     name: String,
     items: Vec<Item>,
+    // Never read: copying it is what counts.
+    #[allow(dead_code)]
+    copies: Copies,
 }
 
 impl Layer {
+    fn new(name: &str, items: Vec<Item>) -> Self {
+        Layer {
+            name: name.into(),
+            items,
+            copies: Copies,
+        }
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -769,6 +828,25 @@ impl Layer {
             Item::Dot(_) => None,
         })
     }
+}
+
+/// Counts the copies of what holds it, process-wide: [`copies`] reads the
+/// count. A binding that borrows a value from its owner makes none.
+#[derive(Debug)]
+struct Copies;
+
+static COPIES: AtomicU32 = AtomicU32::new(0);
+
+impl Clone for Copies {
+    fn clone(&self) -> Self {
+        COPIES.fetch_add(1, Ordering::Relaxed);
+        Copies
+    }
+}
+
+/// How many times a [`Layer`] was copied so far.
+pub fn copies() -> u32 {
+    COPIES.load(Ordering::Relaxed)
 }
 
 /// A named point.

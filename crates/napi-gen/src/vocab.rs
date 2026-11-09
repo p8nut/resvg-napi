@@ -52,9 +52,10 @@ pub enum Js {
     Class(String),
     OptClass(String),
     // A listed class not held by value, whose upstream type is `Clone`: a
-    // copy of the borrowed value, given to the class's `__from` (`Tree`
-    // embedded in an image, the `Group` an `feImage` draws). Never an object
-    // field: a class is not `Clone`.
+    // copy of the borrowed value, given to the class's `__from`; or, for a
+    // projected class reached from a projection (the `Tree` an image embeds,
+    // the `Group` an `feImage` draws), the value borrowed in place
+    // (`Vocab::steps_into`). Never an object field: a class is not `Clone`.
     Owned(String),
     // `Vec<(A, B)>` or `&[(A, B)]`: an `Array<[A, B]>`, each element mapped
     // as a union's payload is.
@@ -149,6 +150,16 @@ pub struct PayloadEnum {
 }
 
 impl PayloadEnum {
+    /// Whether a variant carries a value its union's object can borrow from
+    /// the enum (`Vocab::steps_into`): the union is then made from a
+    /// projection of the enum, not a reference to it (`payload_enum_code`).
+    pub fn projects(&self, vocab: &Vocab) -> bool {
+        self.variants.iter().any(|(_, p)| match p {
+            Payload::Value(ty) => vocab.classify(ty).is_some_and(|js| vocab.steps_into(&js)),
+            _ => false,
+        })
+    }
+
     /// Whether a variant is emitted as a class (bytes, see `payload_enum_code`).
     /// A class is not `Clone`, so no `#[napi(object)]` field can hold the
     /// union: its holder has to stay a read-only class.
@@ -614,9 +625,26 @@ pub struct Vocab {
     /// The listed classes not held by value whose upstream type is `Clone`
     /// (`Js::Owned`): a member borrowing one hands out a copy.
     pub owned: BTreeSet<String>,
+    /// Those of them that hold a projection (`Holding::Projected`): a member
+    /// reached from a projection borrows one rather than copying it.
+    pub projected: BTreeSet<String>,
 }
 
 impl Vocab {
+    /// Whether a value of this kind, reached from a projection, is handed out
+    /// as a projection one step further instead of a copy: a projected class,
+    /// a read-only class (which holds a projection), and a union carrying
+    /// either. Not a class JS can write (`Canvas`): a write would reach the
+    /// owner, which a projection never writes.
+    pub fn steps_into(&self, js: &Js) -> bool {
+        match js {
+            Js::Owned(t) => self.projected.contains(t),
+            Js::Value(_) => true,
+            Js::PayloadEnum(t) => self.payload[t].projects(self),
+            _ => false,
+        }
+    }
+
     /// `Opacity` -> `NormalizedF32` -> ... until it stops being an alias.
     pub fn resolve(&self, ty: &str) -> String {
         // `crate::FontVariation` and `FontVariation` are the same type: upstream

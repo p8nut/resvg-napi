@@ -44,8 +44,9 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'OriginInline', 'OriginPinned',
-    'PaintErrorCode', 'ParseErrorCode', 'Scene', 'Tally', 'Vec2', 'count', 'countAsync', 'paint', 'paintAsync',
+    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'OriginInline', 'OriginPinned',
+    'PaintErrorCode', 'ParseErrorCode', 'Scene', 'Tally', 'Vec2', 'copies', 'count', 'countAsync', 'paint',
+    'paintAsync',
     'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
   ]);
@@ -664,4 +665,43 @@ test('a union variant may carry a class, and a re-exported enum maps', () => {
   assert.equal(layer.name(), 'framed');
   assert.deepEqual(layer.items().map((i) => i.value.name()), ['f']);
   assert.deepEqual(frame.value.shades, [{ type: 'plain' }, { type: 'named', value: 'teal' }]);
+});
+
+// What is reached from a scene is borrowed from it, not copied out: a
+// `Layer` counts its copies, and reading none makes one. A union's variant
+// (`held`, a projected class; `frame`, a read-only class), a read-only
+// class's members (`layer`, a projected class; `content`, a union), and
+// read-only classes in a table (`frames()`) or behind an `Arc` the scene
+// shares (`album()`) are each a step into their owner.
+test('a value reached from an owner is borrowed from it, not copied', () => {
+  const scene = toy.toy.Scene.demo();
+  const before = toy.toy.copies();
+  for (let i = 0; i < 3; i += 1) {
+    const [, , frame, held] = scene.contents();
+    assert.equal(held.type, 'layer');
+    assert.ok(held.value instanceof toy.toy.Layer);
+    assert.equal(held.value.name(), 'held');
+    assert.equal(frame.value.layer.name(), 'framed');
+    const content = frame.value.content;
+    assert.equal(content.type, 'layer');
+    assert.deepEqual(content.value.items().map((it) => it.value.name()), ['i']);
+    const [first] = scene.frames();
+    assert.ok(first instanceof toy.toy.Frame);
+    assert.equal(first.layer.name(), 'framed');
+    const album = scene.album();
+    assert.equal(album.frames()[0].layer.name(), 'framed');
+    assert.equal(album.cover().content.value.name(), 'inset');
+  }
+  assert.equal(toy.toy.copies() - before, 0);
+});
+
+// A union returned by value has nothing to borrow from: it is its own owner,
+// and what it carries is borrowed from it as from any other.
+test('a union made by value owns what it carries', () => {
+  const framed = new toy.toy.Canvas(3, 2).framed();
+  assert.equal(framed.type, 'frame');
+  assert.equal(framed.value.layer.name(), 'canvas');
+  const inner = framed.value.content;
+  assert.equal(inner.type, 'canvas');
+  assert.deepEqual([inner.value.width(), inner.value.height()], [3, 2]);
 });

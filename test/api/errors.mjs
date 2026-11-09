@@ -74,6 +74,13 @@ test('a consumed pixmap throws on every later call', () => {
   assert.equal(inspect(pixmap), 'Pixmap { consumed: true }');
 });
 
+test('inspect rethrows what a member threw, even a thrown null', () => {
+  for (const thrown of [null, undefined, 'text', Object.assign(new Error('x'), { code: 7 })]) {
+    class Odd extends tiny_skia.Pixmap { width() { throw thrown; } }
+    assert.throws(() => inspect(new Odd(1, 1)), (e) => e === thrown);
+  }
+});
+
 test('a number that does not fit the upstream integer throws, never wraps', () => {
   throwsCoded(() => tiny_skia.Color.fromRgba8(256, 0, 0, 0), 'InvalidArg', 'invalid r: 256');
   throwsCoded(() => svgtypes.Color.newRgb(0, -1, 0), 'InvalidArg', /green|u32|number/);

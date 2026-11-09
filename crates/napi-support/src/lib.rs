@@ -583,16 +583,28 @@ pub fn inspect<'e>(
         Err(e) if e.status == Status::PendingException => {
             // A getter threw. `Leased` and `Consumed` are states, printed as
             // `disposed` is; anything else is thrown again.
-            let mut raw = std::ptr::null_mut();
-            unsafe { napi::sys::napi_get_and_clear_last_exception(env.raw(), &mut raw) };
+            let take = || {
+                let mut raw = std::ptr::null_mut();
+                check_status!(unsafe {
+                    napi::sys::napi_get_and_clear_last_exception(env.raw(), &mut raw)
+                })
+                .map(|()| raw)
+            };
+            let raw = take()?;
             let thrown = unsafe { Unknown::from_raw_unchecked(env.raw(), raw) };
-            let code = unsafe { thrown.cast::<Object>() }
-                .and_then(|o| o.get_named_property::<String>("code"))
-                .unwrap_or_default();
-            if ["Leased", "Consumed"].contains(&code.as_str()) {
-                return Ok(format!("{class} {{ {}: true }}", code.to_lowercase()));
+            // Only an Error is read: a thrown `null` has no properties, and
+            // reading one would throw over the original.
+            if thrown.is_error()? {
+                match unsafe { thrown.cast::<Object>() }?.get_named_property::<String>("code") {
+                    Ok(code) if ["Leased", "Consumed"].contains(&code.as_str()) => {
+                        return Ok(format!("{class} {{ {}: true }}", code.to_lowercase()));
+                    }
+                    Ok(_) => {}
+                    // `code` was no string, or its getter threw: drop that, keep the original.
+                    Err(_) => drop(take()),
+                }
             }
-            unsafe { napi::sys::napi_throw(env.raw(), raw) };
+            check_status!(unsafe { napi::sys::napi_throw(env.raw(), raw) })?;
             Err(e)
         }
         other => other,

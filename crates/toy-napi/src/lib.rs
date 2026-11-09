@@ -84,11 +84,11 @@ pub struct ToyStepLine {
 #[doc = " Where some bytes come from: shared bytes, a path, or both. The last is"]
 #[doc = " built on some targets only, as a crate gates a variant on a feature."]
 #[doc = ""]
-#[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
+#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
 #[napi(object, object_to_js = false, js_name = "Origin", namespace = "toy")]
 pub struct ToyOrigin {
     #[doc = " The variant."]
-    #[napi(ts_type = "'inline' | 'path' | 'pinned'")]
+    #[napi(ts_type = "'inline' | 'path'")]
     pub r#type: String,
     #[doc = " The string the variant carries: required for `'path'`, ignored otherwise."]
     pub value: Option<String>,
@@ -97,7 +97,7 @@ pub struct ToyOrigin {
 }
 #[doc = " A tag a filter matches on: a name it borrows, or any."]
 #[doc = ""]
-#[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
+#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
 #[napi(object, object_to_js = false, js_name = "Tag", namespace = "toy")]
 pub struct ToyTag {
     #[doc = " The variant."]

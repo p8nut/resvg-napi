@@ -1913,7 +1913,7 @@ pub enum FontdbStretch {
 }
 #[doc = " A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family)."]
 #[doc = ""]
-#[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
+#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
 #[napi(object, object_to_js = false, js_name = "Family", namespace = "fontdb")]
 pub struct FontdbFamily {
     #[doc = " The variant."]
@@ -1953,11 +1953,11 @@ pub struct FontdbQuery {
 #[doc = ""]
 #[doc = " Stores the whole font and not just a single face."]
 #[doc = ""]
-#[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
+#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
 #[napi(object, object_to_js = false, js_name = "Source", namespace = "fontdb")]
 pub struct FontdbSource {
     #[doc = " The variant."]
-    #[napi(ts_type = "'binary' | 'file' | 'sharedFile'")]
+    #[napi(ts_type = "'binary' | 'file'")]
     pub r#type: String,
     #[doc = " The string the variant carries: required for `'file'`, ignored otherwise."]
     pub value: Option<String>,

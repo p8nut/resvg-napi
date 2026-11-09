@@ -152,6 +152,9 @@ const nsWrite: usvg.WriteOptions = { indent: 'tabs', attributesIndent: 2, coordi
 // @ts-expect-error a plain object is not a `fontdb.Database`
 const nsBadFonts: usvg.Options = { fontdb: {} };
 void [nsOptions, nsWrite, nsBadFonts];
+// @ts-expect-error a shared file carries a path and its bytes: it cannot be passed in
+const nsShared: fontdb.Source = { type: 'sharedFile', value: '/x.ttf' };
+void nsShared;
 
 // 11. the Rust render loop, typed: factories, a free function, the classes
 //     as arguments, `T | null` for an Option, the codes of a thrown error.

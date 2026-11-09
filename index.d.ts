@@ -422,7 +422,7 @@ export declare namespace fontdb {
   /**
    * A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family).
    *
-   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
+   * Passed in as `{ type, value }` or `{ type, bytes }`.
    */
   export interface Family {
     /** The variant. */
@@ -478,11 +478,11 @@ export declare namespace fontdb {
    *
    * Stores the whole font and not just a single face.
    *
-   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
+   * Passed in as `{ type, value }` or `{ type, bytes }`.
    */
   export interface Source {
     /** The variant. */
-    type: 'binary' | 'file' | 'sharedFile'
+    type: 'binary' | 'file'
     /** The string the variant carries: required for `'file'`, ignored otherwise. */
     value?: string
     /** The bytes the variant carries, copied: required for `'binary'`, ignored otherwise. */

@@ -69,6 +69,7 @@ const GEN: Config = Config {
         ("toy", "count"),
         ("toy", "visit"),
         ("toy", "spin"),
+        ("toy", "copies"),
     ],
     // Async twins, one of each shape: a static that throws
     // (`Canvas.fromTextAsync`), free functions taking a view of an owned
@@ -161,10 +162,20 @@ fn main() {
     for (name, _) in classes.by_clone() {
         vocab.owned.insert(name.to_string());
     }
+    // Of those, the projected ones are borrowed instead, when reached from a
+    // projection: the `layer` of a `Frame`, a `Content` holding a `Layer`.
+    for (name, _) in classes.by_projection() {
+        vocab.projected.insert(name.to_string());
+    }
     assert_eq!(
         vocab.owned,
         ["Canvas", "Dot", "Layer", "Tally"].map(String::from).into(),
         "the Clone classes not held by value"
+    );
+    assert_eq!(
+        vocab.projected,
+        ["Dot", "Layer"].map(String::from).into(),
+        "the Clone classes held as a projection"
     );
     let wanted = ["Direction".to_string()].into();
     let (enums, enum_code, _) = map_enums(&files, &wanted, modules, &root);
@@ -305,7 +316,14 @@ fn main() {
         ["Color".to_string()].into(),
         "two namespaces have a Color"
     );
-    let mut toy_part = quote! { #enum_code #point #step #tag #options #frame #unions };
+    // `Album`, reached as an `Arc` (`Scene::album`): a read-only handle,
+    // whose read-only classes are borrowed from its `Arc`.
+    let (album, skipped, _) = wrapper_class(&files, "Album", &vocab, modules, &root);
+    assert!(
+        !album.is_empty() && skipped.is_empty(),
+        "Album maps: frames and cover"
+    );
+    let mut toy_part = quote! { #enum_code #point #step #tag #options #frame #unions #album };
     let mut alt_part = quote!();
     for (i, c) in classes.classes.iter().enumerate() {
         let (code, skipped) = classes.class(i, &vocab);

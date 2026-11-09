@@ -509,6 +509,18 @@ impl<'a> Classes<'a> {
             .map(|c| (c.name.as_str(), self.sources[c.source].root))
     }
 
+    /// Those of [`Classes::by_clone`] held as a projection: what
+    /// `Vocab::projected` starts from.
+    pub fn by_projection(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.by_clone().filter(|(name, root)| {
+            self.classes.iter().any(|c| {
+                c.holding == Holding::Projected
+                    && c.name == *name
+                    && self.sources[c.source].root == *root
+            })
+        })
+    }
+
     /// Whether `ty` (an upstream root-relative key such as `a::Ty` or `Ty`)
     /// is a listed class of the source at `root`.
     pub fn lists(&self, root: &str, ty: &str) -> bool {
@@ -1068,7 +1080,9 @@ impl<'a> Classes<'a> {
         let self_pre = me.as_ref().map(|(_, p)| p);
         // A borrow out of a projection or an `Arc`: a projection again.
         let projected = match (&err, holding) {
-            (None, Some(h)) if me.is_some() => self.projected(h, ctx, ident, &out, optional, &a),
+            (None, Some(h)) if me.is_some() => {
+                self.projected(h, ctx, ident, &out, optional, &a, vocab)
+            }
             _ => None,
         };
         let (body, ret_ty) = match projected {
@@ -1396,7 +1410,7 @@ impl<'a> Classes<'a> {
                 format!(" A shared `{root}::{name}`, copied on the first write while shared.")
             }
             Holding::Projected => format!(
-                " A `{root}::{name}` borrowed from what it was reached from, which it keeps\n alive. Each call finds it there again."
+                " A `{root}::{name}` of its own, or borrowed from what it was reached from,\n which it keeps alive. Each call finds it there again."
             ),
         };
         if !doc.is_empty() {

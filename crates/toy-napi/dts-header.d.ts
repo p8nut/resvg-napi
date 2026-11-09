@@ -12,6 +12,9 @@ export declare namespace alt {
 }
 
 export declare namespace toy {
+  export interface Album {
+    [Symbol.dispose](): void
+  }
   export interface Canvas {
     [Symbol.dispose](): void
   }

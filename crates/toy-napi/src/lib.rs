@@ -167,7 +167,7 @@ pub struct ToyFilter {
 #[doc = " Read-only view of a `Frame`."]
 #[napi(js_name = "Frame", namespace = "toy")]
 pub struct ToyFrame {
-    inner: napi_support::Slot<toy::Frame>,
+    inner: napi_support::Slot<napi_support::Projection<toy::Frame>>,
 }
 #[doc = " The payload-free variants of `Shade`."]
 #[napi(object, js_name = "ShadePlain", namespace = "toy")]
@@ -228,6 +228,28 @@ pub struct ToyContentFrame {
     pub r#type: String,
     pub value: ToyFrame,
 }
+#[doc = " A named list of items."]
+#[doc = ""]
+#[doc = " A `toy::Layer` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
+#[napi(js_name = "Layer", namespace = "toy")]
+pub struct ToyLayer {
+    inner: napi_support::Slot<napi_support::Projection<toy::Layer>>,
+    of: Option<napi_support::Projection<toy::Item>>,
+}
+#[doc = " `Content::Layer`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "ContentLayer",
+    namespace = "toy"
+)]
+pub struct ToyContentLayer {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'layer'")]
+    pub r#type: String,
+    pub value: ToyLayer,
+}
 #[doc = " `Origin::Inline`."]
 #[napi(js_name = "OriginInline", namespace = "toy")]
 pub struct ToyOriginInline {
@@ -249,6 +271,11 @@ pub struct ToyOriginPinned {
         std::path::PathBuf,
         std::sync::Arc<dyn AsRef<[u8]> + Send + Sync>,
     )>,
+}
+#[doc = " Read-only handle on a `toy::Album`."]
+#[napi(js_name = "Album", namespace = "toy")]
+pub struct ToyAlbum {
+    inner: napi_support::Slot<std::sync::Arc<toy::Album>>,
 }
 #[doc = " An immutable counter, shared behind an `Arc`."]
 #[doc = ""]
@@ -288,19 +315,10 @@ pub struct ToyScene {
 pub struct ToyKey {
     inner: napi_support::Slot<toy::Key>,
 }
-#[doc = " A named list of items."]
-#[doc = ""]
-#[doc = " A `toy::Layer` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
-#[napi(js_name = "Layer", namespace = "toy")]
-pub struct ToyLayer {
-    inner: napi_support::Slot<napi_support::Projection<toy::Layer>>,
-    of: Option<napi_support::Projection<toy::Item>>,
-}
 #[doc = " A named point."]
 #[doc = ""]
-#[doc = " A `toy::Dot` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `toy::Dot` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Dot", namespace = "toy")]
 pub struct ToyDot {
     inner: napi_support::Slot<napi_support::Projection<toy::Dot>>,
@@ -516,6 +534,9 @@ impl ToyFilter {
 }
 impl ToyFrame {
     fn wrap(inner: toy::Frame) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<toy::Frame>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
@@ -527,16 +548,34 @@ impl ToyFrame {
     pub fn layer(&self) -> Result<ToyLayer, String> {
         let __inner = self.inner.get("Frame")?;
         Ok({
-            let v = __inner;
-            ToyLayer::__from((v.layer()).clone())
+            let __p = __inner;
+            ToyLayer::__proj(
+                __p.then(|__v| Some(__v.layer()))
+                    .expect("a borrow resolves"),
+            )
         })
     }
     #[napi(getter)]
     pub fn shades(&self) -> Result<Vec<Either<ToyShadePlain, ToyShadeNamed>>, String> {
         let __inner = self.inner.get("Frame")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.shades().iter().map(toy_shade_to_js).collect()
+        })
+    }
+    #[napi(getter)]
+    pub fn content(
+        &self,
+    ) -> Result<Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>, String>
+    {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let __p = __inner;
+            toy_content_to_js(
+                __p.then(|__v| Some(__v.content()))
+                    .expect("a borrow resolves"),
+            )
         })
     }
 }
@@ -552,19 +591,35 @@ fn toy_shade_to_js(v: &toy::Shade) -> Either<ToyShadePlain, ToyShadeNamed> {
     }
 }
 fn toy_content_to_js(
-    v: &toy::Content,
-) -> Either3<ToyContentPlain, ToyContentCanvas, ToyContentFrame> {
-    match v {
-        toy::Content::Empty => Either3::A(ToyContentPlain {
+    p: napi_support::Projection<toy::Content>,
+) -> Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer> {
+    match p.get() {
+        toy::Content::Empty => Either4::A(ToyContentPlain {
             r#type: "empty".to_string(),
         }),
-        toy::Content::Canvas(v) => Either3::B(ToyContentCanvas {
+        toy::Content::Canvas(v) => Either4::B(ToyContentCanvas {
             r#type: "canvas".to_string(),
             value: ToyCanvas::__from((*v).clone()),
         }),
-        toy::Content::Frame(v) => Either3::C(ToyContentFrame {
+        toy::Content::Frame(_) => Either4::C(ToyContentFrame {
             r#type: "frame".to_string(),
-            value: ToyFrame::wrap((*v).clone()),
+            value: ToyFrame::__proj(
+                p.then(|__e| match __e {
+                    toy::Content::Frame(__v) => Some(__v),
+                    _ => None,
+                })
+                .expect("the variant matched"),
+            ),
+        }),
+        toy::Content::Layer(_) => Either4::D(ToyContentLayer {
+            r#type: "layer".to_string(),
+            value: ToyLayer::__proj(
+                p.then(|__e| match __e {
+                    toy::Content::Layer(__v) => Some(__v),
+                    _ => None,
+                })
+                .expect("the variant matched"),
+            ),
         }),
     }
 }
@@ -614,6 +669,37 @@ fn toy_origin_to_js(v: &toy::Origin) -> Either3<ToyOriginInline, ToyOriginPath, 
         toy::Origin::Pinned(v0, v1) => Either3::C(ToyOriginPinned {
             raw: napi_support::Slot::new((v0.clone(), v1.clone())),
         }),
+    }
+}
+impl ToyAlbum {
+    fn wrap(inner: std::sync::Arc<toy::Album>) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyAlbum {
+    #[napi]
+    pub fn frames(&self) -> Result<Vec<ToyFrame>, String> {
+        let __inner = self.inner.get("Album")?;
+        Ok({
+            let __b = napi_support::Projection::of((*__inner).clone());
+            (0..__b.get().frames().len())
+                .filter_map(|__i| __b.then(move |__s| __s.frames().get(__i)))
+                .map(ToyFrame::__proj)
+                .collect()
+        })
+    }
+    #[doc = " The first frame."]
+    #[napi]
+    pub fn cover(&self) -> Result<ToyFrame, String> {
+        let __inner = self.inner.get("Album")?;
+        Ok(ToyFrame::__proj(
+            napi_support::Projection::of((*__inner).clone())
+                .then(|__s| Some(__s.cover()))
+                .expect("a borrow resolves"),
+        ))
     }
 }
 impl ToyCounter {
@@ -1333,6 +1419,19 @@ impl ToyCanvas {
             .map_err(napi_support::coded)?;
         Ok(__v.to_vec().into())
     }
+    #[doc = " A copy of the canvas in a frame of its own: a union made, not"]
+    #[doc = " borrowed from anything."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn framed(
+        &self,
+    ) -> Result<Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>, String>
+    {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Canvas::framed", || __self.framed())
+            .map_err(napi_support::coded)?;
+        Ok(toy_content_to_js(napi_support::Projection::owned(__v)))
+    }
     #[doc = " The bytes, the canvas consumed."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -1432,17 +1531,48 @@ impl ToyScene {
             .map_err(napi_support::coded)?;
         Ok(__v.steps().map(|x| toy_step_to_js(&x)).collect())
     }
-    #[doc = " What the scene's slots hold: nothing, a 2x1 canvas, and a frame"]
-    #[doc = " around the layer `framed` (the dot `f`)."]
+    #[doc = " What the scene's slots hold: nothing, a 2x1 canvas, a frame around"]
+    #[doc = " the layer `framed` (the dot `f`), and the layer `held` (the dot `h`)."]
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn contents(
         &self,
-    ) -> Result<Vec<Either3<ToyContentPlain, ToyContentCanvas, ToyContentFrame>>, String> {
+    ) -> Result<
+        Vec<Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>>,
+        String,
+    > {
         let __self = self.__ref()?;
-        let __v = napi_support::contained("Scene::contents", || __self.contents())
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        napi_support::contained("Scene::contents", || {
+            (0..__b.get().contents().len())
+                .filter_map(|__i| __b.then(move |__s| __s.contents().get(__i)))
+                .map(toy_content_to_js)
+                .collect()
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " The frames, as a table of values: the one around `framed`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn frames(&self) -> Result<Vec<ToyFrame>, String> {
+        let __self = self.__ref()?;
+        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        napi_support::contained("Scene::frames", || {
+            (0..__b.get().frames().len())
+                .filter_map(|__i| __b.then(move |__s| __s.frames().get(__i)))
+                .map(ToyFrame::__proj)
+                .collect()
+        })
+        .map_err(napi_support::coded)
+    }
+    #[doc = " The same frames, behind an `Arc` of their own."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn album(&self) -> Result<ToyAlbum, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Scene::album", || __self.album())
             .map_err(napi_support::coded)?;
-        Ok(__v.iter().map(toy_content_to_js).collect())
+        Ok(ToyAlbum::wrap(__v.clone()))
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -1775,6 +1905,13 @@ pub fn toy_spin_async(
         signal,
     )
 }
+#[doc = " How many times a [`Layer`] was copied so far."]
+#[napi(js_name = "copies", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_copies() -> Result<u32, String> {
+    let __v = napi_support::contained("copies", toy::copies).map_err(napi_support::coded)?;
+    Ok(__v)
+}
 fn toy_item_to_js(p: napi_support::Projection<toy::Item>) -> Either<ToyItemLayer, ToyItemDot> {
     match p.get() {
         toy::Item::Layer(_) => Either::A(ToyItemLayer {
@@ -2028,6 +2165,21 @@ impl ToyOriginPinned {
         self.raw.disposed()
     }
 }
+#[napi(namespace = "toy")]
+impl ToyAlbum {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Album")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
 #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
 #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
 #[doc = " the whole module without it. The `.d.ts` header declares it."]
@@ -2040,6 +2192,7 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
     }
     let classes: &[(Option<&str>, &str)] = &[
         (Some("alt"), "Color"),
+        (Some("toy"), "Album"),
         (Some("toy"), "Canvas"),
         (Some("toy"), "Color"),
         (Some("toy"), "Counter"),
@@ -2110,7 +2263,7 @@ impl ToyFrame {
             &env,
             &this,
             "Frame",
-            &["layer", "shades", "disposed"],
+            &["layer", "shades", "content", "disposed"],
             &[],
             depth,
             options,
@@ -2150,6 +2303,35 @@ impl ToyCanvas {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Canvas".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyLayer {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Layer",
+            &["disposed"],
+            &["name"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Layer".to_string()
     }
 }
 #[napi(namespace = "toy")]
@@ -2208,6 +2390,35 @@ impl ToyOriginPinned {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "OriginPinned".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyAlbum {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Album",
+            &["disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Album".to_string()
     }
 }
 #[napi(namespace = "toy")]
@@ -2353,35 +2564,6 @@ impl ToyKey {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Key".to_string()
-    }
-}
-#[napi(namespace = "toy")]
-impl ToyLayer {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Layer",
-            &["disposed"],
-            &["name"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Layer".to_string()
     }
 }
 #[napi(namespace = "toy")]

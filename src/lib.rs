@@ -768,10 +768,11 @@ pub struct UsvgLinearGradient {
 }
 #[doc = " A nodes tree container."]
 #[doc = ""]
-#[doc = " A shared, read-only `usvg::Tree`."]
+#[doc = " A `usvg::Tree` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Tree", namespace = "usvg")]
 pub struct UsvgTree {
-    inner: napi_support::Slot<std::sync::Arc<usvg::Tree>>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::Tree>>,
 }
 #[doc = " A group container."]
 #[doc = ""]
@@ -780,8 +781,8 @@ pub struct UsvgTree {
 #[doc = ""]
 #[doc = " `g` element in SVG."]
 #[doc = ""]
-#[doc = " A `usvg::Group` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::Group` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Group", namespace = "usvg")]
 pub struct UsvgGroup {
     inner: napi_support::Slot<napi_support::Projection<usvg::Group>>,
@@ -789,8 +790,8 @@ pub struct UsvgGroup {
 }
 #[doc = " A path element."]
 #[doc = ""]
-#[doc = " A `usvg::Path` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::Path` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Path", namespace = "usvg")]
 pub struct UsvgPath {
     inner: napi_support::Slot<napi_support::Projection<usvg::Path>>,
@@ -800,8 +801,8 @@ pub struct UsvgPath {
 #[doc = ""]
 #[doc = " `image` element in SVG."]
 #[doc = ""]
-#[doc = " A `usvg::Image` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::Image` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Image", namespace = "usvg")]
 pub struct UsvgImage {
     inner: napi_support::Slot<napi_support::Projection<usvg::Image>>,
@@ -811,8 +812,8 @@ pub struct UsvgImage {
 #[doc = ""]
 #[doc = " `text` element in SVG."]
 #[doc = ""]
-#[doc = " A `usvg::Text` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::Text` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Text", namespace = "usvg")]
 pub struct UsvgText {
     inner: napi_support::Slot<napi_support::Projection<usvg::Text>>,
@@ -822,8 +823,8 @@ pub struct UsvgText {
 #[doc = ""]
 #[doc = " `clipPath` element in SVG."]
 #[doc = ""]
-#[doc = " A `usvg::ClipPath` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::ClipPath` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "ClipPath", namespace = "usvg")]
 pub struct UsvgClipPath {
     inner: napi_support::Slot<napi_support::Projection<usvg::ClipPath>>,
@@ -832,8 +833,8 @@ pub struct UsvgClipPath {
 #[doc = ""]
 #[doc = " `mask` element in SVG."]
 #[doc = ""]
-#[doc = " A `usvg::Mask` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::Mask` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Mask", namespace = "usvg")]
 pub struct UsvgMask {
     inner: napi_support::Slot<napi_support::Projection<usvg::Mask>>,
@@ -842,8 +843,8 @@ pub struct UsvgMask {
 #[doc = ""]
 #[doc = " `pattern` element in SVG."]
 #[doc = ""]
-#[doc = " A `usvg::Pattern` borrowed from what it was reached from, which it keeps"]
-#[doc = " alive. Each call finds it there again."]
+#[doc = " A `usvg::Pattern` of its own, or borrowed from what it was reached from,"]
+#[doc = " which it keeps alive. Each call finds it there again."]
 #[napi(js_name = "Pattern", namespace = "usvg")]
 pub struct UsvgPattern {
     inner: napi_support::Slot<napi_support::Projection<usvg::Pattern>>,
@@ -1328,17 +1329,17 @@ pub struct UsvgOffset {
 #[doc = " Read-only view of a `PositionedGlyph`."]
 #[napi(js_name = "PositionedGlyph", namespace = "usvg")]
 pub struct UsvgPositionedGlyph {
-    inner: napi_support::Slot<usvg::layout::PositionedGlyph>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::layout::PositionedGlyph>>,
 }
 #[doc = " Read-only view of a `Primitive`."]
 #[napi(js_name = "Primitive", namespace = "usvg")]
 pub struct UsvgPrimitive {
-    inner: napi_support::Slot<usvg::filter::Primitive>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::filter::Primitive>>,
 }
 #[doc = " Read-only view of a `Span`."]
 #[napi(js_name = "Span", namespace = "usvg")]
 pub struct UsvgSpan {
-    inner: napi_support::Slot<usvg::layout::Span>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::layout::Span>>,
 }
 #[doc = " Plain view of a `SpecularLighting`."]
 #[napi(object, js_name = "SpecularLighting", namespace = "usvg")]
@@ -1478,7 +1479,7 @@ pub struct UsvgTurbulence {
 #[doc = " Read-only view of a `filter::Image`."]
 #[napi(js_name = "FilterImage", namespace = "usvg")]
 pub struct UsvgFilterImage {
-    inner: napi_support::Slot<usvg::filter::Image>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::filter::Image>>,
 }
 #[doc = " `ImageKind::JPEG`."]
 #[napi(js_name = "ImageKindJpeg", namespace = "usvg")]
@@ -1986,7 +1987,7 @@ pub struct FontdbID {
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
-    inner: napi_support::Slot<usvg::fontdb::FaceInfo>,
+    inner: napi_support::Slot<napi_support::Projection<usvg::fontdb::FaceInfo>>,
 }
 #[doc = " `Source::Binary`."]
 #[napi(js_name = "SourceBinary", namespace = "fontdb")]
@@ -2023,7 +2024,7 @@ pub fn resvg_render(
     transform: &TinySkiaTransform,
     pixmap: &mut TinySkiaPixmap,
 ) -> Result<(), String> {
-    let __tree = tree.__ref()?;
+    let __tree = tree.__ref()?.get();
     let __transform = *transform.__ref()?;
     let mut __pixmap = pixmap.__mut()?.as_mut();
     napi_support::contained("render", || {
@@ -2057,7 +2058,7 @@ pub fn resvg_render_async(
         vec![__pixmap.hold()],
         move || {
             napi_support::contained("render", || {
-                resvg::render(&__tree, __transform, &mut (*__pixmap).as_mut())
+                resvg::render(__tree.get(), __transform, &mut (*__pixmap).as_mut())
             })
             .map_err(napi_support::coded)
         },
@@ -4747,11 +4748,13 @@ impl UsvgFilter {
     #[napi]
     pub fn primitives(&self) -> Result<Vec<UsvgPrimitive>, String> {
         let __inner = self.inner.get("Filter")?;
-        Ok((*__inner)
-            .primitives()
-            .iter()
-            .map(|x| UsvgPrimitive::wrap(x.clone()))
-            .collect())
+        Ok({
+            let __b = napi_support::Projection::of((*__inner).clone());
+            (0..__b.get().primitives().len())
+                .filter_map(|__i| __b.then(move |__s| __s.primitives().get(__i)))
+                .map(UsvgPrimitive::__proj)
+                .collect()
+        })
     }
 }
 impl UsvgRadialGradient {
@@ -4896,19 +4899,27 @@ impl UsvgLinearGradient {
         Ok((*__inner).stops().iter().map(UsvgStop::from).collect())
     }
 }
+impl From<&usvg::Tree> for UsvgTree {
+    fn from(v: &usvg::Tree) -> Self {
+        Self::__from(v.clone())
+    }
+}
 impl UsvgTree {
-    fn wrap(inner: std::sync::Arc<usvg::Tree>) -> Self {
+    fn __proj(inner: napi_support::Projection<usvg::Tree>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
     }
     fn __from(inner: usvg::Tree) -> Self {
-        Self::wrap(std::sync::Arc::new(inner))
+        Self::__proj(napi_support::Projection::owned(inner))
     }
-    fn __ref(&self) -> Result<&std::sync::Arc<usvg::Tree>, String> {
+    fn wrap(inner: usvg::Tree) -> Self {
+        Self::__from(inner)
+    }
+    fn __ref(&self) -> Result<&napi_support::Projection<usvg::Tree>, String> {
         self.inner.get("Tree")
     }
-    fn __mut(&mut self) -> Result<&mut std::sync::Arc<usvg::Tree>, String> {
+    fn __mut(&mut self) -> Result<&mut napi_support::Projection<usvg::Tree>, String> {
         self.inner.get_mut("Tree")
     }
 }
@@ -5070,7 +5081,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn size(&self) -> Result<TinySkiaSize, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Tree::size", || __self.size()).map_err(napi_support::coded)?;
         Ok(TinySkiaSize::__from(__v))
@@ -5079,8 +5090,8 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn root(&self) -> Result<UsvgGroup, String> {
-        let __self = self.__ref()?;
-        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Tree::root", || {
             UsvgGroup::__proj(
                 __b.then(move |__s| Some(__s.root()))
@@ -5099,8 +5110,8 @@ impl UsvgTree {
         id: String,
     ) -> Result<Option<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
     {
-        let __self = self.__ref()?;
-        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Tree::node_by_id", || {
             __b.then(move |__s| __s.node_by_id(&id))
                 .map(usvg_node_to_js)
@@ -5111,7 +5122,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_text_nodes(&self) -> Result<bool, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::has_text_nodes", || __self.has_text_nodes())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5120,7 +5131,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn has_defs_nodes(&self) -> Result<bool, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::has_defs_nodes", || __self.has_defs_nodes())
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5129,7 +5140,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn linear_gradients(&self) -> Result<Vec<UsvgLinearGradient>, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::linear_gradients", || __self.linear_gradients())
             .map_err(napi_support::coded)?;
         Ok(__v
@@ -5141,7 +5152,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn radial_gradients(&self) -> Result<Vec<UsvgRadialGradient>, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::radial_gradients", || __self.radial_gradients())
             .map_err(napi_support::coded)?;
         Ok(__v
@@ -5153,8 +5164,8 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn patterns(&self) -> Result<Vec<UsvgPattern>, String> {
-        let __self = self.__ref()?;
-        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Tree::patterns", || {
             (0..__b.get().patterns().len())
                 .filter_map(|__i| __b.then(move |__s| __s.patterns().get(__i).map(|__a| &**__a)))
@@ -5167,8 +5178,8 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn clip_paths(&self) -> Result<Vec<UsvgClipPath>, String> {
-        let __self = self.__ref()?;
-        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Tree::clip_paths", || {
             (0..__b.get().clip_paths().len())
                 .filter_map(|__i| __b.then(move |__s| __s.clip_paths().get(__i).map(|__a| &**__a)))
@@ -5181,8 +5192,8 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn masks(&self) -> Result<Vec<UsvgMask>, String> {
-        let __self = self.__ref()?;
-        let __b = napi_support::Projection::of(self.__ref()?.clone());
+        let __self = self.__ref()?.get();
+        let __b = self.__ref()?.clone();
         napi_support::contained("Tree::masks", || {
             (0..__b.get().masks().len())
                 .filter_map(|__i| __b.then(move |__s| __s.masks().get(__i).map(|__a| &**__a)))
@@ -5195,7 +5206,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn filters(&self) -> Result<Vec<UsvgFilter>, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::filters", || __self.filters())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(|x| UsvgFilter::wrap(x.clone())).collect())
@@ -5204,7 +5215,7 @@ impl UsvgTree {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn fontdb(&self) -> Result<FontdbDatabase, String> {
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::fontdb", || __self.fontdb())
             .map_err(napi_support::coded)?;
         Ok(FontdbDatabase::wrap(std::sync::Arc::clone(__v)))
@@ -5214,7 +5225,7 @@ impl UsvgTree {
     #[allow(clippy::redundant_closure)]
     pub fn to_string(&self, opt: Option<UsvgWriteOptions>) -> Result<String, String> {
         let __opt = opt.unwrap_or_default().to_upstream()?;
-        let __self = self.__ref()?;
+        let __self = self.__ref()?.get();
         let __v = napi_support::contained("Tree::to_string", || __self.to_string(&__opt))
             .map_err(napi_support::coded)?;
         Ok(__v)
@@ -5238,7 +5249,7 @@ impl UsvgTree {
             env,
             vec![],
             move || {
-                napi_support::contained("Tree::to_string", || __self.to_string(&__opt))
+                napi_support::contained("Tree::to_string", || __self.get().to_string(&__opt))
                     .map_err(napi_support::coded)
             },
             |__v| Ok(__v),
@@ -5833,9 +5844,14 @@ impl UsvgImage {
         String,
     > {
         let __self = self.__ref()?.get();
-        let __v = napi_support::contained("Image::kind", || __self.kind())
-            .map_err(napi_support::coded)?;
-        Ok(usvg_image_kind_to_js(__v))
+        let __b = self.__ref()?.clone();
+        napi_support::contained("Image::kind", || {
+            usvg_image_kind_to_js(
+                __b.then(move |__s| Some(__s.kind()))
+                    .expect("a borrow resolves"),
+            )
+        })
+        .map_err(napi_support::coded)
     }
     #[doc = " Element's absolute transform."]
     #[doc = ""]
@@ -6099,9 +6115,14 @@ impl UsvgText {
     #[allow(clippy::redundant_closure)]
     pub fn layouted(&self) -> Result<Vec<UsvgSpan>, String> {
         let __self = self.__ref()?.get();
-        let __v = napi_support::contained("Text::layouted", || __self.layouted())
-            .map_err(napi_support::coded)?;
-        Ok(__v.iter().map(|x| UsvgSpan::wrap(x.clone())).collect())
+        let __b = self.__ref()?.clone();
+        napi_support::contained("Text::layouted", || {
+            (0..__b.get().layouted().len())
+                .filter_map(|__i| __b.then(move |__s| __s.layouted().get(__i)))
+                .map(UsvgSpan::__proj)
+                .collect()
+        })
+        .map_err(napi_support::coded)
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -6691,6 +6712,9 @@ impl From<&usvg::filter::PointLight> for UsvgPointLight {
 }
 impl UsvgPositionedGlyph {
     fn wrap(inner: usvg::layout::PositionedGlyph) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<usvg::layout::PositionedGlyph>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
@@ -6702,7 +6726,8 @@ impl UsvgPositionedGlyph {
     pub fn font_size(&self) -> Result<f64, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             f64::from(v.font_size())
         })
     }
@@ -6710,7 +6735,8 @@ impl UsvgPositionedGlyph {
     pub fn transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             TinySkiaTransform::__from(v.transform())
         })
     }
@@ -6718,7 +6744,8 @@ impl UsvgPositionedGlyph {
     pub fn outline_transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             TinySkiaTransform::__from(v.outline_transform())
         })
     }
@@ -6726,7 +6753,8 @@ impl UsvgPositionedGlyph {
     pub fn svg_transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             TinySkiaTransform::__from(v.svg_transform())
         })
     }
@@ -6734,7 +6762,8 @@ impl UsvgPositionedGlyph {
     pub fn colr_transform(&self) -> Result<TinySkiaTransform, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             TinySkiaTransform::__from(v.colr_transform())
         })
     }
@@ -6742,7 +6771,8 @@ impl UsvgPositionedGlyph {
     pub fn id(&self) -> Result<u32, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             u32::from(v.id.0)
         })
     }
@@ -6750,7 +6780,8 @@ impl UsvgPositionedGlyph {
     pub fn text(&self) -> Result<String, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.text.clone().to_string()
         })
     }
@@ -6758,13 +6789,17 @@ impl UsvgPositionedGlyph {
     pub fn font(&self) -> Result<FontdbID, String> {
         let __inner = self.inner.get("PositionedGlyph")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             FontdbID::__from(v.font)
         })
     }
 }
 impl UsvgPrimitive {
     fn wrap(inner: usvg::filter::Primitive) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<usvg::filter::Primitive>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
@@ -6776,7 +6811,8 @@ impl UsvgPrimitive {
     pub fn rect(&self) -> Result<TinySkiaNonZeroRect, String> {
         let __inner = self.inner.get("Primitive")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             TinySkiaNonZeroRect::__from(v.rect())
         })
     }
@@ -6784,7 +6820,8 @@ impl UsvgPrimitive {
     pub fn color_interpolation(&self) -> Result<UsvgColorInterpolation, String> {
         let __inner = self.inner.get("Primitive")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             UsvgColorInterpolation::from(v.color_interpolation())
         })
     }
@@ -6792,7 +6829,8 @@ impl UsvgPrimitive {
     pub fn result(&self) -> Result<String, String> {
         let __inner = self.inner.get("Primitive")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.result().to_string()
         })
     }
@@ -6823,13 +6861,16 @@ impl UsvgPrimitive {
     > {
         let __inner = self.inner.get("Primitive")?;
         Ok({
-            let v = __inner;
-            usvg_kind_to_js(v.kind())
+            let __p = __inner;
+            usvg_kind_to_js(__p.then(|__v| Some(__v.kind())).expect("a borrow resolves"))
         })
     }
 }
 impl UsvgSpan {
     fn wrap(inner: usvg::layout::Span) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<usvg::layout::Span>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
@@ -6841,7 +6882,8 @@ impl UsvgSpan {
     pub fn fill(&self) -> Result<Option<UsvgFill>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.fill.clone().map(|x| UsvgFill::from(&x))
         })
     }
@@ -6849,7 +6891,8 @@ impl UsvgSpan {
     pub fn stroke(&self) -> Result<Option<UsvgStroke>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.stroke.clone().map(|x| UsvgStroke::from(&x))
         })
     }
@@ -6857,7 +6900,8 @@ impl UsvgSpan {
     pub fn paint_order(&self) -> Result<UsvgPaintOrder, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             UsvgPaintOrder::from(v.paint_order)
         })
     }
@@ -6865,7 +6909,8 @@ impl UsvgSpan {
     pub fn font_size(&self) -> Result<f64, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             f64::from(v.font_size.get())
         })
     }
@@ -6873,7 +6918,8 @@ impl UsvgSpan {
     pub fn variations(&self) -> Result<Vec<UsvgFontVariation>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.variations
                 .clone()
                 .iter()
@@ -6885,7 +6931,8 @@ impl UsvgSpan {
     pub fn font_optical_sizing(&self) -> Result<UsvgFontOpticalSizing, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             UsvgFontOpticalSizing::from(v.font_optical_sizing)
         })
     }
@@ -6893,7 +6940,8 @@ impl UsvgSpan {
     pub fn visible(&self) -> Result<bool, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.visible
         })
     }
@@ -6901,7 +6949,8 @@ impl UsvgSpan {
     pub fn positioned_glyphs(&self) -> Result<Vec<UsvgPositionedGlyph>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.positioned_glyphs
                 .clone()
                 .iter()
@@ -6913,7 +6962,8 @@ impl UsvgSpan {
     pub fn underline(&self) -> Result<Option<UsvgPath>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.underline.clone().map(|x| UsvgPath::wrap(x.clone()))
         })
     }
@@ -6921,7 +6971,8 @@ impl UsvgSpan {
     pub fn overline(&self) -> Result<Option<UsvgPath>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.overline.clone().map(|x| UsvgPath::wrap(x.clone()))
         })
     }
@@ -6929,7 +6980,8 @@ impl UsvgSpan {
     pub fn line_through(&self) -> Result<Option<UsvgPath>, String> {
         let __inner = self.inner.get("Span")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.line_through.clone().map(|x| UsvgPath::wrap(x.clone()))
         })
     }
@@ -7064,6 +7116,9 @@ impl From<&usvg::filter::Turbulence> for UsvgTurbulence {
 }
 impl UsvgFilterImage {
     fn wrap(inner: usvg::filter::Image) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<usvg::filter::Image>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
@@ -7075,8 +7130,8 @@ impl UsvgFilterImage {
     pub fn root(&self) -> Result<UsvgGroup, String> {
         let __inner = self.inner.get("FilterImage")?;
         Ok({
-            let v = __inner;
-            UsvgGroup::__from((v.root()).clone())
+            let __p = __inner;
+            UsvgGroup::__proj(__p.then(|__v| Some(__v.root())).expect("a borrow resolves"))
         })
     }
 }
@@ -7244,7 +7299,7 @@ impl UsvgImageKindWebp {
     }
 }
 fn usvg_image_kind_to_js(
-    v: &usvg::ImageKind,
+    p: napi_support::Projection<usvg::ImageKind>,
 ) -> Either5<
     UsvgImageKindJpeg,
     UsvgImageKindPng,
@@ -7252,7 +7307,7 @@ fn usvg_image_kind_to_js(
     UsvgImageKindWebp,
     UsvgImageKindSvg,
 > {
-    match v {
+    match p.get() {
         usvg::ImageKind::JPEG(v) => Either5::A(UsvgImageKindJpeg {
             raw: napi_support::Slot::new(v.clone()),
         }),
@@ -7265,9 +7320,15 @@ fn usvg_image_kind_to_js(
         usvg::ImageKind::WEBP(v) => Either5::D(UsvgImageKindWebp {
             raw: napi_support::Slot::new(v.clone()),
         }),
-        usvg::ImageKind::SVG(v) => Either5::E(UsvgImageKindSvg {
+        usvg::ImageKind::SVG(_) => Either5::E(UsvgImageKindSvg {
             r#type: "svg".to_string(),
-            value: UsvgTree::__from((*v).clone()),
+            value: UsvgTree::__proj(
+                p.then(|__e| match __e {
+                    usvg::ImageKind::SVG(__v) => Some(__v),
+                    _ => None,
+                })
+                .expect("the variant matched"),
+            ),
         }),
     }
 }
@@ -7286,7 +7347,7 @@ fn usvg_input_to_js(v: &usvg::filter::Input) -> Either<UsvgInputPlain, UsvgInput
     }
 }
 fn usvg_kind_to_js(
-    v: &usvg::filter::Kind,
+    p: napi_support::Projection<usvg::filter::Kind>,
 ) -> Either17<
     UsvgKindBlend,
     UsvgKindColorMatrix,
@@ -7306,7 +7367,7 @@ fn usvg_kind_to_js(
     UsvgKindTile,
     UsvgKindTurbulence,
 > {
-    match v {
+    match p.get() {
         usvg::filter::Kind::Blend(v) => Either17::A(UsvgKindBlend {
             r#type: "blend".to_string(),
             value: UsvgBlend::from(v),
@@ -7347,9 +7408,15 @@ fn usvg_kind_to_js(
             r#type: "gaussianBlur".to_string(),
             value: UsvgGaussianBlur::from(v),
         }),
-        usvg::filter::Kind::Image(v) => Either17::K(UsvgKindImage {
+        usvg::filter::Kind::Image(_) => Either17::K(UsvgKindImage {
             r#type: "image".to_string(),
-            value: UsvgFilterImage::wrap((*v).clone()),
+            value: UsvgFilterImage::__proj(
+                p.then(|__e| match __e {
+                    usvg::filter::Kind::Image(__v) => Some(__v),
+                    _ => None,
+                })
+                .expect("the variant matched"),
+            ),
         }),
         usvg::filter::Kind::Merge(v) => Either17::L(UsvgKindMerge {
             r#type: "merge".to_string(),
@@ -8620,6 +8687,9 @@ impl FontdbID {
 }
 impl FontdbFaceInfo {
     fn wrap(inner: usvg::fontdb::FaceInfo) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<usvg::fontdb::FaceInfo>) -> Self {
         Self {
             inner: napi_support::Slot::new(inner),
         }
@@ -8631,7 +8701,8 @@ impl FontdbFaceInfo {
     pub fn id(&self) -> Result<FontdbID, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             FontdbID::__from(v.id)
         })
     }
@@ -8641,7 +8712,8 @@ impl FontdbFaceInfo {
     ) -> Result<Either3<FontdbSourceBinary, FontdbSourceFile, FontdbSourceSharedFile>, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             fontdb_source_to_js(&v.source.clone())
         })
     }
@@ -8649,7 +8721,8 @@ impl FontdbFaceInfo {
     pub fn index(&self) -> Result<u32, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.index
         })
     }
@@ -8657,7 +8730,8 @@ impl FontdbFaceInfo {
     pub fn families(&self) -> Result<Vec<(String, FontdbLanguage)>, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.families
                 .clone()
                 .iter()
@@ -8669,7 +8743,8 @@ impl FontdbFaceInfo {
     pub fn post_script_name(&self) -> Result<String, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.post_script_name.clone().to_string()
         })
     }
@@ -8677,7 +8752,8 @@ impl FontdbFaceInfo {
     pub fn style(&self) -> Result<FontdbStyle, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             FontdbStyle::from(v.style)
         })
     }
@@ -8685,7 +8761,8 @@ impl FontdbFaceInfo {
     pub fn weight(&self) -> Result<u32, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             u32::from(v.weight.0)
         })
     }
@@ -8693,7 +8770,8 @@ impl FontdbFaceInfo {
     pub fn stretch(&self) -> Result<FontdbStretch, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             FontdbStretch::from(v.stretch)
         })
     }
@@ -8701,7 +8779,8 @@ impl FontdbFaceInfo {
     pub fn monospaced(&self) -> Result<bool, String> {
         let __inner = self.inner.get("FaceInfo")?;
         Ok({
-            let v = __inner;
+            let __p = __inner;
+            let v = __p.get();
             v.monospaced
         })
     }

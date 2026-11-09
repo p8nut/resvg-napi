@@ -5,7 +5,8 @@ PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
 Primitive: partial mapping, emitted as read-only class Primitive
 Span: partial mapping, emitted as read-only class Span
 Text: partial mapping, emitted as read-only class Text
-classes a borrowing member copies: Database, Group, Image, Path, Pixmap, Text, Tree
+classes a borrowing member borrows from a projection, copies otherwise: Group, Image, Path, Text, Tree
+classes a borrowing member copies: Database, Pixmap
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence, filter::Image
 filter::Image: partial mapping, emitted as read-only class FilterImage
 names defined more than once across the sources, keyed by module: Image
@@ -74,7 +75,7 @@ usvg::Path is a projection, not a data type
 usvg::Pattern is a class: Projected
 usvg::Text is a class: Projected
 usvg::Text is a projection, not a data type
-usvg::Tree is a class: Shared
+usvg::Tree is a class: Projected
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
 usvg::fontdb::Database is a class: SharedCow
 usvg::fontdb::Database member not in the class: make_shared_face_data (unsafe)

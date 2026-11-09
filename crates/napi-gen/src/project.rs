@@ -19,8 +19,9 @@ use syn::{Fields, Type};
 use crate::class::{
     Args, Class, Classes, Holding, Source, args, deref, find_enum, find_struct, is, segs,
 };
+use crate::emit::stepped;
 use crate::sources::derives;
-use crate::vocab::{Reason, lower_camel};
+use crate::vocab::{Js, Reason, Vocab, lower_camel, ty_str};
 use crate::{config, namespace_of};
 
 /// A `Config::projections` enum, mirrored as a union of projections.
@@ -161,9 +162,10 @@ impl Classes<'_> {
 
     /// A method of a class of holding `h` returning `out` (`optional` when
     /// it was an `Option`): when `out` borrows a projected class or union,
-    /// its JS type, the statement binding the receiver's projection `__b`
-    /// (it may throw `Disposed`), and the value, made by a step from `__b`.
-    /// `None` when it borrows neither.
+    /// or a value `Vocab::steps_into`, its JS type, the statement binding the
+    /// receiver's projection `__b` (it may throw `Disposed`), and the value,
+    /// made by a step from `__b`. `None` when it borrows none of them.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn projected(
         &self,
         h: Holding,
@@ -172,6 +174,7 @@ impl Classes<'_> {
         out: &Type,
         optional: bool,
         a: &Args,
+        vocab: &Vocab,
     ) -> Option<Result<(TokenStream, TokenStream, TokenStream), Reason>> {
         let (r, inner) = deref(out);
         if r != Some(false) {
@@ -191,10 +194,21 @@ impl Classes<'_> {
         {
             let id = self.ident(c);
             (quote!(#id), quote!(#id::__proj))
-        } else {
-            let u = self.union_of(ctx, elem)?;
+        } else if let Some(u) = self.union_of(ctx, elem) {
             let f = self.helper(u, "to_js");
             (self.union_ty(u), quote!(#f))
+        } else {
+            // A read-only class or a union carrying a value, borrowed from
+            // a receiver that is never written: one held by a projection or
+            // a read-only `Arc`. Elsewhere it stays a copy: a projection
+            // into a copy-on-write `Arc` would keep it shared, and the next
+            // write would copy the whole of it.
+            let js = vocab.classify(&ty_str(elem))?;
+            let stepped = stepped(&js, vocab).filter(|_| !matches!(js, Js::Owned(_)))?;
+            if !matches!(h, Holding::Projected | Holding::Shared) {
+                return None;
+            }
+            stepped
         };
         let base = match h {
             Holding::Projected => quote!(self.__ref()?.clone()),

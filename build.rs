@@ -417,16 +417,36 @@ fn main() {
             }
         }
     }
-    // The classes a borrowed member hands out a copy of (`usvg.Tree` in an
-    // image, the `usvg.Group` of an `feImage`), under the same rule.
+    // The classes a borrowed member hands out (`usvg.Tree` in an image, the
+    // `usvg.Group` of an `feImage`), under the same rule: a copy, or, for a
+    // projected one reached from a projection, the value borrowed in place.
     for (name, root) in classes.by_clone() {
         if defines(name).is_none_or(|s| s.root_str == root) {
             vocab.owned.insert(name.to_string());
         }
     }
+    for (name, root) in classes.by_projection() {
+        if defines(name).is_none_or(|s| s.root_str == root) {
+            vocab.projected.insert(name.to_string());
+        }
+    }
     report!(
         "classes a borrowing member copies: {}",
-        vocab.owned.iter().cloned().collect::<Vec<_>>().join(", ")
+        vocab
+            .owned
+            .difference(&vocab.projected)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    report!(
+        "classes a borrowing member borrows from a projection, copies otherwise: {}",
+        vocab
+            .projected
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
     );
 
     // Every source, not just usvg: fontdb defines enums too -- `Style` is

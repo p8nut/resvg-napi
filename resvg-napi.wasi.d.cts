@@ -1370,8 +1370,8 @@ export declare namespace usvg {
    *
    * `clipPath` element in SVG.
    *
-   * A `usvg::ClipPath` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::ClipPath` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class ClipPath {
     /**
@@ -1461,8 +1461,8 @@ export declare namespace usvg {
    *
    * `g` element in SVG.
    *
-   * A `usvg::Group` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::Group` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Group {
     /**
@@ -1596,8 +1596,8 @@ export declare namespace usvg {
    *
    * `image` element in SVG.
    *
-   * A `usvg::Image` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::Image` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Image {
     /**
@@ -1780,8 +1780,8 @@ export declare namespace usvg {
    *
    * `mask` element in SVG.
    *
-   * A `usvg::Mask` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::Mask` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Mask {
     /**
@@ -1832,8 +1832,8 @@ export declare namespace usvg {
   /**
    * A path element.
    *
-   * A `usvg::Path` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::Path` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Path {
     /**
@@ -1923,8 +1923,8 @@ export declare namespace usvg {
    *
    * `pattern` element in SVG.
    *
-   * A `usvg::Pattern` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::Pattern` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Pattern {
     /**
@@ -2079,8 +2079,8 @@ export declare namespace usvg {
    *
    * `text` element in SVG.
    *
-   * A `usvg::Text` borrowed from what it was reached from, which it keeps
-   * alive. Each call finds it there again.
+   * A `usvg::Text` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Text {
     /**
@@ -2202,7 +2202,8 @@ export declare namespace usvg {
   /**
    * A nodes tree container.
    *
-   * A shared, read-only `usvg::Tree`.
+   * A `usvg::Tree` of its own, or borrowed from what it was reached from,
+   * which it keeps alive. Each call finds it there again.
    */
   export class Tree {
     /**

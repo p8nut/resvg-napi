@@ -171,6 +171,13 @@ fn main() {
             .iter()
             .find(|s| struct_fields_opt(&s.files, bare(t)).is_some())
     };
+    // Whether a source other than `root` defines `name`: a class keeps its
+    // upstream name only when none does, whichever source is probed first.
+    let defined_elsewhere = |name: &str, root: &str| {
+        sources
+            .iter()
+            .any(|s| s.root_str != root && struct_fields_opt(&s.files, name).is_some())
+    };
 
     // Enums count as well as structs, and they count together: `payload_enums`
     // qualifies a carried type by this set, so an enum defined in two modules --
@@ -216,9 +223,7 @@ fn main() {
         .option_objects
         .iter()
         .flat_map(|o| {
-            sources
-                .iter()
-                .find(|s| struct_fields_opt(&s.files, o).is_some())
+            defines(o)
                 .map(|s| struct_field_types(&s.files, o))
                 .unwrap_or_default()
         })
@@ -404,13 +409,8 @@ fn main() {
     // (`usvg::Color` is not `tiny_skia.Color`). A wrapped crate's own class
     // (`fontdb::ID`) is the type its members name.
     for (name, plain, root) in classes.by_value() {
-        let enum_here = sources.iter().any(|s| {
-            s.files
-                .iter()
-                .flat_map(|f| &f.items)
-                .any(|i| matches!(i, Item::Enum(e) if e.ident == name && is_pub(&e.vis)))
-        });
-        if defines(name).is_none_or(|s| s.root_str == root) && !enum_here {
+        let enum_here = sources.iter().any(|s| find_enum(&s.files, name).is_some());
+        if !defined_elsewhere(name, root) && !enum_here {
             vocab.classes.insert(name.to_string());
             if plain {
                 vocab.plain.insert(name.to_string());
@@ -421,12 +421,12 @@ fn main() {
     // `usvg.Group` of an `feImage`), under the same rule: a copy, or, for a
     // projected one reached from a projection, the value borrowed in place.
     for (name, root) in classes.by_clone() {
-        if defines(name).is_none_or(|s| s.root_str == root) {
+        if !defined_elsewhere(name, root) {
             vocab.owned.insert(name.to_string());
         }
     }
     for (name, root) in classes.by_projection() {
-        if defines(name).is_none_or(|s| s.root_str == root) {
+        if !defined_elsewhere(name, root) {
             vocab.projected.insert(name.to_string());
         }
     }
@@ -630,15 +630,7 @@ fn main() {
     // database supplied by a `fontdb.Database`.
     // Each from the source that defines it, the primary first.
     for name in GEN.option_objects {
-        let src = sources
-            .iter()
-            .find(|s| {
-                s.files
-                    .iter()
-                    .flat_map(|f| &f.items)
-                    .any(|i| matches!(i, Item::Struct(st) if st.ident == name && is_pub(&st.vis)))
-            })
-            .unwrap_or(primary);
+        let src = defines(name).unwrap_or(primary);
         let Some(obj) = option_object(
             &src.files,
             name,
@@ -811,12 +803,6 @@ fn main() {
     // be one of the data types settled just above.
     let mut unions: Vec<String> = Vec::new();
     for (name, info) in &vocab.payload {
-        // A converter is that type's JS form (`usvg::Indent`, read by
-        // `indent_from_js`): no union of its own beside it.
-        if GEN.converters.iter().any(|c| c.ty == name) {
-            report!("payload enum {name} not mapped: a converter reads it");
-            continue;
-        }
         if let Some(why) = info.payload_blocker(&vocab) {
             report!("payload enum {name} not mapped: {why}");
             continue;
@@ -826,11 +812,9 @@ fn main() {
                 // In the namespace of the source defining the enum; one mined
                 // from a vocabulary crate, in the namespace of the path that
                 // reaches it (`VOCAB_ROOT`, `PathSegment`).
-                let src = sources.iter().find(|s| {
-                    s.files.iter().flat_map(|f| &f.items).any(
-                        |i| matches!(i, Item::Enum(e) if e.ident == bare(name) && is_pub(&e.vis)),
-                    )
-                });
+                let src = sources
+                    .iter()
+                    .find(|s| find_enum(&s.files, bare(name)).is_some());
                 let root = src.map_or(info.root.as_str(), |s| s.root_str);
                 if napi_gen::namespace_of(root).is_none() {
                     report!("payload enum {name} not namespaced: no namespace for {root}");

@@ -16,11 +16,9 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Fields, Type};
 
-use crate::class::{
-    Args, Class, Classes, Holding, Source, args, deref, find_enum, find_struct, is, segs,
-};
+use crate::class::{Args, Class, Classes, Holding, Source, args, deref, find_struct, is, segs};
 use crate::emit::stepped;
-use crate::sources::derives;
+use crate::sources::{derives, find_enum};
 use crate::vocab::{Js, Reason, Vocab, lower_camel, ty_str};
 use crate::{config, namespace_of};
 

@@ -226,6 +226,15 @@ fn main() {
             payload_enum_code(name, &vocab.payload[name], &vocab, modules).expect("the union"),
         );
     }
+    // `Weighted::Held(Canvas, u32)`: a class beside a number, an object
+    // field napi requires `Clone` of. Refused, rather than a union that does
+    // not compile.
+    let weighted = found.remove("Weighted").expect("a payload enum");
+    assert_eq!(
+        weighted.payload_blocker(&vocab).as_deref(),
+        Some("Held carries Canvas, and Canvas is a class, which can only be carried alone"),
+        "a class is carried alone or not at all"
+    );
     let bounds = index_bounds(&files);
     assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
 
@@ -338,6 +347,12 @@ fn main() {
             ],
             // A view has no JS form of its own: `paint` borrows it.
             ("toy", "Canvas") => &["as_view (returns CanvasView<'_>)"],
+            // A `Cell` over an array is no inline vector, and `alt` takes
+            // its `Hue` nowhere, so emits no input form of it.
+            ("toy", "Tally") => &[
+                "first_keys (returns std::cell::Cell<[Key;2]>)",
+                "hue_name (arg: &alt::Hue)",
+            ],
             _ => &[],
         };
         assert_eq!(skipped, want, "{}: what is left out", c.name);

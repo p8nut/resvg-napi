@@ -2255,14 +2255,10 @@ fn input_field(t: &syn::Type) -> Option<InputField> {
         return Some(InputField::BorrowedStr);
     }
     let s = ty_str(t);
-    let arc = ["alloc::sync::", "std::sync::"]
-        .iter()
-        .find_map(|p| s.strip_prefix(p))
-        .unwrap_or(&s);
     match s.as_str() {
         "String" | "PathBuf" | "std::path::PathBuf" => Some(InputField::Str),
         "Vec<u8>" => Some(InputField::Bytes),
-        _ if arc == "Arc<Vec<u8>>" || shared_bytes(&s) => Some(InputField::SharedBytes),
+        _ if bare_arc(&s) == "Arc<Vec<u8>>" || shared_bytes(&s) => Some(InputField::SharedBytes),
         _ => None,
     }
 }
@@ -2315,8 +2311,9 @@ pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
             Item::Fn(f) if is_pub(&f.vis) => take(&mut taken, &f.sig),
             // A method of an enum is not emitted: a union is plain data.
             Item::Impl(imp)
-                if !self_ident(imp)
-                    .is_some_and(|i| crate::class::find_enum(files, &i.to_string()).is_some()) =>
+                if !self_ident(imp).is_some_and(|i| {
+                    crate::sources::find_enum(files, &i.to_string()).is_some()
+                }) =>
             {
                 imp.items.iter().for_each(|it| {
                     if let ImplItem::Fn(f) = it
@@ -2352,6 +2349,14 @@ pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
             _ => None,
         })
         .collect()
+}
+
+/// Whether `files` emit the input form of enum `name` ([`input_enums`]):
+/// the one test of what a member may take as an input enum, so none names a
+/// form that was never emitted. The shape is checked first, being cheaper.
+pub fn is_input(files: &[syn::File], name: &str) -> bool {
+    crate::sources::find_enum(files, name).is_some_and(is_enum_input)
+        && input_enums(files).iter().any(|e| e.ident == name)
 }
 
 /// The input form of an [`is_enum_input`] enum, named as upstream for
@@ -2420,10 +2425,7 @@ pub fn enum_input(
     }
     let arms = e.variants.iter().zip(&tags).map(|(v, tag)| {
         let vid = &v.ident;
-        let g = match crate::cfg::gate(&crate::cfg::of(&v.attrs)) {
-            crate::cfg::Gate::When(on, _) => quote!(#[cfg(#on)]),
-            crate::cfg::Gate::Always => quote!(),
-        };
+        let g = crate::cfg::attr(&v.attrs);
         let missing = |what: &str| format!("{name} '{tag}' needs {what}");
         let value = |m: String| {
             quote!(self.value.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #m))?)
@@ -2494,7 +2496,7 @@ fn input_list<'f>(files: &'f [syn::File], ty: &syn::Type) -> Option<&'f syn::Ite
         return None;
     }
     let name = crate::class::segs(&sl.elem)?.pop()?;
-    crate::class::find_enum(files, &name).filter(|e| is_enum_input(e))
+    crate::sources::find_enum(files, &name).filter(|e| is_enum_input(e))
 }
 
 /// Whether option object `ty` has a field listing input enums: its

@@ -338,8 +338,14 @@ impl PayloadEnum {
                 Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
                 p => p.carried().into_iter().map(|t| (None, t)).collect(),
             };
-            // A tuple is one getter too (`value`), so bytes may sit in it.
-            let sole = matches!(p, Payload::Value(_) | Payload::Tuple(_));
+            // A tuple holding bytes is one getter too (`value`), so a class
+            // may sit beside them. One without bytes is an object, whose
+            // fields napi requires to be Clone.
+            let sole = match p {
+                Payload::Value(_) => true,
+                Payload::Tuple(_) => p.carries_bytes(vocab),
+                _ => false,
+            };
             carried.into_iter().find_map(|(field, t)| {
                 field_of(vocab, t, sole).err().map(|why| match field {
                     Some(f) => format!("{n}.{f} carries {t}, and {why}"),
@@ -352,14 +358,10 @@ impl PayloadEnum {
     /// `#[cfg(..)]` for the arm of variant `n`, translated (`cfg::of`), or
     /// nothing when it is built wherever the enum is.
     pub fn gate(&self, n: &str) -> TokenStream {
-        match self
-            .cfgs
+        self.cfgs
             .get(n)
-            .map(|a| crate::cfg::gate(&crate::cfg::of(a)))
-        {
-            Some(crate::cfg::Gate::When(on, _)) => quote!(#[cfg(#on)]),
-            _ => quote!(),
-        }
+            .map(|a| crate::cfg::attr(a))
+            .unwrap_or_default()
     }
 
     pub fn conv_ident(&self, name: &str) -> proc_macro2::Ident {
@@ -460,7 +462,9 @@ pub fn payload_enums(
     let mut out = BTreeMap::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Enum(e) = item else { continue };
-        if !is_pub(&e.vis) {
+        // A converter is that type's JS form (`Config::converters`): no
+        // union of its own beside it, so none to classify a member as.
+        if !is_pub(&e.vis) || config().converters.iter().any(|c| e.ident == c.ty) {
             continue;
         }
         let qualify = |t: String| {
@@ -798,12 +802,8 @@ pub fn classify(
 /// marker order: bytes a crate shares without saying what holds them (a
 /// `Vec`, a file mapping). Read through `AsRef`, as any bytes are.
 pub fn shared_bytes(ty: &str) -> bool {
-    let t = ty.trim_start_matches('&');
-    let t = ["alloc::sync::", "std::sync::"]
-        .iter()
-        .find_map(|p| t.strip_prefix(p))
-        .unwrap_or(t);
-    t.strip_prefix("Arc<dynAsRef<[u8]>")
+    bare_arc(ty.trim_start_matches('&'))
+        .strip_prefix("Arc<dynAsRef<[u8]>")
         .and_then(|r| r.strip_suffix('>'))
         .is_some_and(|markers| {
             markers
@@ -812,14 +812,19 @@ pub fn shared_bytes(ty: &str) -> bool {
         })
 }
 
+/// `Arc` by its own name, whichever path spelled it: `alloc::sync::Arc<T>`
+/// and `std::sync::Arc<T>` are `Arc<T>`.
+pub fn bare_arc(ty: &str) -> String {
+    ty.replace("alloc::sync::Arc<", "Arc<")
+        .replace("std::sync::Arc<", "Arc<")
+}
+
 /// A type string as `ty_str` left it, made Rust again where dropping the
 /// spaces fused two words (`dynAsRef`), with `Arc` spelled out in full: the
 /// generated file imports neither `alloc` nor `std::sync`.
 pub fn rust_src(ty: &str) -> String {
-    let t = ty
-        .replace("alloc::sync::Arc<", "Arc<")
-        .replace("std::sync::Arc<", "Arc<");
-    t.replace("Arc<", "std::sync::Arc<")
+    bare_arc(ty)
+        .replace("Arc<", "std::sync::Arc<")
         .replace("<dyn", "<dyn ")
         .replace("&dyn", "&dyn ")
 }

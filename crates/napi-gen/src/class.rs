@@ -23,7 +23,7 @@ use quote::{format_ident, quote};
 use syn::{Fields, FnArg, ImplItem, Item, ReturnType, Type};
 
 use crate::emit::{Site, js_conv, method_gate};
-use crate::sources::{derives, inherent_impls, is_pub, self_ident};
+use crate::sources::{derives, find_enum, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 use crate::{config, namespace_of};
 
@@ -207,6 +207,10 @@ pub(crate) fn is_unit(ty: &Type) -> bool {
 }
 
 /// The last segment is `name`, with `n` type arguments.
+/// The small-vector types over an array (`X<[T; N]>`), by name: they
+/// iterate by value, as a `Vec` does.
+const INLINE_VECTORS: &[&str] = &["TinyVec", "SmallVec", "ArrayVec"];
+
 pub(crate) fn is(ty: &Type, name: &str, n: usize) -> bool {
     segs(ty).is_some_and(|s| s.last().is_some_and(|l| l == name)) && args(ty).len() == n
 }
@@ -323,13 +327,6 @@ fn copy_out(inputs: &[Type]) -> Option<(TokenStream, Type)> {
         _ => (quote!((#(#vals),*)), quote!((#(#tys),*))),
     };
     Some((quote!(|#(#pats),*| #body), syn::parse2(ty).ok()?))
-}
-
-pub(crate) fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
-    files.iter().flat_map(|f| &f.items).find_map(|i| match i {
-        Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
-        _ => None,
-    })
 }
 
 /// Whether `files` define a public type called `name`, of any kind.
@@ -732,13 +729,13 @@ impl<'a> Classes<'a> {
             };
             return Some((quote!(#pat: Option<#o>), Some(pre), quote!(&#tmp)));
         }
-        // An input enum (`emit::is_enum_input`), converted for the call from
+        // An input enum (`emit::is_input`), converted for the call from
         // the `{ type, value }` JS passed: lent where upstream borrows it,
         // given where it takes it.
         if r != Some(true)
             && self
                 .resolve(ctx, &segs, |s| {
-                    find_enum(self.sources[s].files, last).is_some_and(crate::emit::is_enum_input)
+                    crate::emit::is_input(self.sources[s].files, last)
                 })
                 .is_some()
         {
@@ -896,11 +893,12 @@ impl<'a> Classes<'a> {
             });
         }
         // Several values of a class held by value: a `Vec<T>`, or an inline
-        // vector over an array (`X<[T; N]>`). Either iterates by value.
+        // vector over an array (`TinyVec<[T; N]>`). Either iterates by value;
+        // another generic over an array (`Box`, `Cell`) need not.
         if r.is_none()
             && let [elem] = args(inner)[..]
             && let Some(item) = match elem {
-                Type::Array(a) => Some(&*a.elem),
+                Type::Array(a) if INLINE_VECTORS.iter().any(|n| is(inner, n, 1)) => Some(&*a.elem),
                 _ if is(inner, "Vec", 1) => Some(elem),
                 _ => None,
             }

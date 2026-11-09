@@ -36,6 +36,15 @@ pub enum Gate {
     When(TokenStream, TokenStream),
 }
 
+/// `#[cfg(..)]` for what `attrs` gate, translated (`of`), or nothing when
+/// it is built everywhere.
+pub fn attr(attrs: &[syn::Attribute]) -> TokenStream {
+    match gate(&of(attrs)) {
+        Gate::When(on, _) => quote!(#[cfg(#on)]),
+        Gate::Always => TokenStream::new(),
+    }
+}
+
 /// The translated predicate of every `#[cfg]` in `attrs`, all of them holding.
 pub fn of(attrs: &[syn::Attribute]) -> Pred {
     Pred::All(

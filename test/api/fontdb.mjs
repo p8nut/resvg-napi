@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { inspect } from 'node:util';
 import binding from '../../index.js';
 
 const { fontdb, usvg } = binding;
@@ -99,6 +100,9 @@ test('Source out: a face\'s bytes, or the file it is read from', () => {
   assert.ok(source.bytes.equals(FONT));
   assert.equal(index, 0);
   assert.equal(db.faceSource(fontdb.ID.dummy()), null);
+  // Printing reads no bytes getter: each read copies the whole font.
+  assert.equal(inspect(source), "SourceBinary { type: 'binary' }");
+  assert.doesNotMatch(inspect(info, { depth: 3 }), /Buffer/);
 
   const path = fileURLToPath(FONT_URL);
   const files = new fontdb.Database();

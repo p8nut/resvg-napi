@@ -429,11 +429,14 @@ in 0.11.0:
   `value` is `[path, bytes]`, its arm built only where fontdb's `memmap`
   is), and `loadFontSource` takes `{ type: 'binary', bytes }` or
   `{ type: 'file', value }`, returning the new `ID`s. `sharedFile` is
-  refused as input: a file mapping is fontdb's to make.
+  refused as input: a file mapping is fontdb's to make. Printing a `Source`
+  leaves its bytes out: each read copies the whole font.
 - ~~#191~~ (#205): back through generic rules. A union variant carrying a class
   is an output-only object holding a copy: `ImageKind`'s `svg` variant holds
   the embedded `usvg.Tree`, `Kind`'s `image` a `usvg.FilterImage` whose
-  `root` is a copy of the group the `feImage` draws. An enum a crate
+  `root` is a copy of the group the `feImage` draws. Since 0.11.2 (#214)
+  none of these is a copy: the `Tree`, the primitives and `root` borrow
+  from their document, which they keep alive. An enum a crate
   re-exports from a dependency is read as its own: `usvg.Font.families`
   lists `FontFamily` (svgtypes'), which makes `Font`, `TextSpan` and
   `TextChunk` plain objects (every member maps). `PositionedGlyph.font` is

@@ -210,6 +210,14 @@ pub fn item_ident(item: &Item) -> Option<&Ident> {
     }
 }
 
+/// The public enum `files` define as `name`.
+pub fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::ItemEnum> {
+    files.iter().flat_map(|f| &f.items).find_map(|i| match i {
+        Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
+        _ => None,
+    })
+}
+
 /// The type an impl block is for, by its last path segment: upstream writes
 /// `impl crate::Tree` as well as `impl Tree`.
 pub fn self_ident(imp: &ItemImpl) -> Option<&Ident> {
@@ -314,15 +322,7 @@ pub fn inline_reexported_enums(
                     continue;
                 }
                 let files = loaded.entry(krate.clone()).or_insert_with(|| load(&krate));
-                let Some(e) = files
-                    .iter()
-                    .flatten()
-                    .flat_map(|f| &f.items)
-                    .find_map(|i| match i {
-                        Item::Enum(e) if e.ident == name && is_pub(&e.vis) => Some(e),
-                        _ => None,
-                    })
-                else {
+                let Some(e) = files.as_deref().and_then(|f| find_enum(f, &name)) else {
                     continue;
                 };
                 let mut e = e.clone();

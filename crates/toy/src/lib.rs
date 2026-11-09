@@ -157,10 +157,10 @@ impl Tally {
 
     /// Keeps where some bytes come from, under a key of its own (keys of
     /// origins count apart from names'): a few keys, held inline.
-    pub fn stamp(&mut self, origin: Origin) -> Few<[Key; 4]> {
+    pub fn stamp(&mut self, origin: Origin) -> ArrayVec<[Key; 4]> {
         self.origins.push(origin);
         let key = Key(self.origins.len() as u32 - 1);
-        Few {
+        ArrayVec {
             items: [key; 4],
             len: 1,
         }
@@ -185,6 +185,21 @@ impl Tally {
             Origin::Pinned(_, b) => b.as_ref().as_ref().len(),
         };
         Some((o, len as u32))
+    }
+
+    /// The first two keys, in a `Cell`: an array in a generic that is no
+    /// inline vector, which no binding lists.
+    pub fn first_keys(&self) -> std::cell::Cell<[Key; 2]> {
+        std::cell::Cell::new([Key(0), Key(1)])
+    }
+
+    /// What a hue names: its own name, or the first one here for `Any`.
+    /// The hue is the `alt` module's, which takes it nowhere itself.
+    pub fn hue_name(&self, hue: &alt::Hue) -> String {
+        match hue {
+            alt::Hue::Named(n) => n.clone(),
+            alt::Hue::Any => self.names.first().cloned().unwrap_or_default(),
+        }
     }
 
     /// The origins kept, in order.
@@ -223,14 +238,24 @@ impl fmt::Debug for Origin {
     }
 }
 
+/// A canvas with a weight: a class beside a number, which no union holds
+/// (a variant with several values is an object, whose fields must be
+/// `Clone`, and a class is not).
+#[derive(Clone, Debug)]
+pub enum Weighted {
+    Nothing,
+    Held(Canvas, u32),
+}
+
 /// A few values held inline, up to the array's length, as a small-vector
-/// crate holds them: a list to JS.
-pub struct Few<A> {
+/// crate holds them: a list to JS. Named as tinyvec's, the generator knowing
+/// inline vectors by name.
+pub struct ArrayVec<A> {
     items: A,
     len: usize,
 }
 
-impl<T, const N: usize> IntoIterator for Few<[T; N]> {
+impl<T, const N: usize> IntoIterator for ArrayVec<[T; N]> {
     type Item = T;
     type IntoIter = std::iter::Take<std::array::IntoIter<T, N>>;
 

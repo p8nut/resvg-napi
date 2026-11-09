@@ -43,3 +43,11 @@ impl FromStr for Color {
         ))
     }
 }
+
+/// A colour by name, or any: an input enum's shape, taken only from the
+/// crate root ([`crate::Tally::hue_name`]).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Hue {
+    Any,
+    Named(String),
+}

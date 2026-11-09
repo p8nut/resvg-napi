@@ -23,10 +23,9 @@ object Node skipped: not a public struct
 object f32 skipped: not a public struct
 payload enum Error not mapped: ParsingFailed carries roxmltree::Error, and it maps to None
 payload enum Family not mapped: Name carries &'astr, and it maps to None
-payload enum Indent not mapped: a converter reads it
 payload enum Node not mapped: Group carries Box<Group>, and it maps to None
 payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, FontFamily, ImageKind, Input, Kind, LightSource, Paint, PathSegment, Source, TextFlow, TransferFunction
-payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), FontFamily(6), ImageKind(5), Indent(3), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
+payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), FontFamily(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
 svgtypes::Color is a class: Value, plain data, a JS name another namespace has
 tiny_skia::Color is a class: Value, a JS name another namespace has
 tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)

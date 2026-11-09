@@ -2374,15 +2374,20 @@ pub fn enum_input(
         .iter()
         .map(|v| lower_camel(&v.ident.to_string()))
         .collect();
-    let ts = tags
-        .iter()
-        .map(|t| format!("'{t}'"))
-        .collect::<Vec<_>>()
-        .join(" | ");
     let one = |v: &syn::Variant| match &v.fields {
         Fields::Unnamed(f) if f.unnamed.len() == 1 => input_field(&f.unnamed[0].ty),
         _ => None,
     };
+    // Only what `to_upstream` accepts: a variant carrying several values
+    // always throws, so the type leaves it out.
+    let ts = e
+        .variants
+        .iter()
+        .zip(&tags)
+        .filter(|(v, _)| matches!(v.fields, Fields::Unit) || one(v).is_some())
+        .map(|(_, t)| format!("'{t}'"))
+        .collect::<Vec<_>>()
+        .join(" | ");
     let listed = |bytes: bool| -> Vec<String> {
         e.variants
             .iter()
@@ -2455,7 +2460,7 @@ pub fn enum_input(
     quote! {
         #(#doc)*
         #[doc = ""]
-        #[doc = " Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`."]
+        #[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
         #[napi(object, object_to_js = false)]
         pub struct #ident {
             #[doc = " The variant."]

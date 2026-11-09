@@ -589,11 +589,11 @@ export declare namespace toy {
    * Where some bytes come from: shared bytes, a path, or both. The last is
    * built on some targets only, as a crate gates a variant on a feature.
    *
-   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
+   * Passed in as `{ type, value }` or `{ type, bytes }`.
    */
   export interface Origin {
     /** The variant. */
-    type: 'inline' | 'path' | 'pinned'
+    type: 'inline' | 'path'
     /** The string the variant carries: required for `'path'`, ignored otherwise. */
     value?: string
     /** The bytes the variant carries, copied: required for `'inline'`, ignored otherwise. */
@@ -709,7 +709,7 @@ export declare namespace toy {
   /**
    * A tag a filter matches on: a name it borrows, or any.
    *
-   * Passed in as the union it prints as: `{ type, value }` or `{ type, bytes }`.
+   * Passed in as `{ type, value }` or `{ type, bytes }`.
    */
   export interface Tag {
     /** The variant. */

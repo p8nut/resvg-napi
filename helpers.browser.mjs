@@ -142,7 +142,7 @@ function cropBox(c) {
 const ATTR = 'data-maxwidth';
 
 /** A `tiny_skia.NonZeroRect` as a plain `{ x, y, width, height }`, or null. */
-const box = (r) => r && { x: r.x(), y: r.y(), width: r.width(), height: r.height() };
+const box = (r) => (r ? { x: r.x(), y: r.y(), width: r.width(), height: r.height() } : null);
 
 /**
  * Where a `usvg.Node` will draw, contours and filters included: a group's
@@ -154,14 +154,14 @@ const box = (r) => r && { x: r.x(), y: r.y(), width: r.width(), height: r.height
 export function nodeExtent({ kind, value }) {
   switch (kind) {
     case 'group': return box(value.absLayerBoundingBox());
-    case 'image': return box(value.absBoundingBox().toNonZeroRect());
-    default: return box(value.absStrokeBoundingBox().toNonZeroRect());
+    case 'image': return box(value.absBoundingBox()?.toNonZeroRect());
+    default: return box(value.absStrokeBoundingBox()?.toNonZeroRect());
   }
 }
 
 /** `usvg::Node::abs_layer_bounding_box`: the box `resvg::render_node` offsets a node by. */
 function layerBox({ kind, value }) {
-  return box(kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox().toNonZeroRect());
+  return box(kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox()?.toNonZeroRect());
 }
 
 /**

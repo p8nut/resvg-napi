@@ -215,6 +215,7 @@ export declare namespace toy {
     label(): string
     step(): number
     direction(): toy.Direction
+    limit(): number
     origin(): toy.Point
     /**
      * Drops this instance's reference now, not at garbage collection: every
@@ -258,6 +259,7 @@ export declare namespace toy {
     get layer(): toy.Layer
     get shades(): Array<toy.ShadePlain | toy.ShadeNamed>
     get content(): toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
+    get backdrop(): toy.Frame | null
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
@@ -584,6 +586,8 @@ export declare namespace toy {
     /** How far one tick moves it. */
     step?: number
     direction?: toy.Direction
+    /** How many ticks it takes, at most: a plain `u32`. */
+    limit?: number
   }
   /**
    * Where some bytes come from: shared bytes, a path, or both. The last is

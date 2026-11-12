@@ -1525,25 +1525,25 @@ export declare namespace usvg {
      *
      * Can be set to `None` in case of an empty group.
      */
-    boundingBox(): tiny_skia.Rect
+    boundingBox(): tiny_skia.Rect | null
     /**
      * Element's bounding box in canvas coordinates.
      *
      * `userSpaceOnUse` in SVG terms.
      */
-    absBoundingBox(): tiny_skia.Rect
+    absBoundingBox(): tiny_skia.Rect | null
     /**
      * Element's object bounding box including stroke.
      *
      * Similar to `bounding_box`, but includes stroke.
      */
-    strokeBoundingBox(): tiny_skia.Rect
+    strokeBoundingBox(): tiny_skia.Rect | null
     /**
      * Element's bounding box including stroke in user coordinates.
      *
      * Similar to `abs_bounding_box`, but includes stroke.
      */
-    absStrokeBoundingBox(): tiny_skia.Rect
+    absStrokeBoundingBox(): tiny_skia.Rect | null
     /**
      * Element's "layer" bounding box in object units.
      *
@@ -1557,12 +1557,10 @@ export declare namespace usvg {
      * For other nodes layer bounding box is the same as stroke bounding box.
      *
      * Unlike other bounding boxes, cannot have zero size.
-     *
-     * Returns 0x0x1x1 for empty groups.
      */
-    layerBoundingBox(): tiny_skia.NonZeroRect
+    layerBoundingBox(): tiny_skia.NonZeroRect | null
     /** Element's "layer" bounding box in canvas units. */
-    absLayerBoundingBox(): tiny_skia.NonZeroRect
+    absLayerBoundingBox(): tiny_skia.NonZeroRect | null
     /** Group's children. */
     children(): Array<usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText>
     /** Checks if this group should be isolated during rendering. */
@@ -1890,25 +1888,25 @@ export declare namespace usvg {
      *
      * `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms.
      */
-    boundingBox(): tiny_skia.Rect
+    boundingBox(): tiny_skia.Rect | null
     /**
      * Element's bounding box in canvas coordinates.
      *
      * `userSpaceOnUse` in SVG terms.
      */
-    absBoundingBox(): tiny_skia.Rect
+    absBoundingBox(): tiny_skia.Rect | null
     /**
      * Element's object bounding box including stroke.
      *
      * Will have the same value as `bounding_box` when path has no stroke.
      */
-    strokeBoundingBox(): tiny_skia.Rect
+    strokeBoundingBox(): tiny_skia.Rect | null
     /**
      * Element's bounding box including stroke in canvas coordinates.
      *
      * Will have the same value as `abs_bounding_box` when path has no stroke.
      */
-    absStrokeBoundingBox(): tiny_skia.Rect
+    absStrokeBoundingBox(): tiny_skia.Rect | null
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -2828,6 +2826,11 @@ export declare namespace usvg {
      * certain attributes.
      */
     styleSheet?: string
+    /**
+     * The maximum nesting allowed while parsing. If this limit is exceeded,
+     * the parser will return an error.
+     */
+    maxDepth?: number
   }
   /** `Paint::Color`. */
   export interface PaintColor {

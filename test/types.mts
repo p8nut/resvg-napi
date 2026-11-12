@@ -57,12 +57,12 @@ resvg.render(tree, tiny_skia.Transform.identity(), pixmap);
 const png: Buffer = pixmap.encodePng();
 console.log(`png=${png.length}B`);
 
-// 4. boxes are tiny-skia's classes: a layer box is never empty, a stroke box
-//    may be, and a `Rect` converts.
-const layer: tiny_skia.NonZeroRect = tree.root().absLayerBoundingBox();
-const stroke: tiny_skia.Rect = tree.root().absStrokeBoundingBox();
-const maybe: tiny_skia.NonZeroRect | null = stroke.toNonZeroRect();
-console.log(layer.width(), maybe?.height());
+// 4. boxes are tiny-skia's classes, null for a node with no content (an
+//    empty group, since usvg 0.50), and a `Rect` converts.
+const layer: tiny_skia.NonZeroRect | null = tree.root().absLayerBoundingBox();
+const stroke: tiny_skia.Rect | null = tree.root().absStrokeBoundingBox();
+const maybe: tiny_skia.NonZeroRect | null | undefined = stroke?.toNonZeroRect();
+console.log(layer?.width(), maybe?.height());
 
 // 5. a face's families are `[name, language]` pairs (Q38)
 for (const face of fonts.faces()) {

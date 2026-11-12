@@ -157,8 +157,10 @@ test('`new` is the constructor, over an option object or none', () => {
   assert.ok(c instanceof Counter);
   assert.equal(c.label(), 'up');
   assert.equal(c.step(), 2);
+  assert.equal(new Counter({ limit: 3 }).limit(), 3);
   // Omitted, the option object is `Options::default()`.
   assert.equal(new Counter().label(), 'counter');
+  assert.equal(new Counter().limit(), 10);
   assert.deepEqual(new Counter().origin(), { x: 0, y: 0 });
   assert.equal(new Tally().isEmpty(), true);
 });
@@ -665,6 +667,9 @@ test('a union variant may carry a class, and a re-exported enum maps', () => {
   assert.equal(layer.name(), 'framed');
   assert.deepEqual(layer.items().map((i) => i.value.name()), ['f']);
   assert.deepEqual(frame.value.shades, [{ type: 'plain' }, { type: 'named', value: 'teal' }]);
+  // `Option<Box<Frame>>`: the boxed value, or null.
+  assert.equal(frame.value.backdrop.layer.name(), 'behind');
+  assert.equal(frame.value.backdrop.backdrop, null);
 });
 
 // What is reached from a scene is borrowed from it, not copied out: a

@@ -45,11 +45,12 @@ test('usvg.Options and usvg.WriteOptions: every field optional', () => {
 });
 
 test('every public field of the upstream structs, under its Rust name', () => {
-  // usvg 0.49's `Options` and `WriteOptions`, camelCased: a field that stops
+  // usvg 0.50's `Options` and `WriteOptions`, camelCased: a field that stops
   // mapping shows up here, and in the codegen report.
   assert.deepEqual(Object.keys(fields('usvg.Options')).sort(), [
     'defaultSize', 'dpi', 'fontFamily', 'fontResolver', 'fontSize', 'fontdb', 'imageHrefResolver',
-    'imageRendering', 'languages', 'resourcesDir', 'shapeRendering', 'styleSheet', 'textRendering',
+    'imageRendering', 'languages', 'maxDepth', 'resourcesDir', 'shapeRendering', 'styleSheet',
+    'textRendering',
   ]);
   assert.deepEqual(Object.keys(fields('usvg.WriteOptions')).sort(), [
     'attributesIndent', 'coordinatesPrecision', 'idPrefix', 'indent', 'preserveText',
@@ -142,4 +143,15 @@ test('WriteOptions: indent, precision and quotes reach the writer', () => {
   assert.match(tree.toString({ coordinatesPrecision: 200 }), /M 0\.123456 0/);
   assert.match(tree.toString({ useSingleQuote: true }), /width='10'/);
   assert.throws(() => tree.toString({ indent: 'wide' }), /invalid indent/);
+});
+
+test('maxDepth bounds the nesting a parse accepts; an empty group has no box', () => {
+  const nested = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg"><g><g><g><rect width="1" height="1"/></g></g></g></svg>',
+  );
+  assert.throws(() => usvg.Tree.fromData(nested, { maxDepth: 2 }), { code: 'ParsingFailed' });
+  assert.equal(usvg.Tree.fromData(nested, { maxDepth: 10 }).root().children().length, 1);
+  const empty = usvg.Tree.fromData(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><g/></svg>'));
+  assert.equal(empty.root().absBoundingBox(), null);
+  assert.equal(empty.root().absLayerBoundingBox(), null);
 });

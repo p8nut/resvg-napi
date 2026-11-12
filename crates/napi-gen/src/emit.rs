@@ -1899,7 +1899,12 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
             };
             let js = js_name(f);
             if args.contains_key("getter") {
-                getters.push(js);
+                // A getter handing out bytes copies them on each read: a
+                // whole font, for a face's source. Printing leaves it out.
+                if !matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t).contains("Buffer"))
+                {
+                    getters.push(js);
+                }
             } else if is_pub(&f.vis)
                 && !["setter", "constructor", "factory"]
                     .iter()

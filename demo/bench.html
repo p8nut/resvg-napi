@@ -127,14 +127,22 @@
   .reg::after { top: 6px; left: 0; height: 1px; width: 100%; }
   .reg.tl { left: -7px; top: -7px; } .reg.tr { right: -7px; top: -7px; }
   .reg.bl { left: -7px; bottom: -7px; } .reg.br { right: -7px; bottom: -7px; }
-  /* The bounding box, drawn from absLayerBoundingBox(). */
-  #bboxOverlay { position: absolute; border: 1px dashed var(--mag); pointer-events: none;
-                 display: none; }
-  #bboxOverlay[data-on] { display: block; }
-  #bboxOverlay span { position: absolute; top: 3px; left: 4px; white-space: nowrap;
-                      font: 400 10px var(--mono); color: var(--mag);
-                      background: color-mix(in oklab, var(--proof) 75%, transparent);
-                      padding: 0 .25rem; }
+  /* The boxes, in the tree's own units: the viewBox maps them onto the proof
+     whatever the scale, width or crop. */
+  #boxes { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  #boxes rect { fill: none; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  #boxes .node { pointer-events: all; }
+  #boxes .node.group { stroke: var(--rule); stroke-dasharray: 3 3; }
+  #boxes .node.path { stroke: var(--cyan); }
+  #boxes .node.text { stroke: var(--plate); }
+  #boxes .node.image { stroke: var(--mag); }
+  /* The geometric box: the shape alone, no stroke, no filter. */
+  #boxes .geom { stroke: var(--rule); stroke-dasharray: 1 2; }
+  #boxes .content { stroke: var(--mag); stroke-dasharray: 4 3; }
+  #boxes .node.hot { stroke: var(--mag); stroke-width: 2.5; stroke-dasharray: none; }
+  #boxes text { font: 400 10px var(--mono); fill: var(--mag); paint-order: stroke;
+                stroke: var(--proof); stroke-width: 3px; }
+  #treeList li.hot button.pick { color: var(--mag); }
 
   /* Measurements: a data list, not prose. */
   .measure { margin: var(--gap) 0 0; display: grid; grid-template-columns: auto 1fr;
@@ -300,7 +308,10 @@
             >stylesheet <input id="styleSheet" type="text"
             placeholder=".value{fill:#c8005e !important}"></label>
           <label class="inline"><input id="crop" type="checkbox"> crop to content</label>
-          <label class="inline"><input id="showBbox" type="checkbox"> show bounding box</label>
+          <label class="inline" title="Where each node draws, stroke and filters included (nodeExtent), and the content box"
+            ><input id="showBbox" type="checkbox" checked> node boxes</label>
+          <label class="inline" title="The shape alone (absBoundingBox), dotted: the gap to the node box is the stroke, or a filter's reach"
+            ><input id="showGeom" type="checkbox"> geometric boxes</label>
           <label class="inline"><input id="fit" type="checkbox" checked> fit data-maxwidth</label>
           <label class="inline"><input id="strict" type="checkbox" checked> strict variables</label>
           <button id="render" disabled>Render</button>
@@ -354,7 +365,7 @@
             <span class="reg tl"></span><span class="reg tr"></span>
             <span class="reg bl"></span><span class="reg br"></span>
             <img id="out" alt="rendered proof" hidden>
-            <div id="bboxOverlay"><span></span></div>
+            <svg id="boxes" aria-hidden="true"></svg>
           </div>
         </div>
         <dl class="measure" id="measure"></dl>
@@ -1055,7 +1066,8 @@
     $('render').disabled = false;
     // Handy for poking at the API from the devtools console.
     globalThis.resvg = { mod, helpers, db };
-    $('slugEngine').textContent = `resvg 0.48 · ${Object.keys(mod).length} exports`;
+    const engine = await fetch('./engine.json').then((r) => r.json()).catch(() => ({}));
+    $('slugEngine').textContent = `resvg ${engine.resvg ?? '?'} · ${Object.keys(mod).length} exports`;
     log('idle');
     report('info', 'page',
       `Ready. loadSystemFonts() finds ${helpers.systemFonts().len()} faces in this sandbox, so a font has to come from somewhere else.`);
@@ -1494,8 +1506,7 @@
       }));
       $('slugPlate').textContent = `${round(doc.width)}×${round(doc.height)}`;
       $('slugFonts').textContent = String(db.len());
-      lastRender = { doc, params };
-      showTree(tree);
+      lastRender = { doc, params, nodes: showTree(tree) };
       // The resolved tree: CSS applied, `use` expanded, inheritance settled --
       // and text either kept or flattened to paths, which is the one thing a
       // rendered source cannot tell you.
@@ -1506,7 +1517,7 @@
       });
       // The rows' node handles keep what they point at alive on their own.
       tree.dispose();
-      placeBbox(doc, params);
+      drawBoxes();
       drainEngineLogs();
       log(`${ms} ms`);
     } catch (e) {
@@ -1531,18 +1542,31 @@
   // re-render (it keeps its tree alive), but the tree is rebuilt anyway so
   // the rows always describe what is on the plate.
   function showTree(tree) {
-    const rows = [];
+    // The rows are rebuilt: a pick from the last render points at nothing now.
+    picked = null;
+    const entries = [];
     const walk = (nodes, depth) => {
       if (depth > 8) return;
       for (const node of nodes) {
-        rows.push(nodeRow(node, depth));
+        const li = nodeRow(node, depth);
+        entries.push({ node, li, box: nodeExtent(node), geom: geometricBox(node) });
+        li.addEventListener('mouseenter', () => hover(li, true));
+        li.addEventListener('mouseleave', () => hover(li, false));
         if (node.kind === 'group') walk(node.value.children(), depth + 1);
       }
     };
     walk(tree.root().children(), 0);
-    $('nodes').hidden = rows.length === 0;
-    $('nodesCount').textContent = rows.length ? `— ${rows.length} elements` : '';
-    $('treeList').replaceChildren(...rows);
+    $('nodes').hidden = entries.length === 0;
+    $('nodesCount').textContent = entries.length ? `— ${entries.length} elements` : '';
+    $('treeList').replaceChildren(...entries.map((e) => e.li));
+    return entries;
+  }
+
+  // The shape alone: no stroke, no filter. `absBoundingBox()` is a `Rect`,
+  // which may be empty (a horizontal line); `toNonZeroRect()` says so.
+  function geometricBox({ value }) {
+    const r = value.absBoundingBox()?.toNonZeroRect();
+    return r ? { x: r.x(), y: r.y(), width: r.width(), height: r.height() } : null;
   }
 
   function nodeRow(node, depth) {
@@ -1571,10 +1595,10 @@
       pick.append(size);
     }
     pick.addEventListener('click', () => {
-      picked = picked?.li === li ? null : { node, li };
+      picked = picked?.li === li ? null : { node, li, entry: lastRender?.nodes.find((e) => e.li === li) };
       for (const row of $('treeList').children) row.removeAttribute('data-on');
       if (picked) li.setAttribute('data-on', '');
-      if (lastRender) placeBbox(lastRender.doc, lastRender.params);
+      drawBoxes();
     });
 
     // Every node renders alone, cropped to its own extent -- no id needed.
@@ -1601,30 +1625,70 @@
     return li;
   }
 
-  // The bounding box, drawn over the proof in registration magenta. Positions
-  // come from the root group's absLayerBoundingBox(), scaled to the rendered
-  // pixels.
-  function placeBbox(doc, params) {
-    const overlay = $('bboxOverlay');
-    // A picked node overrides the document box, and shows without the checkbox:
-    // clicking a row is the request.
-    const box = picked ? nodeExtent(picked.node) : doc.bbox;
-    if ((!picked && !$('showBbox').checked) || !box) {
-      overlay.removeAttribute('data-on');
-      return;
-    }
-    const s = scaleOf(params, doc);
-    const origin = params.crop ?? { x: 0, y: 0 };
-    overlay.style.left = `${(box.x - origin.x) * s}px`;
-    overlay.style.top = `${(box.y - origin.y) * s}px`;
-    overlay.style.width = `${box.width * s}px`;
-    overlay.style.height = `${box.height * s}px`;
-    overlay.querySelector('span').textContent =
-      `${round(box.width)} × ${round(box.height)}`;
-    overlay.setAttribute('data-on', '');
+  // The boxes, drawn over the proof: every node's (nodeExtent: where it draws,
+  // stroke and filters included), optionally its geometric box beside it, and
+  // the content box (the root group's layer box) in registration magenta. A
+  // picked or hovered node's box is drawn heavy, and named. The SVG's viewBox
+  // is the area the proof shows, in the tree's units, so scale, width and crop
+  // need no arithmetic here.
+  const NS = 'http://www.w3.org/2000/svg';
+  function rectOf(box, cls) {
+    const r = document.createElementNS(NS, 'rect');
+    for (const k of ['x', 'y', 'width', 'height']) r.setAttribute(k, box[k]);
+    r.setAttribute('class', cls);
+    return r;
   }
 
-  $('showBbox').addEventListener('change', () => { beginPass(); render(); });
+  function drawBoxes() {
+    const svg = $('boxes');
+    svg.replaceChildren();
+    if (!lastRender) return;
+    const { doc, params, nodes } = lastRender;
+    const view = params.crop ?? { x: 0, y: 0, width: doc.width, height: doc.height };
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.width} ${view.height}`);
+    // The proof's pixel size, as renderPng sized it.
+    const px = scaleOf(params, doc);
+    svg.setAttribute('width', Math.ceil(view.width * px));
+    svg.setAttribute('height', Math.ceil(view.height * px));
+    const all = $('showBbox').checked;
+    for (const e of nodes) {
+      const on = e === picked?.entry || e.li.classList.contains('hot');
+      if (all && $('showGeom').checked && e.geom) svg.append(rectOf(e.geom, 'geom'));
+      if (!e.box || (!all && !on)) continue;
+      const r = rectOf(e.box, `node ${e.node.kind}${on ? ' hot' : ''}`);
+      const t = document.createElementNS(NS, 'title');
+      t.textContent = `${e.node.kind}${e.node.value.id() ? ' #' + e.node.value.id() : ''}: `
+        + `${round(e.box.width)} × ${round(e.box.height)} at ${round(e.box.x)}, ${round(e.box.y)}`;
+      r.append(t);
+      r.addEventListener('mouseenter', () => hover(e.li, true));
+      r.addEventListener('mouseleave', () => hover(e.li, false));
+      svg.append(r);
+    }
+    if (all && doc.bbox) svg.append(rectOf(doc.bbox, 'content'));
+    // The heavy one is named, above the rest.
+    const hot = nodes.find((e) => e.li.classList.contains('hot')) ?? picked?.entry;
+    const box = hot?.box ?? (all ? doc.bbox : null);
+    if (box) {
+      const label = document.createElementNS(NS, 'text');
+      label.setAttribute('x', box.x);
+      label.setAttribute('y', box.y);
+      label.setAttribute('dy', '-0.3em');
+      label.setAttribute('transform-origin', `${box.x} ${box.y}`);
+      // Text in tree units would scale with the proof: undo it.
+      label.setAttribute('transform', `scale(${1 / px})`);
+      label.textContent = `${round(box.width)} × ${round(box.height)}`;
+      svg.append(label);
+    }
+  }
+
+  // A row and its box light up together, from either side.
+  function hover(li, on) {
+    li.classList.toggle('hot', on);
+    drawBoxes();
+  }
+
+  $('showBbox').addEventListener('change', drawBoxes);
+  $('showGeom').addEventListener('change', drawBoxes);
   $('fit').addEventListener('change', () => { beginPass(); render(); });
   $('strict').addEventListener('change', () => {
     makeLiquid();

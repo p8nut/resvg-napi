@@ -14,7 +14,7 @@ Two pages:
 - **`index.html`** -- the first thing a visitor sees: an SVG editor, the PNG
   resvg draws from it, four plain examples (shapes, text, gradient, filter) and
   the Node.js call that does the same (`renderPng` from `resvg-napi/helpers`).
-  No templates, no options beyond scale.
+  No templates, no options beyond scale and the nodes' bounding boxes.
 - **`bench.html`** -- the proof bench, linked from the simple page and
   described below: everything else the API can do.
 
@@ -40,8 +40,11 @@ needs.
 
 The page is laid out as a prepress proof: a slug line of job metadata, crop
 corners, and the render framed by registration marks with tick rules measuring
-its real extent. `absLayerBoundingBox()` can be drawn over it in registration
-magenta. Everything both engines said — Liquid errors, unknown filters, and every
+its real extent. Every node's box is drawn over it: where the node draws,
+stroke and filters included (`nodeExtent`), and on request its geometric box
+(`absBoundingBox()`, dotted), so the gap a stroke or a blur adds shows. A row of
+the Nodes list and its box light up together. The content box (the root's
+`absLayerBoundingBox()`) is in registration magenta. Everything both engines said — Liquid errors, unknown filters, and every
 `log` message from usvg — accumulates in a diagnostics list, with a count in the
 slug line so a problem is visible without scrolling.
 

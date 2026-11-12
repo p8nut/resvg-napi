@@ -292,7 +292,8 @@ shared between parses lists the misses of them all.
 Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`
 and `absStrokeBoundingBox()` (a `tiny_skia.Rect`), and a group
 `layerBoundingBox()` and `absLayerBoundingBox()` (a `tiny_skia.NonZeroRect`)
-— in the document's own units, which is not the canvas. Their sides are
+— in the document's own units, which is not the canvas. A group's or a
+path's box is `null` when it has none: an empty group, a box that overflows. Their sides are
 methods: `box.width()`. `nodeExtent(node)` from `resvg-napi/helpers` is where
 a node will draw, as a plain `{ x, y, width, height }`: a group's layer box, a
 shape's or a text's stroke box. See [Fitting text to a
@@ -545,7 +546,7 @@ way, but no `instanceof`, `dispose()` or `disposed`.
 | `doc.renderPng(params)` · `renderRaw` (and `…Async`) | `renderPng(tree, params)` · `renderRaw` (and `…Async`), or `resvg.render` on a `tiny_skia.Pixmap` |
 | `doc.toString(opts)` · `toStringAsync` | `tree.toString(opts)` · `tree.toStringAsync` |
 | `doc.width` · `doc.height` | `tree.size().width()` · `.height()` |
-| `doc.absLayerBoundingBox()` and the other boxes | `tree.root().absLayerBoundingBox()`: a `tiny_skia.NonZeroRect`, sides as methods |
+| `doc.absLayerBoundingBox()` and the other boxes | `tree.root().absLayerBoundingBox()`: a `tiny_skia.NonZeroRect` or `null`, sides as methods |
 | `doc.pendingImages()` · `pendingFonts()` | `pendingImages` · `pendingFonts` from `parse`, or a `guard` provider's `misses()` |
 | `doc.resolveImage(s)` | parse again with the bytes in `images` |
 | `doc.takeLogs()` (per document) | `takeLogs()`, global |

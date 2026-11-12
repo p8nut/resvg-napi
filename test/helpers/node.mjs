@@ -52,6 +52,11 @@ test('renderNodePng refuses what has nothing to draw, and crop', async () => {
     { code: 'InvalidArg', message: 'crop is not supported when rendering a single node' });
   // A stroke-less horizontal line: no extent.
   assert.throws(() => renderNodePng(tree.nodeById('flat')), /element has no visible size/);
+  // A path whose box overflows has none since usvg 0.50: null, not a crash.
+  const huge = parse(wrap('<g transform="scale(1e30)"><rect id="h" width="1e10" height="1e10" stroke="black"/></g>'),
+    { fonts: [] }).tree.nodeById('h');
+  assert.equal(nodeExtent(huge), null);
+  assert.throws(() => renderNodePng(huge), /element has no visible size/);
   assert.throws(() => renderNodePng(tree.nodeById('r'), { maxPixels: 10 }), /10x10 exceeds maxPixels \(10\)/);
   await assert.rejects(renderNodePngAsync(tree.nodeById('r'), { background: 'nope' }), /invalid background: nope/);
   const ac = new AbortController();

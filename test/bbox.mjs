@@ -25,7 +25,7 @@ assert.deepEqual(box(r.boundingBox()), [60, 30, 60, 40], 'geometry only');
 assert.deepEqual(box(r.absBoundingBox()), [60, 30, 60, 40]);
 assert.deepEqual(box(r.strokeBoundingBox()), [56, 26, 68, 48], 'stroke widens by 4 a side');
 assert.deepEqual(box(r.absStrokeBoundingBox()), [56, 26, 68, 48]);
-assert.ok(r.layerBoundingBox() instanceof tiny_skia.NonZeroRect, 'a layer box is never empty');
+assert.ok(r.layerBoundingBox() instanceof tiny_skia.NonZeroRect, 'a drawn group has a layer box');
 assert.deepEqual(box(r.layerBoundingBox()), [56, 26, 68, 48]);
 // same numbers resvg-js 2.6.2 reports for getBBox()/innerBBox() on this document
 assert.deepEqual(box(r.absLayerBoundingBox()), [56, 26, 68, 48]);

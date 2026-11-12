@@ -44,7 +44,7 @@ Copyright (c) 2019 Daniel "Lokathor" Gee
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2014 Alex Crichton
 
-### crc32fast 1.5.4
+### crc32fast 1.5.5
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright {yyyy} {name of copyright owner}
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
@@ -241,7 +241,7 @@ Copyright (c) 2017 Robert Grosse
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright (c) 2018 Yevhenii Reizner
 
-### syn 3.0.9
+### syn 3.0.10
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
 
@@ -343,13 +343,13 @@ Copyright (c) 2017 Maiddog
 Offered as `Unlicense OR MIT`; listed here under MIT.
 Copyright (c) 2015 Andrew Gallant
 
-### napi 3.16.1
+### napi 3.16.2
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive 3.7.0
+### napi-derive 3.7.1
 No copyright line in the published crate; MIT per its manifest.
 
-### napi-derive-backend 7.0.0
+### napi-derive-backend 7.0.1
 No copyright line in the published crate; MIT per its manifest.
 
 ### napi-sys 3.4.1

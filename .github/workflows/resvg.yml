@@ -106,7 +106,11 @@ jobs:
             git diff --no-color -- codegen-report.txt | tail -60
             echo '```'
           } > /tmp/report.md
-          git diff --quiet -- codegen-report.txt && echo '_The derived surface is unchanged._' > /tmp/report.md
+          # An `if`, not `&&`: as the step's last command, a changed report
+          # (diff exit 1) failed the whole step.
+          if git diff --quiet -- codegen-report.txt; then
+            echo '_The derived surface is unchanged._' > /tmp/report.md
+          fi
 
       # api.yml never sees this PR -- GITHUB_TOKEN's events start no workflow --
       # so the classification it would have made is made here: the committed

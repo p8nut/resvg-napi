@@ -154,6 +154,8 @@ pub struct ToyOptions {
     #[doc = " How far one tick moves it."]
     pub step: Option<f64>,
     pub direction: Option<ToyDirection>,
+    #[doc = " How many ticks it takes, at most: a plain `u32`."]
+    pub limit: Option<u32>,
 }
 #[doc = " What [`Tally::find`] looks for: a list it borrows."]
 #[doc = ""]
@@ -498,6 +500,9 @@ impl ToyOptions {
         if let Some(v) = self.direction {
             o.direction = v.into();
         }
+        if let Some(v) = self.limit {
+            o.limit = v;
+        }
         Ok(o)
     }
 }
@@ -576,6 +581,15 @@ impl ToyFrame {
                 __p.then(|__v| Some(__v.content()))
                     .expect("a borrow resolves"),
             )
+        })
+    }
+    #[napi(getter)]
+    pub fn backdrop(&self) -> Result<Option<ToyFrame>, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.backdrop().map(|x| ToyFrame::wrap(x.as_ref().clone()))
         })
     }
 }
@@ -751,6 +765,14 @@ impl ToyCounter {
         let __v = napi_support::contained("Counter::direction", || __self.direction())
             .map_err(napi_support::coded)?;
         Ok(ToyDirection::from(__v))
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn limit(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Counter::limit", || __self.limit())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
     }
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -2263,7 +2285,7 @@ impl ToyFrame {
             &env,
             &this,
             "Frame",
-            &["layer", "shades", "content", "disposed"],
+            &["layer", "shades", "content", "backdrop", "disposed"],
             &[],
             depth,
             options,
@@ -2438,7 +2460,7 @@ impl ToyCounter {
             &this,
             "Counter",
             &["disposed"],
-            &["label", "step", "direction"],
+            &["label", "step", "direction", "limit"],
             depth,
             options,
             inspect,

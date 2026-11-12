@@ -653,6 +653,9 @@ pub struct UsvgOptions<'a> {
     #[doc = " A CSS stylesheet that should be injected into the SVG. Can be used to overwrite"]
     #[doc = " certain attributes."]
     pub style_sheet: Option<String>,
+    #[doc = " The maximum nesting allowed while parsing. If this limit is exceeded,"]
+    #[doc = " the parser will return an error."]
+    pub max_depth: Option<u32>,
 }
 #[doc = " XML writing options."]
 #[doc = ""]
@@ -4686,6 +4689,9 @@ impl UsvgOptions<'_> {
         if let Some(v) = &self.style_sheet {
             o.style_sheet = Some(v.clone());
         }
+        if let Some(v) = self.max_depth {
+            o.max_depth = v;
+        }
         Ok(o)
     }
 }
@@ -5410,48 +5416,48 @@ impl UsvgGroup {
     #[doc = " Can be set to `None` in case of an empty group."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::bounding_box", || __self.bounding_box())
             .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's bounding box in canvas coordinates."]
     #[doc = ""]
     #[doc = " `userSpaceOnUse` in SVG terms."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn abs_bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_bounding_box", || __self.abs_bounding_box())
             .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's object bounding box including stroke."]
     #[doc = ""]
     #[doc = " Similar to `bounding_box`, but includes stroke."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn stroke_bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::stroke_bounding_box", || {
             __self.stroke_bounding_box()
         })
         .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's bounding box including stroke in user coordinates."]
     #[doc = ""]
     #[doc = " Similar to `abs_bounding_box`, but includes stroke."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn abs_stroke_bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_stroke_bounding_box", || {
             __self.abs_stroke_bounding_box()
         })
         .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's \"layer\" bounding box in object units."]
     #[doc = ""]
@@ -5465,27 +5471,25 @@ impl UsvgGroup {
     #[doc = " For other nodes layer bounding box is the same as stroke bounding box."]
     #[doc = ""]
     #[doc = " Unlike other bounding boxes, cannot have zero size."]
-    #[doc = ""]
-    #[doc = " Returns 0x0x1x1 for empty groups."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn layer_bounding_box(&self) -> Result<TinySkiaNonZeroRect, String> {
+    pub fn layer_bounding_box(&self) -> Result<Option<TinySkiaNonZeroRect>, String> {
         let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Group::layer_bounding_box", || __self.layer_bounding_box())
                 .map_err(napi_support::coded)?;
-        Ok(TinySkiaNonZeroRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
     }
     #[doc = " Element's \"layer\" bounding box in canvas units."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn abs_layer_bounding_box(&self) -> Result<TinySkiaNonZeroRect, String> {
+    pub fn abs_layer_bounding_box(&self) -> Result<Option<TinySkiaNonZeroRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Group::abs_layer_bounding_box", || {
             __self.abs_layer_bounding_box()
         })
         .map_err(napi_support::coded)?;
-        Ok(TinySkiaNonZeroRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaNonZeroRect::__from(__v)))
     }
     #[doc = " Group's children."]
     #[napi]
@@ -5697,47 +5701,47 @@ impl UsvgPath {
     #[doc = " `objectBoundingBox` in SVG terms. Meaning it doesn't affected by parent transforms."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::bounding_box", || __self.bounding_box())
             .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's bounding box in canvas coordinates."]
     #[doc = ""]
     #[doc = " `userSpaceOnUse` in SVG terms."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn abs_bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn abs_bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::abs_bounding_box", || __self.abs_bounding_box())
             .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's object bounding box including stroke."]
     #[doc = ""]
     #[doc = " Will have the same value as `bounding_box` when path has no stroke."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn stroke_bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::stroke_bounding_box", || __self.stroke_bounding_box())
                 .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Element's bounding box including stroke in canvas coordinates."]
     #[doc = ""]
     #[doc = " Will have the same value as `abs_bounding_box` when path has no stroke."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn abs_stroke_bounding_box(&self) -> Result<TinySkiaRect, String> {
+    pub fn abs_stroke_bounding_box(&self) -> Result<Option<TinySkiaRect>, String> {
         let __self = self.__ref()?.get();
         let __v = napi_support::contained("Path::abs_stroke_bounding_box", || {
             __self.abs_stroke_bounding_box()
         })
         .map_err(napi_support::coded)?;
-        Ok(TinySkiaRect::__from(__v))
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Drops this instance's reference now, not at garbage collection: every"]
     #[doc = " later call throws `Disposed`. The value lives on while another instance"]
@@ -6964,7 +6968,9 @@ impl UsvgSpan {
         Ok({
             let __p = __inner;
             let v = __p.get();
-            v.underline.clone().map(|x| UsvgPath::wrap(x.clone()))
+            v.underline
+                .clone()
+                .map(|x| UsvgPath::wrap(x.as_ref().clone()))
         })
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -6973,7 +6979,9 @@ impl UsvgSpan {
         Ok({
             let __p = __inner;
             let v = __p.get();
-            v.overline.clone().map(|x| UsvgPath::wrap(x.clone()))
+            v.overline
+                .clone()
+                .map(|x| UsvgPath::wrap(x.as_ref().clone()))
         })
     }
     #[napi(getter, ts_return_type = "Path | null")]
@@ -6982,7 +6990,9 @@ impl UsvgSpan {
         Ok({
             let __p = __inner;
             let v = __p.get();
-            v.line_through.clone().map(|x| UsvgPath::wrap(x.clone()))
+            v.line_through
+                .clone()
+                .map(|x| UsvgPath::wrap(x.as_ref().clone()))
         })
     }
 }

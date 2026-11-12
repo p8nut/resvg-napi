@@ -212,11 +212,13 @@ pub fn js_conv(
         }
         (Js::OptValue(t), Getter | Method) => {
             let c = data_ident(t);
-            reaching(
-                quote!(Option<#c>),
-                quote!(#a.map(|x| #c::wrap(x.clone()))),
-                t,
-            )
+            // A boxed member wraps what the box holds.
+            let e = if src_ty.contains("Option<Box<") {
+                quote!(#a.map(|x| #c::wrap(x.as_ref().clone())))
+            } else {
+                quote!(#a.map(|x| #c::wrap(x.clone())))
+            };
+            reaching(quote!(Option<#c>), e, t)
         }
         (Js::PayloadEnumList(t), Getter | Field) => {
             let info = &vocab.payload[t];
@@ -918,6 +920,12 @@ fn map_field(
                     quote! { if let Some(v) = self.#ident { o.#ident = u8::try_from(v.min(#max)).unwrap_or(u8::MAX); } },
                 ))
             }
+            Some(Js::U32) => Some(field(
+                &ident,
+                &doc,
+                quote!(u32),
+                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
+            )),
             Some(Js::Bool) => Some(field(
                 &ident,
                 &doc,
@@ -981,7 +989,6 @@ fn map_field(
             | Some(Js::OptClass(_))
             | Some(Js::TupleList(_))
             // Unreached by any upstream option field today.
-            | Some(Js::U32)
             | Some(Js::Scalar)
             // Read-only: a union describes what a document holds, never what a
             // render option sets.

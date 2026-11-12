@@ -190,12 +190,12 @@ Copyright (c) 2015 The quick-error Developers
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
 
-### read-fonts 0.41.0
+### read-fonts 0.46.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### resvg 0.49.0
+### resvg 0.50.0
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright 2017 the Resvg Authors
 
@@ -224,7 +224,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2012-2016 The Rust Project Developers
 Copyright 2016-2026 Frank Denis
 
-### skrifa 0.44.0
+### skrifa 0.49.0
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
@@ -232,6 +232,10 @@ Copyright (c) 2019 Fontations Developers
 ### smallvec 1.16.5
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 The Servo Project Developers
+
+### stable_deref_trait 1.2.1
+Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
+Copyright (c) 2017 Robert Grosse
 
 ### svgtypes 0.16.2
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
@@ -267,7 +271,7 @@ Copyright (c) 2015 The Rust Project Developers
 Offered as `MIT/Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 Reizner Evgeniy
 
-### usvg 0.49.0
+### usvg 0.50.0
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright 2017 the Resvg Authors
 
@@ -328,7 +332,7 @@ Copyright (c) 2021 Riey
 ### fontdb 0.24.0
 Copyright (c) 2020 Yevhenii Reizner
 
-### harfrust 0.12.0
+### harfrust 0.15.0
 Copyright (c) HarfBuzz developers
 Copyright (c) 2020 Yevhenii Reizner
 
@@ -366,6 +370,9 @@ Copyright (c) 2019 Carl Lerche
 ### strict-num 0.1.1
 Copyright (c) 2022 Yevhenii Reizner
 
+### synstructure 0.14.0
+Copyright 2016 Nika Layzell
+
 ### xmlwriter 0.1.0
 Copyright (c) 2019 Reizner Evgeniy
 
@@ -376,7 +383,26 @@ Offered as `(MIT OR Apache-2.0) AND Unicode-3.0`; listed here under Unicode-3.0.
 COPYRIGHT AND PERMISSION NOTICE
 Copyright © 1991-2023 Unicode, Inc
 
+### yoke 0.8.4
+COPYRIGHT AND PERMISSION NOTICE
+Copyright © 2020-2024 Unicode, Inc
+
+### yoke-derive 0.8.4
+COPYRIGHT AND PERMISSION NOTICE
+Copyright © 2020-2024 Unicode, Inc
+
+### zerofrom 0.1.8
+COPYRIGHT AND PERMISSION NOTICE
+Copyright © 2020-2024 Unicode, Inc
+
+### zerofrom-derive 0.1.8
+COPYRIGHT AND PERMISSION NOTICE
+Copyright © 2020-2024 Unicode, Inc
+
 ## Zlib
+
+### foldhash 0.2.0
+Copyright (c) 2024 Orson Peters
 
 ### slotmap 1.1.1
 Copyright (c) 2021 Orson Peters <orsonpeters@gmail.com>
@@ -515,7 +541,7 @@ authorization of the copyright holder.
 ## Zlib
 
 ```
-Copyright (c) 2021 Orson Peters <orsonpeters@gmail.com>
+Copyright (c) 2024 Orson Peters
 
 This software is provided 'as-is', without any express or implied warranty. In
 no event will the authors be held liable for any damages arising from the use of
@@ -525,13 +551,13 @@ Permission is granted to anyone to use this software for any purpose, including
 commercial applications, and to alter it and redistribute it freely, subject to
 the following restrictions:
 
- 1. The origin of this software must not be misrepresented; you must not claim
+1. The origin of this software must not be misrepresented; you must not claim
     that you wrote the original software. If you use this software in a product,
     an acknowledgment in the product documentation would be appreciated but is
     not required.
 
- 2. Altered source versions must be plainly marked as such, and must not be
+2. Altered source versions must be plainly marked as such, and must not be
     misrepresented as being the original software.
 
- 3. This notice may not be removed or altered from any source distribution.
+3. This notice may not be removed or altered from any source distribution.
 ```

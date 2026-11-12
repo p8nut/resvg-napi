@@ -62,7 +62,7 @@ tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])
 usvg index bound for `*_precision` derived from POW_VEC: 12
 usvg re-exports enum FontFamily: read as its own
 usvg re-exports enum Indent: read as its own
-usvg sources: usvg-0.49.0
+usvg sources: usvg-0.50.0
 usvg::ClipPath is a class: Projected
 usvg::Group is a class: Projected
 usvg::Image is a class: Projected

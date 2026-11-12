@@ -854,6 +854,12 @@ pub fn classify_object(ty: &str, objects: &BTreeSet<String>) -> Option<Js> {
         .strip_prefix("Option<")
         .and_then(|s| s.strip_suffix('>'))
         .map(|s| s.trim_start_matches('&'))
+        // `Option<Box<T>>`: a box is how a crate keeps a rare member small.
+        .map(|s| {
+            s.strip_prefix("Box<")
+                .and_then(|b| b.strip_suffix('>'))
+                .unwrap_or(s)
+        })
         && objects.contains(inner)
     {
         return Some(Js::OptObject(inner.to_string()));

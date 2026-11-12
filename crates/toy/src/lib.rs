@@ -35,6 +35,8 @@ pub struct Options {
     /// How far one tick moves it.
     pub step: f32,
     pub direction: Direction,
+    /// How many ticks it takes, at most: a plain `u32`.
+    pub limit: u32,
 }
 
 impl Default for Options {
@@ -43,6 +45,7 @@ impl Default for Options {
             label: "counter".into(),
             step: 1.0,
             direction: Direction::Up,
+            limit: 10,
         }
     }
 }
@@ -75,6 +78,10 @@ impl Counter {
 
     pub fn direction(&self) -> Direction {
         self.options.direction
+    }
+
+    pub fn limit(&self) -> u32 {
+        self.options.limit
     }
 
     pub fn origin(&self) -> &Point {
@@ -561,6 +568,7 @@ impl Canvas {
             layer: Layer::new("canvas", Vec::new()),
             shades: Vec::new(),
             content: Box::new(Content::Canvas(self.clone())),
+            backdrop: None,
         })
     }
 
@@ -644,6 +652,12 @@ impl Scene {
             layer: Layer::new("framed", vec![dot("f", 5.0)]),
             shades: vec![Shade::Plain, Shade::Named("teal".into())],
             content: Box::new(Content::Layer(Layer::new("inset", vec![dot("i", 7.0)]))),
+            backdrop: Some(Box::new(Frame {
+                layer: Layer::new("behind", Vec::new()),
+                shades: Vec::new(),
+                content: Box::new(Content::Empty),
+                backdrop: None,
+            })),
         };
         Arc::new(Scene {
             root: Layer {
@@ -753,6 +767,8 @@ pub struct Frame {
     layer: Layer,
     shades: Vec<Shade>,
     content: Box<Content>,
+    /// Boxed, as a crate keeps a rare member small.
+    backdrop: Option<Box<Frame>>,
 }
 
 impl Frame {
@@ -767,6 +783,11 @@ impl Frame {
     /// What the frame holds: the layer `inset` (the dot `i`).
     pub fn content(&self) -> &Content {
         &self.content
+    }
+
+    /// The frame behind this one, if any.
+    pub fn backdrop(&self) -> Option<Box<Frame>> {
+        self.backdrop.clone()
     }
 }
 

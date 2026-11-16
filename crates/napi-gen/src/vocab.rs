@@ -514,24 +514,42 @@ pub fn payload_enums(
 pub fn peel_type(t: &str) -> &str {
     let mut t = t;
     loop {
+        // The first generic argument only: `Result<Foo,Error>` is about `Foo`.
         let next = t
             .strip_prefix('&')
             .or_else(|| {
                 ["Result<", "Option<", "Vec<", "Box<"]
                     .iter()
                     .find_map(|w| t.strip_circumfix(w, '>'))
+                    .map(first_arg)
             })
             .or_else(|| t.strip_circumfix('[', ']'))
-            .or_else(|| {
-                let r = t.strip_prefix("implIterator<Item=")?;
-                let r = r.trim_suffix("+'_");
-                r.strip_suffix('>')
-            });
+            .or_else(|| t.strip_prefix("implIterator<Item=").map(first_arg));
         match next {
             Some(n) => t = n,
             None => return t,
         }
     }
+}
+
+/// The first of a generic's arguments: `s` up to its first comma or
+/// unmatched closing bracket, the brackets nested inside it skipped.
+/// `A,B` is `A`, and `&Vec<T>>+'_` (what follows `Item=`) is `&Vec<T>`. A
+/// `->` is not a bracket. `ty_str` has removed the whitespace.
+pub fn first_arg(s: &str) -> &str {
+    let mut depth = 0usize;
+    let mut prev = ' ';
+    for (i, c) in s.char_indices() {
+        match c {
+            '>' if prev == '-' => {}
+            '<' | '[' | '(' => depth += 1,
+            '>' | ']' | ')' | ',' if depth == 0 => return &s[..i],
+            '>' | ']' | ')' => depth -= 1,
+            _ => {}
+        }
+        prev = c;
+    }
+    s
 }
 
 /// Why a member or method was left out, as a record rather than a sentence:
@@ -837,7 +855,7 @@ pub fn classify_object(ty: &str, objects: &BTreeSet<String>) -> Option<Js> {
     }
     // `impl Iterator<Item = &FaceInfo> + '_`
     if let Some(rest) = bare.strip_prefix("implIterator<Item=") {
-        let inner = rest.split('>').next()?.trim_start_matches('&');
+        let inner = first_arg(rest).trim_start_matches('&');
         if objects.contains(inner) {
             return Some(Js::ObjectList(inner.to_string()));
         }

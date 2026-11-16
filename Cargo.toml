@@ -38,7 +38,7 @@ napi-derive = "3.7.1"
 # `maxOutputLength`. Re-check when a resvg release carries a configurable cap.
 resvg = { version = "0.50.0", default-features = false, features = ["text", "system-fonts", "raster-images"] }
 # resvg's own CSS colour parser, same version it uses internally.
-svgtypes = "0.16.1"
+svgtypes = "0.16.2"
 # usvg/resvg report recoverable problems through `log`; nothing consumes it by
 # default, so the messages are lost. We install a collector.
 log = "0.4.8"

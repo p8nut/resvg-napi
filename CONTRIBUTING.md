@@ -597,7 +597,7 @@ which `npm test` runs, would pick the latter up on every test-matrix entry.
 
 The compiler is the one `rust-toolchain.toml` pins, locally and in CI: rustup
 installs it on first use. A new stable lands through that file, in its own pull
-request -- the daily `lock` job goes red when one is out -- so a clippy release
+request -- dependabot opens it when one is out -- so a clippy release
 cannot turn unrelated pull requests red.
 
 CI runs the lint on `x86_64-unknown-linux-gnu` only -- the toolchain is warm

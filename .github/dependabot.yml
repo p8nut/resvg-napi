@@ -6,6 +6,13 @@
 # hold can go. Dependabot knows neither and would only propose breaking them.
 version: 2
 updates:
+  # rust-toolchain.toml pins the compiler: nothing else notices a new stable.
+  # The pull request bumps the channel; fix whatever clippy then says in it.
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule:
+      interval: daily
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

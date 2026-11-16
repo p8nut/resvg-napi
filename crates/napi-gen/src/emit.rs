@@ -1154,27 +1154,37 @@ pub struct Member {
 /// member typed `String`, `char`, `OsStr` or `PathBuf` *is* the std type, and
 /// napi's `string` is right for it: forcing the name there declared `String`,
 /// the wrapper object type, which a `string` is not assignable to.
+/// Whether `ts` names `id` anywhere in it: `Result<(String, Buffer), String>`
+/// names `Buffer`.
+fn names(ts: TokenStream, id: &str) -> bool {
+    ts.into_iter().any(|t| match t {
+        proc_macro2::TokenTree::Ident(i) => i == id,
+        proc_macro2::TokenTree::Group(g) => names(g.stream(), id),
+        _ => false,
+    })
+}
+
 pub fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
     const CLASHES: [&str; 5] = ["Path", "BigInt", "Symbol", "Null", "JsFunction"];
-    let t = jsty.to_string().replace(' ', "");
+    let t: Type = syn::parse2(jsty.clone()).ok()?;
     // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
     // -- napi only rewrites the type itself, so only those two shapes need it.
-    let (inner, optional) = match t.strip_circumfix("Option<", '>') {
-        Some(i) => (i, true),
-        None => (t.as_str(), false),
+    let (inner, optional) = match Shape::of(&t) {
+        Shape::Option(i) => (key(i)?, true),
+        s => (s.key()?, false),
     };
-    if !CLASHES.contains(&inner) {
+    if !CLASHES.contains(&inner.as_str()) {
         return None;
     }
     // A field keeps its own optionality: napi derives `?` from the Rust type
     // independently of `ts_type`, so spelling the union here would give
     // `underline?: Path | null`. A getter's return type does not, so it does.
     Some((
-        inner.to_string(),
+        inner.clone(),
         if optional {
             format!("{inner} | null")
         } else {
-            inner.to_string()
+            inner
         },
     ))
 }
@@ -1939,16 +1949,21 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         let ReturnType::Type(_, t) = ret else {
             return false;
         };
-        // Result and Option only, not peel_type: a list is not cheap.
-        let mut name = ty_str(t);
-        while let Some(inner) = ["Result<", "Option<"]
-            .iter()
-            .find_map(|w| name.strip_circumfix(w, '>'))
-        {
-            // `Result<T, String>`: a string error code, the value is `T`.
-            name = inner.trim_suffix(",String").to_string();
+        // Result and Option only, not `peel`: a list is not cheap.
+        let mut t: &Type = t;
+        loop {
+            t = match Shape::of(t) {
+                // `Result<T, String>`: a string error code, the value is `T`.
+                Shape::Result { ok, err }
+                    if err.is_none_or(|e| key(e).as_deref() == Some("String")) =>
+                {
+                    ok
+                }
+                Shape::Option(inner) => inner,
+                _ => break,
+            };
         }
-        scalars.contains(&name)
+        key(t).is_some_and(|k| scalars.contains(&k))
     };
     // `#[napi(object)]` and the enums are plain values, which print fine
     // already.
@@ -1974,7 +1989,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
             if args.contains_key("getter") {
                 // A getter handing out bytes copies them on each read: a
                 // whole font, for a face's source. Printing leaves it out.
-                if !matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t).contains("Buffer"))
+                if !matches!(&f.sig.output, ReturnType::Type(_, t) if names(t.to_token_stream(), "Buffer"))
                 {
                     getters.push(js);
                 }
@@ -2561,11 +2576,11 @@ pub fn input_enums<'f>(files: &'f [syn::File], config: &Config) -> Vec<&'f syn::
         for i in &sig.inputs {
             if let syn::FnArg::Typed(t) = i {
                 let mut ty = &*t.ty;
-                while let syn::Type::Reference(r) = ty {
-                    ty = &r.elem;
+                while let Shape::Ref { inner, .. } = Shape::of(ty) {
+                    ty = inner;
                 }
-                if let Some(n) = crate::class::segs(ty).and_then(|mut v| v.pop()) {
-                    taken.insert(n);
+                if let Some(n) = Shape::of(ty).last() {
+                    taken.insert(n.to_string());
                 }
             }
         }
@@ -2751,16 +2766,18 @@ pub fn enum_input(
 /// The input enum a field `&'a [E<'a>]` lists, when `E` is one
 /// ([`is_enum_input`]).
 fn input_list<'f>(files: &'f [syn::File], ty: &syn::Type) -> Option<&'f syn::ItemEnum> {
-    let syn::Type::Reference(r) = ty else {
+    let Shape::Ref {
+        mutable: false,
+        inner,
+        ..
+    } = Shape::of(ty)
+    else {
         return None;
     };
-    let syn::Type::Slice(sl) = &*r.elem else {
+    let Shape::Slice(elem) = Shape::of(inner) else {
         return None;
     };
-    if r.mutability.is_some() {
-        return None;
-    }
-    let name = crate::class::segs(&sl.elem)?.pop()?;
+    let name = Shape::of(elem).last()?.to_string();
     crate::sources::find_enum(files, &name).filter(|e| is_enum_input(e))
 }
 

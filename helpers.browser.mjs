@@ -204,9 +204,7 @@ export function findWidthConstraints(svg) {
             continue;
         const width = Number(max);
         const id = attr(attrs, 'id');
-        // `id` is undefined, not null, when the tag has none: the public
-        // `WidthConstraint` says null, and both are falsy where it is read.
-        found.push({ tag, name, attrs, id: id, max: width, index: match.index });
+        found.push({ tag, name, attrs, id: id ?? null, max: width, index: match.index });
     }
     return found;
 }
@@ -336,7 +334,6 @@ export function fitTextWidths(svg, render) {
         const factor = c.max / width;
         splices.push({ index: c.index, length: c.tag.length,
             text: withHorizontalScale(c.tag, c.attrs, factor) });
-        // @ts-expect-error -- `measured` is set below, by the verifying parse, and stays unset when that parse throws; the public `Adjustment` declares it always there.
         adjustments.push({ id, from: round(width), to: c.max, factor: round(factor) });
     }
     // Backwards, so each offset still points where it did when it was taken.

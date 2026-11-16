@@ -1232,22 +1232,6 @@ pub fn wrapper_path(
     }
 }
 
-/// `Result<T>` -> `T`.
-pub fn result_inner(ty: &Type) -> Option<Type> {
-    let Type::Path(p) = ty else { return None };
-    let seg = p.path.segments.last()?;
-    if seg.ident != "Result" {
-        return None;
-    }
-    let syn::PathArguments::AngleBracketed(args) = &seg.arguments else {
-        return None;
-    };
-    args.args.iter().find_map(|a| match a {
-        syn::GenericArgument::Type(t) => Some(t.clone()),
-        _ => None,
-    })
-}
-
 /// `render_png` -> `renderPng`, the name napi gives it in JS. An all-caps
 /// name is an acronym: `ImageKind::PNG` is `png`.
 pub fn lower_camel(s: &str) -> String {

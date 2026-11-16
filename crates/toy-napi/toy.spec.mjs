@@ -128,6 +128,17 @@ test('a provider field takes a class instance, shared not copied', () => {
   assert.throws(() => toy.toy.report(t, { base: 'a' }));
 });
 
+test('a provider field of a class held by value takes a copy of the instance', () => {
+  const t = new toy.toy.Tally();
+  t.push('x');
+  t.push('y');
+  const from = t.key(1);
+  assert.equal(toy.toy.report(t, { from }), 'tally[plain]: y');
+  assert.equal(toy.toy.report(t, { from: toy.toy.Key.first() }), 'tally[plain]: x,y');
+  assert.throws(() => toy.toy.report(t, { from: 1 }));
+  assert.throws(() => toy.toy.report(t, { from: new toy.toy.Vec2(0, 0) }), /Key/);
+});
+
 test('a converter field takes its JS form, and refuses anything else', () => {
   const t = new toy.toy.Tally();
   t.push('x');

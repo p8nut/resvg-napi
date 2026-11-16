@@ -474,6 +474,11 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
             }
         }
     }
+    for (name, root) in classes.behind_arc() {
+        if !defined_elsewhere(name, root) {
+            vocab.shared.insert(name.to_string());
+        }
+    }
     // The classes a borrowed member hands out (a tree in an image, say), under
     // the same rule: a copy, or, for a projected one reached from a
     // projection, the value borrowed in place.

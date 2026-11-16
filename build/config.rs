@@ -92,17 +92,17 @@ pub const GEN: Config = Config {
     option_objects: &["Options", "WriteOptions", "Query"],
     // Option fields with no JS form, supplied by a class instance (Q26, Q27).
     // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
-    // copied. The resolvers take the hand-written `guard` providers
-    // (src/guard.rs): left out, usvg's default resolvers apply, which read
-    // any path and decode any image, as in Rust (Q10).
+    // copied: derived from the class, documented here. The resolvers take the
+    // hand-written `guard` providers (src/guard.rs): left out, usvg's default
+    // resolvers apply, which read any path and decode any image, as in Rust
+    // (Q10).
     providers: &[
         Provider {
             ty: "Arc<fontdb::Database>",
-            class: "Database",
-            provide: "v.__ref()?.clone()",
             doc: "A `fontdb.Database`, shared with the parse rather than copied.\n\
                   Left out, the database is empty, as in Rust: text then renders\n\
                   nothing. Load fonts into a `fontdb.Database` and pass it here.",
+            ..Provider::DOC
         },
         Provider {
             ty: "ImageHrefResolver<'a>",
@@ -123,12 +123,12 @@ pub const GEN: Config = Config {
         },
         // `Options::default_size` is a `tiny_skia.Size` (Q39), which has no
         // `fromObject` (its fields are private): JS builds one with
-        // `tiny_skia.Size.fromWh(width, height)`.
+        // `tiny_skia.Size.fromWh(width, height)`, and the field takes it, copied
+        // (derived from the class).
         Provider {
             ty: "Size",
-            class: "Size",
-            provide: "*v.__ref()?",
             doc: "A `tiny_skia.Size`: `tiny_skia.Size.fromWh(width, height)`.",
+            ..Provider::DOC
         },
     ],
     // `WriteOptions::indent` and `attributes_indent` are xmlwriter's `Indent`,

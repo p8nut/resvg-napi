@@ -370,6 +370,10 @@ pub struct ReportOptions {
     pub base: Arc<Tally>,
     /// Default: [`Width::Auto`]
     pub width: Width,
+    /// The first of the tally's own names written: an opaque key.
+    ///
+    /// Default: the first
+    pub from: Key,
     /// Written after the line as ` xN` unless 1. An `f64`, which JS hands
     /// over as it is: `0.1` stays `0.1`.
     ///
@@ -388,6 +392,7 @@ impl Default for ReportOptions {
             style_index: 0,
             base: Arc::new(Tally::default()),
             width: Width::Auto,
+            from: Key::first(),
             ratio: 1.0,
             finish: |s| s,
         }
@@ -400,7 +405,7 @@ pub fn report(tally: &Tally, options: &ReportOptions) -> String {
         .base
         .names
         .iter()
-        .chain(&tally.names)
+        .chain(tally.names.iter().skip(options.from.0 as usize))
         .map(String::as_str)
         .collect();
     let style = STYLES[usize::from(options.style_index)];

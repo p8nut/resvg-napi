@@ -239,14 +239,18 @@ out: it is to become a class with a constructor. A field maps by its type
 (numbers, strings, string lists, enums, paths), or through one of three
 hooks:
 
-- **Providers** (`Config::providers`): "a field of type `T` is supplied by an
-  instance of class `C` providing it". The field takes the instance as a
-  `ClassInstance<'a, C>`, so the object gets a lifetime, and the provider's
-  expression makes the value out of it. `Options::fontdb` takes a
-  `fontdb.Database` and shares its `Arc`; `imageHrefResolver` and
-  `fontResolver` take the `guard` classes (below, ADR 0002, Q26);
-  `defaultSize` a `tiny_skia.Size` (Q39: its fields are private, so no
-  `fromObject`; JS writes `tiny_skia.Size.fromWh(w, h)`). napi checks
+- **Providers**: "a field of type `T` is supplied by an instance of class `C`
+  providing it". The field takes the instance as a `ClassInstance<'a, C>`, so
+  the object gets a lifetime, and the provider's expression makes the value
+  out of it. A listed class provides on its own, with no entry: an `Arc<C>`
+  field of a class held behind an `Arc` shares it (`Options::fontdb` takes a
+  `fontdb.Database`), and a `C` field of a class held by value, not plain
+  data, copies it (`defaultSize` takes a `tiny_skia.Size`, Q39: its fields
+  are private, so no `fromObject`; JS writes `tiny_skia.Size.fromWh(w, h)`).
+  `Config::providers` lists the rest, the classes the template writes:
+  `imageHrefResolver` and `fontResolver` take the `guard` classes (below,
+  ADR 0002, Q26). An entry with no `class` (`Provider::DOC`) only adds a
+  paragraph to a derived provider's field doc. napi checks
   the class: another class's instance, or a plain object, throws (natively by
   type tag, on WASI by the class recorded at wrap time). A field with no JS
   form and no provider is left out of the type and keeps its default, and the

@@ -668,6 +668,10 @@ pub struct Vocab {
     pub classes: BTreeSet<String>,
     /// Those of them that are plain data, with a `<Name>Object`.
     pub plain: BTreeSet<String>,
+    /// The listed classes held behind an `Arc` (`Holding::Shared`,
+    /// `Holding::SharedCow`), under the same naming rule: an option field
+    /// `Arc<T>` of one is supplied by an instance, its `Arc` shared.
+    pub shared: BTreeSet<String>,
     /// The listed classes not held by value whose upstream type is `Clone`
     /// (`Js::Owned`): a member borrowing one hands out a copy.
     pub owned: BTreeSet<String>,

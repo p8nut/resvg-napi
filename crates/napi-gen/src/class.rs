@@ -449,6 +449,16 @@ impl<'a> Classes<'a> {
             })
     }
 
+    /// The classes held behind an `Arc` (`Shared`, `SharedCow`), by upstream
+    /// name, each with the root of its source: what `Vocab::shared` starts
+    /// from.
+    pub fn behind_arc(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.classes
+            .iter()
+            .filter(|c| matches!(c.holding, Holding::Shared | Holding::SharedCow))
+            .map(|c| (c.name.as_str(), self.sources[c.source].root))
+    }
+
     /// The classes not held by value whose upstream type is `Clone`, by
     /// upstream name, each with the root of its source: what `Vocab::owned`
     /// starts from (`Js::Owned`).

@@ -44,6 +44,13 @@ pub enum ToyDirection {
     Up,
     Down,
 }
+#[doc = " An opaque key: no public field, `Copy`, printed as a number."]
+#[doc = ""]
+#[doc = " A `toy::Key`, held by value."]
+#[napi(js_name = "Key", namespace = "toy")]
+pub struct ToyKey {
+    inner: napi_support::Slot<toy::Key>,
+}
 #[doc = " Names counted so far. Unlike [`Counter`] it is `Clone` and changes in"]
 #[doc = " place, which is the shape a binding copies on write."]
 #[doc = ""]
@@ -74,12 +81,14 @@ pub struct ToyReportOptions<'a> {
     #[doc = " Names counted before the tally's own."]
     #[doc = ""]
     #[doc = " Default: none"]
-    #[doc = ""]
-    #[doc = " A `toy.Tally`. Left out: an empty one."]
     pub base: Option<ClassInstance<'a, ToyTally>>,
     #[doc = " Default: [`Width::Auto`]"]
     #[napi(ts_type = "number | 'auto'")]
     pub width: Option<Either<u32, String>>,
+    #[doc = " The first of the tally's own names written: an opaque key."]
+    #[doc = ""]
+    #[doc = " Default: the first"]
+    pub from: Option<ClassInstance<'a, ToyKey>>,
     #[doc = " Written after the line as ` xN` unless 1. An `f64`, which JS hands"]
     #[doc = " over as it is: `0.1` stays `0.1`."]
     #[doc = ""]
@@ -184,13 +193,6 @@ pub struct ToyCanvas {
 #[napi(js_name = "Scene", namespace = "toy")]
 pub struct ToyScene {
     inner: napi_support::Slot<std::sync::Arc<toy::Scene>>,
-}
-#[doc = " An opaque key: no public field, `Copy`, printed as a number."]
-#[doc = ""]
-#[doc = " A `toy::Key`, held by value."]
-#[napi(js_name = "Key", namespace = "toy")]
-pub struct ToyKey {
-    inner: napi_support::Slot<toy::Key>,
 }
 #[doc = " A named list of items."]
 #[doc = ""]
@@ -456,6 +458,10 @@ impl ToyReportOptions<'_> {
         }
         if let Some(v) = &self.width {
             o.width = width_from_js(v, "width").map_err(napi_support::coded)?;
+        }
+        if let Some(v) = &self.from {
+            let v = &**v;
+            o.from = *v.__ref()?;
         }
         if let Some(v) = self.ratio {
             o.ratio = v;
@@ -2363,6 +2369,35 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
     Ok(())
 }
 #[napi(namespace = "toy")]
+impl ToyKey {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Key",
+            &["disposed"],
+            &["toString"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Key".to_string()
+    }
+}
+#[napi(namespace = "toy")]
 impl ToyTally {
     #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
     #[napi(symbol_for = "nodejs.util.inspect.custom")]
@@ -2563,35 +2598,6 @@ impl ToyScene {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Scene".to_string()
-    }
-}
-#[napi(namespace = "toy")]
-impl ToyKey {
-    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
-    #[napi(symbol_for = "nodejs.util.inspect.custom")]
-    pub fn inspect_custom(
-        &self,
-        env: Env,
-        this: This,
-        depth: Option<f64>,
-        options: Object,
-        inspect: Function<FnArgs<(Object, Object)>, String>,
-    ) -> Result<String> {
-        napi_support::inspect(
-            &env,
-            &this,
-            "Key",
-            &["disposed"],
-            &["toString"],
-            depth,
-            options,
-            inspect,
-        )
-    }
-    #[doc = " The class name, for `Object.prototype.toString`."]
-    #[napi(getter, well_known_symbol = "toStringTag")]
-    pub fn to_string_tag(&self) -> String {
-        "Key".to_string()
     }
 }
 #[napi(namespace = "toy")]

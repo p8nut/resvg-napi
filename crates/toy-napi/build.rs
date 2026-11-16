@@ -4,7 +4,7 @@
 //! `toy` is in `GEN` and the small template below; the assertions read the
 //! codegen's report.
 
-use napi_gen::{Config, Converter, Crate, Iterated, Provider, View};
+use napi_gen::{Config, Converter, Crate, Iterated, View};
 use quote::quote;
 
 /// The toy has no font tag and no feature gates: those answers are empty.
@@ -27,13 +27,9 @@ const GEN: Config = Config {
     // `Filter` borrows a list of `Tag`s, an input enum: `toy.Filter` holds
     // `toy.Tag` objects, converted for the call.
     option_objects: &["ReportOptions", "Options", "Counter", "Filter"],
-    // `ReportOptions::base` is supplied by a `toy.Tally`.
-    providers: &[Provider {
-        ty: "Arc<Tally>",
-        class: "Tally",
-        provide: "v.__ref()?.clone()",
-        doc: "A `toy.Tally`. Left out: an empty one.",
-    }],
+    // No providers: `ReportOptions::base`, an `Arc<Tally>`, is supplied by a
+    // `toy.Tally` (its `Arc` shared), and `ReportOptions::from`, a `Key`, by
+    // a `toy.Key` (copied), each derived from its class.
     // `ReportOptions::width` is a payload enum: `width_from_js` below reads
     // a number or `'auto'`.
     converters: &[Converter {
@@ -219,7 +215,8 @@ fn main() {
         "the input enums JS has somewhere to pass"
     );
     // The option objects: `ReportOptions` with every field optional over
-    // `Default`, `base` taken from a `toy.Tally` (a provider), `width`
+    // `Default`, `base` taken from a `toy.Tally` and `from` from a `toy.Key`
+    // (providers, derived), `width`
     // through `width_from_js` (a converter), `style_index` clamped to
     // `STYLES` (the build fails when a bound matches no field). `finish` is
     // a function pointer, with no JS form and no provider: left out, it

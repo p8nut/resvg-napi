@@ -85,8 +85,13 @@ pub struct Config {
     /// left out keeps the struct's `Default`. A struct listed without
     /// `Default` is reported and left out.
     pub option_objects: &'static [&'static str],
-    /// Option fields of a type with no JS form, supplied by a class instance
-    /// instead (a database, a resolver).
+    /// Option fields of a type with no JS form, supplied by an instance of a
+    /// class the template writes instead (a resolver). One of a listed class
+    /// needs no entry: an `Arc<T>` field of a class held behind an `Arc` is
+    /// supplied by an instance of it, the `Arc` shared, and a `T` field of a
+    /// class held by value and not plain data by an instance of it, copied.
+    /// An entry naming no
+    /// `class` ([`Provider::DOC`]) only documents such a field.
     pub providers: &'static [Provider],
     /// Option fields of a type the generator cannot read (a payload enum of
     /// a crate it does not parse), converted from a JS value by a template
@@ -224,7 +229,9 @@ pub struct Iterated {
 
 /// "An option field of type `ty` is supplied by an instance of `class`
 /// providing it." On an option object the field takes the instance, and
-/// `provide` makes the field's value out of it.
+/// `provide` makes the field's value out of it. With `class` empty, the
+/// provider is the one derived from a listed class (see
+/// [`Config::providers`]), and `doc` is added to it.
 pub struct Provider {
     /// The field's upstream type, as the generator spells it (no spaces):
     /// `Arc<toy::Tally>`.
@@ -240,6 +247,17 @@ pub struct Provider {
     /// A paragraph added to the field's doc comment: what leaving it out
     /// means, say. Empty for none.
     pub doc: &'static str,
+}
+
+impl Provider {
+    /// A doc for a derived provider: `Provider { ty: "T", doc: "...",
+    /// ..Provider::DOC }`. The build fails when no listed class provides `ty`.
+    pub const DOC: Provider = Provider {
+        ty: "",
+        class: "",
+        provide: "",
+        doc: "",
+    };
 }
 
 /// "An option field of type `ty` takes the JS type `js`, converted by the

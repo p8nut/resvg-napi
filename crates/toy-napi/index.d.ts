@@ -702,12 +702,16 @@ export declare namespace toy {
      * Names counted before the tally's own.
      *
      * Default: none
-     *
-     * A `toy.Tally`. Left out: an empty one.
      */
     base?: toy.Tally
     /** Default: [`Width::Auto`] */
     width?: number | 'auto'
+    /**
+     * The first of the tally's own names written: an opaque key.
+     *
+     * Default: the first
+     */
+    from?: toy.Key
     /**
      * Written after the line as ` xN` unless 1. An `f64`, which JS hands
      * over as it is: `0.1` stays `0.1`.

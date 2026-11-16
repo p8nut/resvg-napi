@@ -755,6 +755,28 @@ pub struct OptionObject {
     pub bounded: Vec<&'static str>,
 }
 
+/// The provider a listed class makes of an option field, with no
+/// `Config::providers` entry: `Arc<T>` of a class held behind an `Arc`
+/// (`Vocab::shared`), the `Arc` shared; `T` of a class held by value
+/// (`Vocab::classes`), copied. Not a plain-data class: JS passes its
+/// `<Name>Object` instead. The class by its upstream name, and the
+/// expression of `v` giving the value.
+fn derived_provider(ty: &Type, vocab: &Vocab) -> Option<(String, &'static str)> {
+    let (by_value, of, provide) = match Shape::of(ty) {
+        Shape::Arc(inner) => (false, inner, "v.__ref()?.clone()"),
+        Shape::Path { .. } => (true, ty, "*v.__ref()?"),
+        _ => return None,
+    };
+    let k = key(of)?;
+    let name = bare(&k);
+    let provides = if by_value {
+        vocab.classes.contains(name) && !vocab.plain.contains(name)
+    } else {
+        vocab.shared.contains(name)
+    };
+    provides.then(|| (name.to_string(), provide))
+}
+
 /// An upstream option struct with `Default`, as an input-only plain object
 /// of the namespaced surface (ADR 0001, "Option structs are plain objects").
 ///
@@ -818,16 +840,31 @@ pub fn option_object(
         let name = ident.to_string();
         let fty = ty_str(&f.ty);
         let doc = docs(&f.attrs);
-        if let Some(p) = vocab.config.providers.iter().find(|p| p.ty == fty) {
-            let class = format_ident!("{}", p.class);
+        // Supplied by a class instance: a provider `Config::providers`
+        // lists, or one derived from the listed classes. An entry with no
+        // `class` only adds its doc to the derived one.
+        let listed = vocab.config.providers.iter().find(|p| p.ty == fty);
+        let provider = match listed {
+            Some(p) if !p.class.is_empty() => Some((p.class.to_string(), p.provide)),
+            Some(p) => Some(derived_provider(&f.ty, vocab).unwrap_or_else(|| {
+                panic!(
+                    "Config::providers: `{}` names no class, and no listed class provides it",
+                    p.ty
+                )
+            })),
+            None => derived_provider(&f.ty, vocab),
+        };
+        if let Some((class, provide)) = provider {
+            let doc_extra = listed.map_or("", |p| p.doc);
+            let class = format_ident!("{class}");
             let provide: syn::Expr =
-                syn::parse_str(p.provide).expect("a Config::providers expression");
+                syn::parse_str(provide).expect("a Config::providers expression");
             borrows = true;
-            let extra: Vec<TokenStream> = if p.doc.is_empty() {
+            let extra: Vec<TokenStream> = if doc_extra.is_empty() {
                 Vec::new()
             } else {
                 std::iter::once(String::new())
-                    .chain(p.doc.lines().map(|l| format!(" {l}")))
+                    .chain(doc_extra.lines().map(|l| format!(" {l}")))
                     .map(|l| quote!(#[doc = #l]))
                     .collect()
             };

@@ -186,6 +186,39 @@ impl<'a> Shape<'a> {
     pub fn is_unit(&self) -> bool {
         matches!(self, Shape::Tuple(t) if t.is_empty())
     }
+
+    /// The type arguments of a path's last segment: `TinyVec<[T; 4]>` is
+    /// `[[T; 4]]`.
+    pub fn type_args(&self) -> Vec<&'a Type> {
+        match self {
+            Shape::Path { args, .. } => args
+                .iter()
+                .filter_map(|a| match a {
+                    GenericArgument::Type(t) => Some(t),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// A path's segments, its arguments aside: `a::B<'_>` is `[a, B]`. None for
+/// anything but a path ([`Shape::Path`]: `Option<T>` is no path here).
+pub fn segs(ty: &Type) -> Option<Vec<String>> {
+    match Shape::of(ty) {
+        Shape::Path { segs, .. } => Some(segs),
+        _ => None,
+    }
+}
+
+/// `&T` is `(Some(false), T)`, `&mut T` `(Some(true), T)`, `T` `(None, T)`,
+/// whatever the lifetime.
+pub fn deref(ty: &Type) -> (Option<bool>, &Type) {
+    match Shape::of(ty) {
+        Shape::Ref { mutable, inner, .. } => (Some(mutable), inner),
+        _ => (None, ty),
+    }
 }
 
 /// [`Shape::key`] of a type.

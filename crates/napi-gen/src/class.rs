@@ -24,6 +24,7 @@ use syn::{Fields, FnArg, ImplItem, Item, ReturnType, Type};
 
 use crate::Config;
 use crate::emit::{Site, js_conv, method_gate};
+use crate::shape::{deref, segs};
 use crate::sources::{derives, find_enum, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
@@ -165,61 +166,9 @@ impl Prim {
     }
 }
 
-/// A type's path segments, references and lifetimes aside: `&a::B<'_>` is
-/// `[a, B]`. None for anything but a path.
-pub(crate) fn segs(ty: &Type) -> Option<Vec<String>> {
-    match ty {
-        Type::Path(p) if p.qself.is_none() => Some(
-            p.path
-                .segments
-                .iter()
-                .map(|s| s.ident.to_string())
-                .collect(),
-        ),
-        Type::Group(g) => segs(&g.elem),
-        Type::Paren(p) => segs(&p.elem),
-        _ => None,
-    }
-}
-
-/// The type arguments of a path's last segment: `Result<A, B>` is `[A, B]`.
-pub(crate) fn args(ty: &Type) -> Vec<&Type> {
-    let Type::Path(p) = ty else {
-        return Vec::new();
-    };
-    let Some(syn::PathArguments::AngleBracketed(a)) = p.path.segments.last().map(|s| &s.arguments)
-    else {
-        return Vec::new();
-    };
-    a.args
-        .iter()
-        .filter_map(|a| match a {
-            syn::GenericArgument::Type(t) => Some(t),
-            _ => None,
-        })
-        .collect()
-}
-
-/// `&T` is `(Some(false), T)`, `&mut T` `(Some(true), T)`, `T` `(None, T)`.
-pub(crate) fn deref(ty: &Type) -> (Option<bool>, &Type) {
-    match ty {
-        Type::Reference(r) => (Some(r.mutability.is_some()), &r.elem),
-        _ => (None, ty),
-    }
-}
-
-pub(crate) fn is_unit(ty: &Type) -> bool {
-    matches!(ty, Type::Tuple(t) if t.elems.is_empty())
-}
-
-/// The last segment is `name`, with `n` type arguments.
 /// The small-vector types over an array (`X<[T; N]>`), by name: they
 /// iterate by value, as a `Vec` does.
 const INLINE_VECTORS: &[&str] = &["TinyVec", "SmallVec", "ArrayVec"];
-
-pub(crate) fn is(ty: &Type, name: &str, n: usize) -> bool {
-    segs(ty).is_some_and(|s| s.last().is_some_and(|l| l == name)) && args(ty).len() == n
-}
 
 /// What a method's receiver is.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -270,7 +219,7 @@ fn callbacks(sig: &syn::Signature) -> BTreeMap<String, (Vec<Type>, String)> {
         .iter()
         .flat_map(|w| &w.predicates)
         .filter_map(|p| match p {
-            syn::WherePredicate::Type(t) => Some((ty_str(&t.bounded_ty), &t.bounds)),
+            syn::WherePredicate::Type(t) => Some((key(&t.bounded_ty)?, &t.bounds)),
             _ => None,
         });
     let mut out = BTreeMap::new();
@@ -649,7 +598,8 @@ impl<'a> Classes<'a> {
         if r == Some(false) && matches!(segs.as_deref(), Some([s]) if s == "str") {
             return Some((quote!(#pat: String), None, quote!(&#pat)));
         }
-        if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
+        if r.is_none() && matches!(Shape::of(inner), Shape::Vec(e) if Prim::of(e) == Some(Prim::U8))
+        {
             return Some((quote!(#pat: Uint8Array), None, quote!(#pat.to_vec())));
         }
         if r.is_none()
@@ -806,7 +756,7 @@ impl<'a> Classes<'a> {
         vocab: &Vocab,
     ) -> Result<Ret, Reason> {
         let v = quote!(__v);
-        if is_unit(ty) {
+        if Shape::of(ty).is_unit() {
             return Ok(Ret {
                 ty: quote!(()),
                 conv: v,
@@ -822,7 +772,8 @@ impl<'a> Classes<'a> {
                 conv: quote!(#v.to_vec().into()),
             });
         }
-        if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
+        if r.is_none() && matches!(Shape::of(inner), Shape::Vec(e) if Prim::of(e) == Some(Prim::U8))
+        {
             return Ok(Ret {
                 ty: quote!(Buffer),
                 conv: quote!(#v.into()),
@@ -853,7 +804,7 @@ impl<'a> Classes<'a> {
                 .map(|(i, e)| {
                     let i = syn::Index::from(i);
                     let at = quote!(#v.#i);
-                    if is(e, "Vec", 1) && Prim::of(args(e)[0]) == Some(Prim::U8) {
+                    if matches!(Shape::of(e), Shape::Vec(b) if Prim::of(b) == Some(Prim::U8)) {
                         return Some((quote!(Buffer), quote!(#at.into())));
                     }
                     if let Some(p) = Prim::of(e) {
@@ -875,8 +826,8 @@ impl<'a> Classes<'a> {
             });
         }
         // `Arc<T>` of a class holding an `Arc`.
-        if is(inner, "Arc", 1)
-            && let Some(c) = self.class_of(ctx, this, args(inner)[0])
+        if let Shape::Arc(held) = Shape::of(inner)
+            && let Some(c) = self.class_of(ctx, this, held)
             && matches!(
                 self.classes[c].holding,
                 Holding::Shared | Holding::SharedCow
@@ -899,10 +850,14 @@ impl<'a> Classes<'a> {
         // vector over an array (`TinyVec<[T; N]>`). Either iterates by value;
         // another generic over an array (`Box`, `Cell`) need not.
         if r.is_none()
-            && let [elem] = args(inner)[..]
-            && let Some(item) = match elem {
-                Type::Array(a) if INLINE_VECTORS.iter().any(|n| is(inner, n, 1)) => Some(&*a.elem),
-                _ if is(inner, "Vec", 1) => Some(elem),
+            && let Some(item) = match Shape::of(inner) {
+                Shape::Vec(elem) => Some(elem),
+                s if s.last().is_some_and(|l| INLINE_VECTORS.contains(&l)) => {
+                    match s.type_args()[..] {
+                        [Type::Array(a)] => Some(&*a.elem),
+                        _ => None,
+                    }
+                }
                 _ => None,
             }
             && let Some(c) = self.class_of(ctx, this, item)
@@ -1042,16 +997,13 @@ impl<'a> Classes<'a> {
             ReturnType::Default => syn::parse_quote!(()),
             ReturnType::Type(_, t) => (**t).clone(),
         };
-        let (out, err) = if is(&out, "Result", 2) || is(&out, "Result", 1) {
-            let a = args(&out);
-            (a[0].clone(), Some(a.get(1).copied().cloned()))
-        } else {
-            (out, None)
+        let (out, err) = match Shape::of(&out) {
+            Shape::Result { ok, err } => (ok.clone(), Some(err.cloned())),
+            _ => (out.clone(), None),
         };
-        let (out, optional) = if is(&out, "Option", 1) {
-            (args(&out)[0].clone(), true)
-        } else {
-            (out, false)
+        let (out, optional) = match Shape::of(&out) {
+            Shape::Option(inner) => (inner.clone(), true),
+            _ => (out.clone(), false),
         };
         let out = match &copied {
             Some((result, ty)) if matches!(segs(&out).as_deref(), Some([s]) if s == result) => {
@@ -1062,10 +1014,9 @@ impl<'a> Classes<'a> {
         };
         // Only a class's own constructor and factories build it from the
         // class they are called on.
-        let target = if is(&out, "Arc", 1) {
-            args(&out)[0]
-        } else {
-            deref(&out).1
+        let target = match Shape::of(&out) {
+            Shape::Arc(held) => held,
+            _ => deref(&out).1,
         };
         let returns_this = this.is_some() && self.class_of(ctx, this, target) == this;
         let factory = recv == Recv::None && returns_this && !optional;
@@ -1095,7 +1046,7 @@ impl<'a> Classes<'a> {
             }
             None => {
                 // `Option<()>` says whether it did anything: `true` or `null`.
-                let ret = if is_unit(&out) && optional {
+                let ret = if Shape::of(&out).is_unit() && optional {
                     Ret {
                         ty: quote!(bool),
                         conv: quote!(true),
@@ -1143,7 +1094,7 @@ impl<'a> Classes<'a> {
                     #(#pre)*
                     #self_pre
                 };
-                let (js_ty, value) = if is_unit(&out) && !optional {
+                let (js_ty, value) = if Shape::of(&out).is_unit() && !optional {
                     body.extend(quote!(#value;));
                     (&ret.ty, &quote!(()))
                 } else {

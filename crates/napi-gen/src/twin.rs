@@ -18,8 +18,9 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{FnArg, ReturnType, Type};
 
-use crate::class::{Classes, Holding, Prim, Recv, args, deref, is, is_unit, receiver, segs};
-use crate::vocab::{Bound, Vocab, bound_kinds, lower_camel, ty_str};
+use crate::class::{Classes, Holding, Prim, Recv, receiver};
+use crate::shape::{Shape, deref, segs, ty_str};
+use crate::vocab::{Bound, Vocab, bound_kinds, lower_camel};
 
 impl Classes<'_> {
     /// Whether `Config::asynchronous` lists `name` (`Type::name` for a member)
@@ -69,7 +70,8 @@ impl Classes<'_> {
         if r == Some(false) && matches!(segs.as_deref(), Some([s]) if s == "str") {
             return Ok((quote!(#pat: String), None, quote!(&#pat), false));
         }
-        if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
+        if r.is_none() && matches!(Shape::of(inner), Shape::Vec(e) if Prim::of(e) == Some(Prim::U8))
+        {
             return Ok((
                 quote!(#pat: Uint8Array),
                 Some(quote!(let #tmp = #pat.to_vec();)),
@@ -285,21 +287,18 @@ impl Classes<'_> {
             ReturnType::Default => syn::parse_quote!(()),
             ReturnType::Type(_, t) => (**t).clone(),
         };
-        let (out, err) = if is(&out, "Result", 2) || is(&out, "Result", 1) {
-            let a = args(&out);
-            (a[0].clone(), Some(a.get(1).copied().cloned()))
-        } else {
-            (out, None)
+        let (out, err) = match Shape::of(&out) {
+            Shape::Result { ok, err } => (ok.clone(), Some(err.cloned())),
+            _ => (out.clone(), None),
         };
-        let (out, optional) = if is(&out, "Option", 1) {
-            (args(&out)[0].clone(), true)
-        } else {
-            (out, false)
+        let (out, optional) = match Shape::of(&out) {
+            Shape::Option(inner) => (inner.clone(), true),
+            _ => (out.clone(), false),
         };
         if deref(&out).0.is_some() {
             fail("it returns a borrow, which cannot leave the worker thread");
         }
-        let (js_ty, conv) = if is_unit(&out) {
+        let (js_ty, conv) = if Shape::of(&out).is_unit() {
             if optional {
                 (quote!(Option<bool>), quote!(__v.map(|_| true)))
             } else {
@@ -361,7 +360,7 @@ impl Classes<'_> {
         let doc = doc.iter().map(|l| quote!(#[doc = #l]));
         // `Promise<void>`, where napi would say `Promise<undefined>`, and the
         // sync call's `boolean | null` for `Option<()>`.
-        let ts = match (is_unit(&out), optional) {
+        let ts = match (Shape::of(&out).is_unit(), optional) {
             (true, false) => Some(quote!(ts_return_type = "Promise<void>")),
             (true, true) => Some(quote!(ts_return_type = "Promise<boolean | null>")),
             _ => None,

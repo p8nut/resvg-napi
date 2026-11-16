@@ -17,8 +17,9 @@ use quote::{format_ident, quote};
 use syn::{Fields, Type};
 
 use crate::Config;
-use crate::class::{Args, Class, Classes, Holding, Source, args, deref, find_struct, is, segs};
+use crate::class::{Args, Class, Classes, Holding, Source, find_struct};
 use crate::emit::{alias_ident, stepped, union_alias};
+use crate::shape::{Shape, deref, segs};
 use crate::sources::{derives, find_enum};
 use crate::vocab::{Js, Reason, Vocab, lower_camel};
 
@@ -77,9 +78,11 @@ pub(crate) fn projections(
                     v.ident
                 ),
             };
-            let boxed = is(carried, "Box", 1);
-            let ty = if boxed { args(carried)[0] } else { carried };
-            let carried = segs(ty).and_then(|s| s.last().cloned());
+            let (boxed, ty) = match Shape::of(carried) {
+                Shape::Box(inner) => (true, inner),
+                _ => (false, carried),
+            };
+            let carried = Shape::of(ty).last().map(str::to_string);
             let c = classes
                 .iter()
                 .position(|c| {
@@ -179,8 +182,10 @@ impl Classes<'_> {
             t => (false, t),
         };
         // An `Arc` in a table (`&[Arc<T>]`) is stepped through to the `T`.
-        let arc = is(elem, "Arc", 1);
-        let elem = if arc { args(elem)[0] } else { elem };
+        let (arc, elem) = match Shape::of(elem) {
+            Shape::Arc(held) => (true, held),
+            _ => (false, elem),
+        };
         let through = arc.then(|| quote!(.map(|__a| &**__a)));
         let (ty, conv) = if let Some(c) = self
             .class_of(ctx, None, elem)

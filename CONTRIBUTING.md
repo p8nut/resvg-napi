@@ -471,7 +471,7 @@ value says whether the call did anything.
 
 The root lists `usvg::Node` and the four node types: `tree.root()` is a
 `usvg.Group`, `group.children()` and `tree.nodeById(id)` hand out
-`usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText`, and
+`usvg.Node` (`usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText`), and
 `resvg.renderNode(node, transform, pixmap)` takes one back. It lists the
 definitions that own content too, `ClipPath`, `Mask` and `Pattern`: from the
 tree's tables (`tree.clipPaths()`) or from what refers to them

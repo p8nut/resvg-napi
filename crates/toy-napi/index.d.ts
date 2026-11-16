@@ -165,7 +165,7 @@ export declare namespace toy {
      * A copy of the canvas in a frame of its own: a union made, not
      * borrowed from anything.
      */
-    framed(): toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
+    framed(): toy.Content
     /** The bytes, the canvas consumed. */
     intoData(): Buffer
     /**
@@ -259,8 +259,8 @@ export declare namespace toy {
   /** Read-only view of a `Frame`. */
   export class Frame {
     get layer(): toy.Layer
-    get shades(): Array<toy.ShadePlain | toy.ShadeNamed>
-    get content(): toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
+    get shades(): Array<toy.Shade>
+    get content(): toy.Content
     get backdrop(): toy.Frame | null
     /**
      * Drops this instance's value now, not at garbage collection: every later
@@ -305,9 +305,9 @@ export declare namespace toy {
    */
   export class Layer {
     name(): string
-    items(): Array<toy.ItemLayer | toy.ItemDot>
+    items(): Array<toy.Item>
     /** The first item, if any. */
-    first(): toy.ItemLayer | toy.ItemDot | null
+    first(): toy.Item | null
     /**
      * Drops this instance's reference now, not at garbage collection: every
      * later call throws `Disposed`. The value lives on while another instance
@@ -374,14 +374,14 @@ export declare namespace toy {
     /** The shared dots: the mark `x`. */
     marks(): Array<toy.Dot>
     /** The first item called `name`, depth first. */
-    find(name: string): toy.ItemLayer | toy.ItemDot | null
+    find(name: string): toy.Item | null
     /** The way through the scene: a jump to `a`, a line to `d`, a stop. */
-    trail(): Array<toy.StepPlain | toy.StepJump | toy.StepLine>
+    trail(): Array<toy.Step>
     /**
      * What the scene's slots hold: nothing, a 2x1 canvas, a frame around
      * the layer `framed` (the dot `f`), and the layer `held` (the dot `h`).
      */
-    contents(): Array<toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer>
+    contents(): Array<toy.Content>
     /** The frames, as a table of values: the one around `framed`. */
     frames(): Array<toy.Frame>
     /** The same frames, behind an `Arc` of their own. */
@@ -518,6 +518,8 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyVec2 = Vec2
+  /** Any variant of `Content`. */
+  export type Content = toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
   /** `Content::Canvas`. */
   export interface ContentCanvas {
     /** Discriminant. Narrow on this. */
@@ -544,13 +546,13 @@ export declare namespace toy {
   /** How many times a [`Layer`] was copied so far. */
   export function copies(): number
   /** How many dots `item` holds, itself included. */
-  export function count(item: toy.ItemLayer | toy.ItemDot): number
+  export function count(item: toy.Item): number
   /**
    * `count` on a worker thread. The arguments are read now, the call runs
    * off the main thread, and the promise resolves with its result or rejects
    * as `count` throws. `signal` drops the call while it is still queued.
    */
-  export function countAsync(item: toy.ItemLayer | toy.ItemDot, signal?: AbortSignal | undefined | null): Promise<number>
+  export function countAsync(item: toy.Item, signal?: AbortSignal | undefined | null): Promise<number>
   /** Which way a counter counts. */
   export const enum Direction {
     Up = 'up',
@@ -565,6 +567,8 @@ export declare namespace toy {
     tags?: Array<toy.Tag>
     minLen?: number
   }
+  /** Any variant of `Item`. */
+  export type Item = toy.ItemLayer | toy.ItemDot
   /** `Item::Dot`. */
   export interface ItemDot {
     /** Discriminant. Narrow on this. */
@@ -675,6 +679,8 @@ export declare namespace toy {
   }
   /** A number constant: `toy.SCALE`. */
   export const SCALE: number
+  /** Any variant of `Shade`. */
+  export type Shade = toy.ShadePlain | toy.ShadeNamed
   /** `Shade::Named`. */
   export interface ShadeNamed {
     /** Discriminant. Narrow on this. */
@@ -701,6 +707,8 @@ export declare namespace toy {
    * as `spin` throws. `signal` drops the call while it is still queued.
    */
   export function spinAsync(rounds: number, signal?: AbortSignal | undefined | null): Promise<number>
+  /** Any variant of `Step`. */
+  export type Step = toy.StepPlain | toy.StepJump | toy.StepLine
   /** `Step::Jump`. */
   export interface StepJump {
     /** Discriminant. Narrow on this. */
@@ -737,5 +745,5 @@ export declare namespace toy {
     y: number
   }
   /** `None` for an empty layer: nothing to visit. */
-  export function visit(item: toy.ItemLayer | toy.ItemDot): boolean | null
+  export function visit(item: toy.Item): boolean | null
 }

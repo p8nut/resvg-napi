@@ -333,8 +333,34 @@ pub fn carried_field(
     Some((c.field, c.ty, c.expr))
 }
 
+/// The Rust name of the alias naming the union of enum `name`: `NodeUnion`.
+/// Not the enum's own name, which its input form ([`enum_input`]) may hold
+/// in the same namespace: [`namespaced`] tells the two apart by JS name,
+/// the enum's for both, and spells a clashing alias out where it is used.
+pub fn alias_ident(name: &str) -> proc_macro2::Ident {
+    format_ident!("{name}Union")
+}
+
+/// `pub type NodeUnion = Either4<..>`, exported as `Node`: napi writes it as
+/// `export type Node = NodeGroup | ..`, and every signature naming the alias
+/// as `Node`, so the union has a name TypeScript code can use.
+pub fn union_alias(name: &str, parts: &[proc_macro2::Ident]) -> TokenStream {
+    let a = alias_ident(name);
+    let e = match parts.len() {
+        2 => format_ident!("Either"),
+        n => format_ident!("Either{n}"),
+    };
+    let doc = format!(" Any variant of `{name}`.");
+    quote! {
+        #[doc = #doc]
+        #[napi(js_name = #name)]
+        pub type #a = #e<#(#parts),*>;
+    }
+}
+
 /// The union for one payload enum: a struct per payload variant, one shared
-/// struct for the unit ones, and the converter that produces them.
+/// struct for the unit ones, the alias naming their union ([`union_alias`])
+/// and the converter that produces them.
 ///
 /// Err with a reason rather than a partial union: half a discriminated union is
 /// worse than none, because the missing arm is invisible at the call site.
@@ -622,6 +648,10 @@ does this. Copied out on each read.",
         }),));
     }
 
+    let parts = info.parts(name);
+    if parts.len() > 1 {
+        items.extend(union_alias(name, &parts));
+    }
     let conv = info.conv_ident(name);
     let ety = info.either_ty(name);
     // A union carrying a value it can borrow is made from a projection of
@@ -2060,14 +2090,48 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
     // What is left out, with the reason; the rest follows from it below.
     let mut out_why: BTreeMap<String, String> = BTreeMap::new();
     let mut classes: BTreeSet<String> = BTreeSet::new();
+    // Per namespace, each union alias whose JS name a struct or enum of the
+    // namespace has (an input form, `enum_input`): a TypeScript type may not
+    // share a name with an interface, a class or another type. Its uses get
+    // the union spelled out instead, and the alias is left out.
+    let mut inlined: BTreeMap<&str, BTreeMap<String, TokenStream>> = BTreeMap::new();
     for (ns, file) in &parsed {
         let pascal = ns.to_case(convert_case::Case::Pascal);
         let snake = ns.to_case(convert_case::Case::Snake);
+        let types: BTreeSet<String> = file
+            .items
+            .iter()
+            .filter(|i| matches!(i, Item::Struct(_) | Item::Enum(_)))
+            .map(item_name)
+            .collect();
         for item in &file.items {
             let (id, new) = match item {
                 Item::Struct(s) => (&s.ident, format_ident!("{pascal}{}", s.ident)),
                 Item::Enum(e) => (&e.ident, format_ident!("{pascal}{}", e.ident)),
                 Item::Fn(f) => (&f.sig.ident, format_ident!("{snake}_{}", f.sig.ident)),
+                Item::Type(t) => {
+                    let js = alias_js_name(t);
+                    if types.contains(&js) {
+                        report.push(format!(
+                            "not aliased: {ns}.{js}: a type named {js} exists already, \
+                             so its union is spelled out"
+                        ));
+                        let ty = &t.ty;
+                        inlined
+                            .entry(ns)
+                            .or_default()
+                            .insert(t.ident.to_string(), quote!(#ty));
+                        continue;
+                    }
+                    let new = format_ident!("{pascal}{}", t.ident);
+                    let prior = names.insert(key(&t.ident.to_string(), ns), (new, js, ns));
+                    assert!(
+                        prior.is_none(),
+                        "{} is defined twice in namespace {ns}",
+                        t.ident
+                    );
+                    continue;
+                }
                 _ => continue,
             };
             let js = id.to_string();
@@ -2129,8 +2193,17 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
                 renames.entry(id.to_string()).or_insert_with(|| new.clone());
             }
         }
+        let spelled = inlined.get(ns);
         for item in file.items.iter().filter(|i| !matches!(i, Item::Const(_))) {
-            let mut item = item.clone();
+            if let (Item::Type(t), Some(s)) = (item, spelled)
+                && s.contains_key(&t.ident.to_string())
+            {
+                continue;
+            }
+            let mut item = match spelled {
+                Some(s) => syn::parse2(spell_out(quote!(#item), s)).expect("an item"),
+                None => item.clone(),
+            };
             let own = match &mut item {
                 Item::Struct(s) => Some((s.ident.to_string(), &mut s.attrs)),
                 Item::Enum(e) => Some((e.ident.to_string(), &mut e.attrs)),
@@ -2139,6 +2212,9 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
             if let Some((id, attrs)) = own {
                 let (_, js, ns) = &names[&key(&id, ns)];
                 with_napi_args(attrs, quote!(js_name = #js, namespace = #ns));
+            } else if let Item::Type(t) = &mut item {
+                // Its `js_name` is set already: the enum's.
+                with_napi_args(&mut t.attrs, quote!(namespace = #ns));
             } else if let Item::Impl(imp) = &mut item {
                 // An impl joins its class in the `.d.ts` only under the
                 // class's namespace.
@@ -2148,7 +2224,7 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
                     .map_or(*ns, |(_, _, n)| n);
                 with_napi_args(&mut imp.attrs, quote!(namespace = #ns));
             }
-            let is_def = matches!(item, Item::Struct(_) | Item::Enum(_));
+            let is_def = matches!(item, Item::Struct(_) | Item::Enum(_) | Item::Type(_));
             let id = match item_name(&item) {
                 n if n.is_empty() => n,
                 n => key(&n, ns),
@@ -2252,14 +2328,52 @@ pub(crate) fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<Strin
     Some((&s.ident, js, args.remove("namespace").flatten()))
 }
 
-/// The name a struct, enum or function declares, or empty.
+/// The name a struct, enum, function or type alias declares, or empty.
 fn item_name(item: &Item) -> String {
     match item {
         Item::Struct(s) => s.ident.to_string(),
         Item::Enum(e) => e.ident.to_string(),
         Item::Fn(f) => f.sig.ident.to_string(),
+        Item::Type(t) => t.ident.to_string(),
         _ => String::new(),
     }
+}
+
+/// The JS name of a type alias ([`union_alias`]): its `js_name`, or its ident.
+fn alias_js_name(t: &syn::ItemType) -> String {
+    napi_args(&t.attrs)
+        .and_then(|mut a| a.remove("js_name").flatten())
+        .unwrap_or_else(|| t.ident.to_string())
+}
+
+/// `ts` with every identifier in `aliases` replaced by the type it aliases,
+/// except where it names something else (after `::` or `.`).
+fn spell_out(ts: TokenStream, aliases: &BTreeMap<String, TokenStream>) -> TokenStream {
+    use proc_macro2::{Group, TokenTree};
+    let toks: Vec<TokenTree> = ts.into_iter().collect();
+    let punct =
+        |i: usize, c: char| matches!(toks.get(i), Some(TokenTree::Punct(p)) if p.as_char() == c);
+    let mut out = TokenStream::new();
+    for (i, t) in toks.iter().enumerate() {
+        match t {
+            TokenTree::Ident(id)
+                if !(i >= 2 && punct(i - 1, ':') && punct(i - 2, ':'))
+                    && !(i >= 1 && punct(i - 1, '.')) =>
+            {
+                match aliases.get(&id.to_string()) {
+                    Some(ty) => out.extend(ty.clone()),
+                    None => out.extend([t.clone()]),
+                }
+            }
+            TokenTree::Group(g) => {
+                let mut ng = Group::new(g.delimiter(), spell_out(g.stream(), aliases));
+                ng.set_span(g.span());
+                out.extend([TokenTree::Group(ng)]);
+            }
+            _ => out.extend([t.clone()]),
+        }
+    }
+    out
 }
 
 /// Adds `extra` to an item's `#[napi]` or `#[napi(..)]`; nothing without one.

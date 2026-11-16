@@ -287,6 +287,11 @@ pixels, and logs the refusal. The async twins (`fromDataAsync`,
 what they recorded once the promise settled. Use one instance per parse: one
 shared between parses lists the misses of them all.
 
+The parse option `maxDepth` (default 1024) is the only bound on how deep
+usvg recurses into nested elements. Leave it alone on untrusted SVG: a much
+larger value lets a deeply nested document overflow the stack, which aborts
+the process, sooner on a worker thread (`*Async`) or in the browser.
+
 ## Measure text and geometry
 
 Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`
@@ -362,7 +367,7 @@ without a language.
 resvg's own test corpus, rendered through these bindings: **1715 of 1715 match**
 the reference PNGs upstream asserts on, within 1/255 per channel — a tolerance
 measured rather than chosen, with the reason recorded in
-[`scripts/conformance.mjs`](scripts/conformance.mjs).
+[`scripts/conformance.mts`](scripts/conformance.mts).
 
 ```bash
 npm run conformance:fetch   # the corpus, at the tag Cargo.lock builds
@@ -399,7 +404,7 @@ google/fonts by name rather than making you find a file; and WASI has no mmap,
 so font files are read into memory.
 
 Adding a target is the triple in `package.json` under `napi.targets`; then
-`npm run create-npm-dirs`. CI builds that list, and `scripts/ci-targets.mjs`
+`npm run create-npm-dirs`. CI builds that list, and `scripts/ci-targets.mts`
 derives which host builds each triple and which cross-compilation flag it needs.
 
 CI does not build all thirteen on a pull request. It builds the two that can

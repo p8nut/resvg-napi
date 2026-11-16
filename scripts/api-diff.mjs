@@ -26,10 +26,20 @@
 //
 // prints a markdown summary, then `classification=<none|additive|breaking>` as
 // its last line. `.github/workflows/api.yml` and `resvg.yml` read both.
+//
+// Plain JS rather than .mts, unlike the other scripts: test/api/options.mjs
+// imports `declarations`, and the test matrix runs it on Node 20.3, which
+// strips no types. Typed in JSDoc instead, and checked as strictly
+// (tsconfig.json).
 
 import { readFileSync } from 'node:fs';
 
-/** Drop `/* *\/` and `//` comments, leaving string literals alone. */
+/**
+ * Drop `/* *\/` and `//` comments, leaving string literals alone.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
 export function stripComments(text) {
   let out = '';
   for (let i = 0; i < text.length; ) {
@@ -56,7 +66,12 @@ export function stripComments(text) {
   return out;
 }
 
-/** Bracket depth change of a line, outside string literals. */
+/**
+ * Bracket depth change of a line, outside string literals.
+ *
+ * @param {string} line
+ * @returns {number}
+ */
 function depth(line) {
   let d = 0;
   for (let i = 0; i < line.length; i++) {
@@ -72,14 +87,21 @@ function depth(line) {
   return d;
 }
 
-/** Whitespace collapsed: what a reader sees. */
+/** Whitespace collapsed: what a reader sees. @param {string} s */
 const tidy = (s) => s.replace(/\s+/g, ' ').trim().replace(/[;,]$/, '').trim();
 
-/** Whitespace gone around punctuation: what two signatures are compared by. */
+/** Whitespace gone around punctuation: what two signatures are compared by. @param {string} s */
 const compact = (s) => tidy(s).replace(/\s*([()[\]{}<>,:;?|&=])\s*/g, '$1');
 
-/** Split on `sep` at bracket depth zero, outside string literals. */
+/**
+ * Split on `sep` at bracket depth zero, outside string literals.
+ *
+ * @param {string} s
+ * @param {string} sep
+ * @returns {string[]}
+ */
 function splitTop(s, sep) {
+  /** @type {string[]} */
   const parts = [];
   let d = 0;
   let start = 0;
@@ -112,14 +134,19 @@ const CONTAINER =
  * its members hang under it. Two declarations on one key -- an overload, or
  * the interface napi merges into a class of the same name -- share it, their
  * signatures joined in a stable order.
+ *
+ * @param {string} text
+ * @returns {Map<string, string>}
  */
 export function declarations(text) {
   const lines = stripComments(text).split('\n');
   /** @type {Map<string, string[]>} */
   const found = new Map();
+  /** @param {string} key @param {string} sig */
   const add = (key, sig) => found.set(key, [...(found.get(key) ?? []), tidy(sig)]);
   /** @type {{name: string, kind: string}[]} */
   const stack = [];
+  /** @param {string} name */
   const path = (name) => [...stack.map((s) => s.name), name].join('.');
 
   for (let i = 0; i < lines.length; i++) {
@@ -158,7 +185,13 @@ export function declarations(text) {
       // still shows instead of slipping through as `none`.
       else add(path(`<${tidy(body)}>`), 'statement');
     } else if (top.kind.endsWith('enum')) {
+      // `.*` matches what the name leaves, and any line has a first word, so
+      // only a line opening on punctuation fails: keyed whole, as below.
       const m = line.match(/^([\w$]+|'[^']*'|"[^"]*")\s*(.*)$/);
+      if (!m) {
+        add(path(`<${tidy(line)}>`), 'member');
+        continue;
+      }
       add(path(m[1]), m[2] || 'member');
     } else {
       // static / readonly / get / set, then the name, then the rest.
@@ -178,7 +211,21 @@ export function declarations(text) {
   return new Map([...found].map(([k, sigs]) => [k, [...new Set(sigs)].sort().join(' & ')]));
 }
 
-/** `(params)rest` taken apart, or null when the signature is not a call. */
+/**
+ * `m.get(k)`, for a key `m` is known to have: every call passes a key taken
+ * from `m` itself, so the `''` never shows.
+ *
+ * @param {Map<string, string>} m
+ * @param {string} k
+ */
+const at = (m, k) => m.get(k) ?? '';
+
+/**
+ * `(params)rest` taken apart, or null when the signature is not a call.
+ *
+ * @param {string} sig
+ * @returns {{ params: string[], rest: string } | null}
+ */
 function call(sig) {
   const s = sig.replace(/^function\s+/, '');
   if (!s.startsWith('(')) return null;
@@ -192,7 +239,12 @@ function call(sig) {
   return null;
 }
 
-/** The members of a string-literal (or any) union alias, or null. */
+/**
+ * The members of a string-literal (or any) union alias, or null.
+ *
+ * @param {string} sig
+ * @returns {string[] | null}
+ */
 function union(sig) {
   const m = sig.match(/^type\s*=\s*(.*)$/);
   return m ? splitTop(m[1], '|').map(compact) : null;
@@ -204,6 +256,10 @@ function union(sig) {
  * Three widenings only: optional parameters appended after the old ones, an
  * interface or namespace merged into a declaration of the same name, and a
  * union alias that kept every member it had.
+ *
+ * @param {string} base
+ * @param {string} head
+ * @returns {string | null}
  */
 export function widening(base, head) {
   const [b, h] = [call(base), call(head)];
@@ -234,10 +290,14 @@ export function widening(base, head) {
 /**
  * The difference between two d.ts texts.
  *
- * @returns {{classification: 'none'|'additive'|'breaking',
+ * @typedef {{classification: 'none'|'additive'|'breaking',
  *   added: string[], removed: string[], required: string[],
  *   changed: {key: string, base: string, head: string, widening: string|null}[],
- *   before: Map<string,string>, after: Map<string,string>}}
+ *   before: Map<string,string>, after: Map<string,string>}} Diff
+ *
+ * @param {string} baseText
+ * @param {string} headText
+ * @returns {Diff}
  */
 export function apiDiff(baseText, headText) {
   const before = declarations(baseText);
@@ -245,20 +305,20 @@ export function apiDiff(baseText, headText) {
   const added = [...after.keys()].filter((k) => !before.has(k)).sort();
   const removed = [...before.keys()].filter((k) => !after.has(k)).sort();
   const changed = [...before.keys()]
-    .filter((k) => after.has(k) && compact(before.get(k)) !== compact(after.get(k)))
+    .filter((k) => after.has(k) && compact(at(before, k)) !== compact(at(after, k)))
     .sort()
     .map((key) => ({
       key,
-      base: before.get(key),
-      head: after.get(key),
-      widening: widening(before.get(key), after.get(key)),
+      base: at(before, key),
+      head: at(after, key),
+      widening: widening(at(before, key), at(after, key)),
     }));
   // A required field added to an interface that already existed breaks every
   // object literal of that type; on a class, a new member breaks nobody.
   const required = added.filter((k) => {
     const parent = k.slice(0, k.lastIndexOf('.'));
     const kind = before.get(parent) ?? '';
-    return /^interface\b/.test(kind) && !/^(readonly )?\?/.test(after.get(k));
+    return /^interface\b/.test(kind) && !/^(readonly )?\?/.test(at(after, k));
   });
   const classification =
     removed.length || required.length || changed.some((c) => !c.widening)
@@ -272,6 +332,9 @@ export function apiDiff(baseText, headText) {
 /**
  * A key whose container is in the same list goes without saying: a removed
  * class lists once, not once per member.
+ *
+ * @param {string[]} keys
+ * @returns {string[]}
  */
 function outermost(keys) {
   const set = new Set(keys);
@@ -288,12 +351,20 @@ const WIDTH = 160;
  * Inline code, safe for a PR comment: everything here comes from a pull
  * request's d.ts, so it stays inside a code span (no mention, no link, no
  * markup) and is cut to length.
+ *
+ * @param {string} s
+ * @returns {string}
  */
 function code(s) {
   const t = s.replace(/`/g, "'").replace(/\s+/g, ' ');
   return '`' + (t.length > WIDTH ? t.slice(0, WIDTH - 1) + '…' : t) + '`';
 }
 
+/**
+ * @param {string} title
+ * @param {string[]} lines
+ * @returns {string[]}
+ */
 function section(title, lines) {
   if (!lines.length) return [];
   const shown = lines.slice(0, LIMIT);
@@ -301,7 +372,12 @@ function section(title, lines) {
   return [`**${title}** (${lines.length})`, '', ...shown, ...(more > 0 ? [`- ...and ${more} more`] : []), ''];
 }
 
-/** The markdown summary, without the machine line. */
+/**
+ * The markdown summary, without the machine line.
+ *
+ * @param {Diff} diff
+ * @returns {string}
+ */
 export function summary(diff) {
   const { classification, added, removed, required, changed, before, after } = diff;
   const verdict = {
@@ -316,7 +392,7 @@ export function summary(diff) {
   out.push(
     ...section(
       'Removed',
-      outermost(removed).map((k) => `- ${code(k)} ${code(before.get(k))}`),
+      outermost(removed).map((k) => `- ${code(k)} ${code(at(before, k))}`),
     ),
     ...section(
       'Changed',
@@ -324,15 +400,15 @@ export function summary(diff) {
     ),
     ...section(
       'Required on an existing interface',
-      required.map((k) => `- ${code(k)} ${code(after.get(k))}`),
+      required.map((k) => `- ${code(k)} ${code(at(after, k))}`),
     ),
     ...section(
       'Widened',
-      widened.map((c) => `- ${code(c.key)}: ${code(c.widening)}`),
+      widened.map((c) => `- ${code(c.key)}: ${code(c.widening ?? '')}`),
     ),
     ...section(
       'Added',
-      outermost(added.filter((k) => !required.includes(k))).map((k) => `- ${code(k)} ${code(after.get(k))}`),
+      outermost(added.filter((k) => !required.includes(k))).map((k) => `- ${code(k)} ${code(at(after, k))}`),
     ),
   );
   return out.join('\n');

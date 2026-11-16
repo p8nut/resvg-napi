@@ -1880,7 +1880,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
             .find_map(|w| name.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
         {
             // `Result<T, String>`: a string error code, the value is `T`.
-            name = inner.strip_suffix(",String").unwrap_or(inner).to_string();
+            name = inner.trim_suffix(",String").to_string();
         }
         scalars.contains(&name)
     };

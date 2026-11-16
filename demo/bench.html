@@ -1043,7 +1043,7 @@
   try {
     if (!globalThis.crossOriginIsolated) {
       report('error', 'page', 'Not cross-origin isolated: SharedArrayBuffer is unavailable, so the '
-        + 'threaded wasm cannot start. Serve this page with demo/serve.mjs, which sets COOP and COEP.');
+        + 'threaded wasm cannot start. Serve this page with demo/serve.mts, which sets COOP and COEP.');
       throw new Error('not isolated');
     }
     mod = await import('./resvg.js');

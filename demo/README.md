@@ -273,19 +273,19 @@ stripped in `source()`.
 
 ## Browser specifics
 
-Four things the demo has to handle, in `bench.html` and `build.mjs`:
+Four things the demo has to handle, in `bench.html` and `build.mts`:
 
 - **COOP + COEP headers.** The wasm is built for `wasm32-wasip1-threads`, so it
   wants a shared memory, so it needs `SharedArrayBuffer`, so the page must be
-  cross-origin isolated. `serve.mjs` sets both headers.
+  cross-origin isolated. `serve.mts` sets both headers.
 - **A `Buffer` polyfill.** napi's `Buffer` return type is Node's Buffer and
   emnapi looks it up on `globalThis`. A 6-line `Uint8Array` subclass is enough —
   but its `from` must accept a `SharedArrayBuffer`, or every buffer comes back
-  empty. It lives in `buffer-shim.mjs`, which `build.mjs` injects into the
+  empty. It lives in `buffer-shim.mts`, which `build.mts` injects into the
   `resvg.js` bundle.
-- **No Node in the bundles.** `build.mjs` bundles `helpers.browser.mjs` (what
+- **No Node in the bundles.** `build.mts` bundles `helpers.browser.mjs` (what
   `resvg-napi/helpers` resolves to under the `browser` condition) for
-  `index.html`, and `liquid-entry.mjs`, which carries it too, for the bench,
+  `index.html`, and `liquid-entry.mts`, which carries it too, for the bench,
   all with esbuild's `platform: 'browser'`: a `node:` import reaching one
   fails the build.
 - **Copy out of shared memory.** `Blob`, `fetch` bodies and `postMessage` all

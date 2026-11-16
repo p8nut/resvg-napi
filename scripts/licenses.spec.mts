@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { copyrights, spdxIds, required, linkedIds, textFor, render } from './licenses.mjs';
+import { copyrights, spdxIds, required, linkedIds, textFor, render } from './licenses.mts';
 
 test('copyrights', () => {
   assert.deepEqual(copyrights('Copyright (c) 2011 Google Inc. All rights reserved.\nblah'),
@@ -29,7 +29,7 @@ test('required', () => {
   // AND is not a choice: the added terms come back with the chosen half...
   assert.deepEqual(required('(MIT OR Apache-2.0) AND Unicode-3.0'), ['Apache-2.0', 'Unicode-3.0']);
   // ...and no id ever carries a bracket.
-  assert.ok(required('(MIT OR Apache-2.0) AND Unicode-3.0').every((id) => !/[()]/.test(id)));
+  assert.ok(required('(MIT OR Apache-2.0) AND Unicode-3.0').every((id: string) => !/[()]/.test(id)));
 });
 
 test('linkedIds: build dependencies do not reach the binary', () => {

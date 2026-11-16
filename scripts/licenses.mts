@@ -35,9 +35,51 @@ const ALREADY_SHIPPED = ['Apache-2.0', 'MIT'];
 // copyright lines would point at two files that are not there.
 const BESIDE = ['LICENSE-APACHE', 'LICENSE-MIT'];
 
+/** A licence file a crate ships, and its text. */
+export interface LicenceText {
+  file: string
+  text: string
+}
+
+/** One linked crate, as the notice lists it. */
+export interface Crate {
+  name: string
+  version: string
+  /** The manifest's SPDX expression, as written. */
+  expr: string
+  /** The licences it is listed under (`required`). */
+  ids: string[]
+  holders: string[]
+  texts: LicenceText[]
+  repository?: string | null
+}
+
+/** `cargo metadata`'s `resolve`: the dependency graph, by package id. */
+export interface Resolve {
+  nodes: Array<{
+    id: string
+    deps: Array<{ pkg: string; dep_kinds?: Array<{ kind?: string | null; target?: string | null }> }>
+  }>
+  root?: string | null
+}
+
+/** `cargo metadata`'s output, as far as this script reads it. */
+interface Metadata {
+  resolve: Resolve & { root: string }
+  packages: Array<{
+    id: string
+    name: string
+    version: string
+    license?: string | null
+    source: string | null
+    manifest_path: string
+    repository?: string | null
+  }>
+}
+
 /** Copyright lines from a licence text, in order, deduplicated. */
-export function copyrights(text) {
-  const seen = new Set();
+export function copyrights(text: string): string[] {
+  const seen = new Set<string>();
   for (const line of text.split('\n')) {
     const t = line.trim();
     // "Copyright (c) 2011 Google Inc." but not the Apache boilerplate line
@@ -51,7 +93,7 @@ export function copyrights(text) {
 }
 
 /** The SPDX ids in one alternative group, in the order they appear. */
-export function spdxIds(expr) {
+export function spdxIds(expr: string | null | undefined): string[] {
   return [...new Set((expr ?? '')
     .replace(/[()]/g, ' ')
     .split(/\s+(?:OR|AND)\s+|\//)
@@ -67,7 +109,7 @@ export function spdxIds(expr) {
  * the Unicode terms apply whichever half of the dual you take, so both come
  * back and the crate is listed twice.
  */
-export function required(expr) {
+export function required(expr: string | null | undefined): string[] {
   return (expr ?? 'UNKNOWN')
     // Top-level conjuncts. Parentheses only ever group an OR here, so the
     // split is safe without a real parser -- and a nested AND would surface
@@ -81,7 +123,8 @@ export function required(expr) {
     .filter((id, i, all) => all.indexOf(id) === i);
 }
 
-function licenceFiles(dir) {
+/** The licence, copying and notice files at the top of a crate. */
+function licenceFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => /^(LICEN[CS]E|COPYING|NOTICE)/i.test(f))
@@ -104,14 +147,15 @@ function licenceFiles(dir) {
  * Target-specific edges are kept whatever their target: thirteen platforms are
  * published from this graph, so the union is what ships.
  *
- * @param {{nodes: Array<{id: string, deps: Array<{pkg: string, dep_kinds: Array<{kind: string|null}>}>}>, root?: string}} resolve
+ * @param resolve  `cargo metadata`'s `resolve`
+ * @param rootId   the package whose graph it is
  */
-export function linkedIds(resolve, rootId) {
+export function linkedIds(resolve: Resolve, rootId: string): Set<string> {
   const nodes = new Map(resolve.nodes.map((n) => [n.id, n]));
-  const linked = new Set();
+  const linked = new Set<string>();
   const stack = [rootId];
   while (stack.length) {
-    for (const dep of nodes.get(stack.pop())?.deps ?? []) {
+    for (const dep of nodes.get(stack.pop() ?? '')?.deps ?? []) {
       const normal = (dep.dep_kinds ?? []).some((k) => k.kind === null || k.kind === undefined);
       if (!normal || linked.has(dep.pkg)) continue;
       linked.add(dep.pkg);
@@ -121,10 +165,11 @@ export function linkedIds(resolve, rootId) {
   return linked;
 }
 
-function graph() {
+/** The linked third-party crates, with their licences and holders, by name. */
+function graph(): Crate[] {
   const out = execFileSync('cargo', ['metadata', '--format-version', '1', '--offline'],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  const meta = JSON.parse(out);
+  const meta: Metadata = JSON.parse(out);
   const rootId = meta.resolve.root;
   const linked = linkedIds(meta.resolve, rootId);
   return meta.packages
@@ -153,7 +198,7 @@ function graph() {
  * so the one whose name carries the licence wins -- `LICENSE-UNICODE` for
  * Unicode-3.0, not the `LICENSE-APACHE` sitting next to it.
  */
-export function textFor(crates, id) {
+export function textFor(crates: Array<{ texts?: LicenceText[] }>, id: string): string | null {
   const token = id.split('-')[0].toUpperCase();
   for (const c of crates) {
     const named = c.texts?.find((t) => t.file.toUpperCase().includes(token));
@@ -163,12 +208,13 @@ export function textFor(crates, id) {
   return null;
 }
 
-export function render(crates) {
-  const byId = new Map();
+/** The notice, as Markdown, for the crates given. */
+export function render(crates: Crate[]): string {
+  const byId = new Map<string, Crate[]>();
   for (const c of crates) {
     for (const id of c.ids) {
       if (!byId.has(id)) byId.set(id, []);
-      byId.get(id).push(c);
+      byId.get(id)?.push(c);
     }
   }
   const out = [
@@ -190,7 +236,7 @@ export function render(crates) {
     '',
   ];
   for (const id of [...byId.keys()].sort()) {
-    const list = byId.get(id);
+    const list = byId.get(id) ?? [];
     out.push(`## ${id}`, '');
     for (const c of list) {
       out.push(`### ${c.name} ${c.version}`);
@@ -206,7 +252,7 @@ export function render(crates) {
     for (const id of quoted) {
       // One text per licence: the crates under it differ only in their copyright
       // lines, which are listed above.
-      out.push(`## ${id}`, '', '```', (textFor(byId.get(id), id)
+      out.push(`## ${id}`, '', '```', (textFor(byId.get(id) ?? [], id)
         ?? `No text shipped with any crate under it; see https://spdx.org/licenses/${id}.html`).trim(), '```', '');
     }
   }
@@ -214,7 +260,7 @@ export function render(crates) {
 }
 
 /** The `npm/*` packages: each holds a binary, so each carries the notice. */
-function platformDirs() {
+function platformDirs(): string[] {
   if (!existsSync('npm')) return [];
   return readdirSync('npm')
     .map((d) => join('npm', d))
@@ -236,13 +282,13 @@ if (import.meta.main) {
   // written into the directory and left off it ships nowhere. `napi
   // create-npm-dirs` rewrites those manifests from `napi.targets` and would
   // drop the three entries without saying so; this puts them back.
-  const want = { [SNAPSHOT]: got };
+  const want: Record<string, string> = { [SNAPSHOT]: got };
   for (const f of BESIDE) want[f] = readFileSync(f, 'utf8');
   const dirs = platformDirs();
   for (const dir of dirs) {
     for (const [file, content] of Object.entries(want)) writeFileSync(join(dir, file), content);
     const manifest = join(dir, 'package.json');
-    const m = JSON.parse(readFileSync(manifest, 'utf8'));
+    const m: { files?: string[] } = JSON.parse(readFileSync(manifest, 'utf8'));
     const missing = Object.keys(want).filter((f) => !(m.files ?? []).includes(f));
     if (missing.length) {
       m.files = [...missing, ...(m.files ?? [])].sort();

@@ -604,7 +604,7 @@ pub fn inspect<'e>(
                     Err(_) => drop(take()),
                 }
             }
-            check_status!(unsafe { napi::sys::napi_throw(env.raw(), raw) })?;
+            env.throw(thrown)?;
             Err(e)
         }
         other => other,

@@ -1,8 +1,8 @@
 // The surface: one namespace per crate (`usvg.*`, `fontdb.*`, `tiny_skia.*`,
 // `svgtypes.*`, `resvg.*`, and the hand-written `guard.*`), Rust names, and
 // nothing at the root but the global logs. This checks its shape against
-// index.d.ts: every class, enum and function declared is there at runtime,
-// under its Rust name, with the members declared. What they do is for
+// index.d.ts: every class, enum, function and constant declared is there at
+// runtime, under its Rust name, with the members declared. What they do is for
 // render.mjs, errors.mjs and conversions.mjs beside it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,9 +14,9 @@ import { declarations } from '../../scripts/api-diff.mjs';
 const dts = declarations(readFileSync(new URL('../../index.d.ts', import.meta.url), 'utf8'));
 const NAMESPACES = ['usvg', 'fontdb', 'tiny_skia', 'svgtypes', 'resvg', 'guard'];
 
-/** `{ classes, enums, functions, types }` a namespace declares, by name. */
+/** `{ classes, enums, functions, consts, types }` a namespace declares, by name. */
 function declared(ns) {
-  const out = { classes: new Map(), enums: new Map(), functions: new Set(), types: new Set() };
+  const out = { classes: new Map(), enums: new Map(), functions: new Set(), consts: new Set(), types: new Set() };
   for (const [key, sig] of dts) {
     const [head, name, member, ...more] = key.split('.');
     if (head !== ns || !name || more.length) continue;
@@ -28,6 +28,7 @@ function declared(ns) {
     const values = sig.match(/^type = ((?:'[^']*'(?: \| )?)+)$/);
     if (sig.startsWith('class')) out.classes.set(name, []);
     else if (sig.startsWith('function')) out.functions.add(name);
+    else if (sig.startsWith('const')) out.consts.add(name);
     else if (values) out.enums.set(name, [...values[1].matchAll(/'([^']*)'/g)].map((m) => m[1]));
     else out.types.add(name);
   }
@@ -41,11 +42,12 @@ test('each crate is a namespace export', () => {
   }
 });
 
-test('every class, enum and function declared is there, under its Rust name', () => {
+test('every class, enum, function and constant declared is there, under its Rust name', () => {
   for (const ns of NAMESPACES) {
-    const { classes, enums, functions } = declared(ns);
+    const { classes, enums, functions, consts } = declared(ns);
     assert.ok(classes.size + functions.size > 0, `${ns} declares classes or functions`);
     for (const name of functions) assert.equal(typeof binding[ns][name], 'function', `${ns}.${name}`);
+    for (const name of consts) assert.notEqual(binding[ns][name], undefined, `${ns}.${name}`);
     for (const [name] of classes) {
       assert.equal(typeof binding[ns][name], 'function', `${ns}.${name}`);
       assert.equal(binding[ns][name].name, name, `${ns}.${name}: the class's own name`);
@@ -58,11 +60,16 @@ test('every class, enum and function declared is there, under its Rust name', ()
       assert.deepEqual(Object.values(e).sort(), [...values].sort(), `${ns}.${name} values`);
     }
     // What runs is what is declared: no runtime export the d.ts does not name.
-    const known = new Set([...classes.keys(), ...enums.keys(), ...functions]);
+    const known = new Set([...classes.keys(), ...enums.keys(), ...functions, ...consts]);
     for (const name of Object.keys(binding[ns])) {
-      assert.ok(known.has(name), `${ns}.${name} is declared as a class, an enum or a function`);
+      assert.ok(known.has(name), `${ns}.${name} is declared as a class, an enum, a function or a constant`);
     }
   }
+});
+
+test('a public constant is a value under its Rust name', () => {
+  // usvg's nesting limit, what `usvg.Options.maxDepth` defaults to.
+  assert.equal(binding.usvg.DEFAULT_MAX_DEPTH, 1024);
 });
 
 test('the Rust names, and nothing else at the root', () => {

@@ -2408,6 +2408,8 @@ export declare namespace usvg {
     rows: number
     data: Array<number>
   }
+  /** The default nesting limit when parsing. */
+  export const DEFAULT_MAX_DEPTH: number
   /** Plain view of a `DiffuseLighting`. */
   export interface DiffuseLighting {
     input: usvg.InputPlain | usvg.InputReference

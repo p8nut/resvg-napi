@@ -44,13 +44,13 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'OriginInline', 'OriginPinned',
-    'PaintErrorCode', 'ParseErrorCode', 'Scene', 'Tally', 'Vec2', 'copies', 'count', 'countAsync', 'paint',
+    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'NAME',
+    'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Tally', 'Vec2', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
   ]);
-  assert.deepEqual(Object.keys(toy.alt).sort(), ['Color']);
+  assert.deepEqual(Object.keys(toy.alt).sort(), ['Color', 'NAME']);
   assert.deepEqual({ ...ns.Direction }, { Up: 'up', Down: 'down' });
   // Nothing at the root but the generic prelude: one constructor per class
   // name, whatever the namespace, and every class is in its namespace.
@@ -709,4 +709,17 @@ test('a union made by value owns what it carries', () => {
   const inner = framed.value.content;
   assert.equal(inner.type, 'canvas');
   assert.deepEqual([inner.value.width(), inner.value.height()], [3, 2]);
+});
+
+test('a public constant is a value of its namespace, under its Rust name', () => {
+  assert.equal(toy.toy.NAME, 'toy');
+  assert.equal(toy.alt.NAME, 'alt');
+  assert.equal(toy.toy.SCALE, 0.5);
+  assert.equal(toy.toy.STRICT, true);
+  // Re-exported from a private module; what nothing exports stays out.
+  assert.equal(toy.toy.MAX_LAYERS, 64);
+  assert.ok(!('HIDDEN' in toy.toy));
+  // No JS value: a u64, a struct.
+  assert.ok(!('BIG' in toy.toy));
+  assert.ok(!('ORIGIN' in toy.toy));
 });

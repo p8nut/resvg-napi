@@ -64,6 +64,7 @@ usvg re-exports enum FontFamily: read as its own
 usvg re-exports enum Indent: read as its own
 usvg sources: usvg-0.50.0
 usvg::ClipPath is a class: Projected
+usvg::DEFAULT_MAX_DEPTH is a constant: usvg.DEFAULT_MAX_DEPTH
 usvg::Group is a class: Projected
 usvg::Image is a class: Projected
 usvg::Image is a projection, not a data type

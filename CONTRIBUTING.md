@@ -357,6 +357,19 @@ Q34):
 - Panics are contained (`napi_support::contained`), and `unsafe fn`s are left
   out.
 
+**Constants** need no allowlist: every public `const` a wrapped crate
+exports (`UPSTREAM` in `build/config.rs`, not `CLASS_CRATES`) is a value
+of the namespace of the module that exports it, under its Rust name
+(`usvg.DEFAULT_MAX_DEPTH`, ADR 0002, Q21), when its type is a number that
+fits a JS number, a `bool` or a string (`napi_gen::emit::constants`). Any
+other is left out, and the report says so. `ModTree::consts` finds them
+through re-exports, as it finds types. napi registers a `#[napi] const`
+under its Rust identifier, whatever its `js_name`, so the namespace prefix
+cannot apply: each namespace's constants sit in a module of their own
+(`usvg_consts`). The toy has one of each (`toy.NAME` and `alt.NAME`,
+`MAX_LAYERS` re-exported from a private module, a `u64` and a struct left
+out).
+
 Two namespaces may each have a class of one name (`toy.Color` and
 `alt.Color`, `tiny_skia.Color` and `svgtypes.Color`). napi builds an instance
 it returns from the constructor registered under the class's JS name, and it

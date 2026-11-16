@@ -110,6 +110,8 @@ export declare namespace alt {
     green: number
     blue: number
   }
+  /** The module's name: `alt.NAME`, beside `toy.NAME`. */
+  export const NAME: string
 }
 
 export declare namespace toy {
@@ -575,6 +577,10 @@ export declare namespace toy {
     kind: 'layer'
     value: toy.Layer
   }
+  /** How many layers a scene may hold: `toy::MAX_LAYERS`. */
+  export const MAX_LAYERS: number
+  /** The library's name: a string constant, `toy.NAME`. `alt.NAME` is another. */
+  export const NAME: string
   /**
    * How to build a [`Counter`].
    *
@@ -667,6 +673,8 @@ export declare namespace toy {
     /** Default: [`Width::Auto`] */
     width?: number | 'auto'
   }
+  /** A number constant: `toy.SCALE`. */
+  export const SCALE: number
   /** `Shade::Named`. */
   export interface ShadeNamed {
     /** Discriminant. Narrow on this. */
@@ -710,6 +718,8 @@ export declare namespace toy {
     /** Discriminant. Narrow on this. */
     type: 'stop'
   }
+  /** A boolean constant: `toy.STRICT`. */
+  export const STRICT: boolean
   /**
    * A tag a filter matches on: a name it borrows, or any.
    *

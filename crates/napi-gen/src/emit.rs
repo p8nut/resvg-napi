@@ -1954,6 +1954,66 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     out
 }
 
+/// The public constants a source exports ([`ModTree::consts`]), each as a
+/// `#[napi] const` of the namespace of the module that exports it, under its
+/// Rust name: `toy::LIMIT` is `toy.LIMIT`, `toy::alt::LIMIT` is `alt.LIMIT`.
+/// `root` is the source's path (`toy`). A constant of a number type that fits
+/// a JS number, a `bool` or a string maps, through type aliases; any other
+/// is left out, and so is one exported by a module with no namespace. Returns
+/// the code by the [`Config::namespaces`](crate::Config::namespaces) root it
+/// goes under, and a report line per constant.
+///
+/// [`ModTree::consts`]: crate::sources::ModTree::consts
+pub fn constants(
+    root: &str,
+    consts: &[(String, String, syn::ItemConst)],
+    vocab: &Vocab,
+) -> (Vec<(&'static str, TokenStream)>, Vec<String>) {
+    let (mut code, mut report) = (Vec::new(), Vec::new());
+    for (module, name, c) in consts {
+        let at = if module.is_empty() {
+            root.to_string()
+        } else {
+            format!("{root}::{module}")
+        };
+        let ty = vocab.resolve(&ty_str(&c.ty));
+        let js_ty = match ty.as_str() {
+            "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64" | "bool" | "String" => {
+                ty.parse::<TokenStream>().expect("a primitive type")
+            }
+            t if t.starts_with('&') && t.ends_with("str") => quote!(&str),
+            _ => {
+                report.push(format!(
+                    "{at}::{name} constant not exposed: {} (no JS value)",
+                    ty_str(&c.ty)
+                ));
+                continue;
+            }
+        };
+        let Some((r, ns)) = config().namespaces.iter().find(|(r, _)| *r == at) else {
+            report.push(format!(
+                "{at}::{name} constant not exposed: no namespace for {at}"
+            ));
+            continue;
+        };
+        let id = &c.ident;
+        let path: TokenStream = format!("{at}::{name}").parse().expect("a path");
+        let docs = docs(&c.attrs);
+        let gate = crate::cfg::attr(&c.attrs);
+        report.push(format!("{at}::{name} is a constant: {ns}.{name}"));
+        code.push((
+            *r,
+            quote! {
+                #(#docs)*
+                #gate
+                #[napi(namespace = #ns)]
+                pub const #id: #js_ty = #path;
+            },
+        ));
+    }
+    (code, report)
+}
+
 /// The surface: every item of `parts`, each under its part's JS namespace
 /// (`toy.Point`). Returns the code, and what was left out with the reason.
 ///
@@ -1981,6 +2041,12 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
 /// Rust identifier. The copies' struct and enum definitions are therefore
 /// put before whatever names them, and every impl and function after all of
 /// them.
+///
+/// A constant ([`constants`]) keeps its Rust name: napi exports a `#[napi]
+/// const` under its Rust identifier whatever its `js_name` says (napi-derive
+/// 3.7), so a prefix would reach JavaScript. Each part's constants go in a
+/// module of their own instead (`toy_consts`), where no other part's can
+/// clash with them.
 pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> Surfaces {
     let mut report: Vec<String> = Vec::new();
     let parsed: Vec<(&str, syn::File)> = parts
@@ -2033,7 +2099,24 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
     // (key or empty, whether a definition, the item renamed, the keys of the
     // copies it names)
     let mut items: Vec<(String, bool, TokenStream, BTreeSet<String>)> = Vec::new();
+    let mut consts = TokenStream::new();
     for (ns, file) in &parsed {
+        let own: Vec<&Item> = file
+            .items
+            .iter()
+            .filter(|i| matches!(i, Item::Const(_)))
+            .collect();
+        if !own.is_empty() {
+            let module = format_ident!("{}_consts", ns.to_case(convert_case::Case::Snake));
+            let doc = format!(" The constants of `{ns}`, apart: they keep their Rust names.");
+            consts.extend(quote! {
+                #[doc = #doc]
+                mod #module {
+                    use super::*;
+                    #(#own)*
+                }
+            });
+        }
         // What a name means in this part: its own item, or else the one
         // other namespace's item of that name. One that two other namespaces
         // define stays as it is.
@@ -2052,7 +2135,7 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
                 renames.entry(id.to_string()).or_insert_with(|| new.clone());
             }
         }
-        for item in &file.items {
+        for item in file.items.iter().filter(|i| !matches!(i, Item::Const(_))) {
             let mut item = item.clone();
             let own = match &mut item {
                 Item::Struct(s) => Some((s.ident.to_string(), &mut s.attrs)),
@@ -2141,6 +2224,7 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
         visit(i, &defs, &index, &mut state, &mut out);
     }
     out.extend(rest.into_iter().map(|(_, _, code, _)| code));
+    out.extend(consts);
     report.extend(out_why.into_values());
     Surfaces {
         namespaced: out,

@@ -4,6 +4,9 @@
 
 use std::str::FromStr;
 
+/// The module's name: `alt.NAME`, beside `toy.NAME`.
+pub const NAME: &str = "alt";
+
 /// A colour as plain data: every field public.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Color {

@@ -761,6 +761,17 @@ fn main() {
         }
         mirrored.entry(root).or_default().extend(code);
     }
+    // The constants the wrapped crates export (`usvg.DEFAULT_MAX_DEPTH`),
+    // each in the namespace of the module exporting it.
+    for src in &sources {
+        let (code, lines) = constants(src.root_str, &src.tree.consts, &vocab);
+        for line in lines {
+            report!("{line}");
+        }
+        for (root, code) in code {
+            mirrored.entry(root).or_default().extend(code);
+        }
+    }
     for u in &classes.unions {
         let root = classes.sources[u.source].root;
         report!("{root}::{} is a union of projections", u.name);

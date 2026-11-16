@@ -46,7 +46,6 @@ use template::*;
 
 fn main() {
     napi_build::setup();
-    napi_gen::configure(GEN);
     // One table: a kind that both a getter and a method can return has the
     // same JS type at both, whatever expression each uses to get there.
     {
@@ -123,7 +122,7 @@ fn main() {
         .map(|(i, u)| {
             let dir = locate(u.pkg, u.marker, &locked);
             if i == 0 {
-                report!("{} sources: {}", u.root, dir.display());
+                report!(GEN, "{} sources: {}", u.root, dir.display());
             }
             let mut all = parse_crate(&dir);
             // What it re-exports of a dependency's enums is its own
@@ -136,7 +135,7 @@ fn main() {
                 Some(parse_crate(&dir).into_iter().map(|(_, f)| f).collect())
             };
             for name in inline_reexported_enums(&mut all, &mut load) {
-                report!("{} re-exports enum {name}: read as its own", u.root);
+                report!(GEN, "{} re-exports enum {name}: read as its own", u.root);
             }
             let tree = ModTree::load(&dir, &all);
             let parsed = tree.public_view(&all, &dir);
@@ -206,15 +205,17 @@ fn main() {
     };
     if !dups.is_empty() {
         report!(
+            GEN,
             "names defined more than once across the sources, keyed by module: {}",
             dups.iter().cloned().collect::<Vec<_>>().join(", ")
         );
     }
 
     // Each index-bounded field's highest usable index, read off its table.
-    let bounds = index_bounds(primary_files);
+    let bounds = index_bounds(primary_files, &GEN);
     for ((suffix, table), (_, max)) in GEN.index_bounded.iter().zip(&bounds) {
         report!(
+            GEN,
             "{} index bound for `*{suffix}` derived from {table}: {max}",
             primary.root_str
         );
@@ -253,7 +254,7 @@ fn main() {
         .chain(
             by_module
                 .iter()
-                .flat_map(|(m, files)| payload_enums(files, m, &dups, primary.root_str))
+                .flat_map(|(m, files)| payload_enums(files, m, &dups, primary.root_str, &GEN))
                 .flat_map(|(_, p)| p.variants)
                 .flat_map(|(_, payload)| payload.carried().into_iter().cloned().collect::<Vec<_>>())
                 .filter(|t| !GEN.node_types.contains(&bare(t)))
@@ -282,7 +283,10 @@ fn main() {
         )
         .collect();
 
-    let mut vocab = Vocab::default();
+    let mut vocab = Vocab {
+        config: GEN,
+        ..Vocab::default()
+    };
     let extra: Vec<syn::File> = VOCAB_CRATES
         .iter()
         .flat_map(|c| parse_crate(&locate(c, "lib.rs", &locked)))
@@ -302,7 +306,9 @@ fn main() {
         // never in usvg's own files.
         vocab.scalars.extend(f32_newtypes(set));
         vocab.aliases.extend(type_aliases(set));
-        vocab.payload.extend(payload_enums(set, "", &dups, root));
+        vocab
+            .payload
+            .extend(payload_enums(set, "", &dups, root, &GEN));
         for item in set.iter().flat_map(|f| &f.items) {
             if let Item::Struct(st) = item
                 && is_pub(&st.vis)
@@ -321,9 +327,10 @@ fn main() {
         }
         vocab
             .payload
-            .extend(payload_enums(files, m, &dups, primary.root_str));
+            .extend(payload_enums(files, m, &dups, primary.root_str, &GEN));
     }
     report!(
+        GEN,
         "payload enums found: {}",
         vocab
             .payload
@@ -333,6 +340,7 @@ fn main() {
             .join(", ")
     );
     report!(
+        GEN,
         "vocabulary derived: {} f32 newtypes, {} type aliases",
         vocab.scalars.len(),
         vocab.aliases.len()
@@ -403,6 +411,7 @@ fn main() {
                 modules: &c.modules,
             }))
             .collect(),
+        GEN,
     );
     // By its upstream name, unless another wrapped crate defines that name
     // (`usvg::Color` is not `tiny_skia.Color`). A wrapped crate's own class
@@ -430,6 +439,7 @@ fn main() {
         }
     }
     report!(
+        GEN,
         "classes a borrowing member copies: {}",
         vocab
             .owned
@@ -439,6 +449,7 @@ fn main() {
             .join(", ")
     );
     report!(
+        GEN,
         "classes a borrowing member borrows from a projection, copies otherwise: {}",
         vocab
             .projected
@@ -461,7 +472,7 @@ fn main() {
         enum_names.extend(names);
         mirrored.entry(src.root_str).or_default().extend(code);
         for (name, why) in rejected {
-            report!("payload enum {name} not mapped: {why}");
+            report!(GEN, "payload enum {name} not mapped: {why}");
         }
     }
     // `enum_names` already carries every source's enums, fontdb's included.
@@ -492,7 +503,7 @@ fn main() {
         } else if let Some(src) = defines(&t) {
             (&src.files, src.root.clone())
         } else {
-            report!("object {t} skipped: not a public struct");
+            report!(GEN, "object {t} skipped: not a public struct");
             continue;
         };
         vocab.objects.insert(t.clone());
@@ -538,7 +549,7 @@ fn main() {
                 object_todo.push_back(t);
                 continue;
             }
-            report!("data type {t} skipped: nothing mappable on it");
+            report!(GEN, "data type {t} skipped: nothing mappable on it");
             continue;
         }
     }
@@ -599,6 +610,7 @@ fn main() {
                 // registry with nothing said, which reads exactly like a type
                 // that was never a candidate.
                 report!(
+                    GEN,
                     "{t} dropped: nothing maps, not even read-only ({})",
                     dropped
                         .iter()
@@ -616,11 +628,12 @@ fn main() {
         let (vcode, dropped, _) = value_class(source_of(t), t, &vocab, modules, &object_root[t]);
         object_parts.insert(t.clone(), vcode);
         report!(
+            GEN,
             "{t}: partial mapping, emitted as read-only class {}",
             data_ident(t)
         );
         for d in dropped {
-            report!("{t} member not exposed: {d}");
+            report!(GEN, "{t} member not exposed: {d}");
         }
     }
 
@@ -639,6 +652,7 @@ fn main() {
             &bounds,
         ) else {
             report!(
+                GEN,
                 "{}::{name} not an option object: no Default to fill it from",
                 src.root_str
             );
@@ -657,6 +671,7 @@ fn main() {
         );
         for s in obj.skipped {
             report!(
+                GEN,
                 "{}::{name} field not in the option object: {s}",
                 src.root_str
             );
@@ -667,8 +682,9 @@ fn main() {
     // Enums JS passes in, borrowed for the call (`fontdb::Family`): their
     // `{ type, value }` input form.
     for src in &sources {
-        for e in input_enums(&src.files) {
+        for e in input_enums(&src.files, &GEN) {
             report!(
+                GEN,
                 "{}::{} is an input enum: {{ type, value }}",
                 src.root_str,
                 e.ident
@@ -677,6 +693,7 @@ fn main() {
                 e,
                 &src.tree.paths,
                 &src.root,
+                &GEN,
             ));
         }
     }
@@ -725,6 +742,7 @@ fn main() {
         let (code, skipped, reached) = wrapper_class(&src.files, key, &vocab, modules, &src.root);
         for s in skipped {
             report!(
+                GEN,
                 "{}::{key} method not in the namespaced class: {s}",
                 src.root_str
             );
@@ -733,6 +751,7 @@ fn main() {
         todo.extend(reached.into_iter().filter(|x| !done.contains(x)));
     }
     report!(
+        GEN,
         "wrapper classes generated: {}",
         done.iter().cloned().collect::<Vec<_>>().join(", ")
     );
@@ -747,16 +766,16 @@ fn main() {
         if c.shared_name {
             what.push_str(", a JS name another namespace has");
         }
-        report!("{root}::{} is a class: {what}", c.name);
+        report!(GEN, "{root}::{} is a class: {what}", c.name);
         for s in skipped {
-            report!("{root}::{} member not in the class: {s}", c.name);
+            report!(GEN, "{root}::{} member not in the class: {s}", c.name);
         }
         mirrored.entry(root).or_default().extend(code);
     }
     for ClassCrate { lib, root, .. } in &extra_crates {
         let (code, skipped) = classes.functions(root, lib, &vocab);
         for s in skipped {
-            report!("{root} function not exposed: {s}");
+            report!(GEN, "{root} function not exposed: {s}");
         }
         mirrored.entry(root).or_default().extend(code);
     }
@@ -765,7 +784,7 @@ fn main() {
     for src in &sources {
         let (code, lines) = constants(src.root_str, &src.tree.consts, &vocab);
         for line in lines {
-            report!("{line}");
+            report!(GEN, "{line}");
         }
         for (root, code) in code {
             mirrored.entry(root).or_default().extend(code);
@@ -773,7 +792,7 @@ fn main() {
     }
     for u in &classes.unions {
         let root = classes.sources[u.source].root;
-        report!("{root}::{} is a union of projections", u.name);
+        report!(GEN, "{root}::{} is a union of projections", u.name);
     }
     for (s, code) in classes
         .error_codes()
@@ -800,7 +819,7 @@ fn main() {
             .iter()
             .any(|(r, n)| *r == src.root_str && *n == t.as_str())
         {
-            report!("{root}::{t} is a projection, not a data type");
+            report!(GEN, "{root}::{t} is a projection, not a data type");
             continue;
         }
         mirrored
@@ -814,7 +833,7 @@ fn main() {
     let mut unions: Vec<String> = Vec::new();
     for (name, info) in &vocab.payload {
         if let Some(why) = info.payload_blocker(&vocab) {
-            report!("payload enum {name} not mapped: {why}");
+            report!(GEN, "payload enum {name} not mapped: {why}");
             continue;
         }
         match payload_enum_code(name, info, &vocab, modules) {
@@ -826,8 +845,11 @@ fn main() {
                     .iter()
                     .find(|s| find_enum(&s.files, bare(name)).is_some());
                 let root = src.map_or(info.root.as_str(), |s| s.root_str);
-                if napi_gen::namespace_of(root).is_none() {
-                    report!("payload enum {name} not namespaced: no namespace for {root}");
+                if GEN.namespace_of(root).is_none() {
+                    report!(
+                        GEN,
+                        "payload enum {name} not namespaced: no namespace for {root}"
+                    );
                     continue;
                 }
                 let root = GEN
@@ -839,13 +861,18 @@ fn main() {
                 mirrored.entry(root).or_default().extend(code);
                 unions.push(name.clone());
             }
-            Err(why) => report!("payload enum {name} skipped: {why}"),
+            Err(why) => report!(GEN, "payload enum {name} skipped: {why}"),
         }
     }
     if !unions.is_empty() {
-        report!("payload enums emitted as unions: {}", unions.join(", "));
+        report!(
+            GEN,
+            "payload enums emitted as unions: {}",
+            unions.join(", ")
+        );
     }
     report!(
+        GEN,
         "data types emitted: {}",
         object_parts.keys().cloned().collect::<Vec<_>>().join(", ")
     );
@@ -855,14 +882,15 @@ fn main() {
     let parts: Vec<(&str, TokenStream)> = mirrored
         .into_iter()
         .map(|(root, code)| {
-            let ns = napi_gen::namespace_of(root)
+            let ns = GEN
+                .namespace_of(root)
                 .unwrap_or_else(|| panic!("no GEN.namespaces entry for {root}"));
             (ns, code)
         })
         .collect();
     let surfaces = namespaced(&parts, &classes.shared_names());
     for line in surfaces.report {
-        report!("{line}");
+        report!(GEN, "{line}");
     }
     let (prelude, template, namespaced) = (prelude(), template(), surfaces.namespaced);
     let code = {

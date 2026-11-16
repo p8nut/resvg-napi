@@ -19,19 +19,18 @@ use quote::{format_ident, quote};
 use syn::{FnArg, ReturnType, Type};
 
 use crate::class::{Classes, Holding, Prim, Recv, args, deref, is, is_unit, receiver, segs};
-use crate::config;
 use crate::vocab::{Bound, Vocab, bound_kinds, lower_camel, ty_str};
 
-/// Whether `Config::asynchronous` lists `name` (`Type::name` for a member)
-/// of the source at `root`.
-pub fn listed(root: &str, name: &str) -> bool {
-    config()
-        .asynchronous
-        .iter()
-        .any(|(r, n)| *r == root && *n == name)
-}
-
 impl Classes<'_> {
+    /// Whether `Config::asynchronous` lists `name` (`Type::name` for a member)
+    /// of the source at `root`.
+    pub fn listed(&self, root: &str, name: &str) -> bool {
+        self.config
+            .asynchronous
+            .iter()
+            .any(|(r, n)| *r == root && *n == name)
+    }
+
     /// One argument of a twin: its parameter, the statement converting it
     /// on the main thread into an owned `Send` value, the expression the
     /// worker passes, and whether that statement leases the argument. An
@@ -136,7 +135,7 @@ impl Classes<'_> {
         let segs = segs.ok_or_else(missing)?;
         let last = segs.last().ok_or_else(missing)?;
         if r == Some(true)
-            && let Some(v) = config().views.iter().find(|v| v.ty == last)
+            && let Some(v) = self.config.views.iter().find(|v| v.ty == last)
         {
             let mut class_segs = segs.clone();
             *class_segs.last_mut().ok_or_else(missing)? = v.class.to_string();
@@ -155,7 +154,7 @@ impl Classes<'_> {
                 true,
             ));
         }
-        if r == Some(false) && config().option_objects.contains(&last.as_str()) {
+        if r == Some(false) && self.config.option_objects.contains(&last.as_str()) {
             let o = format_ident!("{last}");
             return Ok((
                 quote!(#pat: Option<#o>),

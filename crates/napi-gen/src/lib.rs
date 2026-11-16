@@ -16,18 +16,20 @@
 //!   twin     `*Async` twins, on a worker thread, with leases
 //!
 //! What is specific to the wrapped crates is not here: the build script fills
-//! a [`Config`] and hands it over with [`configure`] before any phase runs.
-
-use std::sync::OnceLock;
+//! a [`Config`] and hands it to the phases that read it -- inside the
+//! [`vocab::Vocab`] and the [`class::Classes`] most of them already take, or as
+//! an argument to the few that run before either exists. No global: two
+//! configs can live in one process (the unit tests use that).
 
 /// The codegen's own report: what it derived from upstream, and what it left
 /// alone with the reason. Cargo gives a build script no channel but
 /// `cargo::warning`, so this competes with real warnings -- clippy's four were
-/// buried under 101 lines of it. Off unless [`Config::log_env`] is set.
+/// buried under 101 lines of it. Off unless the [`Config::log_env`] of the
+/// config given first is set: `report!(config, "{x} skipped")`.
 #[macro_export]
 macro_rules! report {
-    ($($arg:tt)*) => {
-        if ::std::env::var_os($crate::config().log_env).is_some() {
+    ($config:expr, $($arg:tt)*) => {
+        if ::std::env::var_os($config.log_env).is_some() {
             println!("cargo::warning={}", format!($($arg)*));
         }
     };
@@ -45,6 +47,10 @@ pub mod vocab;
 /// What the phases need to know about the wrapped crates and do not discover
 /// on their own. Each list is an API decision, not a description of upstream:
 /// the build script owns the values, and says why each one is there.
+///
+/// `Copy`: every list is `&'static`, so a phase holds its own copy rather
+/// than a borrow. `Default` is the empty config: nothing listed.
+#[derive(Clone, Copy, Default)]
 pub struct Config {
     /// The env var that turns [`report!`] on.
     pub log_env: &'static str,
@@ -174,28 +180,12 @@ pub struct Converter {
     pub convert: &'static str,
 }
 
-static CONFIG: OnceLock<Config> = OnceLock::new();
-
-/// Hands the generator its config: once, before any phase runs.
-pub fn configure(config: Config) {
-    assert!(
-        CONFIG.set(config).is_ok(),
-        "napi_gen::configure called twice"
-    );
-}
-
-/// The config [`configure`] was given.
-pub fn config() -> &'static Config {
-    CONFIG
-        .get()
-        .expect("napi_gen::configure must run before the generator does")
-}
-
-/// The namespace [`Config::namespaces`] gives the source reached by `root`.
-pub fn namespace_of(root: &str) -> Option<&'static str> {
-    config()
-        .namespaces
-        .iter()
-        .find(|(r, _)| *r == root)
-        .map(|(_, ns)| *ns)
+impl Config {
+    /// The namespace [`Config::namespaces`] gives the source reached by `root`.
+    pub fn namespace_of(&self, root: &str) -> Option<&'static str> {
+        self.namespaces
+            .iter()
+            .find(|(r, _)| *r == root)
+            .map(|(_, ns)| *ns)
+    }
 }

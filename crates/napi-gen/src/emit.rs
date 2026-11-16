@@ -15,7 +15,7 @@ use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType};
 
-use crate::config;
+use crate::Config;
 use crate::sources::{derives, has_default, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
@@ -383,7 +383,7 @@ pub fn payload_enum_code(
         {
             let vid = format_ident!("{}", n);
             let tag = lower_camel(n);
-            let g = info.gate(n);
+            let g = info.gate(n, &vocab.config);
             arms.push(quote!(#g #up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
         }
         i = 1;
@@ -398,7 +398,7 @@ pub fn payload_enum_code(
         let tag = lower_camel(n);
         let ts = format!("'{tag}'");
         let arm = info.either_arm(name, i);
-        let g = info.gate(n);
+        let g = info.gate(n, &vocab.config);
         i += 1;
 
         // What the struct declares, how the arm binds it, and how each field is
@@ -407,6 +407,7 @@ pub fn payload_enum_code(
             Payload::None => unreachable!("skipped above"),
             Payload::Value(ty) if vocab.classify(ty).is_none() => {
                 report!(
+                    vocab.config,
                     "{name}::{n} carries {ty}, which has no mappable data: emitted without a value"
                 );
                 (Vec::new(), quote!(#up::#vid(_)), Vec::new())
@@ -682,8 +683,8 @@ pub fn prelude() -> TokenStream {
 /// `Config::index_bounded`, each suffix with the highest index its table
 /// allows, read off the upstream `static` in `files`. A table that is gone
 /// fails the build.
-pub fn index_bounds(files: &[syn::File]) -> Vec<(&'static str, u32)> {
-    config()
+pub fn index_bounds(files: &[syn::File], config: &Config) -> Vec<(&'static str, u32)> {
+    config
         .index_bounded
         .iter()
         .map(|(suffix, table)| {
@@ -769,7 +770,7 @@ pub fn option_object(
         let name = ident.to_string();
         let fty = ty_str(&f.ty);
         let doc = docs(&f.attrs);
-        if let Some(p) = config().providers.iter().find(|p| p.ty == fty) {
+        if let Some(p) = vocab.config.providers.iter().find(|p| p.ty == fty) {
             let class = format_ident!("{}", p.class);
             let provide: syn::Expr =
                 syn::parse_str(p.provide).expect("a Config::providers expression");
@@ -790,7 +791,7 @@ pub fn option_object(
             );
             continue;
         }
-        if let Some(c) = config().converters.iter().find(|c| c.ty == fty) {
+        if let Some(c) = vocab.config.converters.iter().find(|c| c.ty == fty) {
             let js: syn::Type = syn::parse_str(c.js).expect("a Config::converters type");
             let convert = format_ident!("{}", c.convert);
             let (ts, label) = (c.ts, lower_camel(&name));
@@ -1165,14 +1166,14 @@ pub fn data_members(
     // `step` borrows the member from `__v`, a reference to the value, when
     // it can be borrowed (a field, an accessor returning a reference).
     let mut push = |name: &str, ty_s: &str, access: TokenStream, step: Option<TokenStream>| {
-        if config().not_data.contains(&name) {
+        if vocab.config.not_data.contains(&name) {
             return;
         }
         let peeled = peel_type(ty_s);
         let js = vocab.classify(ty_s);
         // A node type a listed class copies (`Js::Owned`) is that class, and
         // reaches nothing behind it.
-        if config().node_types.contains(&bare(peeled)) && !matches!(js, Some(Js::Owned(_))) {
+        if vocab.config.node_types.contains(&bare(peeled)) && !matches!(js, Some(Js::Owned(_))) {
             return;
         }
         let id = format_ident!("{}", name);
@@ -1615,7 +1616,7 @@ pub fn map_methods(
             if taken.contains(&name) || !twins.insert(name.clone()) {
                 continue;
             }
-            let gate = method_gate(imp, f);
+            let gate = method_gate(imp, f, &vocab.config);
 
             // generic param -> what its bound takes, so `P: AsRef<Path>` can
             // be classified.
@@ -1810,14 +1811,18 @@ pub fn map_methods(
 /// `#[cfg]`, so a gated method cannot be compiled out. It is kept on every
 /// target, with its body gated instead: where the upstream item is missing
 /// it throws, and the JS surface stays the same everywhere.
-pub fn method_gate(imp: &syn::ItemImpl, f: &syn::ImplItemFn) -> Option<(TokenStream, TokenStream)> {
+pub fn method_gate(
+    imp: &syn::ItemImpl,
+    f: &syn::ImplItemFn,
+    config: &Config,
+) -> Option<(TokenStream, TokenStream)> {
     let gated = crate::cfg::Pred::Any(
         imp.items
             .iter()
             .filter_map(|i| match i {
                 ImplItem::Fn(g) if g.sig.ident == f.sig.ident => Some(crate::cfg::Pred::All(vec![
-                    crate::cfg::of(&imp.attrs),
-                    crate::cfg::of(&g.attrs),
+                    crate::cfg::of(config, &imp.attrs),
+                    crate::cfg::of(config, &g.attrs),
                 ])),
                 _ => None,
             })
@@ -2006,7 +2011,7 @@ pub fn constants(
                 continue;
             }
         };
-        let Some((r, ns)) = config().namespaces.iter().find(|(r, _)| *r == at) else {
+        let Some((r, ns)) = vocab.config.namespaces.iter().find(|(r, _)| *r == at) else {
             report.push(format!(
                 "{at}::{name} constant not exposed: no namespace for {at}"
             ));
@@ -2015,7 +2020,7 @@ pub fn constants(
         let id = &c.ident;
         let path: TokenStream = format!("{at}::{name}").parse().expect("a path");
         let docs = docs(&c.attrs);
-        let gate = crate::cfg::attr(&c.attrs);
+        let gate = crate::cfg::attr(&vocab.config, &c.attrs);
         report.push(format!("{at}::{name} is a constant: {ns}.{name}"));
         code.push((
             *r,
@@ -2403,7 +2408,7 @@ pub fn is_enum_input(e: &syn::ItemEnum) -> bool {
 /// The [`is_enum_input`] enums of `files` that JS has somewhere to pass: an
 /// argument of a function, or a list in an option object
 /// (`Config::option_objects`). The rest would be types nothing takes.
-pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
+pub fn input_enums<'f>(files: &'f [syn::File], config: &Config) -> Vec<&'f syn::ItemEnum> {
     let mut taken = BTreeSet::new();
     let take = |taken: &mut BTreeSet<String>, sig: &syn::Signature| {
         for i in &sig.inputs {
@@ -2436,7 +2441,7 @@ pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
                 })
             }
             Item::Struct(st)
-                if config()
+                if config
                     .option_objects
                     .contains(&st.ident.to_string().as_str()) =>
             {
@@ -2466,9 +2471,9 @@ pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
 /// Whether `files` emit the input form of enum `name` ([`input_enums`]):
 /// the one test of what a member may take as an input enum, so none names a
 /// form that was never emitted. The shape is checked first, being cheaper.
-pub fn is_input(files: &[syn::File], name: &str) -> bool {
+pub fn is_input(files: &[syn::File], name: &str, config: &Config) -> bool {
     crate::sources::find_enum(files, name).is_some_and(is_enum_input)
-        && input_enums(files).iter().any(|e| e.ident == name)
+        && input_enums(files, config).iter().any(|e| e.ident == name)
 }
 
 /// The input form of an [`is_enum_input`] enum, named as upstream for
@@ -2479,6 +2484,7 @@ pub fn enum_input(
     e: &syn::ItemEnum,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
+    config: &Config,
 ) -> TokenStream {
     let name = e.ident.to_string();
     let ident = format_ident!("{name}");
@@ -2537,7 +2543,7 @@ pub fn enum_input(
     }
     let arms = e.variants.iter().zip(&tags).map(|(v, tag)| {
         let vid = &v.ident;
-        let g = crate::cfg::attr(&v.attrs);
+        let g = crate::cfg::attr(config, &v.attrs);
         let missing = |what: &str| format!("{name} '{tag}' needs {what}");
         let value = |m: String| {
             quote!(self.value.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #m))?)

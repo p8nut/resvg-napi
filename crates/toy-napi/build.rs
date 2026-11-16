@@ -101,7 +101,6 @@ const GEN: Config = Config {
 
 fn main() {
     napi_build::setup();
-    napi_gen::configure(GEN);
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=src/lib.rs");
 
@@ -134,22 +133,28 @@ fn main() {
     // source's into its namespace. Built first: a member naming a class held
     // by value is that class (`Vocab::classes`).
     let none = Default::default();
-    let classes = Classes::new(vec![
-        Source {
-            root: "toy",
-            files: &files,
-            modules,
-        },
-        Source {
-            root: "toy::alt",
-            files: &alt,
-            modules: &none,
-        },
-    ]);
+    let classes = Classes::new(
+        vec![
+            Source {
+                root: "toy",
+                files: &files,
+                modules,
+            },
+            Source {
+                root: "toy::alt",
+                files: &alt,
+                modules: &none,
+            },
+        ],
+        GEN,
+    );
 
     // The unit enum, the plain-data struct and the payload enum `Step`,
     // each through the emitter the root crate uses for the same shape.
-    let mut vocab = Vocab::default();
+    let mut vocab = Vocab {
+        config: GEN,
+        ..Vocab::default()
+    };
     // `Color` has two, so a member's bare `Color` names neither.
     for (name, plain, _) in classes.by_value().filter(|(n, _, _)| *n != "Color") {
         vocab.classes.insert(name.to_string());
@@ -188,7 +193,7 @@ fn main() {
     );
     // A unit variant, one carrying a plain-data class (its `Vec2Object`),
     // and one carrying two (a tuple, `value: [from, to]`).
-    let step = payload_enums(&files, "", &Default::default(), "toy")
+    let step = payload_enums(&files, "", &Default::default(), "toy", &GEN)
         .remove("Step")
         .expect("Step is a payload enum");
     vocab.payload.insert("Step".into(), step);
@@ -205,7 +210,7 @@ fn main() {
     // (`value`, a string), and a tuple holding bytes (a read-only class
     // whose `value` is the array), its arm built under the variant's own
     // `#[cfg(unix)]`.
-    let mut found = payload_enums(&files, "", &Default::default(), "toy");
+    let mut found = payload_enums(&files, "", &Default::default(), "toy", &GEN);
     for name in ["Shade", "Content", "Origin"] {
         let e = found.remove(name).expect("a payload enum");
         vocab.payload.insert(name.into(), e);
@@ -237,7 +242,7 @@ fn main() {
         Some("Held carries Canvas, and Canvas is a class, which can only be carried alone"),
         "a class is carried alone or not at all"
     );
-    let bounds = index_bounds(&files);
+    let bounds = index_bounds(&files, &GEN);
     assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
 
     // The input enums: `Tag` (`{ type, value }`, borrowed for the call) and
@@ -245,7 +250,7 @@ fn main() {
     // variant refused). `Label` has their shape, but only a method of an
     // enum takes it, and none is emitted.
     let mut tag = quote!();
-    let inputs = input_enums(&files);
+    let inputs = input_enums(&files, &GEN);
     assert_eq!(
         inputs
             .iter()
@@ -262,7 +267,7 @@ fn main() {
         "Label has the shape"
     );
     for e in inputs {
-        tag.extend(enum_input(e, modules, &root));
+        tag.extend(enum_input(e, modules, &root, &GEN));
     }
     vocab.ints.insert("MinLen".into());
 

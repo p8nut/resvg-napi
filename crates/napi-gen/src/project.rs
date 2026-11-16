@@ -16,11 +16,11 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Fields, Type};
 
+use crate::Config;
 use crate::class::{Args, Class, Classes, Holding, Source, args, deref, find_struct, is, segs};
 use crate::emit::stepped;
 use crate::sources::{derives, find_enum};
 use crate::vocab::{Js, Reason, Vocab, lower_camel, ty_str};
-use crate::{config, namespace_of};
 
 /// A `Config::projections` enum, mirrored as a union of projections.
 pub struct Union {
@@ -32,14 +32,18 @@ pub struct Union {
 
 /// Adds the structs `Config::projections` lists to `classes`, and returns
 /// its enums as unions of them.
-pub(crate) fn projections(sources: &[Source], classes: &mut Vec<Class>) -> Vec<Union> {
+pub(crate) fn projections(
+    sources: &[Source],
+    classes: &mut Vec<Class>,
+    config: &Config,
+) -> Vec<Union> {
     let source_of = |root: &str| {
         sources
             .iter()
             .position(|s| s.root == root)
             .unwrap_or_else(|| panic!("Config::projections: no source with root {root}"))
     };
-    for (root, name) in config().projections {
+    for (root, name) in config.projections {
         let source = source_of(root);
         if find_struct(sources[source].files, name).is_some() {
             classes.push(Class {
@@ -53,7 +57,7 @@ pub(crate) fn projections(sources: &[Source], classes: &mut Vec<Class>) -> Vec<U
         }
     }
     let mut unions = Vec::new();
-    for (root, name) in config().projections {
+    for (root, name) in config.projections {
         let source = source_of(root);
         if find_struct(sources[source].files, name).is_some() {
             continue;
@@ -142,8 +146,10 @@ impl Classes<'_> {
         pat: &Ident,
     ) -> (TokenStream, Option<TokenStream>, TokenStream) {
         let un = &self.unions[u];
-        let ns =
-            namespace_of(self.sources[un.source].root).map_or(String::new(), |n| format!("{n}."));
+        let ns = self
+            .config
+            .namespace_of(self.sources[un.source].root)
+            .map_or(String::new(), |n| format!("{n}."));
         let ts: Vec<String> = un
             .variants
             .iter()

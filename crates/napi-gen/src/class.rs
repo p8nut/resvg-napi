@@ -22,10 +22,10 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Fields, FnArg, ImplItem, Item, ReturnType, Type};
 
+use crate::Config;
 use crate::emit::{Site, js_conv, method_gate};
 use crate::sources::{derives, find_enum, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
-use crate::{config, namespace_of};
 
 /// One source of classes and functions: its root path from the generated
 /// code (`toy`, `toy::alt`), its files, and where its types are exported
@@ -85,7 +85,13 @@ pub struct Classes<'a> {
     pub unions: Vec<crate::project::Union>,
     /// Error enums thrown by something emitted: (source, name). Each gets a
     /// type of its codes from [`Classes::error_codes`].
+    ///
+    /// Filled while [`Classes::class`] and [`Classes::functions`] emit, read
+    /// once they are done: one pass, local to this table. A `RefCell` because
+    /// the error mapper that finds one sits deep under `&self`.
     errors: RefCell<BTreeSet<(usize, String)>>,
+    /// The build script's config: the allowlists the table is read from.
+    pub config: Config,
 }
 
 /// What a JS number, boolean or string becomes upstream, both ways.
@@ -421,9 +427,9 @@ pub(crate) type Why = (Reason, Option<String>);
 
 impl<'a> Classes<'a> {
     /// The table of `Config::classes`, over `sources`.
-    pub fn new(sources: Vec<Source<'a>>) -> Self {
+    pub fn new(sources: Vec<Source<'a>>, config: Config) -> Self {
         let mut classes = Vec::new();
-        for (root, name) in config().classes {
+        for (root, name) in config.classes {
             let source = sources
                 .iter()
                 .position(|s| s.root == *root)
@@ -449,8 +455,8 @@ impl<'a> Classes<'a> {
                 of: None,
             });
         }
-        let unions = crate::project::projections(&sources, &mut classes);
-        let ns = |c: &Class| namespace_of(sources[c.source].root);
+        let unions = crate::project::projections(&sources, &mut classes, &config);
+        let ns = |c: &Class| config.namespace_of(sources[c.source].root);
         for i in 0..classes.len() {
             classes[i].shared_name = classes
                 .iter()
@@ -461,6 +467,7 @@ impl<'a> Classes<'a> {
             classes,
             unions,
             errors: RefCell::new(BTreeSet::new()),
+            config,
         }
     }
 
@@ -683,7 +690,7 @@ impl<'a> Classes<'a> {
         let last = segs.last()?;
         // `Config::views`: borrowed from its class for the call.
         if r == Some(true)
-            && let Some(v) = config().views.iter().find(|v| v.ty == last)
+            && let Some(v) = self.config.views.iter().find(|v| v.ty == last)
         {
             let mut class_segs = segs.clone();
             *class_segs.last_mut()? = v.class.to_string();
@@ -704,7 +711,7 @@ impl<'a> Classes<'a> {
         }
         // An option object (`Config::option_objects`): optional, `Default`
         // under what JS provided.
-        if r == Some(false) && config().option_objects.contains(&last.as_str()) {
+        if r == Some(false) && self.config.option_objects.contains(&last.as_str()) {
             let s = self.resolve(ctx, &segs, |s| {
                 crate::sources::has_default(self.sources[s].files, last)
             })?;
@@ -732,7 +739,7 @@ impl<'a> Classes<'a> {
         if r != Some(true)
             && self
                 .resolve(ctx, &segs, |s| {
-                    crate::emit::is_input(self.sources[s].files, last)
+                    crate::emit::is_input(self.sources[s].files, last, &self.config)
                 })
                 .is_some()
         {
@@ -1232,7 +1239,7 @@ impl<'a> Classes<'a> {
                 if !is_pub(&f.vis) || !taken.insert(f.sig.ident.to_string()) {
                     continue;
                 }
-                let gate = method_gate(imp, f);
+                let gate = method_gate(imp, f, &self.config);
                 let member = format!("{name}::{}", f.sig.ident);
                 match self.function(
                     class.source,
@@ -1245,7 +1252,7 @@ impl<'a> Classes<'a> {
                 ) {
                     Ok(code) => {
                         methods.extend(code);
-                        if crate::twin::listed(src.root, &member) {
+                        if self.listed(src.root, &member) {
                             let twin = format!("{}_async", f.sig.ident);
                             assert!(
                                 taken.insert(twin),
@@ -1269,7 +1276,7 @@ impl<'a> Classes<'a> {
                 }
             }
         }
-        for (r, member) in config().asynchronous {
+        for (r, member) in self.config.asynchronous {
             assert!(
                 *r != src.root
                     || member.split_once("::").is_none_or(|(t, _)| t != name)
@@ -1532,11 +1539,13 @@ impl<'a> Classes<'a> {
             .iter()
             .position(|s| s.root == root)
             .unwrap_or_else(|| panic!("Config::functions: no source with root {root}"));
-        let ns =
-            namespace_of(root).unwrap_or_else(|| panic!("no Config::namespaces entry for {root}"));
+        let ns = self
+            .config
+            .namespace_of(root)
+            .unwrap_or_else(|| panic!("no Config::namespaces entry for {root}"));
         let mut code = TokenStream::new();
         let mut skipped = Vec::new();
-        for (r, name) in config().functions.iter().filter(|(r, _)| *r == root) {
+        for (r, name) in self.config.functions.iter().filter(|(r, _)| *r == root) {
             let f = files
                 .iter()
                 .flat_map(|f| &f.items)
@@ -1545,13 +1554,13 @@ impl<'a> Classes<'a> {
                     _ => None,
                 })
                 .unwrap_or_else(|| panic!("upstream: `pub fn {name}` not found in {r}"));
-            let gate = match crate::cfg::gate(&crate::cfg::of(&f.attrs)) {
+            let gate = match crate::cfg::gate(&crate::cfg::of(&self.config, &f.attrs)) {
                 crate::cfg::Gate::Always => None,
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
             };
             let js = lower_camel(name);
             let napi = quote!(#[napi(js_name = #js, namespace = #ns)]);
-            let twin = crate::twin::listed(root, name);
+            let twin = self.listed(root, name);
             match self.function(ctx, None, &f.sig, &f.attrs, gate.clone(), napi, vocab) {
                 Ok(c) => code.extend(c),
                 Err((reason, ty)) => {

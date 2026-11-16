@@ -23,7 +23,8 @@ resvg-specific guards of `src/guard.rs`.
 
 It is a handful of files, one per phase. The generic phases are a crate of
 their own, `crates/napi-gen`, a build-dependency of this one: `build.rs` fills
-its `Config` and hands it over with `napi_gen::configure` before running them.
+its `Config` and hands it to the phases: inside the `Vocab` and `Classes` most
+of them take, or as an argument to the few that run before either exists.
 
 | | |
 |---|---|

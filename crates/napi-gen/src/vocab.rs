@@ -16,7 +16,7 @@ use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
-use crate::config;
+use crate::Config;
 use crate::sources::{is_pub, self_ident};
 
 /// Normalised textual form of a type, e.g. `Option<std::path::PathBuf>`.
@@ -366,10 +366,10 @@ impl PayloadEnum {
 
     /// `#[cfg(..)]` for the arm of variant `n`, translated (`cfg::of`), or
     /// nothing when it is built wherever the enum is.
-    pub fn gate(&self, n: &str) -> TokenStream {
+    pub fn gate(&self, n: &str, config: &Config) -> TokenStream {
         self.cfgs
             .get(n)
-            .map(|a| crate::cfg::attr(a))
+            .map(|a| crate::cfg::attr(config, a))
             .unwrap_or_default()
     }
 
@@ -467,13 +467,14 @@ pub fn payload_enums(
     dups: &BTreeSet<String>,
     // The crate these files belong to, recorded on every enum found.
     root: &str,
+    config: &Config,
 ) -> BTreeMap<String, PayloadEnum> {
     let mut out = BTreeMap::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Enum(e) = item else { continue };
         // A converter is that type's JS form (`Config::converters`): no
         // union of its own beside it, so none to classify a member as.
-        if !is_pub(&e.vis) || config().converters.iter().any(|c| e.ident == c.ty) {
+        if !is_pub(&e.vis) || config.converters.iter().any(|c| e.ident == c.ty) {
             continue;
         }
         let qualify = |t: String| {
@@ -718,6 +719,10 @@ pub struct Vocab {
     /// Those of them that hold a projection (`Holding::Projected`): a member
     /// reached from a projection borrows one rather than copying it.
     pub projected: BTreeSet<String>,
+    /// The build script's config: what [`Vocab::classify`] reads of it
+    /// (`Config::iterated`, `Config::tag4_types`), and what the phases taking
+    /// a `Vocab` read of it.
+    pub config: Config,
 }
 
 impl Vocab {
@@ -771,7 +776,7 @@ impl Vocab {
         if self.owned.contains(unref) {
             return Some(Js::Owned(unref.to_string()));
         }
-        if let Some(it) = config().iterated.iter().find(|i| i.ty == unref) {
+        if let Some(it) = self.config.iterated.iter().find(|i| i.ty == unref) {
             return self
                 .classify(it.item)
                 .map(|item| Js::Iterated(Box::new(item), it.via.to_string()));
@@ -788,7 +793,7 @@ impl Vocab {
                 .collect();
             return mapped.map(Js::TupleList);
         }
-        if let Some(js) = classify(&t, &self.enums, &self.scalars) {
+        if let Some(js) = classify(&t, &self.enums, &self.scalars, self.config.tag4_types) {
             return Some(js);
         }
         if self.ints.contains(&t) {
@@ -839,6 +844,8 @@ pub fn classify(
     ty: &str,
     known_enums: &BTreeSet<String>,
     scalars: &BTreeSet<String>,
+    // `Config::tag4_types`.
+    tag4_types: &[&str],
 ) -> Option<Js> {
     Some(match ty {
         // No `Transform` arm: `Vocab::matrices` answers that one by shape,
@@ -874,7 +881,7 @@ pub fn classify(
         s if let Some(t) = s.trim_prefix('&').strip_circumfix("Arc<", '>') => {
             Js::Handle(t.to_string())
         }
-        s if config().tag4_types.contains(&s) => Js::Tag4,
+        s if tag4_types.contains(&s) => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
         // Payload enums are classified by name here and given their union
         // further down; `map_enums` only mirrors the unit ones.
@@ -1295,9 +1302,130 @@ mod tests {
     #[test]
     fn f64_lists_are_f64() {
         let none = BTreeSet::new();
-        assert_eq!(classify("f64", &none, &none), Some(Js::F64));
-        assert_eq!(classify("Vec<f64>", &none, &none), Some(Js::F64List));
-        assert_eq!(classify("&[f64]", &none, &none), Some(Js::F64List));
-        assert_eq!(classify("i16", &none, &none), Some(Js::I16));
+        assert_eq!(classify("f64", &none, &none, &[]), Some(Js::F64));
+        assert_eq!(classify("Vec<f64>", &none, &none, &[]), Some(Js::F64List));
+        assert_eq!(classify("&[f64]", &none, &none, &[]), Some(Js::F64List));
+        assert_eq!(classify("i16", &none, &none, &[]), Some(Js::I16));
+    }
+
+    /// A vocabulary over `config`: one object `Foo`, one value `Val`, one
+    /// unit enum `Mode`, and the alias `Fooish = Foo`.
+    fn vocab(config: Config) -> Vocab {
+        let set = |n: &str| BTreeSet::from([n.to_string()]);
+        Vocab {
+            objects: set("Foo"),
+            values: set("Val"),
+            enums: set("Mode"),
+            aliases: BTreeMap::from([("Fooish".to_string(), "Foo".to_string())]),
+            config,
+            ..Vocab::default()
+        }
+    }
+
+    /// The config-dependent lists set: `Tag` is a tag, `Outline` iterates `f32`s.
+    fn listing() -> Config {
+        Config {
+            tag4_types: &["Tag"],
+            iterated: &[crate::Iterated {
+                ty: "Outline",
+                via: "points",
+                item: "f32",
+            }],
+            ..Config::default()
+        }
+    }
+
+    /// What does not depend on the config: the same answer under both, in
+    /// one test binary (which a global config ruled out). Type strings as
+    /// `ty_str` spells them: no spaces.
+    #[test]
+    fn classify_without_the_config() {
+        let s = |n: &str| n.to_string();
+        let cases: &[(&str, Option<Js>)] = &[
+            ("f64", Some(Js::F64)),
+            ("Vec<f64>", Some(Js::F64List)),
+            ("&[f64]", Some(Js::F64List)),
+            ("&str", Some(Js::Str)),
+            ("Option<String>", Some(Js::OptStr)),
+            ("Vec<u8>", Some(Js::Bytes)),
+            ("Arc<dynAsRef<[u8]>+Send+Sync>", Some(Js::Bytes)),
+            ("Arc<dynAsRef<[u8]>+Sync+Send>", Some(Js::Bytes)),
+            ("std::sync::Arc<dynAsRef<[u8]>+Send+Sync>", Some(Js::Bytes)),
+            ("&Arc<dynAsRef<[u8]>+Send+Sync>", Some(Js::Bytes)),
+            ("Result<(),Error>", Some(Js::TryUnit)),
+            // A `Result` of a value is peeled by the caller, not here.
+            ("Result<Foo,Error>", None),
+            ("Arc<Foo>", Some(Js::Handle(s("Foo")))),
+            ("&Arc<Foo>", Some(Js::Handle(s("Foo")))),
+            ("&[Arc<Foo>]", Some(Js::HandleList(s("Foo")))),
+            ("Mode", Some(Js::Enum)),
+            ("Foo", Some(Js::Object(s("Foo")))),
+            ("&Foo", Some(Js::Object(s("Foo")))),
+            ("Fooish", Some(Js::Object(s("Foo")))),
+            ("Vec<Foo>", Some(Js::ObjectList(s("Foo")))),
+            ("&[Foo]", Some(Js::ObjectList(s("Foo")))),
+            ("Option<Foo>", Some(Js::OptObject(s("Foo")))),
+            ("Option<Box<Foo>>", Some(Js::OptObject(s("Foo")))),
+            ("Option<&Foo>", Some(Js::OptObject(s("Foo")))),
+            ("Val", Some(Js::Value(s("Val")))),
+            ("&[Val]", Some(Js::ValueList(s("Val")))),
+            ("Option<Val>", Some(Js::OptValue(s("Val")))),
+            (
+                "Vec<(f32,Mode)>",
+                Some(Js::TupleList(vec![
+                    (s("f32"), Js::F32),
+                    (s("Mode"), Js::Enum),
+                ])),
+            ),
+            // One element without a JS form, and the whole list has none.
+            ("Vec<(f32,Unknown)>", None),
+            ("u64", None),
+            ("Unknown", None),
+        ];
+        for config in [Config::default(), listing()] {
+            let v = vocab(config);
+            for (ty, want) in cases {
+                assert_eq!(&v.classify(ty), want, "{ty}");
+            }
+        }
+    }
+
+    /// What `Config::tag4_types` and `Config::iterated` decide: listed, a
+    /// type has their form; unlisted, it has none.
+    #[test]
+    fn classify_by_the_config() {
+        let (bare, listed) = (vocab(Config::default()), vocab(listing()));
+        let points = Js::Iterated(Box::new(Js::F32), "points".to_string());
+        let cases: &[(&str, Option<Js>, Option<Js>)] = &[
+            ("Tag", None, Some(Js::Tag4)),
+            ("Outline", None, Some(points.clone())),
+            ("&Outline", None, Some(points)),
+        ];
+        for (ty, unlisted, want) in cases {
+            assert_eq!(&bare.classify(ty), unlisted, "{ty}, unlisted");
+            assert_eq!(&listed.classify(ty), want, "{ty}, listed");
+        }
+    }
+
+    /// `Config::converters` claims an enum: it is no payload enum then.
+    #[test]
+    fn payload_enums_leave_converted_enums_out() {
+        let file: syn::File = syn::parse_quote! {
+            pub enum Width { Auto, Px(f32) }
+        };
+        let files = [file];
+        let converted = Config {
+            converters: &[crate::Converter {
+                ty: "Width",
+                js: "JsWidth",
+                ts: "number | 'auto'",
+                convert: "width",
+            }],
+            ..Config::default()
+        };
+        let dups = BTreeSet::new();
+        let found = |c: &Config| payload_enums(&files, "", &dups, "up", c);
+        assert!(found(&Config::default()).contains_key("Width"));
+        assert!(found(&converted).is_empty());
     }
 }

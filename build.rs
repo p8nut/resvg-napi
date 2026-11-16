@@ -71,7 +71,8 @@ fn main() {
             Js::Object("O".into()),
             Js::ObjectList("O".into()),
         ] {
-            let ty = |site| js_conv(&js, "T", &v, &a, site).map(|c| c.ty.to_string());
+            let ty =
+                |site| js_conv(&js, &syn::parse_quote!(T), &v, &a, site).map(|c| c.ty.to_string());
             assert_eq!(
                 ty(Site::Getter),
                 ty(Site::Method),
@@ -222,7 +223,7 @@ fn main() {
     }
 
     // Enums to mirror = named by a config field OR by a return of a wrapped impl.
-    let mut referenced: BTreeSet<String> = GEN
+    let mut referenced: Types = GEN
         .option_objects
         .iter()
         .flat_map(|o| {
@@ -241,12 +242,9 @@ fn main() {
     // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&FaceInfo>`
     // make Stop/FaceInfo objects, while `&Group` stays a handle question.
     let object_seeds: BTreeSet<String> = referenced
-        .iter()
-        .filter(|t| {
-            let b = t.trim_start_matches('&');
-            b.starts_with('[') || b.starts_with("implIterator<Item=")
-        })
-        .map(|t| peel_type(t).to_string())
+        .values()
+        .filter(|t| matches!(Shape::of(unref(t)), Shape::Slice(_) | Shape::ImplIter(_)))
+        .map(|t| ty_str(peel(t)))
         // Plus what a payload enum carries. `filter::Kind` names seventeen
         // primitive structs and nothing else does. Safe now on two counts: a
         // duplicated name is keyed by its module, and a member returning a node
@@ -256,7 +254,7 @@ fn main() {
                 .iter()
                 .flat_map(|(m, files)| payload_enums(files, m, &dups, primary.root_str, &GEN))
                 .flat_map(|(_, p)| p.variants)
-                .flat_map(|(_, payload)| payload.carried().into_iter().cloned().collect::<Vec<_>>())
+                .flat_map(|(_, payload)| payload.carried().into_iter().filter_map(key).collect::<Vec<_>>())
                 .filter(|t| !GEN.node_types.contains(&bare(t)))
                 .filter(|t| struct_fields_opt(primary_files, bare(t)).is_some()),
         )
@@ -271,9 +269,9 @@ fn main() {
                 .filter(|t| {
                     // Not one already claimed as a handle: an `Arc`-held
                     // definition (`ClipPath`) would get `wrap` twice.
-                    let arc_held = referenced
-                        .iter()
-                        .any(|r| peel_type(r).strip_circumfix("Arc<", '>') == Some(t.as_str()));
+                    let arc_held = referenced.values().any(|r| {
+                        matches!(Shape::of(peel(r)), Shape::Arc(a) if key(a).as_deref() == Some(t.as_str()))
+                    });
                     !arc_held
                         && !GEN.node_types.contains(&t.as_str())
                         && sources
@@ -468,7 +466,12 @@ fn main() {
     // `napi_gen::emit::namespaced` puts it under that source's namespace.
     let mut mirrored: BTreeMap<&str, TokenStream> = BTreeMap::new();
     for src in &sources {
-        let (names, code, rejected) = map_enums(&src.files, &referenced, modules, &src.root);
+        let (names, code, rejected) = map_enums(
+            &src.files,
+            &referenced.keys().cloned().collect(),
+            modules,
+            &src.root,
+        );
         enum_names.extend(names);
         mirrored.entry(src.root_str).or_default().extend(code);
         for (name, why) in rejected {
@@ -522,11 +525,14 @@ fn main() {
         // A dropped member whose type is itself a public struct is a candidate:
         // that is how `Stop` reaches `Color`.
         for d in &dropped {
-            let bare = peel_type(d.ty.as_deref().unwrap_or_default())
-                .rsplit("::")
-                .next()
-                .unwrap_or_default()
-                .to_string();
+            let bare =
+                d.ty.as_ref()
+                    .map(|t| ty_str(peel(t)))
+                    .unwrap_or_default()
+                    .rsplit("::")
+                    .next()
+                    .unwrap_or_default()
+                    .to_string();
             if !bare.is_empty() && !object_done.contains(&bare) {
                 object_todo.push_back(bare);
                 seeded = true;
@@ -701,8 +707,8 @@ fn main() {
     // Fixpoint: start from the handle types the wrapped impls return, generate a
     // class for each, then follow the handles *those* classes return. The type
     // graph is finite, and `done` keeps a type from being visited twice.
-    let handles_of = |set: &BTreeSet<String>| -> BTreeSet<String> {
-        set.iter()
+    let handles_of = |set: &Types| -> BTreeSet<String> {
+        set.values()
             .filter_map(|t| match vocab.classify(t) {
                 Some(Js::Handle(x)) | Some(Js::HandleList(x)) => Some(x),
                 _ => None,

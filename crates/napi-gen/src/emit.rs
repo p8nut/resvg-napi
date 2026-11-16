@@ -13,7 +13,7 @@ use convert_case::Casing;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
-use syn::{Fields, ImplItem, Item, ReturnType};
+use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
 use crate::Config;
 use crate::sources::{derives, has_default, inherent_impls, is_pub, self_ident};
@@ -64,10 +64,10 @@ pub struct Conv {
 }
 
 /// The one Js -> JS table. `access` is the Rust expression to convert; `src_ty`
-/// its type text, for the `&` it may already carry. None: no form at this site.
+/// its type, for the `&` it may already carry. None: no form at this site.
 pub fn js_conv(
     js: &Js,
-    src_ty: &str,
+    src_ty: &Type,
     vocab: &Vocab,
     access: &TokenStream,
     site: Site,
@@ -91,12 +91,14 @@ pub fn js_conv(
         reached: Some(t.to_string()),
         ..plain(ty, expr)
     };
-    // `&x` unless the member already is a reference.
-    let by_ref = if src_ty.starts_with('&') {
-        quote!(#a)
-    } else {
-        quote!(&#a)
+    let is_ref = matches!(Shape::of(src_ty), Shape::Ref { .. });
+    // What an `Option` member holds, a plain `&` aside.
+    let opt = match Shape::of(unref(src_ty)) {
+        Shape::Option(inner) => Some(Shape::of(inner)),
+        _ => None,
     };
+    // `&x` unless the member already is a reference.
+    let by_ref = if is_ref { quote!(#a) } else { quote!(&#a) };
     let saturating = quote!(u32::try_from(#a).unwrap_or(u32::MAX));
     Some(match (js, site) {
         (Js::Bool, _) => plain(quote!(bool), d),
@@ -129,11 +131,7 @@ pub fn js_conv(
         (Js::Class(_), Field | Carried) => return None,
         (Js::Class(t), Getter | Method) => {
             let c = format_ident!("{t}");
-            let v = if src_ty.starts_with('&') {
-                quote!(*#a)
-            } else {
-                quote!(#a)
-            };
+            let v = if is_ref { quote!(*#a) } else { quote!(#a) };
             plain(quote!(#c), quote!(#c::__from(#v)))
         }
         // A copy of the borrowed value, wrapped as the class wraps its own.
@@ -143,7 +141,7 @@ pub fn js_conv(
         }
         (Js::OptClass(t), Getter | Method) => {
             let c = format_ident!("{t}");
-            let f = if src_ty.contains("Option<&") {
+            let f = if matches!(opt, Some(Shape::Ref { .. })) {
                 quote!(|x| #c::__from(*x))
             } else {
                 quote!(#c::__from)
@@ -168,7 +166,8 @@ pub fn js_conv(
         }
         (Js::Iterated(item, via), Getter | Field | Method) => {
             let via = format_ident!("{via}");
-            let c = js_conv(item, "", vocab, &quote!(x), Getter)?;
+            // The item, handed by value.
+            let c = js_conv(item, &syn::parse_quote!(_), vocab, &quote!(x), Getter)?;
             let (ty, e) = (c.ty, c.expr);
             plain(quote!(Vec<#ty>), quote!(#a.#via().map(|x| #e).collect()))
         }
@@ -182,7 +181,7 @@ pub fn js_conv(
         ),
         (Js::F64List, Getter | Field | Carried) => plain(quote!(Vec<f64>), quote!(#a.to_vec())),
         (Js::Enum, _) => {
-            let e = enum_ident(&vocab.resolve(src_ty));
+            let e = enum_ident(&key(vocab.resolve(src_ty)).expect("an enum is named by a path"));
             plain(quote!(#e), quote!(#e::from(#d)))
         }
         // A value class owns its upstream value, so a nested one is cloned
@@ -205,7 +204,8 @@ pub fn js_conv(
         // `iter` for a slice, `into_iter` for an iterator of references.
         (Js::ValueList(t), Method) => {
             let c = data_ident(t);
-            let iter = if src_ty.starts_with("&[") {
+            let iter = if matches!(Shape::of(src_ty), Shape::Ref { inner, .. } if matches!(Shape::of(inner), Shape::Slice(_)))
+            {
                 quote!(iter)
             } else {
                 quote!(into_iter)
@@ -216,7 +216,13 @@ pub fn js_conv(
         (Js::OptValue(t), Getter | Method) => {
             let c = data_ident(t);
             // A boxed member wraps what the box holds.
-            let e = if src_ty.contains("Option<Box<") {
+            let e = if opt
+                .map(|o| match o {
+                    Shape::Ref { inner, .. } => Shape::of(inner),
+                    o => o,
+                })
+                .is_some_and(|o| matches!(o, Shape::Box(_)))
+            {
                 quote!(#a.map(|x| #c::wrap(x.as_ref().clone())))
             } else {
                 quote!(#a.map(|x| #c::wrap(x.clone())))
@@ -233,7 +239,7 @@ pub fn js_conv(
         (Js::PayloadEnum(t), Getter | Field) if vocab.payload[t].projects(vocab) => {
             let info = &vocab.payload[t];
             let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
-            let own = if src_ty.starts_with('&') {
+            let own = if is_ref {
                 quote!(#a.clone())
             } else {
                 quote!(#a)
@@ -329,7 +335,7 @@ pub fn stepped(js: &Js, vocab: &Vocab) -> Option<(TokenStream, TokenStream)> {
 /// `payload_blocker` is the authority on *whether*, this is the *how*.
 pub fn carried_field(
     vocab: &Vocab,
-    ty: &str,
+    ty: &Type,
     access: &TokenStream,
 ) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
     let c = js_conv(&vocab.classify(ty)?, ty, vocab, access, Site::Carried)?;
@@ -434,7 +440,8 @@ pub fn payload_enum_code(
             Payload::Value(ty) if vocab.classify(ty).is_none() => {
                 report!(
                     vocab.config,
-                    "{name}::{n} carries {ty}, which has no mappable data: emitted without a value"
+                    "{name}::{n} carries {}, which has no mappable data: emitted without a value",
+                    ty_str(ty)
                 );
                 (Vec::new(), quote!(#up::#vid(_)), Vec::new())
             }
@@ -458,9 +465,7 @@ does this. Copied out on each read.",
                 // Qualified: the generated file imports the napi prelude and the
                 // wrapped crates, not `std::sync`, and the rest of it spells
                 // `Arc` out in full.
-                let raw_src = rust_src(ty);
-                let raw_ty: syn::Type = syn::parse_str(&raw_src)
-                    .unwrap_or_else(|e| panic!("{name}::{n} carries {ty}, unparseable: {e}"));
+                let raw_ty = std_arc(ty);
                 items.extend(quote! {
                     #[doc = #doc]
                     #[napi]
@@ -505,7 +510,10 @@ does this. Copied out on each read.",
                     None => carried_field(vocab, ty, &quote!(v)).map(|(_, fty, expr)| (fty, expr)),
                 };
                 let Some((fty, expr)) = carried else {
-                    return Err(format!("{name}::{n} carries {ty}, which cannot be carried"));
+                    return Err(format!(
+                        "{name}::{n} carries {}, which cannot be carried",
+                        ty_str(ty)
+                    ));
                 };
                 let doc = format!(" `{name}::{n}`.");
                 items.extend(quote! {
@@ -527,7 +535,10 @@ does this. Copied out on each read.",
             Payload::Value(ty) => {
                 let access = quote!(v);
                 let Some((hint, fty, expr)) = carried_field(vocab, ty, &access) else {
-                    return Err(format!("{name}::{n} carries {ty}, which cannot be a field"));
+                    return Err(format!(
+                        "{name}::{n} carries {}, which cannot be a field",
+                        ty_str(ty)
+                    ));
                 };
                 let field = format_ident!("{}", hint.unwrap_or("value"));
                 (
@@ -548,16 +559,15 @@ does this. Copied out on each read.",
                     (Vec::new(), Vec::new(), Vec::new(), Vec::new());
                 for (j, ty) in tys.iter().enumerate() {
                     let b = format_ident!("v{j}");
-                    let raw_ty: syn::Type = syn::parse_str(&rust_src(ty)).unwrap_or_else(|e| {
-                        panic!("{name}::{n}.{j} carries {ty}, unparseable: {e}")
-                    });
+                    let raw_ty = std_arc(ty);
                     // Each bound by reference, as a union's payload is.
                     let (jty, conv) = if matches!(vocab.classify(ty), Some(Js::Bytes)) {
                         (quote!(Buffer), quote!(napi_support::copied(#b)))
                     } else {
                         let Some((_, jty, conv)) = carried_field(vocab, ty, &quote!(#b)) else {
                             return Err(format!(
-                                "{name}::{n}.{j} carries {ty}, which cannot be a field"
+                                "{name}::{n}.{j} carries {}, which cannot be a field",
+                                ty_str(ty)
                             ));
                         };
                         (jty, conv)
@@ -601,7 +611,8 @@ does this. Copied out on each read.",
                     let id = format_ident!("v{j}");
                     let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(#id)) else {
                         return Err(format!(
-                            "{name}::{n}.{j} carries {ty}, which cannot be a field"
+                            "{name}::{n}.{j} carries {}, which cannot be a field",
+                            ty_str(ty)
                         ));
                     };
                     binds.push(id);
@@ -623,7 +634,8 @@ does this. Copied out on each read.",
                     let access = quote!(#id);
                     let Some((_, fty, expr)) = carried_field(vocab, ty, &access) else {
                         return Err(format!(
-                            "{name}::{n}.{fname} carries {ty}, which cannot be a field"
+                            "{name}::{n}.{fname} carries {}, which cannot be a field",
+                            ty_str(ty)
                         ));
                     };
                     decls.push(quote!(pub #id: #fty,));
@@ -852,7 +864,7 @@ pub fn option_object(
                 decls.push(m.decl);
                 assigns.push(m.assign);
             }
-            None => skipped.push(Skip::new(&name, Some(&fty), Reason::Unprovided)),
+            None => skipped.push(Skip::new(&name, Some(&f.ty), Reason::Unprovided)),
         }
     }
     let (generics, anon) = if borrows {
@@ -919,9 +931,8 @@ fn map_field(
 ) -> Option<Field> {
     let ident = f.ident.clone()?;
     let name = ident.to_string();
-    let ty = ty_str(&f.ty);
     let doc = docs(&f.attrs);
-    match vocab.classify(&ty) {
+    match vocab.classify(&f.ty) {
             Some(Js::F32) => Some(field(
                 &ident,
                 &doc,
@@ -998,7 +1009,7 @@ fn map_field(
             )),
             Some(Js::Enum) => {
                 // The JS name, after `Config::enum_renames`, as every other site spells it.
-                let e = enum_ident(&vocab.resolve(&ty));
+                let e = enum_ident(&key(vocab.resolve(&f.ty)).expect("an enum is named by a path"));
                 Some(field(
                     &ident,
                     &doc,
@@ -1076,7 +1087,7 @@ pub fn map_enums(
         }
         // A payload enum is mapped elsewhere, as a union, when its shape
         // allows; when it does not, this is the one place that says so.
-        if let Err(why) = payload_shape(e, &|t| t) {
+        if let Err(why) = payload_shape(e, &|t| t.clone()) {
             rejected.push((e.ident.to_string(), why));
             continue;
         }
@@ -1195,15 +1206,16 @@ pub fn data_members(
 
     // `step` borrows the member from `__v`, a reference to the value, when
     // it can be borrowed (a field, an accessor returning a reference).
-    let mut push = |name: &str, ty_s: &str, access: TokenStream, step: Option<TokenStream>| {
+    let mut push = |name: &str, ty: &Type, access: TokenStream, step: Option<TokenStream>| {
         if vocab.config.not_data.contains(&name) {
             return;
         }
-        let peeled = peel_type(ty_s);
-        let js = vocab.classify(ty_s);
+        let js = vocab.classify(ty);
         // A node type a listed class copies (`Js::Owned`) is that class, and
         // reaches nothing behind it.
-        if vocab.config.node_types.contains(&bare(peeled)) && !matches!(js, Some(Js::Owned(_))) {
+        if key(peel(ty)).is_some_and(|k| vocab.config.node_types.contains(&bare(&k)))
+            && !matches!(js, Some(Js::Owned(_)))
+        {
             return;
         }
         let id = format_ident!("{}", name);
@@ -1214,7 +1226,7 @@ pub fn data_members(
             && !nested_values
             && vocab.payload[t].holds_class(vocab)
         {
-            skipped.push(Skip::new(name, Some(ty_s), Reason::UnionWithClasses));
+            skipped.push(Skip::new(name, Some(ty), Reason::UnionWithClasses));
             return;
         }
         // A read-only class holds a projection of its value: a member it can
@@ -1241,7 +1253,7 @@ pub fn data_members(
         };
         if let Some(c) = js
             .as_ref()
-            .and_then(|j| js_conv(j, ty_s, vocab, &access, site))
+            .and_then(|j| js_conv(j, ty, vocab, &access, site))
         {
             reached.extend(c.reached);
             out.push(Member {
@@ -1253,11 +1265,13 @@ pub fn data_members(
             return;
         }
         // `Option<T>` where T maps stays optional on the JS side.
-        let raw = ty_s.trim_start_matches('&').strip_circumfix("Option<", '>');
-        let is_ref = raw.is_some_and(|s| s.starts_with('&'));
-        let inner = raw.map(|s| s.trim_start_matches('&').to_string());
-        match inner
-            .as_deref()
+        let raw = match Shape::of(unref(ty)) {
+            Shape::Option(inner) => Some(inner),
+            _ => None,
+        };
+        let is_ref = raw.is_some_and(|i| matches!(Shape::of(i), Shape::Ref { .. }));
+        match raw
+            .map(unref)
             .and_then(|i| vocab.classify(i).map(|j| (i, j)))
         {
             Some((_, Js::F32)) => {
@@ -1318,7 +1332,7 @@ pub fn data_members(
                 });
             }
             _ => {
-                skipped.push(Skip::new(name, Some(ty_s), Reason::Member));
+                skipped.push(Skip::new(name, Some(ty), Reason::Member));
             }
         }
     };
@@ -1347,9 +1361,8 @@ pub fn data_members(
             };
             let id = &f.sig.ident;
             seen.insert(id.to_string());
-            let out = ty_str(o);
-            let step = out.starts_with('&').then(|| quote!(__v.#id()));
-            push(&id.to_string(), &out, quote!(v.#id()), step);
+            let step = matches!(Shape::of(o), Shape::Ref { .. }).then(|| quote!(__v.#id()));
+            push(&id.to_string(), o, quote!(v.#id()), step);
         }
     }
     if let Some(Fields::Named(named)) = struct_fields_opt(files, bare(ty)) {
@@ -1363,8 +1376,10 @@ pub fn data_members(
             }
             // Copy kinds are read by value. Should upstream make one of them
             // non-Copy, this stops compiling rather than silently cloning.
-            let ty_s = ty_str(&f.ty);
-            let inner = ty_s.strip_circumfix("Option<", '>').unwrap_or(&ty_s);
+            let inner = match Shape::of(&f.ty) {
+                Shape::Option(inner) => inner,
+                _ => &f.ty,
+            };
             let copy = matches!(
                 vocab.classify(inner),
                 Some(
@@ -1387,7 +1402,7 @@ pub fn data_members(
             } else {
                 quote!(v.#id.clone())
             };
-            push(&id.to_string(), &ty_s, access, Some(quote!(&__v.#id)));
+            push(&id.to_string(), &f.ty, access, Some(quote!(&__v.#id)));
         }
     }
     (out, skipped, reached)
@@ -1555,7 +1570,7 @@ pub fn wrapper_class(
     let reached = skipped
         .iter()
         .filter_map(|s| {
-            let t = s.ty.as_deref().filter(|_| s.reason == Reason::Returns)?;
+            let t = s.ty.as_ref().filter(|_| s.reason == Reason::Returns)?;
             match vocab.classify(t) {
                 Some(Js::Handle(x)) | Some(Js::HandleList(x)) => Some(x),
                 _ => None,
@@ -1671,13 +1686,13 @@ pub fn map_methods(
             let mut ok = true;
             for a in inputs {
                 let syn::FnArg::Typed(t) = a else { continue };
-                let ty = ty_str(&t.ty);
+                let ty = &*t.ty;
                 // A generic parameter is classified through its bound instead.
-                let kind = match bounds.get(&ty) {
+                let kind = match key(ty).and_then(|k| bounds.get(&k)) {
                     Some(Some(Bound::Path)) => Some(Arg::PathStr),
                     Some(Some(Bound::Str)) => Some(Arg::Str),
                     Some(None) => None,
-                    None => match vocab.classify(&ty) {
+                    None => match vocab.classify(ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
                         _ => None,
@@ -1687,7 +1702,7 @@ pub fn map_methods(
                     Some(k) => args.push((t.pat.clone(), k)),
                     None => {
                         ok = false;
-                        skipped.push(Skip::new(&name, Some(&ty), Reason::Arg));
+                        skipped.push(Skip::new(&name, Some(ty), Reason::Arg));
                         break;
                     }
                 }
@@ -1701,16 +1716,16 @@ pub fn map_methods(
             let ret = match &f.sig.output {
                 ReturnType::Default => None,
                 ReturnType::Type(_, t) => {
-                    let ty = ty_str(t);
-                    match vocab.classify(&ty) {
+                    let ty = &**t;
+                    match vocab.classify(ty) {
                         Some(js)
-                            if js_conv(&js, &ty, vocab, &TokenStream::new(), Site::Method)
+                            if js_conv(&js, ty, vocab, &TokenStream::new(), Site::Method)
                                 .is_some() =>
                         {
                             Some((js, ty))
                         }
                         _ => {
-                            skipped.push(Skip::new(&name, Some(&ty), Reason::Returns));
+                            skipped.push(Skip::new(&name, Some(ty), Reason::Returns));
                             continue;
                         }
                     }
@@ -1755,11 +1770,15 @@ pub fn map_methods(
                 // A read-only class borrowed from a read-only `Arc`: a step
                 // into it, as `Classes::projected` takes one, not a copy.
                 Some((Js::Value(t), ty)) | Some((Js::ValueList(t), ty))
-                    if readonly && !mutable && fwd.is_empty() && ty.starts_with('&') =>
+                    if readonly
+                        && !mutable
+                        && fwd.is_empty()
+                        && matches!(Shape::of(ty), Shape::Ref { .. }) =>
                 {
                     let c = data_ident(t);
+                    let slice = matches!(Shape::of(ty), Shape::Ref { inner, .. } if matches!(Shape::of(inner), Shape::Slice(_)));
                     let b = quote!(napi_support::Projection::of(#receiver.clone()));
-                    let value = if ty.starts_with("&[") {
+                    let value = if slice {
                         quote!({
                             let __b = #b;
                             (0..__b.get().#ident().len())
@@ -1770,11 +1789,7 @@ pub fn map_methods(
                     } else {
                         quote!(#c::__proj(#b.then(|__s| Some(__s.#ident())).expect("a borrow resolves")))
                     };
-                    let ty = if ty.starts_with("&[") {
-                        quote!(Vec<#c>)
-                    } else {
-                        quote!(#c)
-                    };
+                    let ty = if slice { quote!(Vec<#c>) } else { quote!(#c) };
                     (ty, value, false)
                 }
                 Some((js, ty)) => {
@@ -2027,12 +2042,19 @@ pub fn constants(
         } else {
             format!("{root}::{module}")
         };
-        let ty = vocab.resolve(&ty_str(&c.ty));
-        let js_ty = match ty.as_str() {
-            "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64" | "bool" | "String" => {
-                ty.parse::<TokenStream>().expect("a primitive type")
+        let ty = vocab.resolve(&c.ty);
+        let js_ty = match Shape::of(ty) {
+            s if matches!(
+                s.key().as_deref(),
+                Some(
+                    "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64" | "bool" | "String"
+                )
+            ) =>
+            {
+                ty.to_token_stream()
             }
-            t if t.starts_with('&') && t.ends_with("str") => quote!(&str),
+            // `&str` and `&'static str` alike.
+            Shape::Ref { inner, .. } if key(inner).as_deref() == Some("str") => quote!(&str),
             _ => {
                 report.push(format!(
                     "{at}::{name} constant not exposed: {} (no JS value)",
@@ -2479,17 +2501,28 @@ enum InputField {
 }
 
 fn input_field(t: &syn::Type) -> Option<InputField> {
-    if let syn::Type::Reference(r) = t
-        && r.mutability.is_none()
-        && ty_str(&r.elem) == "str"
-    {
-        return Some(InputField::BorrowedStr);
-    }
-    let s = ty_str(t);
-    match s.as_str() {
-        "String" | "PathBuf" | "std::path::PathBuf" => Some(InputField::Str),
-        "Vec<u8>" => Some(InputField::Bytes),
-        _ if bare_arc(&s) == "Arc<Vec<u8>>" || shared_bytes(&s) => Some(InputField::SharedBytes),
+    let u8s = |e: &Type| key(e).as_deref() == Some("u8");
+    match Shape::of(t) {
+        Shape::Ref {
+            mutable: false,
+            inner,
+            ..
+        } if key(inner).as_deref() == Some("str") => Some(InputField::BorrowedStr),
+        s if matches!(
+            s.key().as_deref(),
+            Some("String" | "PathBuf" | "std::path::PathBuf")
+        ) =>
+        {
+            Some(InputField::Str)
+        }
+        Shape::Vec(e) if u8s(e) => Some(InputField::Bytes),
+        Shape::Arc(i) if matches!(Shape::of(i), Shape::Vec(e) if u8s(e)) => {
+            Some(InputField::SharedBytes)
+        }
+        // Behind a plain `&` too, as shared bytes are read anywhere.
+        _ if matches!(Shape::of(unref(t)), Shape::Arc(i) if Shape::of(i) == Shape::DynBytes) => {
+            Some(InputField::SharedBytes)
+        }
         _ => None,
     }
 }

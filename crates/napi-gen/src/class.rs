@@ -423,7 +423,7 @@ pub(crate) struct Ret {
 }
 
 /// Why a function or method was left out.
-pub(crate) type Why = (Reason, Option<String>);
+pub(crate) type Why = (Reason, Option<Box<Type>>);
 
 impl<'a> Classes<'a> {
     /// The table of `Config::classes`, over `sources`.
@@ -861,9 +861,8 @@ impl<'a> Classes<'a> {
                     }
                     // Anything else the vocabulary maps for a getter: a
                     // union, a class held by value.
-                    let t = ty_str(e);
-                    let js = vocab.classify(&t)?;
-                    js_conv(&js, &t, vocab, &at, Site::Getter)
+                    let js = vocab.classify(e)?;
+                    js_conv(&js, e, vocab, &at, Site::Getter)
                         .filter(|c| !c.is_result)
                         .map(|c| (c.ty, c.expr))
                 })
@@ -937,12 +936,11 @@ impl<'a> Classes<'a> {
         // What the vocabulary maps, for a method: a handle class hands out
         // the handles and data it reaches.
         if with_self {
-            let t = ty_str(ty);
             // A getter's conversion where a method has none (a payload
             // enum, a list of numbers): the call is the same.
-            if let Some(js) = vocab.classify(&t)
-                && let Some(c) = js_conv(&js, &t, vocab, &v, Site::Method)
-                    .or_else(|| js_conv(&js, &t, vocab, &v, Site::Getter))
+            if let Some(js) = vocab.classify(ty)
+                && let Some(c) = js_conv(&js, ty, vocab, &v, Site::Method)
+                    .or_else(|| js_conv(&js, ty, vocab, &v, Site::Getter))
                 && !c.is_result
             {
                 return Ok(Ret {
@@ -969,7 +967,7 @@ impl<'a> Classes<'a> {
         vocab: &Vocab,
     ) -> Result<TokenStream, Why> {
         let name = sig.ident.to_string();
-        let skip = |r: Reason, t: Option<String>| Err((r, t));
+        let skip = |r: Reason, t: Option<Box<Type>>| Err((r, t));
         if matches!(sig.safety, syn::Safety::Unsafe(_)) {
             return skip(Reason::Unsafe, None);
         }
@@ -1016,7 +1014,7 @@ impl<'a> Classes<'a> {
         for input in sig.inputs.iter().skip(usize::from(recv != Recv::None)) {
             let FnArg::Typed(t) = input else { continue };
             let syn::Pat::Ident(p) = &*t.pat else {
-                return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                return skip(Reason::Arg, Some(t.ty.clone()));
             };
             // A callback whose result the function returns (`with_data(id,
             // |data, index| ..)`): no JS argument; the closure copies out what
@@ -1025,14 +1023,14 @@ impl<'a> Classes<'a> {
                 && let Some((inputs, result)) = callbacks.get(seg)
             {
                 let Some((closure, ty)) = copy_out(inputs) else {
-                    return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                    return skip(Reason::Arg, Some(t.ty.clone()));
                 };
                 a.fwd.push(closure);
                 copied = Some((result.clone(), ty));
                 continue;
             }
             let Some((param, pre, fwd)) = self.arg(ctx, this, &p.ident, &t.ty, &bounds) else {
-                return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                return skip(Reason::Arg, Some(t.ty.clone()));
             };
             a.params.push(param);
             a.pre.extend(pre);
@@ -1059,7 +1057,7 @@ impl<'a> Classes<'a> {
             Some((result, ty)) if matches!(segs(&out).as_deref(), Some([s]) if s == result) => {
                 ty.clone()
             }
-            Some(_) => return skip(Reason::Returns, Some(ty_str(&out))),
+            Some(_) => return skip(Reason::Returns, Some(Box::new(out.clone()))),
             None => out,
         };
         // Only a class's own constructor and factories build it from the
@@ -1085,7 +1083,7 @@ impl<'a> Classes<'a> {
         };
         let (body, ret_ty) = match projected {
             Some(p) => {
-                let (ty, bind, value) = p.map_err(|r| (r, Some(ty_str(&out))))?;
+                let (ty, bind, value) = p.map_err(|r| (r, Some(Box::new(out.clone()))))?;
                 let pre = &a.pre;
                 let body = quote! {
                     #(#pre)*
@@ -1104,10 +1102,10 @@ impl<'a> Classes<'a> {
                     }
                 } else {
                     self.ret(ctx, this, &out, factory || is_new, me.is_some(), vocab)
-                        .map_err(|r| (r, Some(ty_str(&out))))?
+                        .map_err(|r| (r, Some(Box::new(out.clone()))))?
                 };
                 if is_new && !returns_this {
-                    return skip(Reason::Returns, Some(ty_str(&out)));
+                    return skip(Reason::Returns, Some(Box::new(out.clone())));
                 }
 
                 let path = match this {

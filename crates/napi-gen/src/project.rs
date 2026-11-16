@@ -20,7 +20,7 @@ use crate::Config;
 use crate::class::{Args, Class, Classes, Holding, Source, args, deref, find_struct, is, segs};
 use crate::emit::{alias_ident, stepped, union_alias};
 use crate::sources::{derives, find_enum};
-use crate::vocab::{Js, Reason, Vocab, lower_camel, ty_str};
+use crate::vocab::{Js, Reason, Vocab, lower_camel};
 
 /// A `Config::projections` enum, mirrored as a union of projections.
 pub struct Union {
@@ -197,7 +197,7 @@ impl Classes<'_> {
             // a read-only `Arc`. Elsewhere it stays a copy: a projection
             // into a copy-on-write `Arc` would keep it shared, and the next
             // write would copy the whole of it.
-            let js = vocab.classify(&ty_str(elem))?;
+            let js = vocab.classify(elem)?;
             let stepped = stepped(&js, vocab).filter(|_| !matches!(js, Js::Owned(_)))?;
             if !matches!(h, Holding::Projected | Holding::Shared) {
                 return None;

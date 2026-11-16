@@ -16,6 +16,8 @@ use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
+pub use crate::shape::{Shape, key, peel, peeled, unref};
+
 use crate::Config;
 use crate::sources::{is_pub, self_ident};
 
@@ -58,7 +60,7 @@ pub enum Js {
     Owned(String),
     // `Vec<(A, B)>` or `&[(A, B)]`: an `Array<[A, B]>`, each element mapped
     // as a union's payload is.
-    TupleList(Vec<(String, Js)>),
+    TupleList(Vec<(Type, Js)>),
     // A newtype over f32 with a `get(&self) -> f32`, e.g. `Opacity`.
     Scalar,
     // `Arc<T>`: shareable, so a wrapper class can own one.
@@ -102,13 +104,13 @@ pub enum Payload {
     /// `Identity` -- nothing but its discriminant.
     None,
     /// `Table(Vec<f32>)` -- one unnamed field, exposed as `value`.
-    Value(String),
+    Value(Box<Type>),
     /// `Linear { slope: f32, intercept: f32 }` -- named fields, exposed under
     /// their own names, which is a better shape than wrapping them in `value`.
-    Fields(Vec<(String, String)>),
+    Fields(Vec<(String, Type)>),
     /// `Line(Point, Point)` -- unnamed fields, exposed as `value`, an array
     /// of them: a tuple, as `Vec<(A, B)>` is one.
-    Tuple(Vec<String>),
+    Tuple(Vec<Type>),
 }
 
 impl Payload {
@@ -121,10 +123,10 @@ impl Payload {
     }
 
     /// The types it carries.
-    pub fn carried(&self) -> Vec<&String> {
+    pub fn carried(&self) -> Vec<&Type> {
         match self {
             Payload::None => Vec::new(),
-            Payload::Value(t) => vec![t],
+            Payload::Value(t) => vec![&**t],
             Payload::Fields(f) => f.iter().map(|(_, t)| t).collect(),
             Payload::Tuple(ts) => ts.iter().collect(),
         }
@@ -263,7 +265,7 @@ impl PayloadEnum {
         /// only shape `payload_enum_code` turns into a read-only class. A named
         /// field beside others has to be an object field, and bytes cannot be
         /// one.
-        fn field_of(vocab: &Vocab, p: &str, sole: bool) -> Result<(), String> {
+        fn field_of(vocab: &Vocab, p: &Type, sole: bool) -> Result<(), String> {
             if let Some(Js::Handle(t)) = vocab.classify(p) {
                 return if vocab.with_id.contains(&t) {
                     Ok(())
@@ -273,14 +275,16 @@ impl PayloadEnum {
             }
             // A payload that is itself a payload enum would recurse through
             // `classify`; not a shape any wrapped crate uses yet.
-            if vocab.payload.contains_key(&vocab.resolve(p)) {
+            if key(vocab.resolve(p)).is_some_and(|k| vocab.payload.contains_key(&k)) {
                 return Err("it is itself a payload enum".into());
             }
             // A payload naming a public struct the registry dropped carries nothing
             // mappable: `filter::Image` has one method, `root() -> &Group`, and a
             // Group is a handle question. The variant keeps its discriminant and
             // loses its value, because there is no value to give it.
-            if vocab.classify(p).is_none() && vocab.structs.contains(bare(p)) {
+            if vocab.classify(p).is_none()
+                && key(p).is_some_and(|k| vocab.structs.contains(bare(&k)))
+            {
                 return Ok(());
             }
             if let Some(Js::Class(t)) = vocab.classify(p) {
@@ -340,7 +344,7 @@ impl PayloadEnum {
         }
 
         self.variants.iter().find_map(|(n, p)| {
-            let carried: Vec<(Option<&str>, &String)> = match p {
+            let carried: Vec<(Option<&str>, &Type)> = match p {
                 Payload::Fields(f) => f.iter().map(|(k, t)| (Some(k.as_str()), t)).collect(),
                 p => p.carried().into_iter().map(|t| (None, t)).collect(),
             };
@@ -353,9 +357,12 @@ impl PayloadEnum {
                 _ => false,
             };
             carried.into_iter().find_map(|(field, t)| {
-                field_of(vocab, t, sole).err().map(|why| match field {
-                    Some(f) => format!("{n}.{f} carries {t}, and {why}"),
-                    None => format!("{n} carries {t}, and {why}"),
+                field_of(vocab, t, sole).err().map(|why| {
+                    let t = ty_str(t);
+                    match field {
+                        Some(f) => format!("{n}.{f} carries {t}, and {why}"),
+                        None => format!("{n} carries {t}, and {why}"),
+                    }
                 })
             })
         })
@@ -417,7 +424,7 @@ pub fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
 /// refused for one stated reason rather than dropped by both in silence.
 pub fn payload_shape(
     e: &syn::ItemEnum,
-    qualify: &dyn Fn(String) -> String,
+    qualify: &dyn Fn(&Type) -> Type,
 ) -> Result<Vec<(String, Payload)>, String> {
     let mut out = Vec::new();
     for v in &e.variants {
@@ -425,7 +432,7 @@ pub fn payload_shape(
         let payload = match &v.fields {
             Fields::Unit => Payload::None,
             Fields::Unnamed(f) if f.unnamed.len() == 1 => {
-                Payload::Value(qualify(ty_str(&f.unnamed[0].ty)))
+                Payload::Value(Box::new(qualify(&f.unnamed[0].ty)))
             }
             Fields::Unnamed(f) if f.unnamed.is_empty() => {
                 return Err(format!(
@@ -434,16 +441,12 @@ pub fn payload_shape(
             }
             // Several unnamed fields: a tuple, `value: [a, b]`.
             Fields::Unnamed(f) => {
-                Payload::Tuple(f.unnamed.iter().map(|x| qualify(ty_str(&x.ty))).collect())
+                Payload::Tuple(f.unnamed.iter().map(|x| qualify(&x.ty)).collect())
             }
             Fields::Named(f) => Payload::Fields(
                 f.named
                     .iter()
-                    .filter_map(|x| {
-                        x.ident
-                            .as_ref()
-                            .map(|i| (i.to_string(), qualify(ty_str(&x.ty))))
-                    })
+                    .filter_map(|x| x.ident.as_ref().map(|i| (i.to_string(), qualify(&x.ty))))
                     .collect(),
             ),
         };
@@ -474,12 +477,11 @@ pub fn payload_enums(
         if !is_pub(&e.vis) || config.converters.iter().any(|c| e.ident == c.ty) {
             continue;
         }
-        let qualify = |t: String| {
-            if !module.is_empty() && dups.contains(&t) {
-                format!("{module}::{t}")
-            } else {
-                t
+        let qualify = |t: &Type| match key(t) {
+            Some(k) if !module.is_empty() && dups.contains(&k) => {
+                syn::parse_str(&format!("{module}::{k}")).expect("a module path")
             }
+            _ => t.clone(),
         };
         // Unit variants alone are a plain enum, not a payload one.
         let Ok(variants) = payload_shape(e, &qualify) else {
@@ -511,32 +513,6 @@ pub fn payload_enums(
         }
     }
     out
-}
-
-/// The type a member is *about*, its wrappers peeled: `&`, `Result<..>`,
-/// `Option<..>`, `Vec<..>`, `Box<..>`, a slice `[..]` and
-/// `implIterator<Item=..>`, as often as they nest. Stops at `Arc<..>`: that marks a shared handle, and peeling it
-/// would seed the handle's type as data. The path prefix is left on; callers
-/// that want the bare name take it off. `ty_str` has removed the whitespace.
-pub fn peel_type(t: &str) -> &str {
-    let mut t = t;
-    loop {
-        // The first generic argument only: `Result<Foo,Error>` is about `Foo`.
-        let next = t
-            .strip_prefix('&')
-            .or_else(|| {
-                ["Result<", "Option<", "Vec<", "Box<"]
-                    .iter()
-                    .find_map(|w| t.strip_circumfix(w, '>'))
-                    .map(first_arg)
-            })
-            .or_else(|| t.strip_circumfix('[', ']'))
-            .or_else(|| t.strip_prefix("implIterator<Item=").map(first_arg));
-        match next {
-            Some(n) => t = n,
-            None => return t,
-        }
-    }
 }
 
 /// What JS can hand a generic parameter, by its bound: a string either way.
@@ -589,7 +565,7 @@ pub fn bound_kinds(g: &syn::Generics) -> BTreeMap<String, Option<Bound>> {
         .collect();
     for p in g.where_clause.iter().flat_map(|w| &w.predicates) {
         if let syn::WherePredicate::Type(t) = p
-            && let Some(slot) = out.get_mut(&ty_str(&t.bounded_ty))
+            && let Some(slot) = key(&t.bounded_ty).and_then(|k| out.get_mut(&k))
             && slot.is_none()
         {
             *slot = t.bounds.iter().find_map(kind);
@@ -598,33 +574,13 @@ pub fn bound_kinds(g: &syn::Generics) -> BTreeMap<String, Option<Bound>> {
     out
 }
 
-/// The first of a generic's arguments: `s` up to its first comma or
-/// unmatched closing bracket, the brackets nested inside it skipped.
-/// `A,B` is `A`, and `&Vec<T>>+'_` (what follows `Item=`) is `&Vec<T>`. A
-/// `->` is not a bracket. `ty_str` has removed the whitespace.
-pub fn first_arg(s: &str) -> &str {
-    let mut depth = 0usize;
-    let mut prev = ' ';
-    for (i, c) in s.char_indices() {
-        match c {
-            '>' if prev == '-' => {}
-            '<' | '[' | '(' => depth += 1,
-            '>' | ']' | ')' | ',' if depth == 0 => return &s[..i],
-            '>' | ']' | ')' => depth -= 1,
-            _ => {}
-        }
-        prev = c;
-    }
-    s
-}
-
 /// Why a member or method was left out, as a record rather than a sentence:
 /// the discovery fixpoint reads the type off it, the report reads the name,
 /// and neither has to split a formatted string to get them back.
 pub struct Skip {
     pub name: String,
     /// The upstream type the decision was about, when there is one.
-    pub ty: Option<String>,
+    pub ty: Option<Type>,
     pub reason: Reason,
 }
 
@@ -654,10 +610,10 @@ pub enum Reason {
 }
 
 impl Skip {
-    pub fn new(name: &str, ty: Option<&str>, reason: Reason) -> Skip {
+    pub fn new(name: &str, ty: Option<&Type>, reason: Reason) -> Skip {
         Skip {
             name: name.to_string(),
-            ty: ty.map(str::to_string),
+            ty: ty.cloned(),
             reason,
         }
     }
@@ -666,7 +622,7 @@ impl Skip {
 /// The report's wording, unchanged from when these were built as strings.
 impl std::fmt::Display for Skip {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let (n, t) = (&self.name, self.ty.as_deref().unwrap_or_default());
+        let (n, t) = (&self.name, self.ty.as_ref().map(ty_str).unwrap_or_default());
         match self.reason {
             Reason::Member => write!(f, "{n}: {t}"),
             Reason::UnionWithClasses => write!(f, "{n}: {t} (a union with class variants)"),
@@ -700,7 +656,8 @@ pub struct Vocab {
     pub payload: BTreeMap<String, PayloadEnum>,
     pub enums: BTreeSet<String>,
     pub scalars: BTreeSet<String>,
-    pub aliases: BTreeMap<String, String>,
+    /// `pub type X = Y;`, by name: what [`Vocab::resolve`] follows.
+    pub aliases: BTreeMap<String, Type>,
     pub ints: BTreeSet<String>,
     pub objects: BTreeSet<String>,
     pub values: BTreeSet<String>,
@@ -738,85 +695,89 @@ impl Vocab {
     }
 
     /// `Opacity` -> `NormalizedF32` -> ... until it stops being an alias.
-    pub fn resolve(&self, ty: &str) -> String {
-        // `crate::FontVariation` and `FontVariation` are the same type: upstream
-        // spells some of its own members with the prefix and the rest without,
-        // and nothing downstream cares which.
-        //
-        // Lifetimes are *not* stripped here on purpose: `ty_str` drops
-        // whitespace, so `&'a str` arrives as `&'astr` and there is no way to
-        // tell the lifetime from the type that follows it. That is why
-        // `Family::Name` is reported unmapped rather than guessed at.
-        let mut t = ty.replace("crate::", "");
+    ///
+    /// A whole type only: `&Opacity` is not followed. `crate::Opacity` and
+    /// `Opacity` are the same name ([`Shape::key`]).
+    pub fn resolve<'a>(&'a self, ty: &'a Type) -> &'a Type {
+        let mut t = ty;
         for _ in 0..8 {
-            match self.aliases.get(&t) {
-                Some(next) if *next != t => t = next.clone(),
+            let k = key(t);
+            match k.as_ref().and_then(|k| self.aliases.get(k)) {
+                Some(next) if key(next) != k => t = next,
                 _ => break,
             }
         }
         t
     }
 
-    pub fn classify(&self, ty: &str) -> Option<Js> {
+    pub fn classify(&self, ty: &Type) -> Option<Js> {
         let t = self.resolve(ty);
-        let unref = t.trim_start_matches('&');
-        if self.classes.contains(unref) {
-            return Some(Js::Class(unref.to_string()));
-        }
-        if let Some(inner) = unref
-            .strip_circumfix("Option<", '>')
-            .map(|r| r.trim_start_matches('&'))
-            && self.classes.contains(inner)
+        // A plain `&` aside: `&Paint` and `Paint` are the same value, and
+        // the registries are keyed bare.
+        let u = unref(t);
+        let uk = key(u);
+        if let Some(k) = &uk
+            && self.classes.contains(k)
         {
-            return Some(Js::OptClass(inner.to_string()));
+            return Some(Js::Class(k.clone()));
         }
-        if self.owned.contains(unref) {
-            return Some(Js::Owned(unref.to_string()));
+        if let Shape::Option(inner) = Shape::of(u)
+            && let Some(k) = key(unref(inner))
+            && self.classes.contains(&k)
+        {
+            return Some(Js::OptClass(k));
         }
-        if let Some(it) = self.config.iterated.iter().find(|i| i.ty == unref) {
+        if let Some(k) = &uk
+            && self.owned.contains(k)
+        {
+            return Some(Js::Owned(k.clone()));
+        }
+        if let Some(k) = &uk
+            && let Some(it) = self.config.iterated.iter().find(|i| i.ty == k)
+        {
+            let item: Type = syn::parse_str(it.item).expect("a Config::iterated item type");
             return self
-                .classify(it.item)
+                .classify(&item)
                 .map(|item| Js::Iterated(Box::new(item), it.via.to_string()));
         }
         // `Vec<(A, B)>`, `&[(A, B)]`: every element must map.
-        if let Some(inner) = unref
-            .strip_circumfix("Vec<", '>')
-            .or_else(|| unref.strip_circumfix('[', ']'))
-            && let Some(elems) = tuple_elems(inner)
+        if let Shape::Vec(inner) | Shape::Slice(inner) = Shape::of(u)
+            && let Shape::Tuple(elems) = Shape::of(inner)
+            && elems.len() > 1
         {
-            let mapped: Option<Vec<(String, Js)>> = elems
+            let mapped: Option<Vec<(Type, Js)>> = elems
                 .into_iter()
-                .map(|e| self.classify(&e).map(|j| (e, j)))
+                .map(|e| self.classify(e).map(|j| (e.clone(), j)))
                 .collect();
             return mapped.map(Js::TupleList);
         }
-        if let Some(js) = classify(&t, &self.enums, &self.scalars, self.config.tag4_types) {
+        if let Some(js) = classify(t, &self.enums, &self.scalars, self.config.tag4_types) {
             return Some(js);
         }
-        if self.ints.contains(&t) {
-            return Some(Js::IntNewtype(t));
+        if let Some(k) = key(t)
+            && self.ints.contains(&k)
+        {
+            return Some(Js::IntNewtype(k));
         }
-        // `&Paint` and `Paint` are the same enum; the registry is keyed bare.
-        let bare = t.trim_start_matches('&').to_string();
-        if let Some(p) = self.payload.get(&bare) {
-            return p
-                .payload_blocker(self)
-                .is_none()
-                .then_some(Js::PayloadEnum(bare));
-        }
-        // `&[BaselineShift]`: a list of one, which reads the same way.
-        if let Some(inner) = t
-            .trim_start_matches('&')
-            .strip_circumfix('[', ']')
-            .map(|r| self.resolve(r.trim_start_matches('&')))
-            && let Some(p) = self.payload.get(&inner)
+        if let Some(k) = uk
+            && let Some(p) = self.payload.get(&k)
         {
             return p
                 .payload_blocker(self)
                 .is_none()
-                .then_some(Js::PayloadEnumList(inner));
+                .then_some(Js::PayloadEnum(k));
         }
-        classify_object(&t, &self.objects).or_else(|| match classify_object(&t, &self.values) {
+        // `&[BaselineShift]`: a list of one, which reads the same way.
+        if let Shape::Slice(inner) = Shape::of(u)
+            && let Some(k) = key(self.resolve(unref(inner)))
+            && let Some(p) = self.payload.get(&k)
+        {
+            return p
+                .payload_blocker(self)
+                .is_none()
+                .then_some(Js::PayloadEnumList(k));
+        }
+        classify_object(t, &self.objects).or_else(|| match classify_object(t, &self.values) {
             Some(Js::Object(x)) => Some(Js::Value(x)),
             Some(Js::ObjectList(x)) => Some(Js::ValueList(x)),
             Some(Js::OptObject(x)) => Some(Js::OptValue(x)),
@@ -826,130 +787,151 @@ impl Vocab {
 }
 
 /// `pub type X = Y;` pairs, so an alias can be followed to the real type.
-pub fn type_aliases(files: &[syn::File]) -> BTreeMap<String, String> {
+pub fn type_aliases(files: &[syn::File]) -> BTreeMap<String, Type> {
     files
         .iter()
         .flat_map(|f| &f.items)
         .filter_map(|i| match i {
-            Item::Type(t) if is_pub(&t.vis) => Some((t.ident.to_string(), ty_str(&t.ty))),
+            Item::Type(t) if is_pub(&t.vis) => Some((t.ident.to_string(), (*t.ty).clone())),
             _ => None,
         })
         .collect()
 }
 
 pub fn classify(
-    ty: &str,
+    ty: &Type,
     known_enums: &BTreeSet<String>,
     scalars: &BTreeSet<String>,
-    // `Config::tag4_types`.
+    // `Config::tag4_types`, as `ty_str` spells them.
     tag4_types: &[&str],
 ) -> Option<Js> {
-    Some(match ty {
-        // No `Transform` arm: `Vocab::matrices` answers that one by shape,
-        // before this function is reached.
-        "f32" => Js::F32,
-        "f64" => Js::F64,
-        "u32" => Js::U32,
-        "u8" => Js::U8,
-        "u16" => Js::U16,
-        "i32" => Js::I32,
-        "i8" | "i16" => Js::I16,
-        // No `i64` / `u64` arm: neither fits a JS number, so such a member is
-        // left out and reported, as such a constant is (`emit::constants`).
-        "bool" => Js::Bool,
-        "usize" => Js::Count,
-        "String" | "&str" => Js::Str,
-        "Option<String>" => Js::OptStr,
-        "Option<std::path::PathBuf>" | "Option<PathBuf>" => Js::OptPath,
-        "std::path::PathBuf" | "PathBuf" | "&std::path::Path" | "&Path" => Js::Path,
-        "Vec<String>" => Js::StrList,
-        "Vec<f32>" | "&[f32]" | "[f32]" => Js::F32List,
-        "Vec<f64>" | "&[f64]" | "[f64]" => Js::F64List,
-        // An Arc around bytes is shared *data*, not a shared entity: it has no
-        // identity to name it by, and treating it as a handle is what made
-        // `ImageKind`'s image payloads unmappable.
-        "Vec<u8>" | "&[u8]" | "Arc<Vec<u8>>" | "&Arc<Vec<u8>>" | "std::sync::Arc<Vec<u8>>" => {
-            Js::Bytes
-        }
-        s if shared_bytes(s) => Js::Bytes,
-        s if s.starts_with("Result<(),") => Js::TryUnit,
+    let is = |t: &Type, name: &str| key(t).as_deref() == Some(name);
+    // An `Arc` (or a plain `&` to one). An Arc around bytes is shared *data*,
+    // not a shared entity: it has no identity to name it by, and treating it
+    // as a handle is what made `ImageKind`'s image payloads unmappable.
+    // `Arc<dyn AsRef<[u8]> + Send + Sync>` is bytes a crate shares without
+    // saying what holds them, read through `AsRef` as any bytes are.
+    let arc = |inner: &Type| match Shape::of(inner) {
+        Shape::Vec(e) if is(e, "u8") => Some(Js::Bytes),
+        Shape::DynBytes => Some(Js::Bytes),
         // Arc-held definitions can be owned by a wrapper class.
-        s if let Some(t) = s.strip_circumfix("&[Arc<", ">]") => Js::HandleList(t.to_string()),
-        s if let Some(t) = s.trim_prefix('&').strip_circumfix("Arc<", '>') => {
-            Js::Handle(t.to_string())
-        }
-        s if tag4_types.contains(&s) => Js::Tag4,
-        other if known_enums.contains(other) => Js::Enum,
-        // Payload enums are classified by name here and given their union
-        // further down; `map_enums` only mirrors the unit ones.
-        other if scalars.contains(other) => Js::Scalar,
-        _ => return None,
-    })
+        s => s.key().map(Js::Handle),
+    };
+    let list = |e: &Type| match key(e).as_deref() {
+        Some("f32") => Some(Js::F32List),
+        Some("f64") => Some(Js::F64List),
+        _ => None,
+    };
+    let path = |t: &Type| matches!(key(t).as_deref(), Some("std::path::PathBuf" | "PathBuf"));
+    let shape = Shape::of(ty);
+    if let Some(k) = shape.key() {
+        return Some(match k.as_str() {
+            // No `Transform` arm: `Vocab::matrices` answers that one by shape,
+            // before this function is reached.
+            "f32" => Js::F32,
+            "f64" => Js::F64,
+            "u32" => Js::U32,
+            "u8" => Js::U8,
+            "u16" => Js::U16,
+            "i32" => Js::I32,
+            "i8" | "i16" => Js::I16,
+            // No `i64` / `u64` arm: neither fits a JS number, so such a member is
+            // left out and reported, as such a constant is (`emit::constants`).
+            "bool" => Js::Bool,
+            "usize" => Js::Count,
+            "String" => Js::Str,
+            "std::path::PathBuf" | "PathBuf" => Js::Path,
+            k if tag4_types.contains(&k) => Js::Tag4,
+            k if known_enums.contains(k) => Js::Enum,
+            // Payload enums are classified by name here and given their union
+            // further down; `map_enums` only mirrors the unit ones.
+            k if scalars.contains(k) => Js::Scalar,
+            _ => return None,
+        });
+    }
+    if tag4_types.contains(&ty_str(ty).as_str()) {
+        return Some(Js::Tag4);
+    }
+    match shape {
+        Shape::Ref {
+            mutable: false,
+            lifetime: false,
+            inner,
+        } => match Shape::of(inner) {
+            _ if is(inner, "str") => Some(Js::Str),
+            _ if matches!(key(inner).as_deref(), Some("std::path::Path" | "Path")) => {
+                Some(Js::Path)
+            }
+            Shape::Slice(e) if is(e, "u8") => Some(Js::Bytes),
+            Shape::Slice(e) => match Shape::of(e) {
+                Shape::Arc(h) => key(h).map(Js::HandleList),
+                _ => list(e),
+            },
+            Shape::Arc(h) => arc(h),
+            _ => None,
+        },
+        Shape::Option(i) if is(i, "String") => Some(Js::OptStr),
+        Shape::Option(i) if path(i) => Some(Js::OptPath),
+        Shape::Vec(e) if is(e, "String") => Some(Js::StrList),
+        Shape::Vec(e) if is(e, "u8") => Some(Js::Bytes),
+        Shape::Vec(e) | Shape::Slice(e) => list(e),
+        Shape::Arc(h) => arc(h),
+        Shape::Result { ok, err: Some(_) } if Shape::of(ok).is_unit() => Some(Js::TryUnit),
+        _ => None,
+    }
 }
 
-/// `Arc<dyn AsRef<[u8]> + Send + Sync>`, by any path to `Arc` and in any
-/// marker order: bytes a crate shares without saying what holds them (a
-/// `Vec`, a file mapping). Read through `AsRef`, as any bytes are.
-pub fn shared_bytes(ty: &str) -> bool {
-    bare_arc(ty.trim_start_matches('&'))
-        .strip_circumfix("Arc<dynAsRef<[u8]>", '>')
-        .is_some_and(|markers| {
-            markers
-                .split('+')
-                .all(|m| ["", "Send", "Sync", "'static"].contains(&m))
-        })
-}
-
-/// `Arc` by its own name, whichever path spelled it: `alloc::sync::Arc<T>`
-/// and `std::sync::Arc<T>` are `Arc<T>`.
-pub fn bare_arc(ty: &str) -> String {
-    ty.replace("alloc::sync::Arc<", "Arc<")
-        .replace("std::sync::Arc<", "Arc<")
-}
-
-/// A type string as `ty_str` left it, made Rust again where dropping the
-/// spaces fused two words (`dynAsRef`), with `Arc` spelled out in full: the
+/// `ty` with every `Arc` spelled out in full, whichever path named it: the
 /// generated file imports neither `alloc` nor `std::sync`.
-pub fn rust_src(ty: &str) -> String {
-    bare_arc(ty)
-        .replace("Arc<", "std::sync::Arc<")
-        .replace("<dyn", "<dyn ")
-        .replace("&dyn", "&dyn ")
+pub fn std_arc(ty: &Type) -> Type {
+    use syn::visit_mut::VisitMut;
+    struct StdArc;
+    impl VisitMut for StdArc {
+        fn visit_type_path_mut(&mut self, p: &mut syn::TypePath) {
+            syn::visit_mut::visit_type_path_mut(self, p);
+            if p.qself.is_none()
+                && let Some(last) = p.path.segments.last()
+                && last.ident == "Arc"
+            {
+                let args = last.arguments.clone();
+                p.path = syn::parse_quote!(std::sync::Arc);
+                if let Some(l) = p.path.segments.last_mut() {
+                    l.arguments = args;
+                }
+            }
+        }
+    }
+    let mut t = ty.clone();
+    StdArc.visit_type_mut(&mut t);
+    t
 }
 
 /// Second classification pass, for types that need the object registry: it is
 /// built after the first pass, so it cannot live in `classify`.
-pub fn classify_object(ty: &str, objects: &BTreeSet<String>) -> Option<Js> {
-    let bare = ty.trim_start_matches('&');
-    if let Some(inner) = bare
-        .strip_circumfix("[", "]")
-        .or_else(|| bare.strip_circumfix("Vec<", ">"))
-    {
-        let inner = inner.trim_start_matches('&');
-        if objects.contains(inner) {
-            return Some(Js::ObjectList(inner.to_string()));
+pub fn classify_object(ty: &Type, objects: &BTreeSet<String>) -> Option<Js> {
+    let bare = unref(ty);
+    let known = |t: &Type| key(t).filter(|k| objects.contains(k));
+    match Shape::of(bare) {
+        // `&[T]`, `Vec<T>`, and `impl Iterator<Item = &FaceInfo> + '_`.
+        Shape::Slice(inner) | Shape::Vec(inner) | Shape::ImplIter(inner) => {
+            if let Some(k) = known(unref(inner)) {
+                return Some(Js::ObjectList(k));
+            }
         }
-    }
-    // `impl Iterator<Item = &FaceInfo> + '_`
-    if let Some(rest) = bare.strip_prefix("implIterator<Item=") {
-        let inner = first_arg(rest).trim_start_matches('&');
-        if objects.contains(inner) {
-            return Some(Js::ObjectList(inner.to_string()));
+        Shape::Option(inner) => {
+            let inner = unref(inner);
+            // `Option<Box<T>>`: a box is how a crate keeps a rare member small.
+            let inner = match Shape::of(inner) {
+                Shape::Box(b) => b,
+                _ => inner,
+            };
+            if let Some(k) = known(inner) {
+                return Some(Js::OptObject(k));
+            }
         }
+        _ => {}
     }
-    if let Some(inner) = bare
-        .strip_circumfix("Option<", '>')
-        .map(|s| s.trim_start_matches('&'))
-        // `Option<Box<T>>`: a box is how a crate keeps a rare member small.
-        .map(|s| s.strip_circumfix("Box<", '>').unwrap_or(s))
-        && objects.contains(inner)
-    {
-        return Some(Js::OptObject(inner.to_string()));
-    }
-    if objects.contains(bare) {
-        return Some(Js::Object(bare.to_string()));
-    }
-    None
+    known(bare).map(Js::Object)
 }
 
 /// Tuple newtypes over an integer, e.g. `pub struct Weight(pub u16)`.
@@ -966,8 +948,8 @@ pub fn int_newtypes(files: &[syn::File]) -> BTreeSet<String> {
             let f = &u.unnamed[0];
             if is_pub(&f.vis)
                 && matches!(
-                    ty_str(&f.ty).as_str(),
-                    "u8" | "u16" | "u32" | "i32" | "usize"
+                    key(&f.ty).as_deref(),
+                    Some("u8" | "u16" | "u32" | "i32" | "usize")
                 )
             {
                 out.insert(s.ident.to_string());
@@ -996,7 +978,7 @@ pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
                     // not a newtype unwrapping itself -- and counting it as a
                     // scalar made the whole type invisible to discovery.
                     && f.sig.inputs.len() == 1
-                    && matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t) == "f32")
+                    && matches!(&f.sig.output, ReturnType::Type(_, t) if key(t).as_deref() == Some("f32"))
             }
             _ => false,
         });
@@ -1007,37 +989,12 @@ pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
     out
 }
 
-/// A tuple type's elements, `(A,B)` -> `[A, B]`: split at the top level, so
-/// `(Vec<(A,B)>,C)` has two. None for anything but a tuple of two or more.
-pub fn tuple_elems(t: &str) -> Option<Vec<String>> {
-    let inner = t.strip_circumfix('(', ')')?;
-    let (mut out, mut depth, mut cur) = (Vec::new(), 0i32, String::new());
-    for c in inner.chars() {
-        match c {
-            '<' | '(' | '[' => depth += 1,
-            '>' | ')' | ']' => depth -= 1,
-            ',' if depth == 0 => {
-                out.push(std::mem::take(&mut cur));
-                continue;
-            }
-            _ => {}
-        }
-        cur.push(c);
-    }
-    if !cur.is_empty() {
-        out.push(cur);
-    }
-    (out.len() > 1).then_some(out)
-}
+/// Types by their [`ty_str`]: a set of them, in the order of their text.
+pub type Types = BTreeMap<String, Type>;
 
-/// What a member's type is about, [`peel_type`]'s answer, or each element's
-/// when that is a tuple: `Vec<(String,Language)>` names both.
-pub fn peeled(t: &str) -> Vec<String> {
-    let p = peel_type(t);
-    match tuple_elems(p) {
-        Some(elems) => elems.iter().flat_map(|e| peeled(e)).collect(),
-        None => vec![p.to_string()],
-    }
+/// `ty` into `set`, by its text.
+fn add(set: &mut Types, ty: &Type) {
+    set.insert(ty_str(ty), ty.clone());
 }
 
 /// Every type named by a field of a public struct.
@@ -1047,15 +1004,17 @@ pub fn peeled(t: &str) -> Vec<String> {
 /// `FaceInfo.style` never put `Style` in the wanted set, so the enum pass
 /// skipped it, leaving object discovery to report it as "not a public struct"
 /// and drop the field.
-pub fn field_types(files: &[syn::File]) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
+pub fn field_types(files: &[syn::File]) -> Types {
+    let mut out = Types::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Struct(st) = item else { continue };
         if !is_pub(&st.vis) {
             continue;
         }
         for f in &st.fields {
-            out.extend(peeled(&ty_str(&f.ty)));
+            for t in peeled(&f.ty) {
+                add(&mut out, t);
+            }
         }
     }
     out
@@ -1065,8 +1024,8 @@ pub fn field_types(files: &[syn::File]) -> BTreeSet<String> {
 /// Drives which enums get mirrored, so the set follows the wrapped surface
 /// instead of a list -- and an accessor on a generated wrapper class gets its
 /// enum mirrored too.
-pub fn returned_types(files: &[syn::File]) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
+pub fn returned_types(files: &[syn::File]) -> Types {
+    let mut out = Types::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Impl(imp) = item else { continue };
         if imp.trait_.is_some() {
@@ -1076,7 +1035,7 @@ pub fn returned_types(files: &[syn::File]) -> BTreeSet<String> {
             if let ImplItem::Fn(f) = it
                 && let (true, ReturnType::Type(_, t)) = (is_pub(&f.vis), &f.sig.output)
             {
-                out.insert(ty_str(t));
+                add(&mut out, t);
             }
         }
     }
@@ -1122,12 +1081,12 @@ pub fn struct_fields<'a>(files: &'a [syn::File], ty: &str) -> &'a syn::FieldsNam
 
 /// Every type name a config struct mentions. Drives which enums get mirrored,
 /// so the generated surface follows the struct instead of a hand-kept list.
-pub fn struct_field_types(files: &[syn::File], ty: &str) -> BTreeSet<String> {
+pub fn struct_field_types(files: &[syn::File], ty: &str) -> Types {
     struct_fields(files, ty)
         .named
         .iter()
         .filter(|f| is_pub(&f.vis))
-        .map(|f| ty_str(&f.ty))
+        .map(|f| (ty_str(&f.ty), f.ty.clone()))
         .collect()
 }
 
@@ -1247,29 +1206,16 @@ pub fn lower_camel(s: &str) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn peel_type_takes_the_first_generic_argument() {
-        assert_eq!(peel_type("Result<Foo,Error>"), "Foo");
-        assert_eq!(peel_type("Result<Vec<Foo>,Box<Error>>"), "Foo");
-        assert_eq!(peel_type("&Option<Box<Foo>>"), "Foo");
-        assert_eq!(peel_type("implIterator<Item=&Vec<Foo>>+'_"), "Foo");
-        assert_eq!(peel_type("implIterator<Item=Foo>"), "Foo");
-        assert_eq!(peel_type("Arc<Foo>"), "Arc<Foo>");
-    }
-
-    #[test]
-    fn first_arg_skips_nested_brackets() {
-        assert_eq!(first_arg("A,B"), "A");
-        assert_eq!(first_arg("&Vec<T>>+'_"), "&Vec<T>");
-        assert_eq!(first_arg("HashMap<K,V>,E"), "HashMap<K,V>");
-        assert_eq!(first_arg("fn(A)->B,E"), "fn(A)->B");
+    /// A type, as a test spells it.
+    fn ty(s: &str) -> Type {
+        syn::parse_str(s).unwrap_or_else(|e| panic!("{s}: {e}"))
     }
 
     #[test]
     fn classify_object_reads_an_iterator_item_whole() {
         let objects = BTreeSet::from(["Foo".to_string()]);
         assert_eq!(
-            classify_object("implIterator<Item=&Foo>+'_", &objects),
+            classify_object(&ty("impl Iterator<Item = &Foo> + '_"), &objects),
             Some(Js::ObjectList("Foo".into()))
         );
     }
@@ -1299,10 +1245,11 @@ mod tests {
     #[test]
     fn f64_lists_are_f64() {
         let none = BTreeSet::new();
-        assert_eq!(classify("f64", &none, &none, &[]), Some(Js::F64));
-        assert_eq!(classify("Vec<f64>", &none, &none, &[]), Some(Js::F64List));
-        assert_eq!(classify("&[f64]", &none, &none, &[]), Some(Js::F64List));
-        assert_eq!(classify("i16", &none, &none, &[]), Some(Js::I16));
+        let c = |s: &str| classify(&ty(s), &none, &none, &[]);
+        assert_eq!(c("f64"), Some(Js::F64));
+        assert_eq!(c("Vec<f64>"), Some(Js::F64List));
+        assert_eq!(c("&[f64]"), Some(Js::F64List));
+        assert_eq!(c("i16"), Some(Js::I16));
     }
 
     /// A vocabulary over `config`: one object `Foo`, one value `Val`, one
@@ -1313,7 +1260,7 @@ mod tests {
             objects: set("Foo"),
             values: set("Val"),
             enums: set("Mode"),
-            aliases: BTreeMap::from([("Fooish".to_string(), "Foo".to_string())]),
+            aliases: BTreeMap::from([("Fooish".to_string(), ty("Foo"))]),
             config,
             ..Vocab::default()
         }
@@ -1333,8 +1280,7 @@ mod tests {
     }
 
     /// What does not depend on the config: the same answer under both, in
-    /// one test binary (which a global config ruled out). Type strings as
-    /// `ty_str` spells them: no spaces.
+    /// one test binary (which a global config ruled out).
     #[test]
     fn classify_without_the_config() {
         let s = |n: &str| n.to_string();
@@ -1345,10 +1291,13 @@ mod tests {
             ("&str", Some(Js::Str)),
             ("Option<String>", Some(Js::OptStr)),
             ("Vec<u8>", Some(Js::Bytes)),
-            ("Arc<dynAsRef<[u8]>+Send+Sync>", Some(Js::Bytes)),
-            ("Arc<dynAsRef<[u8]>+Sync+Send>", Some(Js::Bytes)),
-            ("std::sync::Arc<dynAsRef<[u8]>+Send+Sync>", Some(Js::Bytes)),
-            ("&Arc<dynAsRef<[u8]>+Send+Sync>", Some(Js::Bytes)),
+            ("Arc<dyn AsRef<[u8]> + Send + Sync>", Some(Js::Bytes)),
+            ("Arc<dyn AsRef<[u8]> + Sync + Send>", Some(Js::Bytes)),
+            (
+                "std::sync::Arc<dyn AsRef<[u8]> + Send + Sync>",
+                Some(Js::Bytes),
+            ),
+            ("&Arc<dyn AsRef<[u8]> + Send + Sync>", Some(Js::Bytes)),
             ("Result<(),Error>", Some(Js::TryUnit)),
             // A `Result` of a value is peeled by the caller, not here.
             ("Result<Foo,Error>", None),
@@ -1370,19 +1319,22 @@ mod tests {
             (
                 "Vec<(f32,Mode)>",
                 Some(Js::TupleList(vec![
-                    (s("f32"), Js::F32),
-                    (s("Mode"), Js::Enum),
+                    (ty("f32"), Js::F32),
+                    (ty("Mode"), Js::Enum),
                 ])),
             ),
             // One element without a JS form, and the whole list has none.
             ("Vec<(f32,Unknown)>", None),
             ("u64", None),
             ("Unknown", None),
+            // What a `&'a` or a `&mut` holds is not read as the value.
+            ("&'a str", None),
+            ("&mut Foo", None),
         ];
         for config in [Config::default(), listing()] {
             let v = vocab(config);
             for (ty, want) in cases {
-                assert_eq!(&v.classify(ty), want, "{ty}");
+                assert_eq!(&v.classify(&super::tests::ty(ty)), want, "{ty}");
             }
         }
     }
@@ -1399,8 +1351,9 @@ mod tests {
             ("&Outline", None, Some(points)),
         ];
         for (ty, unlisted, want) in cases {
-            assert_eq!(&bare.classify(ty), unlisted, "{ty}, unlisted");
-            assert_eq!(&listed.classify(ty), want, "{ty}, listed");
+            let t = super::tests::ty(ty);
+            assert_eq!(&bare.classify(&t), unlisted, "{ty}, unlisted");
+            assert_eq!(&listed.classify(&t), want, "{ty}, listed");
         }
     }
 

@@ -137,13 +137,9 @@ impl Classes<'_> {
         let segs = segs.ok_or_else(missing)?;
         let last = segs.last().ok_or_else(missing)?;
         if r == Some(true)
-            && let Some(v) = self.config.views.iter().find(|v| v.ty == last)
+            && let Some((c, via)) = self.view_of(ctx, this, &segs)
         {
-            let mut class_segs = segs.clone();
-            *class_segs.last_mut().ok_or_else(missing)? = v.class.to_string();
-            let fake: Type = syn::parse_str(&class_segs.join("::")).map_err(|e| e.to_string())?;
-            let c = self.class_of(ctx, this, &fake).ok_or_else(missing)?;
-            let (id, via) = (self.ident(c), format_ident!("{}", v.via));
+            let id = self.ident(c);
             let place = match self.classes[c].holding {
                 Holding::Owned | Holding::Value => quote!((*#tmp)),
                 Holding::SharedCow => quote!(std::sync::Arc::make_mut(&mut *#tmp)),

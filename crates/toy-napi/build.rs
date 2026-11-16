@@ -4,7 +4,7 @@
 //! `toy` is in `GEN` and the small template below; the assertions read the
 //! codegen's report.
 
-use napi_gen::{Config, Converter, Crate, Iterated, View};
+use napi_gen::{Config, Converter, Crate, Iterated};
 use quote::quote;
 
 /// The toy has no font tag and no feature gates: those answers are empty.
@@ -82,13 +82,9 @@ const GEN: Config = Config {
         ("toy", "count"),
         ("toy", "spin"),
     ],
-    // `paint` writes through a `CanvasView`, which JS hands over as the
-    // `Canvas` it borrows.
-    views: &[View {
-        ty: "CanvasView",
-        class: "Canvas",
-        via: "as_view",
-    }],
+    // No views: `paint` writes through a `CanvasView`, which JS hands over
+    // as the `Canvas` it borrows, `Canvas::as_view` being the one method
+    // returning it.
     // A `Scene`'s nodes are borrowed from it: `Layer` and `Dot` become
     // classes holding a projection, and `Item` a union of the two.
     projections: &[("toy", "Item"), ("toy", "Layer"), ("toy", "Dot")],

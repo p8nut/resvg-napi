@@ -9,7 +9,7 @@
 //! (`crates`), the index bounds, and the allowlists of classes, functions and
 //! async twins.
 
-use napi_gen::{Config, Converter, Crate, HandWritten, Iterated, Provider, Role, View};
+use napi_gen::{Config, Converter, Crate, HandWritten, Iterated, Provider, Role};
 
 /// What the generic phases (`napi-gen`) read: resvg's answers to its questions.
 pub const GEN: Config = Config {
@@ -199,13 +199,10 @@ pub const GEN: Config = Config {
     ],
     // `resvg.render`, and `resvg.renderNode`, which takes a `usvg.Node`.
     functions: &[("resvg", "render"), ("resvg", "render_node")],
-    // `resvg::render` draws on a `&mut PixmapMut`: JS passes the
-    // `tiny_skia.Pixmap`, borrowed with `as_mut()` for the call.
-    views: &[View {
-        ty: "PixmapMut",
-        class: "Pixmap",
-        via: "as_mut",
-    }],
+    // No views: `resvg::render` draws on a `&mut PixmapMut`, which JS passes
+    // as the `tiny_skia.Pixmap` it is borrowed from with `as_mut()` for the
+    // call, `Pixmap`'s one `&mut self` method returning `PixmapMut<'_>`.
+    views: &[],
     // The tree's nodes are borrowed from it (ADR 0002, Q22): `usvg.Group`,
     // `usvg.Path`, `usvg.Image` and `usvg.Text` hold the tree and the way back
     // to their node, and `usvg.Node` is a `{ kind, value }` union of them.

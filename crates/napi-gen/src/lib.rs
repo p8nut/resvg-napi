@@ -123,7 +123,9 @@ pub struct Config {
     pub functions: &'static [(&'static str, &'static str)],
     /// Borrowed views: an argument `&mut V` is obtained from an instance of a
     /// class by one of its methods, for the call (`CanvasView` from a
-    /// `Canvas` by `as_view`).
+    /// `Canvas` by `as_view`). Derived with no entry when exactly one `&mut
+    /// self` method of a listed class, taking nothing else, returns `V<'_>`:
+    /// an entry settles two.
     pub views: &'static [View],
     /// Types only ever borrowed from an `Arc`-held owner, by source root and
     /// name (`("toy", "Layer")`): a struct becomes a class holding a

@@ -409,9 +409,10 @@ Q34):
   `dispose()` empties (below).
 - **Arguments**: numbers, booleans, strings and bytes; a listed class, by
   value (`Copy`), `&` or `&mut` as its holding allows; an option object; and a
-  **view** (`Config::views`): `&mut V` that a class's method returns for the
-  call, so `paint(view: &mut CanvasView)` takes the `Canvas` and calls
-  `as_view()` on it. A generic `P: AsRef<Path>` or `S: Into<String>` is a
+  **view**: `&mut V` that a class's method returns for the call, so
+  `paint(view: &mut CanvasView)` takes the `Canvas` and calls `as_view()` on
+  it. Derived when exactly one `&mut self` method of a listed class returns
+  `V<'_>`; `Config::views` settles two. A generic `P: AsRef<Path>` or `S: Into<String>` is a
   string.
 - **Conversions** come from Rust's traits, one direction each and with
   nothing reported when the other is missing (Q34): `FromStr` gives a static

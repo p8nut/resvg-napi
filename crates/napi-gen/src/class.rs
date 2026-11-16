@@ -335,6 +335,35 @@ fn holding(files: &[syn::File], name: &str) -> Holding {
     }
 }
 
+/// The views a type's methods borrow: each public `&mut self` method taking
+/// nothing else and returning a type with a lifetime (`V<'_>`), as the
+/// view's name and the method's.
+fn view_methods(files: &[syn::File], name: &str) -> Vec<(String, String)> {
+    inherent_impls(files, name)
+        .flat_map(|imp| &imp.items)
+        .filter_map(|it| match it {
+            ImplItem::Fn(f)
+                if is_pub(&f.vis)
+                    && receiver(&f.sig) == Some(Recv::Mut)
+                    && f.sig.inputs.len() == 1 =>
+            {
+                let ReturnType::Type(_, t) = &f.sig.output else {
+                    return None;
+                };
+                let Shape::Path { segs, args } = Shape::of(t) else {
+                    return None;
+                };
+                let borrows = args
+                    .iter()
+                    .any(|a| matches!(a, syn::GenericArgument::Lifetime(_)));
+                let view = segs.last().filter(|_| borrows)?;
+                Some((view.clone(), f.sig.ident.to_string()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The public fields, when every field is public and of a [`Prim`] type and
 /// the struct can be built from them (not `#[non_exhaustive]`).
 fn plain_fields(st: &syn::ItemStruct) -> Vec<(Ident, Prim)> {
@@ -564,6 +593,44 @@ impl<'a> Classes<'a> {
         (!foreign || self.classes[c].holding != Holding::Projected).then_some(c)
     }
 
+    /// The class an argument `&mut <segs>` is a view of, and its method
+    /// borrowing the view: `Config::views` lists it, or exactly one `&mut
+    /// self` method of a listed class, taking nothing else, returns it with a
+    /// lifetime (`as_view(&mut self) -> CanvasView<'_>`). Two such methods
+    /// are ambiguous, and an entry settles which.
+    pub(crate) fn view_of(
+        &self,
+        ctx: usize,
+        this: Option<usize>,
+        segs: &[String],
+    ) -> Option<(usize, Ident)> {
+        let last = segs.last()?;
+        let (class, via, derived) = match self.config.views.iter().find(|v| v.ty == last) {
+            Some(v) => (v.class.to_string(), v.via.to_string(), None),
+            None => {
+                let mut found = self.classes.iter().enumerate().flat_map(|(i, c)| {
+                    view_methods(self.sources[c.source].files, &c.name)
+                        .into_iter()
+                        .filter(|(ty, _)| ty == last)
+                        .map(move |(_, via)| (i, via))
+                });
+                let (i, via) = found.next()?;
+                if found.next().is_some() {
+                    return None;
+                }
+                (self.classes[i].name.clone(), via, Some(i))
+            }
+        };
+        // Resolved where the view is named: the class of that crate.
+        let mut class_segs = segs.to_vec();
+        *class_segs.last_mut()? = class;
+        let fake: Type = syn::parse_str(&class_segs.join("::")).ok()?;
+        let c = self.class_of(ctx, this, &fake)?;
+        derived
+            .is_none_or(|i| i == c)
+            .then(|| (c, format_ident!("{via}")))
+    }
+
     pub(crate) fn ident(&self, c: usize) -> Ident {
         format_ident!("{}", self.classes[c].name)
     }
@@ -648,15 +715,11 @@ impl<'a> Classes<'a> {
         }
         let segs = segs?;
         let last = segs.last()?;
-        // `Config::views`: borrowed from its class for the call.
+        // A view (`Classes::view_of`): borrowed from its class for the call.
         if r == Some(true)
-            && let Some(v) = self.config.views.iter().find(|v| v.ty == last)
+            && let Some((c, via)) = self.view_of(ctx, this, &segs)
         {
-            let mut class_segs = segs.clone();
-            *class_segs.last_mut()? = v.class.to_string();
-            let fake: Type = syn::parse_str(&class_segs.join("::")).ok()?;
-            let c = self.class_of(ctx, this, &fake)?;
-            let (id, via) = (self.ident(c), format_ident!("{}", v.via));
+            let id = self.ident(c);
             let from = match self.classes[c].holding {
                 Holding::Owned | Holding::Value => quote!(#pat.__mut()?),
                 Holding::SharedCow => quote!(std::sync::Arc::make_mut(#pat.__mut()?)),

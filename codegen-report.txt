@@ -10,6 +10,7 @@ classes a borrowing member copies: Database, Pixmap
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence, filter::Image
 filter::Image: partial mapping, emitted as read-only class FilterImage
 names defined more than once across the sources, keyed by module: Image
+not aliased: fontdb.Source: a type named Source exists already, so its union is spelled out
 object Arc<ClipPath> skipped: not a public struct
 object Arc<LinearGradient> skipped: not a public struct
 object Arc<Mask> skipped: not a public struct

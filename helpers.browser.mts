@@ -28,8 +28,11 @@ export interface Binding {
   tiny_skia: typeof tiny_skia
 }
 
-/** A `usvg.Node`: what `tree.nodeById` and `group.children()` hand back. */
-export type Node = usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText
+/**
+ * A `usvg.Node`: what `tree.nodeById` and `group.children()` hand back. The
+ * binding names the union itself now; this stays for code that imported it.
+ */
+export type Node = usvg.Node
 
 /**
  * A box in the tree's units, as a plain object: what `nodeExtent` returns,
@@ -154,9 +157,9 @@ export interface Helpers {
   /** `renderRaw` off the main thread. */
   renderRawAsync(svg: Source | usvg.Tree, options?: RenderAsyncOptions): Promise<RawImage>
   /** One node in a PNG sized to its extent (`nodeExtent`). */
-  renderNodePng(node: Node, params?: NodeRenderParams): Buffer
+  renderNodePng(node: usvg.Node, params?: NodeRenderParams): Buffer
   /** `renderNodePng` off the main thread. */
-  renderNodePngAsync(node: Node, params?: NodeRenderParams & { signal?: AbortSignal }): Promise<Buffer>
+  renderNodePngAsync(node: usvg.Node, params?: NodeRenderParams & { signal?: AbortSignal }): Promise<Buffer>
   /** The width `text` draws at, in user units: its stroke box. 0 when nothing draws. */
   measureText(text: string, options?: MeasureOptions): number
   /**
@@ -376,7 +379,7 @@ const box = (r: tiny_skia.NonZeroRect | null | undefined): Box | null =>
  * `{ x, y, width, height }`, the numbers of Rust's `NonZeroRect`, which `crop`
  * takes back.
  */
-export function nodeExtent(node: Node): Box | null {
+export function nodeExtent(node: usvg.Node): Box | null {
   const { kind, value } = node;
   switch (kind) {
     case 'group': return box(value.absLayerBoundingBox());
@@ -386,7 +389,7 @@ export function nodeExtent(node: Node): Box | null {
 }
 
 /** `usvg::Node::abs_layer_bounding_box`: the box `resvg::render_node` offsets a node by. */
-function layerBox({ kind, value }: Node): Box | null {
+function layerBox({ kind, value }: usvg.Node): Box | null {
   return box(kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox()?.toNonZeroRect());
 }
 
@@ -789,7 +792,7 @@ function build(binding: Binding): Helpers {
    * its parent's transform. (The 0.9 `renderNodePng` passed the group's
    * absolute one, which applied its own transform twice.)
    */
-  function nodeCanvas(node: Node, params: RenderParams): { pixmap: tiny_skia.Pixmap; transform: tiny_skia.Transform } {
+  function nodeCanvas(node: usvg.Node, params: RenderParams): { pixmap: tiny_skia.Pixmap; transform: tiny_skia.Transform } {
     if (params.crop) throw coded('crop is not supported when rendering a single node', 'InvalidArg');
     const box = nodeExtent(node);
     if (!box) throw new Error('element has no visible size');
@@ -879,7 +882,7 @@ function build(binding: Binding): Helpers {
     return drawnAsync(await treeOfAsync(input, options), options, raw);
   }
 
-  function renderNodePng(node: Node, params?: NodeRenderParams): Buffer {
+  function renderNodePng(node: usvg.Node, params?: NodeRenderParams): Buffer {
     params ??= {};
     const { pixmap, transform } = nodeCanvas(node, params);
     try {
@@ -890,7 +893,7 @@ function build(binding: Binding): Helpers {
     }
   }
 
-  async function renderNodePngAsync(node: Node, params?: NodeRenderParams & { signal?: AbortSignal }): Promise<Buffer> {
+  async function renderNodePngAsync(node: usvg.Node, params?: NodeRenderParams & { signal?: AbortSignal }): Promise<Buffer> {
     params ??= {};
     const { pixmap, transform } = nodeCanvas(node, params);
     try {

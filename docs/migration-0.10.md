@@ -126,7 +126,8 @@ definition tables, `clipPath.root()`, `mask.root()`, `pattern.root()` and
   is not released. `usvg.Span.underline()` and its siblings hand out a
   `usvg.Path` of their own.
 - napi has no TypeScript alias for a union: `usvg.Node` is spelled out where
-  it is used (`usvg.NodeGroup | usvg.NodePath | ...`).
+  it is used (`usvg.NodeGroup | usvg.NodePath | ...`). (Later lifted: the
+  generator emits the alias as a `#[napi] type`, ADR 0002, Names.)
 - `Option<()>` (`render_node`) returns `true` or `null`.
 - The root module is the usvg class source: `filter::Image`'s methods were
   read as `usvg::Image`'s. And another crate's type of a projected name

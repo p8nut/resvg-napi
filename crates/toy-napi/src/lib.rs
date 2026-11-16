@@ -81,6 +81,9 @@ pub struct ToyStepLine {
     pub r#type: String,
     pub value: (ToyVec2Object, ToyVec2Object),
 }
+#[doc = " Any variant of `Step`."]
+#[napi(js_name = "Step", namespace = "toy")]
+pub type ToyStepUnion = Either3<ToyStepPlain, ToyStepJump, ToyStepLine>;
 #[doc = " Where some bytes come from: shared bytes, a path, or both. The last is"]
 #[doc = " built on some targets only, as a crate gates a variant on a feature."]
 #[doc = ""]
@@ -193,6 +196,9 @@ pub struct ToyShadeNamed {
     pub r#type: String,
     pub value: String,
 }
+#[doc = " Any variant of `Shade`."]
+#[napi(js_name = "Shade", namespace = "toy")]
+pub type ToyShadeUnion = Either<ToyShadePlain, ToyShadeNamed>;
 #[doc = " The payload-free variants of `Content`."]
 #[napi(object, js_name = "ContentPlain", namespace = "toy")]
 #[derive(Clone)]
@@ -257,6 +263,10 @@ pub struct ToyContentLayer {
     pub r#type: String,
     pub value: ToyLayer,
 }
+#[doc = " Any variant of `Content`."]
+#[napi(js_name = "Content", namespace = "toy")]
+pub type ToyContentUnion =
+    Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>;
 #[doc = " `Origin::Inline`."]
 #[napi(js_name = "OriginInline", namespace = "toy")]
 pub struct ToyOriginInline {
@@ -343,6 +353,14 @@ pub enum ToyParseErrorCode {
     BadNumber,
     Missing,
 }
+#[doc = " `Item::Dot`."]
+#[napi(object, object_from_js = false, js_name = "ItemDot", namespace = "toy")]
+pub struct ToyItemDot {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'dot'")]
+    pub kind: String,
+    pub value: ToyDot,
+}
 #[doc = " `Item::Layer`."]
 #[napi(
     object,
@@ -356,14 +374,9 @@ pub struct ToyItemLayer {
     pub kind: String,
     pub value: ToyLayer,
 }
-#[doc = " `Item::Dot`."]
-#[napi(object, object_from_js = false, js_name = "ItemDot", namespace = "toy")]
-pub struct ToyItemDot {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'dot'")]
-    pub kind: String,
-    pub value: ToyDot,
-}
+#[doc = " Any variant of `Item`."]
+#[napi(js_name = "Item", namespace = "toy")]
+pub type ToyItemUnion = Either<ToyItemLayer, ToyItemDot>;
 #[doc = " A colour as plain data: every field public."]
 #[doc = ""]
 #[doc = " A `toy::alt::Color`, held by value."]
@@ -403,7 +416,7 @@ impl From<&toy::Point> for ToyPoint {
         }
     }
 }
-fn toy_step_to_js(v: &toy::Step) -> Either3<ToyStepPlain, ToyStepJump, ToyStepLine> {
+fn toy_step_to_js(v: &toy::Step) -> ToyStepUnion {
     match v {
         toy::Step::Stop => Either3::A(ToyStepPlain {
             r#type: "stop".to_string(),
@@ -569,7 +582,7 @@ impl ToyFrame {
         })
     }
     #[napi(getter)]
-    pub fn shades(&self) -> Result<Vec<Either<ToyShadePlain, ToyShadeNamed>>, String> {
+    pub fn shades(&self) -> Result<Vec<ToyShadeUnion>, String> {
         let __inner = self.inner.get("Frame")?;
         Ok({
             let __p = __inner;
@@ -578,10 +591,7 @@ impl ToyFrame {
         })
     }
     #[napi(getter)]
-    pub fn content(
-        &self,
-    ) -> Result<Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>, String>
-    {
+    pub fn content(&self) -> Result<ToyContentUnion, String> {
         let __inner = self.inner.get("Frame")?;
         Ok({
             let __p = __inner;
@@ -628,7 +638,7 @@ impl ToyFrame {
         })
     }
 }
-fn toy_shade_to_js(v: &toy::Shade) -> Either<ToyShadePlain, ToyShadeNamed> {
+fn toy_shade_to_js(v: &toy::Shade) -> ToyShadeUnion {
     match v {
         toy::Shade::Plain => Either::A(ToyShadePlain {
             r#type: "plain".to_string(),
@@ -639,9 +649,7 @@ fn toy_shade_to_js(v: &toy::Shade) -> Either<ToyShadePlain, ToyShadeNamed> {
         }),
     }
 }
-fn toy_content_to_js(
-    p: napi_support::Projection<toy::Content>,
-) -> Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer> {
+fn toy_content_to_js(p: napi_support::Projection<toy::Content>) -> ToyContentUnion {
     match p.get() {
         toy::Content::Empty => Either4::A(ToyContentPlain {
             r#type: "empty".to_string(),
@@ -1497,10 +1505,7 @@ impl ToyCanvas {
     #[doc = " borrowed from anything."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn framed(
-        &self,
-    ) -> Result<Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>, String>
-    {
+    pub fn framed(&self) -> Result<ToyContentUnion, String> {
         let __self = self.__ref()?;
         let __v = napi_support::contained("Canvas::framed", || __self.framed())
             .map_err(napi_support::coded)?;
@@ -1588,7 +1593,7 @@ impl ToyScene {
     #[doc = " The first item called `name`, depth first."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn find(&self, name: String) -> Result<Option<Either<ToyItemLayer, ToyItemDot>>, String> {
+    pub fn find(&self, name: String) -> Result<Option<ToyItemUnion>, String> {
         let __self = self.__ref()?;
         let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Scene::find", || {
@@ -1599,7 +1604,7 @@ impl ToyScene {
     #[doc = " The way through the scene: a jump to `a`, a line to `d`, a stop."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn trail(&self) -> Result<Vec<Either3<ToyStepPlain, ToyStepJump, ToyStepLine>>, String> {
+    pub fn trail(&self) -> Result<Vec<ToyStepUnion>, String> {
         let __self = self.__ref()?;
         let __v = napi_support::contained("Scene::trail", || __self.trail())
             .map_err(napi_support::coded)?;
@@ -1609,12 +1614,7 @@ impl ToyScene {
     #[doc = " the layer `framed` (the dot `f`), and the layer `held` (the dot `h`)."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn contents(
-        &self,
-    ) -> Result<
-        Vec<Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>>,
-        String,
-    > {
+    pub fn contents(&self) -> Result<Vec<ToyContentUnion>, String> {
         let __self = self.__ref()?;
         let __b = napi_support::Projection::of(self.__ref()?.clone());
         napi_support::contained("Scene::contents", || {
@@ -1747,7 +1747,7 @@ impl ToyLayer {
     }
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn items(&self) -> Result<Vec<Either<ToyItemLayer, ToyItemDot>>, String> {
+    pub fn items(&self) -> Result<Vec<ToyItemUnion>, String> {
         let __self = self.__ref()?.get();
         let __b = self.__ref()?.clone();
         napi_support::contained("Layer::items", || {
@@ -1761,7 +1761,7 @@ impl ToyLayer {
     #[doc = " The first item, if any."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn first(&self) -> Result<Option<Either<ToyItemLayer, ToyItemDot>>, String> {
+    pub fn first(&self) -> Result<Option<ToyItemUnion>, String> {
         let __self = self.__ref()?.get();
         let __b = self.__ref()?.clone();
         napi_support::contained("Layer::first", || {
@@ -1912,9 +1912,7 @@ pub fn toy_paint_async(
 #[doc = " How many dots `item` holds, itself included."]
 #[napi(js_name = "count", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
-pub fn toy_count(
-    #[napi(ts_arg_type = "toy.ItemLayer | toy.ItemDot")] item: Object,
-) -> Result<u32, String> {
+pub fn toy_count(#[napi(ts_arg_type = "toy.Item")] item: Object) -> Result<u32, String> {
     let __item = toy_item_from_js(&item)?;
     let __v = napi_support::contained("count", || toy::count(__item.get()))
         .map_err(napi_support::coded)?;
@@ -1926,7 +1924,7 @@ pub fn toy_count(
 #[napi(js_name = "countAsync", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
 pub fn toy_count_async(
-    #[napi(ts_arg_type = "toy.ItemLayer | toy.ItemDot")] item: Object,
+    #[napi(ts_arg_type = "toy.Item")] item: Object,
     env: Env,
     #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
 ) -> Result<PromiseRaw<'static, u32>, String> {
@@ -1945,9 +1943,7 @@ pub fn toy_count_async(
 #[doc = " `None` for an empty layer: nothing to visit."]
 #[napi(js_name = "visit", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
-pub fn toy_visit(
-    #[napi(ts_arg_type = "toy.ItemLayer | toy.ItemDot")] item: Object,
-) -> Result<Option<bool>, String> {
+pub fn toy_visit(#[napi(ts_arg_type = "toy.Item")] item: Object) -> Result<Option<bool>, String> {
     let __item = toy_item_from_js(&item)?;
     let __v = napi_support::contained("visit", || toy::visit(__item.get()))
         .map_err(napi_support::coded)?;
@@ -1986,7 +1982,7 @@ pub fn toy_copies() -> Result<u32, String> {
     let __v = napi_support::contained("copies", toy::copies).map_err(napi_support::coded)?;
     Ok(__v)
 }
-fn toy_item_to_js(p: napi_support::Projection<toy::Item>) -> Either<ToyItemLayer, ToyItemDot> {
+fn toy_item_to_js(p: napi_support::Projection<toy::Item>) -> ToyItemUnion {
     match p.get() {
         toy::Item::Layer(_) => Either::A(ToyItemLayer {
             kind: "layer".to_string(),

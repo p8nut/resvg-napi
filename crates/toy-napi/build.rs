@@ -415,7 +415,16 @@ fn main() {
         &[("toy", toy_part), ("alt", alt_part)],
         &classes.shared_names(),
     );
-    assert!(surfaces.report.is_empty(), "nothing is left out");
+    // Nothing is left out. Each union gets a named type (`toy.Step`), but
+    // `Origin`'s name is its input form's, an interface: that union is
+    // spelled out instead.
+    assert_eq!(
+        surfaces.report,
+        [
+            "not aliased: toy.Origin: a type named Origin exists already, so its union is spelled out"
+        ],
+        "nothing is left out, one union is not aliased"
+    );
     let mirrored = surfaces.namespaced;
     let prelude = prelude();
     let code = quote! {

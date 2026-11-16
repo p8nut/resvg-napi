@@ -82,8 +82,10 @@ pub struct Config {
     pub index_bounded: &'static [(&'static str, &'static str)],
     /// Upstream option structs mirrored as plain objects on the namespaced
     /// surface ([`emit::option_object`]): every field optional, and what is
-    /// left out keeps the struct's `Default`. A struct listed without
-    /// `Default` is reported and left out.
+    /// left out keeps the struct's `Default`. Beside the ones derived: a
+    /// struct with `Default` that a listed member of a discovered crate takes
+    /// by `&` needs no entry. A struct listed without `Default` is reported
+    /// and left out.
     pub option_objects: &'static [&'static str],
     /// Option fields of a type with no JS form, supplied by an instance of a
     /// class the template writes instead (a resolver). One of a listed class

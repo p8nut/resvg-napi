@@ -82,14 +82,15 @@ pub const GEN: Config = Config {
     // name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
     // table's length; the build fails if the suffix matches nothing.
     index_bounded: &[("_precision", "POW_VEC")],
-    // The option structs mirrored as plain objects, `usvg.Options` and
+    // No option objects: the option structs mirrored as plain objects are
+    // what the listed members take by `&`. `usvg.Options` and
     // `usvg.WriteOptions` (ADR 0002, Q15): what `usvg.Tree` parses with, and
     // what `toString()` writes with. Every field optional, the rest from
     // usvg's `Default` -- an empty font database, Times New Roman, the default
     // resolvers. The raw API follows Rust (Q10, Q27).
     // `fontdb.Query` too, the same shape: `Database.query` takes one, its
     // `families` a list of `fontdb.Family` (`{ type, value }`).
-    option_objects: &["Options", "WriteOptions", "Query"],
+    option_objects: &[],
     // Option fields with no JS form, supplied by a class instance (Q26, Q27).
     // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
     // copied: derived from the class, documented here. The resolvers take the

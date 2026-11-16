@@ -274,6 +274,73 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         );
     }
 
+    // The classes and free functions (`Config::classes`, `Config::functions`):
+    // over the discovered crates, and over the crates read for them alone
+    // (`Role::Classes`), each read as one source. The crate root's files are
+    // where its free functions are. Built before the data types: a member
+    // naming a class held by value is that class.
+    let extra_crates: Vec<ClassCrate> = config
+        .crates_of(Role::Classes)
+        .map(|c| {
+            let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
+            for pkg in c.pkgs {
+                let dir = locate(pkg, "lib.rs", &locked);
+                let all = parse_crate(&dir);
+                let tree = ModTree::load(&dir, &all);
+                for (path, file) in tree.public_view(&all, &dir) {
+                    if path == dir.join("lib.rs") && lib.is_empty() {
+                        lib.push(file.clone());
+                    }
+                    files.push(file);
+                }
+                for (name, at) in tree.paths {
+                    modules.entry(name).or_insert(at);
+                }
+            }
+            ClassCrate {
+                files,
+                lib,
+                modules,
+                root: c.root,
+            }
+        })
+        .collect();
+    let mut classes = Classes::new(
+        scopes
+            .iter()
+            .map(|s| ClassSource {
+                root: &s.root,
+                files: &s.files,
+                modules: &s.modules,
+            })
+            .chain(extra_crates.iter().map(|c| ClassSource {
+                root: c.root,
+                files: &c.files,
+                modules: &c.modules,
+            }))
+            .collect(),
+        config,
+    );
+    // The option objects (`Config::option_objects`): what the listed members
+    // take by `&T`, and what the config lists beside them. Settled before
+    // anything reads the list.
+    let config = {
+        let all = derived_option_objects(&classes, &scopes);
+        let listed = config.option_objects.iter().map(|o| o.to_string());
+        let extra: Vec<String> = listed.filter(|o| !all.contains(o)).collect();
+        // A build script runs once: the merged list lives as long as it.
+        let names: Vec<&'static str> = all
+            .into_iter()
+            .chain(extra)
+            .map(|n| &*Box::leak(n.into_boxed_str()))
+            .collect();
+        Config {
+            option_objects: Box::leak(names.into_boxed_slice()),
+            ..config
+        }
+    };
+    classes.config = config;
+
     // Each index-bounded field's highest usable index, read off its table.
     let bounds = index_bounds(primary_files, &config);
     for ((suffix, table), (_, max)) in config.index_bounded.iter().zip(&bounds) {
@@ -415,53 +482,6 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         vocab.aliases.len()
     );
 
-    // The classes and free functions (`Config::classes`, `Config::functions`):
-    // over the discovered crates, and over the crates read for them alone
-    // (`Role::Classes`), each read as one source. The crate root's files are
-    // where its free functions are. Built before the data types: a member
-    // naming a class held by value is that class.
-    let extra_crates: Vec<ClassCrate> = config
-        .crates_of(Role::Classes)
-        .map(|c| {
-            let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
-            for pkg in c.pkgs {
-                let dir = locate(pkg, "lib.rs", &locked);
-                let all = parse_crate(&dir);
-                let tree = ModTree::load(&dir, &all);
-                for (path, file) in tree.public_view(&all, &dir) {
-                    if path == dir.join("lib.rs") && lib.is_empty() {
-                        lib.push(file.clone());
-                    }
-                    files.push(file);
-                }
-                for (name, at) in tree.paths {
-                    modules.entry(name).or_insert(at);
-                }
-            }
-            ClassCrate {
-                files,
-                lib,
-                modules,
-                root: c.root,
-            }
-        })
-        .collect();
-    let classes = Classes::new(
-        scopes
-            .iter()
-            .map(|s| ClassSource {
-                root: &s.root,
-                files: &s.files,
-                modules: &s.modules,
-            })
-            .chain(extra_crates.iter().map(|c| ClassSource {
-                root: c.root,
-                files: &c.files,
-                modules: &c.modules,
-            }))
-            .collect(),
-        config,
-    );
     // By its upstream name, unless another source defines that name (`a::Color`
     // is not `b.Color`). A discovered crate's own class is the type its
     // members name.
@@ -1087,6 +1107,68 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
     let formatted = fs::read_to_string(&staged).unwrap_or(text);
     write_if_changed(&manifest.join("src/lib.rs"), &formatted);
     Output { report: log.lines }
+}
+
+/// The option objects no entry needs to list: each struct with `Default`
+/// and no type parameter that a listed member of a discovered crate -- a
+/// method of a listed or projected class, a listed function -- takes by `&`,
+/// defined beside it and not a class itself (ADR 0001: what the allowlisted
+/// members reach). `Counter::new(&Options)` makes `Options` one.
+fn derived_option_objects(classes: &Classes, scopes: &[&Scope]) -> BTreeSet<String> {
+    let config = &classes.config;
+    let mut out = BTreeSet::new();
+    for scope in scopes {
+        let methods = classes
+            .classes
+            .iter()
+            .filter(|c| classes.sources[c.source].root == scope.root)
+            .flat_map(|c| inherent_impls(&scope.files, &c.name))
+            .flat_map(|imp| &imp.items)
+            .filter_map(|it| match it {
+                syn::ImplItem::Fn(f) if is_pub(&f.vis) => Some(&f.sig),
+                _ => None,
+            });
+        let functions = scope
+            .lib
+            .iter()
+            .flat_map(|f| &f.items)
+            .filter_map(|i| match i {
+                Item::Fn(f)
+                    if is_pub(&f.vis)
+                        && config
+                            .functions
+                            .contains(&(scope.root.as_str(), f.sig.ident.to_string().as_str())) =>
+                {
+                    Some(&f.sig)
+                }
+                _ => None,
+            });
+        for sig in methods.chain(functions) {
+            for arg in &sig.inputs {
+                let syn::FnArg::Typed(a) = arg else { continue };
+                let Shape::Ref {
+                    mutable: false,
+                    inner,
+                    ..
+                } = Shape::of(&a.ty)
+                else {
+                    continue;
+                };
+                let Some(name) = Shape::of(inner).last().map(str::to_string) else {
+                    continue;
+                };
+                let option = !classes.classes.iter().any(|c| c.name == name)
+                    && !config.node_types.contains(&name.as_str())
+                    && crate::class::find_struct(&scope.files, &name)
+                        .is_some_and(|st| st.generics.type_params().next().is_none())
+                    && has_default(&scope.files, &name);
+                if option {
+                    out.insert(name);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The generated file's header after its first line.

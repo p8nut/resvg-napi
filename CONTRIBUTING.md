@@ -132,7 +132,8 @@ const GEN: Config = Config {
     // Every list is an API decision, and empty unless named.
     classes: &[("toy", "Counter"), ("toy", "Canvas")],
     functions: &[("toy", "report")],
-    option_objects: &["Options"],
+    // `Options` and `ReportOptions` need no entry: `Counter::new` and
+    // `report` take them by `&`, which makes them option objects.
     ..Config::EMPTY
 };
 
@@ -227,8 +228,9 @@ the generator hooks that served only it (`shapes`, `size_new`,
 
 An upstream option struct is a plain object on the namespaced surface
 ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md)): `usvg.Options`,
-`usvg.WriteOptions`. `Config::option_objects` lists the structs, and
-`napi_gen::emit::option_object` makes each one an input-only
+`usvg.WriteOptions`. A struct with `Default` that a listed member takes by
+`&` is one (`Tree::from_data(&Options)`), and `Config::option_objects` lists
+any other; then `napi_gen::emit::option_object` makes each one an input-only
 `#[napi(object, object_to_js = false)]` with every field optional, plus a
 `to_upstream(&self) -> Result<Upstream>` that starts from upstream's
 `Default` and overrides only the fields JS provided. A field left out, or

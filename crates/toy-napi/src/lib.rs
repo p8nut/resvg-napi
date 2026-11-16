@@ -44,6 +44,40 @@ pub enum ToyDirection {
     Up,
     Down,
 }
+#[doc = " A tag a filter matches on: a name it borrows, or any."]
+#[doc = ""]
+#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
+#[napi(object, object_to_js = false, js_name = "Tag", namespace = "toy")]
+pub struct ToyTag {
+    #[doc = " The variant."]
+    #[napi(ts_type = "'named' | 'any'")]
+    pub r#type: String,
+    #[doc = " The string the variant carries: required for `'named'`, ignored otherwise."]
+    pub value: Option<String>,
+}
+#[doc = " What [`Tally::find`] looks for: a list it borrows."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(object, object_to_js = false, js_name = "Filter", namespace = "toy")]
+#[derive(Default)]
+pub struct ToyFilter {
+    pub tags: Option<Vec<ToyTag>>,
+    pub min_len: Option<u32>,
+}
+#[doc = " How to build a [`Counter`]."]
+#[doc = ""]
+#[doc = " Every field is optional: one left out keeps the `Default` value."]
+#[napi(object, object_to_js = false, js_name = "Options", namespace = "toy")]
+#[derive(Default)]
+pub struct ToyOptions {
+    #[doc = " What the counter is called."]
+    pub label: Option<String>,
+    #[doc = " How far one tick moves it."]
+    pub step: Option<f64>,
+    pub direction: Option<ToyDirection>,
+    #[doc = " How many ticks it takes, at most: a plain `u32`."]
+    pub limit: Option<u32>,
+}
 #[doc = " An opaque key: no public field, `Copy`, printed as a number."]
 #[doc = ""]
 #[doc = " A `toy::Key`, held by value."]
@@ -94,40 +128,6 @@ pub struct ToyReportOptions<'a> {
     #[doc = ""]
     #[doc = " Default: 1"]
     pub ratio: Option<f64>,
-}
-#[doc = " How to build a [`Counter`]."]
-#[doc = ""]
-#[doc = " Every field is optional: one left out keeps the `Default` value."]
-#[napi(object, object_to_js = false, js_name = "Options", namespace = "toy")]
-#[derive(Default)]
-pub struct ToyOptions {
-    #[doc = " What the counter is called."]
-    pub label: Option<String>,
-    #[doc = " How far one tick moves it."]
-    pub step: Option<f64>,
-    pub direction: Option<ToyDirection>,
-    #[doc = " How many ticks it takes, at most: a plain `u32`."]
-    pub limit: Option<u32>,
-}
-#[doc = " A tag a filter matches on: a name it borrows, or any."]
-#[doc = ""]
-#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
-#[napi(object, object_to_js = false, js_name = "Tag", namespace = "toy")]
-pub struct ToyTag {
-    #[doc = " The variant."]
-    #[napi(ts_type = "'named' | 'any'")]
-    pub r#type: String,
-    #[doc = " The string the variant carries: required for `'named'`, ignored otherwise."]
-    pub value: Option<String>,
-}
-#[doc = " What [`Tally::find`] looks for: a list it borrows."]
-#[doc = ""]
-#[doc = " Every field is optional: one left out keeps the `Default` value."]
-#[napi(object, object_to_js = false, js_name = "Filter", namespace = "toy")]
-#[derive(Default)]
-pub struct ToyFilter {
-    pub tags: Option<Vec<ToyTag>>,
-    pub min_len: Option<u32>,
 }
 #[doc = " Where some bytes come from: shared bytes, a path, or both. The last is"]
 #[doc = " built on some targets only, as a crate gates a variant on a feature."]
@@ -442,52 +442,6 @@ impl From<toy::Direction> for ToyDirection {
         }
     }
 }
-impl ToyReportOptions<'_> {
-    #[doc = " The upstream value: `Default`, with what JS provided on top."]
-    fn to_upstream(&self) -> Result<toy::ReportOptions, String> {
-        let mut o = <toy::ReportOptions>::default();
-        if let Some(v) = &self.title {
-            o.title = v.clone();
-        }
-        if let Some(v) = self.style_index {
-            o.style_index = u8::try_from(v.min(2u32)).unwrap_or(u8::MAX);
-        }
-        if let Some(v) = &self.base {
-            let v = &**v;
-            o.base = v.__ref()?.clone();
-        }
-        if let Some(v) = &self.width {
-            o.width = width_from_js(v, "width").map_err(napi_support::coded)?;
-        }
-        if let Some(v) = &self.from {
-            let v = &**v;
-            o.from = *v.__ref()?;
-        }
-        if let Some(v) = self.ratio {
-            o.ratio = v;
-        }
-        Ok(o)
-    }
-}
-impl ToyOptions {
-    #[doc = " The upstream value: `Default`, with what JS provided on top."]
-    fn to_upstream(&self) -> Result<toy::Options, String> {
-        let mut o = <toy::Options>::default();
-        if let Some(v) = &self.label {
-            o.label = v.clone();
-        }
-        if let Some(v) = self.step {
-            o.step = to_f32(v);
-        }
-        if let Some(v) = self.direction {
-            o.direction = v.into();
-        }
-        if let Some(v) = self.limit {
-            o.limit = v;
-        }
-        Ok(o)
-    }
-}
 impl ToyFilter {
     #[doc = " The lists the upstream value borrows, converted from JS's."]
     fn lists<'s>(&'s self) -> Result<(Option<Vec<toy::Tag<'s>>>,), String> {
@@ -515,6 +469,52 @@ impl ToyFilter {
             o.min_len.0 = v
                 .try_into()
                 .map_err(|_| napi_support::invalid("minLen", v))?;
+        }
+        Ok(o)
+    }
+}
+impl ToyOptions {
+    #[doc = " The upstream value: `Default`, with what JS provided on top."]
+    fn to_upstream(&self) -> Result<toy::Options, String> {
+        let mut o = <toy::Options>::default();
+        if let Some(v) = &self.label {
+            o.label = v.clone();
+        }
+        if let Some(v) = self.step {
+            o.step = to_f32(v);
+        }
+        if let Some(v) = self.direction {
+            o.direction = v.into();
+        }
+        if let Some(v) = self.limit {
+            o.limit = v;
+        }
+        Ok(o)
+    }
+}
+impl ToyReportOptions<'_> {
+    #[doc = " The upstream value: `Default`, with what JS provided on top."]
+    fn to_upstream(&self) -> Result<toy::ReportOptions, String> {
+        let mut o = <toy::ReportOptions>::default();
+        if let Some(v) = &self.title {
+            o.title = v.clone();
+        }
+        if let Some(v) = self.style_index {
+            o.style_index = u8::try_from(v.min(2u32)).unwrap_or(u8::MAX);
+        }
+        if let Some(v) = &self.base {
+            let v = &**v;
+            o.base = v.__ref()?.clone();
+        }
+        if let Some(v) = &self.width {
+            o.width = width_from_js(v, "width").map_err(napi_support::coded)?;
+        }
+        if let Some(v) = &self.from {
+            let v = &**v;
+            o.from = *v.__ref()?;
+        }
+        if let Some(v) = self.ratio {
+            o.ratio = v;
         }
         Ok(o)
     }

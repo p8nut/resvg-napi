@@ -21,12 +21,14 @@ const GEN: Config = Config {
     }],
     // `ReportOptions::style_index` indexes `STYLES` unchecked.
     index_bounded: &[("_index", "STYLES")],
-    // `ReportOptions` and `Options` become `toy.ReportOptions` and
-    // `toy.Options`. `Counter` has no `Default`, so it is refused (it is a
-    // class with a constructor instead).
-    // `Filter` borrows a list of `Tag`s, an input enum: `toy.Filter` holds
-    // `toy.Tag` objects, converted for the call.
-    option_objects: &["ReportOptions", "Options", "Counter", "Filter"],
+    // `ReportOptions`, `Options` and `Filter` need no entry: `report`,
+    // `Counter::new` and `Tally::find` take them by `&`, so they become
+    // `toy.ReportOptions`, `toy.Options` and `toy.Filter`. `Filter` borrows
+    // a list of `Tag`s, an input enum: `toy.Filter` holds `toy.Tag` objects,
+    // converted for the call. `Counter` is listed for the refusal: it has no
+    // `Default`, so it is reported and left out (it is a class with a
+    // constructor instead).
+    option_objects: &["Counter"],
     // No providers: `ReportOptions::base`, an `Arc<Tally>`, is supplied by a
     // `toy.Tally` (its `Arc` shared), and `ReportOptions::from`, a `Key`, by
     // a `toy.Key` (copied), each derived from its class.

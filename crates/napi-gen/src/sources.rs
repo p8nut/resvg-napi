@@ -59,7 +59,7 @@ pub fn locked_versions() -> BTreeMap<String, Vec<String>> {
 pub fn cargo_home() -> PathBuf {
     env::var_os("CARGO_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env::var_os("HOME").expect("HOME unset")).join(".cargo"))
+        .unwrap_or_else(|| env::home_dir().expect("no home directory").join(".cargo"))
 }
 
 /// `$CARGO_HOME/registry/src/<any-index>/<pkg>-<version>/src`

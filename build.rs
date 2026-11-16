@@ -268,12 +268,9 @@ fn main() {
                 .filter(|t| {
                     // Not one already claimed as a handle: an `Arc`-held
                     // definition (`ClipPath`) would get `wrap` twice.
-                    let arc_held = referenced.iter().any(|r| {
-                        peel_type(r)
-                            .strip_prefix("Arc<")
-                            .and_then(|i| i.strip_suffix('>'))
-                            == Some(t.as_str())
-                    });
+                    let arc_held = referenced
+                        .iter()
+                        .any(|r| peel_type(r).strip_circumfix("Arc<", '>') == Some(t.as_str()));
                     !arc_held
                         && !GEN.node_types.contains(&t.as_str())
                         && sources

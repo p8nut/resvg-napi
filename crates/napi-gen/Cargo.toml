@@ -2,7 +2,7 @@
 name = "napi-gen"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.100"
 license = "Apache-2.0 OR MIT"
 description = "Build-time generator of napi-rs bindings from the wrapped crates' own sources: syn reads upstream, quote emits the binding"
 publish = false

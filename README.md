@@ -287,6 +287,11 @@ pixels, and logs the refusal. The async twins (`fromDataAsync`,
 what they recorded once the promise settled. Use one instance per parse: one
 shared between parses lists the misses of them all.
 
+The parse option `maxDepth` (default 1024) is the only bound on how deep
+usvg recurses into nested elements. Leave it alone on untrusted SVG: a much
+larger value lets a deeply nested document overflow the stack, which aborts
+the process, sooner on a worker thread (`*Async`) or in the browser.
+
 ## Measure text and geometry
 
 Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`

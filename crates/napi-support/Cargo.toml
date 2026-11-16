@@ -2,7 +2,7 @@
 name = "napi-support"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.100"
 license = "Apache-2.0 OR MIT"
 description = "Runtime pieces a napi-rs binding of an untrusted-input library needs: contained panics, bounded logs, capped file reads, a checked AbortSignal"
 publish = false

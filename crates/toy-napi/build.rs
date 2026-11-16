@@ -1,19 +1,24 @@
 //! Writes src/lib.rs from the toy crate's sources with `napi-gen`: the generic
-//! generator, on a crate it was not written for. Everything specific to `toy`
-//! is in `GEN` and the small template below.
+//! generator, on a crate it was not written for, through the same
+//! `napi_gen::generate::generate` the root crate calls. Everything specific to
+//! `toy` is in `GEN` and the small template below; the assertions read the
+//! codegen's report.
 
-use std::{env, fs, path::PathBuf, process::Command};
-
-use napi_gen::class::{Classes, Holding, Source};
-use napi_gen::emit::*;
-use napi_gen::sources::{ModTree, inline_reexported_enums, parse_crate};
-use napi_gen::vocab::{Vocab, payload_enums};
 use napi_gen::{Config, Converter, Crate, Iterated, Provider, View};
 use quote::quote;
 
 /// The toy has no font tag and no feature gates: those answers are empty.
 const GEN: Config = Config {
     log_env: "TOY_NAPI_CODEGEN_LOG",
+    generated_from: "the toy crate's sources",
+    // The crate root's items under `toy`, the `alt` module's under `alt`.
+    crates: &[Crate {
+        pkgs: &["toy"],
+        root: "toy",
+        ns: "toy",
+        modules: &[("alt", "alt")],
+        ..Crate::EMPTY
+    }],
     // `ReportOptions::style_index` indexes `STYLES` unchecked.
     index_bounded: &[("_index", "STYLES")],
     // `ReportOptions` and `Options` become `toy.ReportOptions` and
@@ -37,24 +42,12 @@ const GEN: Config = Config {
         ts: "number | 'auto'",
         convert: "width_from_js",
     }],
-    tag4_types: &[],
     // A `Trail` is what its `steps()` iterates: `scene.trail()` is an array
     // of `Step` unions.
     iterated: &[Iterated {
         ty: "Trail",
         via: "steps",
         item: "Step",
-    }],
-    node_types: &[],
-    not_data: &[],
-    features: &[],
-    // The crate root's items under `toy`, the `alt` module's under `alt`.
-    crates: &[Crate {
-        pkgs: &["toy"],
-        root: "toy",
-        ns: "toy",
-        modules: &[("alt", "alt")],
-        ..Crate::EMPTY
     }],
     // One class of each holding: `Counter` shared, `Tally` copied on
     // write, `Vec2` and `Color` by value, `Canvas` owned. `Vec2` and
@@ -109,306 +102,6 @@ const GEN: Config = Config {
 fn main() {
     napi_build::setup();
     println!("cargo::rerun-if-changed=build.rs");
-    println!("cargo::rerun-if-changed=src/lib.rs");
-
-    let here = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let src = here.join("../toy/src");
-    let mut all = parse_crate(&src);
-    // `pub use toy_dep::Shade`: another crate's enum, read as the toy's.
-    let dep = here.join("../toy-dep/src");
-    println!("cargo::rerun-if-changed={}", dep.display());
-    let inlined = inline_reexported_enums(&mut all, &mut |krate| {
-        (krate == "toy_dep").then(|| parse_crate(&dep).into_iter().map(|(_, f)| f).collect())
-    });
-    assert_eq!(inlined, ["Shade"], "Shade is the one re-exported enum");
-    let tree = ModTree::load(&src, &all);
-    // The crate root's files and the `alt` module's: a source each.
-    let (alt, files): (Vec<_>, Vec<_>) = tree
-        .public_view(&all, &src)
-        .into_iter()
-        .partition(|(p, _)| tree.file_ns.get(p).is_some_and(|ns| ns == "alt"));
-    let lib: Vec<syn::File> = files
-        .iter()
-        .filter(|(p, _)| p.ends_with("lib.rs"))
-        .map(|(_, f)| f.clone())
-        .collect();
-    let files: Vec<syn::File> = files.into_iter().map(|(_, f)| f).collect();
-    let alt: Vec<syn::File> = alt.into_iter().map(|(_, f)| f).collect();
-    let (modules, root) = (&tree.paths, quote!(toy));
-
-    // The classes and functions (`GEN.classes`, `GEN.functions`), each
-    // source's into its namespace. Built first: a member naming a class held
-    // by value is that class (`Vocab::classes`).
-    let none = Default::default();
-    let classes = Classes::new(
-        vec![
-            Source {
-                root: "toy",
-                files: &files,
-                modules,
-            },
-            Source {
-                root: "toy::alt",
-                files: &alt,
-                modules: &none,
-            },
-        ],
-        GEN,
-    );
-
-    // The unit enum, the plain-data struct and the payload enum `Step`,
-    // each through the emitter the root crate uses for the same shape.
-    let mut vocab = Vocab {
-        config: GEN,
-        ..Vocab::default()
-    };
-    // `Color` has two, so a member's bare `Color` names neither.
-    for (name, plain, _) in classes.by_value().filter(|(n, _, _)| *n != "Color") {
-        vocab.classes.insert(name.to_string());
-        if plain {
-            vocab.plain.insert(name.to_string());
-        }
-    }
-    // The classes a borrowing member hands out a copy of: `Canvas` (owned)
-    // and `Layer` and `Dot` (projected), and `Tally`.
-    for (name, _) in classes.by_clone() {
-        vocab.owned.insert(name.to_string());
-    }
-    // Of those, the projected ones are borrowed instead, when reached from a
-    // projection: the `layer` of a `Frame`, a `Content` holding a `Layer`.
-    for (name, _) in classes.by_projection() {
-        vocab.projected.insert(name.to_string());
-    }
-    assert_eq!(
-        vocab.owned,
-        ["Canvas", "Dot", "Layer", "Tally"].map(String::from).into(),
-        "the Clone classes not held by value"
-    );
-    assert_eq!(
-        vocab.projected,
-        ["Dot", "Layer"].map(String::from).into(),
-        "the Clone classes held as a projection"
-    );
-    let wanted = ["Direction".to_string()].into();
-    let (enums, enum_code, _) = map_enums(&files, &wanted, modules, &root);
-    vocab.enums = enums;
-    vocab.objects.insert("Point".into());
-    let (point, skipped, _) = object_struct(&files, "Point", &vocab, modules, &root);
-    assert!(
-        !point.is_empty() && skipped.is_empty(),
-        "Point maps completely"
-    );
-    // A unit variant, one carrying a plain-data class (its `Vec2Object`),
-    // and one carrying two (a tuple, `value: [from, to]`).
-    let step = payload_enums(&files, "", &Default::default(), "toy", &GEN)
-        .remove("Step")
-        .expect("Step is a payload enum");
-    vocab.payload.insert("Step".into(), step);
-    assert!(
-        vocab.payload["Step"].payload_blocker(&vocab).is_none(),
-        "every Step variant maps"
-    );
-    let step =
-        payload_enum_code("Step", &vocab.payload["Step"], &vocab, modules).expect("the Step union");
-    // `Shade` (re-exported, `{ type, value }`), `Frame` (a read-only class:
-    // `layer` is a copy of a projected class) and `Content`, whose variants
-    // carry a class and that read-only class: output-only objects.
-    // `Origin` too: shared bytes (a read-only class with `bytes`), a path
-    // (`value`, a string), and a tuple holding bytes (a read-only class
-    // whose `value` is the array), its arm built under the variant's own
-    // `#[cfg(unix)]`.
-    let mut found = payload_enums(&files, "", &Default::default(), "toy", &GEN);
-    for name in ["Shade", "Content", "Origin"] {
-        let e = found.remove(name).expect("a payload enum");
-        vocab.payload.insert(name.into(), e);
-    }
-    vocab.values.insert("Frame".into());
-    // Its `f64`, `&[f64]` and `i16` map; its `u64` cannot fit a JS number.
-    let (frame, skipped, _) = value_class(&files, "Frame", &vocab, modules, &root);
-    let skipped: Vec<_> = skipped.iter().map(|s| s.name.as_str()).collect();
-    assert!(
-        !frame.is_empty() && skipped == ["serial"],
-        "Frame maps all but serial: {skipped:?}"
-    );
-    let mut unions = quote!();
-    for name in ["Shade", "Content", "Origin"] {
-        assert!(
-            vocab.payload[name].payload_blocker(&vocab).is_none(),
-            "every {name} variant maps"
-        );
-        unions.extend(
-            payload_enum_code(name, &vocab.payload[name], &vocab, modules).expect("the union"),
-        );
-    }
-    // `Weighted::Held(Canvas, u32)`: a class beside a number, an object
-    // field napi requires `Clone` of. Refused, rather than a union that does
-    // not compile.
-    let weighted = found.remove("Weighted").expect("a payload enum");
-    assert_eq!(
-        weighted.payload_blocker(&vocab).as_deref(),
-        Some("Held carries Canvas, and Canvas is a class, which can only be carried alone"),
-        "a class is carried alone or not at all"
-    );
-    let bounds = index_bounds(&files, &GEN);
-    assert_eq!(bounds, [("_index", 2)], "STYLES has three entries");
-
-    // The input enums: `Tag` (`{ type, value }`, borrowed for the call) and
-    // `Origin` (`{ type, bytes }` or `{ type, value }`, given; its tuple
-    // variant refused). `Label` has their shape, but only a method of an
-    // enum takes it, and none is emitted.
-    let mut tag = quote!();
-    let inputs = input_enums(&files, &GEN);
-    assert_eq!(
-        inputs
-            .iter()
-            .map(|e| e.ident.to_string())
-            .collect::<Vec<_>>(),
-        ["Origin", "Tag"],
-        "the input enums JS has somewhere to pass"
-    );
-    assert!(
-        files
-            .iter()
-            .flat_map(|f| &f.items)
-            .any(|i| matches!(i, syn::Item::Enum(e) if e.ident == "Label" && is_enum_input(e))),
-        "Label has the shape"
-    );
-    for e in inputs {
-        tag.extend(enum_input(e, modules, &root, &GEN));
-    }
-    vocab.ints.insert("MinLen".into());
-
-    // The option objects: `ReportOptions` with every field optional over
-    // `Default`, `base` taken from a `toy.Tally` (a provider), `width`
-    // through `width_from_js` (a converter), `style_index` clamped to
-    // `STYLES`. `finish` is a function pointer, with no JS form and no
-    // provider: left out, it keeps its default. `Options` maps whole.
-    // `Counter` has no `Default`.
-    let mut options = quote!();
-    for name in GEN.option_objects {
-        match option_object(&files, name, &vocab, modules, &root, &bounds) {
-            Some(obj) => {
-                let skipped: Vec<_> = obj.skipped.iter().map(ToString::to_string).collect();
-                let (want, bounded): (&[&str], usize) = match *name {
-                    "ReportOptions" => (
-                        &["finish: fn(String)->String (no provider: keeps the default)"],
-                        1,
-                    ),
-                    _ => (&[], 0),
-                };
-                assert_eq!(
-                    has_input_lists(&files, name),
-                    *name == "Filter",
-                    "{name}: only Filter borrows lists"
-                );
-                assert_eq!(skipped, want, "{name}: what is left out");
-                assert_eq!(obj.bounded.len(), bounded, "{name}: style_index is clamped");
-                options.extend(obj.code);
-            }
-            None => assert_eq!(*name, "Counter", "{name} has Default"),
-        }
-    }
-
-    // What a class leaves out is listed, as the codegen report would.
-    let holdings: Vec<_> = classes.classes.iter().map(|c| c.holding).collect();
-    assert_eq!(
-        holdings,
-        [
-            Holding::Shared,
-            Holding::SharedCow,
-            Holding::Value,
-            Holding::Value,
-            Holding::Owned,
-            Holding::Value,
-            Holding::Shared,
-            Holding::Value,
-            Holding::Projected,
-            Holding::Projected,
-        ],
-        "each class holds its value as its shape asks"
-    );
-    let plain: Vec<_> = classes
-        .classes
-        .iter()
-        .filter(|c| !c.plain.is_empty())
-        .map(|c| &c.name)
-        .collect();
-    assert_eq!(plain, ["Vec2", "Color"], "plain data: Vec2 and alt::Color");
-    assert_eq!(
-        classes.shared_names(),
-        ["Color".to_string()].into(),
-        "two namespaces have a Color"
-    );
-    // `Album`, reached as an `Arc` (`Scene::album`): a read-only handle,
-    // whose read-only classes are borrowed from its `Arc`.
-    let (album, skipped, _) = wrapper_class(&files, "Album", &vocab, modules, &root);
-    assert!(
-        !album.is_empty() && skipped.is_empty(),
-        "Album maps: frames and cover"
-    );
-    let mut toy_part = quote! { #enum_code #point #step #tag #options #frame #unions #album };
-    let mut alt_part = quote!();
-    for (i, c) in classes.classes.iter().enumerate() {
-        let (code, skipped) = classes.class(i, &vocab);
-        let skipped: Vec<_> = skipped.iter().map(ToString::to_string).collect();
-        let want: &[&str] = match (classes.sources[c.source].root, c.name.as_str()) {
-            // `Option<Self>` outside the constructor: `null` would have to
-            // go through napi's constructor registry, which holds one
-            // `Color` of the two.
-            ("toy", "Color") => &[
-                "checked (returns Self, a class whose JS name another namespace has: \
-                 only its constructor and factories may)",
-            ],
-            // A view has no JS form of its own: `paint` borrows it.
-            ("toy", "Canvas") => &["as_view (returns CanvasView<'_>)"],
-            // A `Cell` over an array is no inline vector, and `alt` takes
-            // its `Hue` nowhere, so emits no input form of it.
-            ("toy", "Tally") => &[
-                "first_keys (returns std::cell::Cell<[Key;2]>)",
-                "hue_name (arg: &alt::Hue)",
-            ],
-            _ => &[],
-        };
-        assert_eq!(skipped, want, "{}: what is left out", c.name);
-        match classes.sources[c.source].root {
-            "toy" => toy_part.extend(code),
-            _ => alt_part.extend(code),
-        }
-    }
-    let (functions, skipped) = classes.functions("toy", &lib, &vocab);
-    assert!(skipped.is_empty(), "report and paint map");
-    toy_part.extend(functions);
-    // The constants the crate exports, in the namespace of the module that
-    // exports them: `MAX_LAYERS` re-exported from a private module, `NAME`
-    // in both namespaces, and two with no JS value.
-    let (consts, report) = constants("toy", &tree.consts, &vocab);
-    assert_eq!(
-        report,
-        [
-            "toy::NAME is a constant: toy.NAME",
-            "toy::SCALE is a constant: toy.SCALE",
-            "toy::STRICT is a constant: toy.STRICT",
-            "toy::BIG constant not exposed: u64 (no JS value)",
-            "toy::ORIGIN constant not exposed: Point (no JS value)",
-            "toy::alt::NAME is a constant: alt.NAME",
-            "toy::MAX_LAYERS is a constant: toy.MAX_LAYERS",
-        ],
-        "what becomes a constant"
-    );
-    for (root, code) in consts {
-        match root.as_str() {
-            "toy" => toy_part.extend(code),
-            _ => alt_part.extend(code),
-        }
-    }
-    for (s, code) in classes.error_codes() {
-        assert_eq!(classes.sources[s].root, "toy", "the errors are toy's");
-        toy_part.extend(code);
-    }
-    for (s, code) in classes.union_code() {
-        assert_eq!(classes.sources[s].root, "toy", "Item is toy's");
-        toy_part.extend(code);
-    }
 
     let template = quote! {
         #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
@@ -422,31 +115,10 @@ fn main() {
             }
         }
     };
-    // The two `Color`s keep their name: `shared_names`.
-    let surfaces = namespaced(
-        &[("toy", toy_part), ("alt", alt_part)],
-        &classes.shared_names(),
-    );
-    // Nothing is left out. Each union gets a named type (`toy.Step`), but
-    // `Origin`'s name is its input form's, an interface: that union is
-    // spelled out instead.
-    assert_eq!(
-        surfaces.report,
-        [
-            "not aliased: toy.Origin: a type named Origin exists already, so its union is spelled out"
-        ],
-        "nothing is left out, one union is not aliased"
-    );
-    let mirrored = surfaces.namespaced;
-    let prelude = prelude();
-    let code = quote! {
-        #prelude
-        #template
-        #mirrored
-
-        // Copy on write has no Rust counterpart to mirror: these two let the
-        // test see it. The namespaced items are named by the prefix rule:
-        // `ToyTally`.
+    // Copy on write has no Rust counterpart to mirror: these two let the
+    // test see it. The namespaced items are named by the prefix rule:
+    // `ToyTally`.
+    let tail = quote! {
         #[doc = " A second handle on the same `Tally`: shared until one of them writes."]
         #[napi(js_name = "share", namespace = "toy")]
         pub fn toy_share(t: &ToyTally) -> Result<ToyTally, String> {
@@ -459,31 +131,179 @@ fn main() {
             Ok(std::sync::Arc::ptr_eq(a.__ref()?, b.__ref()?))
         }
     };
-    let mut file: syn::File = syn::parse2(code).expect("the toy template is valid Rust");
-    // `dispose()` on every class, `[Symbol.dispose]` set at load, and the
-    // `.d.ts` header declaring it (`napi.dtsHeaderFile` in package.json).
-    napi_gen::dispose::slotted(&mut file);
-    let (alias, header) = napi_gen::dispose::aliases(&file);
-    let header_path = here.join("dts-header.d.ts");
-    if fs::read_to_string(&header_path).ok().as_deref() != Some(header.as_str()) {
-        fs::write(&header_path, header).unwrap();
-    }
-    let inspect = inspect_members(&file);
-    let text = format!(
-        "// @generated by build.rs from the toy crate's sources. DO NOT EDIT.\n\
-         #![allow(dead_code, clippy::field_reassign_with_default, clippy::type_complexity)]\n{}",
-        quote!(#file #alias #inspect)
-    );
+    let report = napi_gen::generate::generate(&GEN, template, tail).report;
+    // The report lines containing `part`, in report order.
+    let lines = |part: &str| -> Vec<&str> {
+        report
+            .iter()
+            .map(String::as_str)
+            .filter(|l| l.contains(part))
+            .collect()
+    };
 
-    let staged = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
-    fs::write(&staged, &text).unwrap();
-    let _ = Command::new("rustfmt")
-        .arg("--edition=2024")
-        .arg(&staged)
-        .status();
-    let formatted = fs::read_to_string(&staged).unwrap();
-    let dest = here.join("src/lib.rs");
-    if fs::read_to_string(&dest).ok().as_deref() != Some(formatted.as_str()) {
-        fs::write(&dest, formatted).unwrap();
-    }
+    // `pub use toy_dep::Shade`: another crate's enum, read as the toy's,
+    // found through Cargo.lock as a workspace member.
+    assert_eq!(
+        lines("re-exports enum"),
+        ["toy re-exports enum Shade: read as its own"],
+        "Shade is the one re-exported enum"
+    );
+    assert_eq!(
+        lines("index bound"),
+        ["toy index bound for `*_index` derived from STYLES: 2"],
+        "STYLES has three entries"
+    );
+    // The classes a borrowing member hands out a copy of: `Canvas` (owned)
+    // and `Tally`; `Layer` and `Dot` (projected) are borrowed instead, when
+    // reached from a projection: the `layer` of a `Frame`, a `Content`
+    // holding a `Layer`.
+    assert_eq!(
+        lines("classes a borrowing member"),
+        [
+            "classes a borrowing member copies: Canvas, Tally",
+            "classes a borrowing member borrows from a projection, copies otherwise: Dot, Layer",
+        ],
+        "the Clone classes not held by value, and those held as a projection"
+    );
+    // `Point` (an object `Counter::origin` returns) maps whole; `Frame` is a
+    // read-only class (its `layer` is a copy of a projected class), its
+    // `f64`, `&[f64]` and `i16` mapped and its `u64` unable to fit a JS
+    // number. `Layer` and `Dot` are walked as data and left to their
+    // projection classes.
+    assert_eq!(
+        lines("data types emitted"),
+        ["data types emitted: Dot, Frame, Layer, Point"],
+        "the data types"
+    );
+    assert_eq!(
+        lines("Frame:")
+            .into_iter()
+            .chain(lines("Frame member"))
+            .collect::<Vec<_>>(),
+        [
+            "Frame: partial mapping, emitted as read-only class Frame",
+            "Frame member not exposed: serial: u64",
+        ],
+        "Frame maps all but serial"
+    );
+    assert!(lines("Point member").is_empty(), "Point maps completely");
+    // The unions: `Step` (a unit variant, one carrying a plain-data class,
+    // one carrying two), `Shade` (re-exported), `Content` (variants carrying
+    // a class and a read-only class), `Origin` (shared bytes, a path, and a
+    // tuple under its variant's own `#[cfg(unix)]`), `Label` and the error
+    // `PaintError`. `Weighted::Held(Canvas, u32)` is a class beside a number,
+    // an object field napi requires `Clone` of: refused, rather than a union
+    // that does not compile.
+    assert_eq!(
+        lines("payload enums emitted"),
+        ["payload enums emitted as unions: Content, Label, Origin, PaintError, Shade, Step"],
+        "the unions"
+    );
+    assert!(
+        lines("payload enum Weighted").contains(
+            &"payload enum Weighted not mapped: Held carries Canvas, and Canvas is a class, \
+              which can only be carried alone"
+        ),
+        "a class is carried alone or not at all"
+    );
+    // The input enums: `Tag` (`{ type, value }`, borrowed for the call) and
+    // `Origin` (`{ type, bytes }` or `{ type, value }`, given). `Label` has
+    // their shape, but only a method of an enum takes it, and none is
+    // emitted; `alt::Hue` is in a module discovery does not walk.
+    assert_eq!(
+        lines("is an input enum"),
+        [
+            "toy::Origin is an input enum: { type, value }",
+            "toy::Tag is an input enum: { type, value }",
+        ],
+        "the input enums JS has somewhere to pass"
+    );
+    // The option objects: `ReportOptions` with every field optional over
+    // `Default`, `base` taken from a `toy.Tally` (a provider), `width`
+    // through `width_from_js` (a converter), `style_index` clamped to
+    // `STYLES` (the build fails when a bound matches no field). `finish` is
+    // a function pointer, with no JS form and no provider: left out, it
+    // keeps its default. `Options` and `Filter` map whole. `Counter` has no
+    // `Default`.
+    assert_eq!(
+        lines("option object"),
+        [
+            "toy::ReportOptions field not in the option object: finish: fn(String)->String \
+             (no provider: keeps the default)",
+            "toy::Counter not an option object: no Default to fill it from",
+        ],
+        "what the option objects leave out"
+    );
+    // Each class holds its value as its shape asks; `Vec2` and `alt::Color`
+    // are plain data, and two namespaces have a `Color`. What a class leaves
+    // out is listed:
+    // - `toy::Color::checked`: `Option<Self>` outside the constructor. `null`
+    //   would have to go through napi's constructor registry, which holds
+    //   one `Color` of the two.
+    // - `Canvas::as_view`: a view has no JS form of its own; `paint` borrows it.
+    // - `Tally`: a `Cell` over an array is no inline vector, and `alt` takes
+    //   its `Hue` nowhere, so emits no input form of it.
+    assert_eq!(
+        lines("is a class:")
+            .into_iter()
+            .chain(lines("not in the class"))
+            .collect::<Vec<_>>(),
+        [
+            "toy::Counter is a class: Shared",
+            "toy::Tally is a class: SharedCow",
+            "toy::Vec2 is a class: Value, plain data",
+            "toy::Color is a class: Value, a JS name another namespace has",
+            "toy::Canvas is a class: Owned",
+            "toy::alt::Color is a class: Value, plain data, a JS name another namespace has",
+            "toy::Scene is a class: Shared",
+            "toy::Key is a class: Value",
+            "toy::Layer is a class: Projected",
+            "toy::Dot is a class: Projected",
+            "toy::Tally member not in the class: first_keys (returns std::cell::Cell<[Key;2]>)",
+            "toy::Tally member not in the class: hue_name (arg: &alt::Hue)",
+            "toy::Color member not in the class: checked (returns Self, a class whose JS name \
+             another namespace has: only its constructor and factories may)",
+            "toy::Canvas member not in the class: as_view (returns CanvasView<'_>)",
+        ],
+        "the classes, and what each leaves out"
+    );
+    assert!(
+        lines("function not exposed").is_empty(),
+        "every function maps"
+    );
+    // `Album`, reached as an `Arc` (`Scene::album`): a read-only handle,
+    // whose read-only classes are borrowed from its `Arc`.
+    assert!(
+        lines("wrapper classes generated")
+            .first()
+            .is_some_and(|l| l.contains("Album"))
+            && lines("toy::Album").is_empty(),
+        "Album maps: frames and cover"
+    );
+    // The constants the crate exports, in the namespace of the module that
+    // exports them: `MAX_LAYERS` re-exported from a private module, `NAME`
+    // in both namespaces, and two with no JS value.
+    assert_eq!(
+        lines("constant"),
+        [
+            "toy::NAME is a constant: toy.NAME",
+            "toy::SCALE is a constant: toy.SCALE",
+            "toy::STRICT is a constant: toy.STRICT",
+            "toy::BIG constant not exposed: u64 (no JS value)",
+            "toy::ORIGIN constant not exposed: Point (no JS value)",
+            "toy::alt::NAME is a constant: alt.NAME",
+            "toy::MAX_LAYERS is a constant: toy.MAX_LAYERS",
+        ],
+        "what becomes a constant"
+    );
+    // Nothing is left out of the surface. Each union gets a named type
+    // (`toy.Step`), but `Origin`'s name is its input form's, an interface:
+    // that union is spelled out instead.
+    assert_eq!(
+        lines("not aliased"),
+        [
+            "not aliased: toy.Origin: a type named Origin exists already, so its union is spelled out"
+        ],
+        "nothing is left out, one union is not aliased"
+    );
 }

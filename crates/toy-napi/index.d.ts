@@ -594,6 +594,19 @@ export declare namespace toy {
     kind: 'layer'
     value: toy.Layer
   }
+  /** Any variant of `Label`. */
+  export type Label = toy.LabelPlain | toy.LabelText
+  /** The payload-free variants of `Label`. */
+  export interface LabelPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'unnamed'
+  }
+  /** `Label::Text`. */
+  export interface LabelText {
+    /** Discriminant. Narrow on this. */
+    type: 'text'
+    value: string
+  }
   /** How many layers a scene may hold: `toy::MAX_LAYERS`. */
   export const MAX_LAYERS: number
   /** The library's name: a string constant, `toy.NAME`. `alt.NAME` is another. */
@@ -647,6 +660,12 @@ export declare namespace toy {
   /** The `code` a thrown `toy::PaintError` carries: the variant's name. The message is its `Display`. */
   export const enum PaintErrorCode {
     OutOfBounds = 'OutOfBounds',
+  }
+  /** `PaintError::OutOfBounds`. */
+  export interface PaintErrorOutOfBounds {
+    /** Discriminant. Narrow on this. */
+    type: 'outOfBounds'
+    value: [number, number]
   }
   /** The `code` a thrown `toy::ParseError` carries: the variant's name. The message is its `Display`. */
   export const enum ParseErrorCode {

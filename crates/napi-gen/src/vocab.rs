@@ -233,8 +233,9 @@ impl PayloadEnum {
         }
     }
 
-    /// `Either::A` / `Either17::C`, for the nth arm.
-    pub fn either_arm(&self, name: &str, i: usize) -> TokenStream {
+    /// `value` as the nth arm of the union: `Either::A(value)` /
+    /// `Either17::C(value)`, or `value` itself when the union is one struct.
+    pub fn either_arm(&self, name: &str, i: usize, value: TokenStream) -> TokenStream {
         let letter = format_ident!(
             "{}",
             char::from(b'A' + u8::try_from(i).expect("fewer than 26 letters"))
@@ -246,9 +247,9 @@ impl PayloadEnum {
             format_ident!("Either{n}")
         };
         if n == 1 {
-            quote!()
+            value
         } else {
-            quote!(#e::#letter)
+            quote!(#e::#letter(#value))
         }
     }
 

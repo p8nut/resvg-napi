@@ -64,10 +64,13 @@ macro_rules! say {
 /// `root_str` is kept beside `root`: quote! spells a path with spaces around
 /// `::`, and this one reaches the report a reader is expected to grep.
 struct Discovered {
+    /// Its public files, but a module's with a namespace of its own.
     files: Vec<syn::File>,
+    /// The same, by path.
     parsed: Vec<(PathBuf, syn::File)>,
     tree: ModTree,
-    dir: PathBuf,
+    /// Its class sources: the root module first.
+    scopes: Vec<Scope>,
     root: TokenStream,
     root_str: &'static str,
 }
@@ -146,12 +149,55 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                 say!(log, "{} re-exports enum {name}: read as its own", c.root);
             }
             let tree = ModTree::load(&dir, &all);
-            let parsed = tree.public_view(&all, &dir);
+            // A module with a namespace of its own (`Crate::modules`) is a
+            // class source of its own, and not walked: its listed classes,
+            // functions and constants are emitted, nothing is discovered in
+            // it. ponytail: discovery over such a module waits for a crate
+            // that needs it.
+            let ns_of = |p: &PathBuf| tree.file_ns.get(p).map_or("", String::as_str);
+            let (own, apart): (Vec<_>, Vec<_>) = tree
+                .public_view(&all, &dir)
+                .into_iter()
+                .partition(|(p, _)| !c.modules.iter().any(|(m, _)| *m == ns_of(p)));
+            let in_ns = |files: &[(PathBuf, syn::File)], ns: &str| -> Vec<syn::File> {
+                files
+                    .iter()
+                    .filter(|(p, _)| ns_of(p) == ns)
+                    .map(|(_, f)| f.clone())
+                    .collect()
+            };
+            // The crate's root module, and each module with a namespace of
+            // its own. A crate's classes are its root module's: a module whose
+            // types are exported under its own path (`filter`) is not that
+            // source, and its `Image` is not the root's.
+            let lib = own
+                .iter()
+                .filter(|(p, _)| *p == dir.join("lib.rs"))
+                .map(|(_, f)| f.clone())
+                .collect();
+            let scopes = std::iter::once(Scope {
+                root: c.root.to_string(),
+                files: in_ns(&own, ""),
+                lib,
+                modules: tree.paths.clone(),
+                module: false,
+            })
+            .chain(c.modules.iter().map(|(m, _)| {
+                let files = in_ns(&apart, m);
+                Scope {
+                    root: format!("{}::{m}", c.root),
+                    lib: files.clone(),
+                    files,
+                    modules: BTreeMap::new(),
+                    module: true,
+                }
+            }))
+            .collect();
             Discovered {
-                files: parsed.iter().map(|(_, f)| f.clone()).collect(),
-                parsed,
+                files: own.iter().map(|(_, f)| f.clone()).collect(),
+                parsed: own,
                 tree,
-                dir,
+                scopes,
                 root: c
                     .root
                     .parse()
@@ -176,47 +222,8 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         by_module.entry(m).or_default().push(file.clone());
     }
 
-    // The class sources inside the discovered crates: each crate's root
-    // module, and each module with a namespace of its own. A crate's classes
-    // are its root module's: a module whose types are exported under its own
-    // path (`filter`) is not that source, and its `Image` is not the root's.
-    let scopes: Vec<Scope> = sources
-        .iter()
-        .zip(config.crates_of(Role::Discover))
-        .flat_map(|(s, c)| {
-            let in_ns = |ns: &str| -> Vec<syn::File> {
-                s.parsed
-                    .iter()
-                    .filter(|(p, _)| s.tree.file_ns.get(p).map_or("", String::as_str) == ns)
-                    .map(|(_, f)| f.clone())
-                    .collect()
-            };
-            let lib = s
-                .parsed
-                .iter()
-                .filter(|(p, _)| *p == s.dir.join("lib.rs"))
-                .map(|(_, f)| f.clone())
-                .collect();
-            std::iter::once(Scope {
-                root: s.root_str.to_string(),
-                files: in_ns(""),
-                lib,
-                modules: s.tree.paths.clone(),
-                module: false,
-            })
-            .chain(c.modules.iter().map(move |(m, _)| {
-                let files = in_ns(m);
-                Scope {
-                    root: format!("{}::{m}", s.root_str),
-                    lib: files.clone(),
-                    files,
-                    modules: BTreeMap::new(),
-                    module: true,
-                }
-            }))
-            .collect::<Vec<_>>()
-        })
-        .collect();
+    // The class sources inside the discovered crates.
+    let scopes: Vec<&Scope> = sources.iter().flat_map(|s| &s.scopes).collect();
 
     // Which crate defines a type, by the same probe the chains used: the first
     // source with a public struct of that name.
@@ -533,7 +540,39 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
 
     // Fixpoint over object types: a generated object can reference another
     // (`Stop` holds a `Color`).
-    let mut object_todo: VecDeque<String> = object_seeds.into_iter().collect();
+    // Plus what a listed class of a discovered crate returns: the class maps
+    // a member returning a data type only when that type is one. A struct of
+    // a discovered crate, not itself a class, a node or an iterated list.
+    let class_returns: Vec<String> = classes
+        .classes
+        .iter()
+        .filter(|c| {
+            scopes
+                .iter()
+                .any(|s| s.root == classes.sources[c.source].root)
+        })
+        .flat_map(|c| inherent_impls(classes.sources[c.source].files, &c.name))
+        .flat_map(|imp| &imp.items)
+        .filter_map(|it| match it {
+            syn::ImplItem::Fn(f) if is_pub(&f.vis) => match &f.sig.output {
+                syn::ReturnType::Type(_, t) => Some(&**t),
+                syn::ReturnType::Default => None,
+            },
+            _ => None,
+        })
+        .flat_map(peeled)
+        .filter_map(key)
+        .filter(|t| {
+            !object_seeds.contains(t)
+                && !vocab.enums.contains(t)
+                && !config.node_types.contains(&t.as_str())
+                && !config.projections.iter().any(|(_, p)| p == t)
+                && !config.iterated.iter().any(|it| it.ty == t)
+                && !classes.classes.iter().any(|c| c.name == *t)
+                && defines(t).is_some()
+        })
+        .collect();
+    let mut object_todo: VecDeque<String> = object_seeds.into_iter().chain(class_returns).collect();
     let mut object_done: BTreeSet<String> = BTreeSet::new();
     let mut object_root: BTreeMap<String, TokenStream> = BTreeMap::new();
     // Types given a second turn once their dependencies were discovered.
@@ -545,6 +584,16 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
             continue;
         }
         if vocab.enums.contains(&t) || vocab.scalars.contains(&t) || vocab.ints.contains(&t) {
+            continue;
+        }
+        // A listed class of a discovered crate is `crate::class`'s, whatever
+        // reaches it (a payload carrying it, a list of it): emitted twice, the
+        // two would clash. By its bare name only: a module's type of the same
+        // name (`m::Image`) is another one. A projection is walked as data
+        // (what it holds is data of its class), and left out when emitted.
+        let listed = |s: &Discovered| config.classes.contains(&(s.root_str, t.as_str()));
+        if !t.contains("::") && defines(&t).is_some_and(listed) {
+            say!(log, "object {t} skipped: a listed class");
             continue;
         }
         let scoped = t.rsplit_once("::").and_then(|(m, _)| by_module.get(m));

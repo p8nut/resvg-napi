@@ -407,7 +407,7 @@ pub fn payload_enum_code(
                 pub r#type: String,
             }
         });
-        let arm = info.either_arm(name, 0);
+        let arm = |v: TokenStream| info.either_arm(name, 0, v);
         for (n, _) in info
             .variants
             .iter()
@@ -416,7 +416,8 @@ pub fn payload_enum_code(
             let vid = format_ident!("{}", n);
             let tag = lower_camel(n);
             let g = info.gate(n, &vocab.config);
-            arms.push(quote!(#g #up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
+            let value = arm(quote!(#unit { r#type: #tag.to_string() }));
+            arms.push(quote!(#g #up::#vid => #value,));
         }
         i = 1;
     }
@@ -429,7 +430,8 @@ pub fn payload_enum_code(
         let vid = format_ident!("{}", n);
         let tag = lower_camel(n);
         let ts = format!("'{tag}'");
-        let arm = info.either_arm(name, i);
+        let n_arm = i;
+        let arm = |v: TokenStream| info.either_arm(name, n_arm, v);
         let g = info.gate(n, &vocab.config);
         i += 1;
 
@@ -490,7 +492,8 @@ does this. Copied out on each read.",
                         }
                     }
                 });
-                arms.push(quote!(#g #up::#vid(v) => #arm(#sid { raw: v.clone() }),));
+                let value = arm(quote!(#sid { raw: v.clone() }));
+                arms.push(quote!(#g #up::#vid(v) => #value,));
                 continue;
             }
             // A class carried alone: an output-only object holding it, which
@@ -526,10 +529,11 @@ does this. Copied out on each read.",
                         pub value: #fty,
                     }
                 });
-                arms.push(quote!(#g #up::#vid(#bind) => #arm(#sid {
+                let value = arm(quote!(#sid {
                     r#type: #tag.to_string(),
                     value: #expr,
-                }),));
+                }));
+                arms.push(quote!(#g #up::#vid(#bind) => #value,));
                 continue;
             }
             Payload::Value(ty) => {
@@ -598,9 +602,10 @@ does this. Copied out on each read.",
                         }
                     }
                 });
-                arms.push(quote!(#g #up::#vid(#(#binds),*) => #arm(#sid {
+                let value = arm(quote!(#sid {
                     raw: (#(#binds.clone(),)*),
-                }),));
+                }));
+                arms.push(quote!(#g #up::#vid(#(#binds),*) => #value,));
                 continue;
             }
             // Several unnamed fields: `value` is a tuple of them, an array
@@ -658,10 +663,11 @@ does this. Copied out on each read.",
                 #(#decls)*
             }
         });
-        arms.push(quote!(#g #pattern => #arm(#sid {
+        let value = arm(quote!(#sid {
             r#type: #tag.to_string(),
             #(#inits)*
-        }),));
+        }));
+        arms.push(quote!(#g #pattern => #value,));
     }
 
     let parts = info.parts(name);

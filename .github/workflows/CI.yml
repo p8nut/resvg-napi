@@ -208,6 +208,15 @@ jobs:
           npx napi build --cwd crates/toy-napi --platform --no-js
           node --test crates/toy-napi/toy.spec.mjs
 
+      # The helpers are TypeScript: tsc emits the helpers*.mjs and
+      # helpers*.d.mts the package ships, committed beside their .mts so that
+      # no install has to compile them (TypeScript 7 does not run on Node 20.3,
+      # which the test matrix covers). Emitted here, so the drift check below
+      # fails when they no longer match their source.
+      - name: Emit the helpers
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: npm run build:helpers
+
       # The build regenerates committed files: src/lib.rs and index.d.ts from
       # the upstream sources (build.rs), index.js and browser.js, and on wasm the
       # WASI loader shims. The generators are deterministic, so anything the
@@ -297,6 +306,7 @@ jobs:
           if [ "${{ matrix.target }}" = x86_64-unknown-linux-gnu ]; then
             npm run report || true
             npm run licenses || true
+            npm run build:helpers || true
           fi
           git diff --binary -- . ':!package-lock.json' > regen.patch
       - if: failure() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'

@@ -234,7 +234,14 @@ The demo parses only through the helpers.
 
 `resvg-napi/helpers` is JS on the generated API, nothing else
 ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md), "Helpers sit beside it,
-in JS"). Two files and their hand-written declarations:
+in JS"). It is written in TypeScript, strict: two sources, `helpers.browser.mts`
+and `helpers.mts`, from which `npm run build:helpers` (`tsc -p
+tsconfig.helpers.json`) emits the `.mjs` and `.d.mts` the package ships, beside
+them. Edit the `.mts` and run it: the emitted files are committed, so that no
+install compiles anything (TypeScript 7 does not run on Node 20.3, which
+`engines` allows), and CI's drift check fails when they differ from the
+sources. The declarations are the sources' own, with their doc comments;
+`npm run typecheck` checks them against `test/helpers-types.mts`.
 
 - `helpers.browser.mjs` (`helpers.browser.d.mts`) loads no binding.
   `createHelpers(binding)` builds the set on the binding it is given, one set
@@ -569,7 +576,8 @@ npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
 npm run conformance   # resvg's corpus against its references (conformance:fetch first)
-npm run typecheck     # tsc --strict over the .d.ts / .d.mts files and test/*.mts
+npm run typecheck     # tsc --strict over the .d.ts / .d.mts files, the helpers' .mts and test/*.mts
+npm run build:helpers # emits helpers*.mjs and helpers*.d.mts from the .mts (commit them)
 npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```
 

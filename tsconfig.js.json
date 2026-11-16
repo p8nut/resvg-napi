@@ -12,7 +12,7 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["helpers.browser.mjs", "helpers.mjs", "scripts/*.mjs", "demo/*.mjs"],
+  "include": ["scripts/*.mjs", "demo/*.mjs"],
   // esbuild output (demo/build.mjs), not ours.
   "exclude": ["demo/wasi-worker-browser.mjs"]
 }

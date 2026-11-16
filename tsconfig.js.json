@@ -1,6 +1,6 @@
 {
   // The plain JS, checked against its JSDoc and the libraries' types. Not
-  // strict: untyped parameters are `any`, as in JS.
+  // strict: an untyped parameter is unchecked, as in JS.
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,

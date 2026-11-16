@@ -17,4 +17,5 @@ class BufferPolyfill extends Uint8Array {
   static alloc(size) { return new BufferPolyfill(size); }
   static isBuffer(value) { return value instanceof BufferPolyfill; }
 }
-globalThis.Buffer ??= /** @type {any} */ (BufferPolyfill);
+// @ts-expect-error -- only what emnapi calls, not all of Node's BufferConstructor.
+globalThis.Buffer ??= BufferPolyfill;

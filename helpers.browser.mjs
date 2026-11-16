@@ -268,11 +268,12 @@ function ensureIds(svg) {
  * `usvg.Tree.fromStr` resolves `<image href>` from any local path instead.
  *
  * @param binding  the binding (native or wasm): `{ usvg, guard }`
- * @param options  `usvg.Options` (`fontdb`, `fontFamily`, `resourcesDir`...),
+ * @param {import('./helpers.browser.d.mts').GuardedParseOptions} [options]
+ *                 `usvg.Options` (`fontdb`, `fontFamily`, `resourcesDir`...),
  *                 plus the resolver's `images` and `resourcesRoot`
  * @returns (svg) => usvg.Tree
  */
-export function guardedParse({ usvg, guard }, { images, resourcesRoot, ...options } = /** @type {any} */ ({})) {
+export function guardedParse({ usvg, guard }, { images, resourcesRoot, ...options } = {}) {
   return (svg) => usvg.Tree.fromStr(svg, {
     ...options,
     imageHrefResolver: new guard.ImageHrefResolver({ images, resourcesRoot }),
@@ -647,7 +648,11 @@ function build(binding) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-  function measureText(text, { fontSize = 12, family, ...options } = /** @type {any} */ ({})) {
+  /**
+   * @param {string} text
+   * @param {import('./helpers.browser.d.mts').MeasureOptions} [options]
+   */
+  function measureText(text, { fontSize = 12, family, ...options } = {}) {
     const fam = family ?? options.fontFamily ?? 'sans-serif';
     const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
       + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`

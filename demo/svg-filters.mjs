@@ -26,10 +26,11 @@ const round = (n) => Math.round(n * 100) / 100;
  * @param binding the binding (native or wasm)
  * @param db      the `fontdb.Database` holding the fonts the document renders with
  * @param text    the string
- * @param fontSize, family  defaults: 12, `options.fontFamily`
+ * @param {Pick<import('../helpers.browser.d.mts').MeasureOptions, 'fontSize' | 'family'>} [size]
+ *                fontSize, family; defaults: 12, `options.fontFamily`
  * @param options extra `usvg.Options` (e.g. `languages`, `fontFamily`)
  */
-export function measureText(binding, db, text, { fontSize = 12, family } = /** @type {any} */ ({}), options = {}) {
+export function measureText(binding, db, text, { fontSize = 12, family } = {}, options = {}) {
   try {
     return createHelpers(binding).measureText(text, { ...options, fontSize, family, fonts: db });
   } catch {

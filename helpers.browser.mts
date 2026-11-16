@@ -89,7 +89,8 @@ export interface RenderParams {
   height?: number
   /**
    * Background: any CSS colour `svgtypes.Color.fromStr` reads (`#eee`,
-   * `teal`, `rgba(255, 0, 0, .5)`). Default: transparent.
+   * `teal`, `rgba(255, 0, 0, .5)`, `rgb(255 0 0 / 50%)`, `hwb(90 10% 10%)`).
+   * Default: transparent.
    */
   background?: string
   /**
@@ -379,7 +380,7 @@ export function nodeExtent(node: Node): Box | null {
   const { kind, value } = node;
   switch (kind) {
     case 'group': return box(value.absLayerBoundingBox());
-    case 'image': return box(value.absBoundingBox()?.toNonZeroRect());
+    case 'image': return box(value.absBoundingBox().toNonZeroRect());
     default: return box(value.absStrokeBoundingBox()?.toNonZeroRect());
   }
 }

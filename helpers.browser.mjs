@@ -162,7 +162,7 @@ export function nodeExtent(node) {
     const { kind, value } = node;
     switch (kind) {
         case 'group': return box(value.absLayerBoundingBox());
-        case 'image': return box(value.absBoundingBox()?.toNonZeroRect());
+        case 'image': return box(value.absBoundingBox().toNonZeroRect());
         default: return box(value.absStrokeBoundingBox()?.toNonZeroRect());
     }
 }

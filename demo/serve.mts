@@ -8,7 +8,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));  // see render.mjs
-const types = {
+const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
   '.mjs': 'text/javascript',
@@ -19,7 +19,7 @@ const types = {
 };
 
 const server = createServer(async (req, res) => {
-  const url = req.url.split('?')[0];
+  const url = (req.url ?? '/').split('?')[0];
   const path = join(root, normalize(decodeURIComponent(url)));
   const file = path.endsWith('/') ? join(path, 'index.html') : path;
   try {

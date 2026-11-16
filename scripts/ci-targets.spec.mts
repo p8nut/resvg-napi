@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { entry, isFull, matrix, tests, emit } from './ci-targets.mjs';
+import { entry, isFull, matrix, tests, emit } from './ci-targets.mts';
 
 test('only an unlabelled pull request is slim', () => {
   assert.equal(isFull('push', []), true);
@@ -12,7 +12,7 @@ test('only an unlabelled pull request is slim', () => {
 });
 
 test('host and flag follow from the triple', () => {
-  const pick = (t) => { const { host, build_args } = entry(t); return [host, build_args]; };
+  const pick = (t: string) => { const { host, build_args } = entry(t); return [host, build_args]; };
   assert.deepEqual(pick('x86_64-unknown-linux-gnu'), ['ubuntu-latest', '--use-napi-cross']);
   assert.deepEqual(pick('armv7-unknown-linux-gnueabihf'), ['ubuntu-latest', '--use-napi-cross']);
   assert.deepEqual(pick('aarch64-unknown-linux-musl'), ['ubuntu-latest', '-x']);

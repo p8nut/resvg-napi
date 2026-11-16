@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalise } from './codegen-report.mjs';
+import { normalise } from './codegen-report.mts';
 
 test('ours only, sorted, and the registry path reduced to the crate dir', () => {
   const raw = [

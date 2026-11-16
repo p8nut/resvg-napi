@@ -8,10 +8,29 @@ import { toValueSync } from 'liquidjs';
 import qrcode from 'qrcode-generator';
 import { createHelpers } from '../helpers.browser.mjs';
 
+// Plain JS rather than .mts: demo/render.mjs imports it, and the test matrix
+// runs that, and test/demo-filters.mjs, on Node 20.3, which strips no types.
+// Typed in JSDoc instead, and checked as strictly as the .mts (tsconfig.json).
+
+/** @typedef {import('liquidjs').Liquid} Liquid */
+/** @typedef {import('liquidjs').Template} Template */
+/** @typedef {import('../helpers.browser.mjs').Binding} Binding */
+/** @typedef {import('../helpers.browser.mjs').ParseOptions} ParseOptions */
+/**
+ * The text's size and family, what `measure` takes.
+ * @typedef {Pick<import('../helpers.browser.mjs').MeasureOptions, 'fontSize' | 'family'>} MeasureSize
+ */
+/**
+ * `(text, { fontSize, family }) => width in user units`.
+ * @typedef {(text: string, size: MeasureSize) => number} Measure
+ */
+
+/** @param {unknown} s */
 const escapeXml = (s) => String(s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
+/** @param {number} n */
 const round = (n) => Math.round(n * 100) / 100;
 
 /**
@@ -23,12 +42,14 @@ const round = (n) => Math.round(n * 100) / 100;
  * `guard.ImageHrefResolver` unless `options` brings one. A string that does
  * not parse measures 0, so a template keeps rendering.
  *
- * @param binding the binding (native or wasm)
- * @param db      the `fontdb.Database` holding the fonts the document renders with
- * @param text    the string
- * @param {Pick<import('../helpers.browser.d.mts').MeasureOptions, 'fontSize' | 'family'>} [size]
+ * @param {Binding} binding the binding (native or wasm)
+ * @param {import('../index.js').fontdb.Database} db
+ *                the `fontdb.Database` holding the fonts the document renders with
+ * @param {string} text the string
+ * @param {MeasureSize} [size]
  *                fontSize, family; defaults: 12, `options.fontFamily`
- * @param options extra `usvg.Options` (e.g. `languages`, `fontFamily`)
+ * @param {ParseOptions} [options] extra `usvg.Options` (e.g. `languages`, `fontFamily`)
+ * @returns {number}
  */
 export function measureText(binding, db, text, { fontSize = 12, family } = {}, options = {}) {
   try {
@@ -45,10 +66,11 @@ export function measureText(binding, db, text, { fontSize = 12, family } = {}, o
  * `<svg id="qr" x=".." y=".." width="39.68" height="39.68">{{ upn | qr | raw }}</svg>`
  * scales it without the template having to know the module count.
  *
- * @param text  value to encode
- * @param dark  colour of the modules (default black)
- * @param light colour behind them; `#00000000` for transparent (default none)
+ * @param {unknown} text  value to encode
+ * @param {string} [dark]  colour of the modules (default black)
+ * @param {string} [light] colour behind them; `#00000000` for transparent (default none)
  * @param {'L' | 'M' | 'Q' | 'H'} [level] error correction (default M)
+ * @returns {string}
  */
 export function qrSvg(text, dark = '#000000', light = 'none', level = 'M') {
   const value = String(text ?? '');
@@ -80,8 +102,9 @@ export function qrSvg(text, dark = '#000000', light = 'none', level = 'M') {
 /**
  * Registers the filters on a Liquid instance.
  *
- * @param liquid   the engine
- * @param measure  (text, { fontSize, family }) => width in user units
+ * @param {Liquid} liquid   the engine
+ * @param {{ measure: Measure }} filters
+ *                 `measure`: (text, { fontSize, family }) => width in user units
  */
 export function registerSvgFilters(liquid, { measure }) {
   liquid.registerFilter('qr', (value, dark, light, level) => qrSvg(value, dark, light, level));
@@ -101,6 +124,7 @@ export function registerSvgFilters(liquid, { measure }) {
     // is a render, so keep the number of probes logarithmic. Cut on code
     // points: a UTF-16 index can land inside an emoji and leave half of it.
     const chars = Array.from(text);
+    /** @param {number} n */
     const prefix = (n) => chars.slice(0, n).join('').trimEnd();
     let lo = 0;
     let hi = chars.length;
@@ -124,6 +148,7 @@ export function registerSvgFilters(liquid, { measure }) {
     const step = Number(lineHeight) || size * 1.25;
     const opts = { fontSize: size, family };
 
+    /** @type {string[]} */
     const lines = [];
     let line = '';
     for (const word of text.split(/\s+/)) {
@@ -170,16 +195,24 @@ export function registerSvgFilters(liquid, { measure }) {
  * Calls `fn` on every node of a parsed template, nested ones included.
  * `source` is template text or what `liquid.parse` returned; text that does
  * not parse visits nothing.
+ *
+ * @param {Liquid} liquid
+ * @param {string | Template[]} source
+ * @param {(node: Template) => void} fn
  */
 export function eachNode(liquid, source, fn) {
-  let templates = source;
+  /** @type {Template[]} */
+  let templates;
   if (typeof source === 'string') {
     try {
       templates = liquid.parse(source);
     } catch {
       return;
     }
+  } else {
+    templates = source;
   }
+  /** @param {Template[]} nodes */
   const visit = (nodes) => {
     for (const node of nodes) {
       fn(node);
@@ -191,16 +224,35 @@ export function eachNode(liquid, source, fn) {
   visit(templates);
 }
 
-/** Partial names a template asks for, from the `render`/`include` tags. */
+/**
+ * `v.getText()`, when `v` has one: what a dynamic file name (a Value) says.
+ *
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+const textOf = (v) => (typeof v === 'object' && v !== null && 'getText' in v
+  && typeof v.getText === 'function' ? v.getText() : undefined);
+
+/**
+ * Partial names a template asks for, from the `render`/`include` tags.
+ *
+ * @param {Liquid} liquid
+ * @param {string | Template[]} source
+ * @returns {Set<string>}
+ */
 export function referencedPartials(liquid, source) {
+  /** @type {Set<string>} */
   const names = new Set();
   eachNode(liquid, source, (node) => {
-    if (node.name !== 'render' && node.name !== 'include') return;
+    // `name` and `file` are the tags' own fields, which liquid's `Template`
+    // does not declare (`file` is private to the class).
+    if (!('name' in node) || (node.name !== 'render' && node.name !== 'include')) return;
+    const file = 'file' in node ? node.file : undefined;
     // A literal file name arrives already unquoted; a dynamic one
     // (`{% render page %}`) is a Value, and only known at render time.
-    const name = typeof node.file === 'string'
-      ? node.file
-      : String(node.file?.getText?.() ?? '').trim();
+    const name = typeof file === 'string'
+      ? file
+      : String(textOf(file) ?? '').trim();
     if (name) names.add(name);
   });
   return names;

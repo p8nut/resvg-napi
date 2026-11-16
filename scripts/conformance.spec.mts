@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { testList, compare, diffPixels, formatBaseline, parseBaseline, THREW } from './conformance.mjs';
+import { testList, compare, diffPixels, formatBaseline, parseBaseline, THREW } from './conformance.mts';
 
-const B = (o) => new Map(Object.entries(o));
+const B = (o: Record<string, number>) => new Map(Object.entries(o));
 
 test('testList: the paths upstream asserts on, sorted, `.svg` appended', () => {
   assert.deepEqual(
@@ -42,7 +42,7 @@ test('the baseline round-trips, and passing files are not written', () => {
 });
 
 test('diffPixels: 1 is the same pixel, 2 is not', () => {
-  const px = (v) => Uint8Array.from(v);
+  const px = (v: number[]) => Uint8Array.from(v);
   assert.equal(diffPixels(px([10, 10, 10, 255]), px([11, 9, 10, 255])), 0);
   assert.equal(diffPixels(px([10, 10, 10, 255]), px([12, 10, 10, 255])), 1);
   assert.equal(diffPixels(px([0, 0, 0, 0]), px([0, 0, 0, 0])), 0);

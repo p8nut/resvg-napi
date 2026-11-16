@@ -28,6 +28,18 @@ const FONTS = join(ROOT, 'fonts');
 const BASELINE = 'conformance/baseline.txt';
 const WIDTH = 300; // IMAGE_SIZE in the upstream harness
 
+/** One file's move against the baseline: differing pixels, or a state. */
+export interface Moved {
+  path: string
+  was: number | 'new' | 'threw'
+  now: number | 'threw'
+}
+
+/** What `run` reads of pngjs, which ships no types. */
+interface Pngjs {
+  PNG: { sync: { read(data: Buffer): { width: number; height: number; data: Buffer } } }
+}
+
 /**
  * The cases upstream actually asserts on, read off its generated test list.
  *
@@ -38,7 +50,7 @@ const WIDTH = 300; // IMAGE_SIZE in the upstream harness
  * all. Scoping to the list is what makes "we agree with upstream" mean
  * something.
  */
-export function testList(source) {
+export function testList(source: string): string[] {
   return [...source.matchAll(/render\("tests\/([^"]+)"\)/g)]
     .map((m) => `${m[1]}.svg`)
     .sort();
@@ -55,7 +67,7 @@ export function testList(source) {
 const TOLERANCE = 1;
 
 /** Pixels differing by more than `TOLERANCE` on any channel. */
-export function diffPixels(a, b, tolerance = TOLERANCE) {
+export function diffPixels(a: Uint8Array, b: Uint8Array, tolerance = TOLERANCE): number {
   let diff = 0;
   for (let i = 0; i < a.length; i += 4) {
     if (
@@ -70,20 +82,23 @@ export function diffPixels(a, b, tolerance = TOLERANCE) {
   return diff;
 }
 
+/** A case that threw instead of rendering. Not a pixel count, and not comparable to one. */
+export const THREW = -1;
+
 /**
  * What changed against the baseline. A file that got worse is a regression; one
  * that got better is news worth acting on, not a failure.
  *
- * @param {Map<string, number>} want  baseline: path -> differing pixels
- * @param {Map<string, number>} got
+ * @param want  baseline: path -> differing pixels
+ * @param got
  */
-/** A case that threw instead of rendering. Not a pixel count, and not comparable to one. */
-export const THREW = -1;
-
-export function compare(want, got) {
-  const worse = [];
-  const better = [];
-  const gone = [];
+export function compare(
+  want: Map<string, number>,
+  got: Map<string, number>,
+): { worse: Moved[]; better: Moved[]; gone: string[] } {
+  const worse: Moved[] = [];
+  const better: Moved[] = [];
+  const gone: string[] = [];
   for (const [path, diff] of got) {
     const was = want.get(path);
     // Throwing is its own state, ranked above every pixel count rather than
@@ -108,8 +123,9 @@ export function compare(want, got) {
   return { worse, better, gone };
 }
 
-export function parseBaseline(text) {
-  const m = new Map();
+/** The baseline file read back: path -> differing pixels. */
+export function parseBaseline(text: string): Map<string, number> {
+  const m = new Map<string, number>();
   for (const line of text.split('\n')) {
     const t = line.trim();
     if (!t || t.startsWith('#')) continue;
@@ -119,7 +135,8 @@ export function parseBaseline(text) {
   return m;
 }
 
-export function formatBaseline(got) {
+/** The baseline file: the files that differ, and by how many pixels. */
+export function formatBaseline(got: Map<string, number>): string {
   const failing = [...got].filter(([, d]) => d > 0).sort(([a], [b]) => (a < b ? -1 : 1));
   const head = [
     '# resvg conformance: files whose render differs from upstream\'s reference,',
@@ -132,10 +149,11 @@ export function formatBaseline(got) {
   return head.concat(failing.map(([p, d]) => `${p} ${d}`)).join('\n') + '\n';
 }
 
-function run() {
+/** Every case rendered: path -> differing pixels (or `THREW`), and why each threw. */
+function run(): { got: Map<string, number>; errors: Map<string, string> } {
   const require = createRequire(import.meta.url);
-  const { usvg, resvg, tiny_skia, fontdb } = require('../index.js');
-  const { PNG } = require('pngjs');
+  const { usvg, resvg, tiny_skia, fontdb }: typeof import('../index.js') = require('../index.js');
+  const { PNG }: Pngjs = require('pngjs');
 
   // Upstream's GLOBAL_FONTDB: sorted, so the load order is deterministic.
   const db = new fontdb.Database();
@@ -160,8 +178,8 @@ function run() {
         'and an empty run would pass',
     );
   }
-  const got = new Map();
-  const errors = new Map();
+  const got = new Map<string, number>();
+  const errors = new Map<string, string>();
 
   for (const rel of files) {
     const svgPath = join(CORPUS, rel);
@@ -193,7 +211,7 @@ function run() {
       }
       got.set(rel, diffPixels(data, ref.data));
     } catch (e) {
-      errors.set(rel, e.message.split('\n')[0]);
+      errors.set(rel, (e instanceof Error ? e.message : String(e)).split('\n')[0]);
       got.set(rel, THREW);
     }
   }

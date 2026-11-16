@@ -362,7 +362,7 @@ without a language.
 resvg's own test corpus, rendered through these bindings: **1715 of 1715 match**
 the reference PNGs upstream asserts on, within 1/255 per channel — a tolerance
 measured rather than chosen, with the reason recorded in
-[`scripts/conformance.mjs`](scripts/conformance.mjs).
+[`scripts/conformance.mts`](scripts/conformance.mts).
 
 ```bash
 npm run conformance:fetch   # the corpus, at the tag Cargo.lock builds
@@ -399,7 +399,7 @@ google/fonts by name rather than making you find a file; and WASI has no mmap,
 so font files are read into memory.
 
 Adding a target is the triple in `package.json` under `napi.targets`; then
-`npm run create-npm-dirs`. CI builds that list, and `scripts/ci-targets.mjs`
+`npm run create-npm-dirs`. CI builds that list, and `scripts/ci-targets.mts`
 derives which host builds each triple and which cross-compilation flag it needs.
 
 CI does not build all thirteen on a pull request. It builds the two that can

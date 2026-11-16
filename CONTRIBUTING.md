@@ -576,7 +576,7 @@ npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
 npm run conformance   # resvg's corpus against its references (conformance:fetch first)
-npm run typecheck     # tsc --strict over the .d.ts / .d.mts files, the helpers' .mts and test/*.mts
+npm run typecheck     # tsc --strict over the .d.ts / .d.mts, every .mts, and the JSDoc of the .mjs below
 npm run build:helpers # emits helpers*.mjs and helpers*.d.mts from the .mts (commit them)
 npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```
@@ -596,12 +596,23 @@ there is none. The env-var prefix is POSIX-shell syntax; on Windows use
 ```
 cargo fmt --all --check
 cargo clippy --workspace --release --all-targets -- -D warnings
-node --test "scripts/*.spec.mjs" # the scripts' own tests, offline
+node --test "scripts/*.spec.mts" # the scripts' own tests, offline
 npm run check:package            # what publish would ship: root tarball, manifests
 ```
 
-The scripts' tests are `*.spec.mjs`, not `*.test.mjs`: plain `node --test`,
+The scripts' tests are `*.spec.mts`, not `*.test.mts`: plain `node --test`,
 which `npm test` runs, would pick the latter up on every test-matrix entry.
+
+The scripts and the demo's Node side are TypeScript, strict, and nothing
+compiles them: Node runs a `.mts` as it is, stripping the types (CI's Node 22
+does). So they use erasable syntax only (no `enum`, no `namespace`, no
+parameter properties), import each other with the `.mts` extension and types
+with `import type`, which `tsconfig.json` enforces (`erasableSyntaxOnly`,
+`verbatimModuleSyntax`). Three files stay `.mjs`, because the test matrix
+runs them on Node 20.3, which strips no types: `demo/render.mjs`
+(`test:examples`), `demo/svg-filters.mjs` (it imports it, and so do two
+tests) and `scripts/api-diff.mjs` (a test imports it). They are typed in
+JSDoc instead, and `tsconfig.json` checks them as strictly (`checkJs`).
 
 The compiler is the one `rust-toolchain.toml` pins, locally and in CI: rustup
 installs it on first use. A new stable lands through that file, in its own pull
@@ -619,7 +630,7 @@ It does not build all thirteen targets on a pull request. It builds
 `wasm32-wasip1-threads`, which is a different code path. The other eleven build
 on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
 `full-matrix`. Adding a target means the triple in `package.json` under
-`napi.targets`, then `npm run create-npm-dirs`; `scripts/ci-targets.mjs` reads
+`napi.targets`, then `npm run create-npm-dirs`; `scripts/ci-targets.mts` reads
 that list and derives the host and cross flag from the triple.
 
 The codegen keeps a report of everything it derived and everything it left
@@ -722,7 +733,7 @@ git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z
 ```
 
 The repository stays at version 0.0.0. On a `v*` tag, CI runs
-`scripts/set-version.mjs` with the tag's version before it builds, packs and
+`scripts/set-version.mts` with the tag's version before it builds, packs and
 publishes. That one script writes the version into the seven places it
 lives, and every one of them has failed a release at least once:
 - `package.json`, its `optionalDependencies` and the wasm `peerDependencies`

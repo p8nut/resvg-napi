@@ -42,7 +42,7 @@ export declare namespace usvg {
 }
 `;
 
-const edit = (from, to) => {
+const edit = (from: string, to: string) => {
   assert.ok(BASE.includes(from), `fixture has ${from}`);
   return BASE.replace(from, to);
 };
@@ -114,7 +114,7 @@ test('an interface merged into a class: additive', () => {
   const d = apiDiff(BASE, head);
   assert.equal(d.classification, 'additive');
   assert.deepEqual(d.added, ['Counter.[Symbol.dispose]']);
-  assert.match(d.changed[0].widening, /declaration merged: interface/);
+  assert.match(d.changed[0].widening ?? '', /declaration merged: interface/);
   // ...but a class turned into an interface is not.
   assert.equal(apiDiff(BASE, edit('export declare class Counter', 'export interface Counter')).classification, 'breaking');
 });

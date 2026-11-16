@@ -84,7 +84,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: node scripts/ci-targets.mjs >> "$GITHUB_OUTPUT"
+        run: node scripts/ci-targets.mts >> "$GITHUB_OUTPUT"
       # napi-derive's expansion calls napi API without depending on napi, so
       # cargo happily resolves a pair that does not build: derive 3.6.13 calls
       # defer_native_borrow_scope, which napi only has from 3.15.0. Holding the
@@ -104,7 +104,7 @@ jobs:
       # install, so once here rather than on every test-matrix entry. `.spec`
       # rather than `.test`, which `node --test` would also pick up from
       # `npm test` on every matrix entry.
-      - run: node --test "scripts/*.spec.mjs"
+      - run: node --test "scripts/*.spec.mts"
       # The generic crates name no wrapped crate, comments included: whole
       # words, case sensitive (ADR 0002, Q35). What is specific to resvg goes
       # through napi_gen::Config, filled by build/config.rs; crates/toy-napi
@@ -142,7 +142,7 @@ jobs:
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash # Windows runners default to pwsh, which has no ${VAR#v}
-        run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
+        run: node scripts/set-version.mts "${GITHUB_REF_NAME#v}" && git add -A
       # `npm install`, not `npm ci`: the resvg-napi-<platform>
       # optionalDependencies name 0.0.0, or on a tag a version the publish job
       # has not put on the registry yet, so they are never in the lock file.
@@ -277,13 +277,13 @@ jobs:
             exit 1
           fi
 
-      # esbuild has exactly one consumer -- demo/build.mjs -- and pages.yml runs
+      # esbuild has exactly one consumer -- demo/build.mts -- and pages.yml runs
       # only on main, so an esbuild bump was provable only after merging, in the
       # deploy. `demo:build` is not used here: it would rebuild the wasm this
       # job already produced, which is the file the script copies.
       - name: The demo still bundles
         if: matrix.target == 'wasm32-wasip1-threads'
-        run: node demo/build.mjs
+        run: node demo/build.mts
 
       # The whole suite against the wasm build, not just a smoke test: the
       # binding is the same generated code, but the environment is not -- WASI
@@ -376,7 +376,7 @@ jobs:
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash # Windows runners default to pwsh, which has no ${VAR#v}
-        run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
+        run: node scripts/set-version.mts "${GITHUB_REF_NAME#v}" && git add -A
       - run: npm install  # not `npm ci` -- see the build job
       # The root tarball and every manifest. Needs no artifacts: the root
       # package holds no platform binary.
@@ -409,7 +409,7 @@ jobs:
       # offsets the other build happened to use. Nothing broke only because
       # resvg stayed at 0.48.1 and the layouts matched.
       #
-      # Here rather than in check-package.mjs: that script asks what npm would
+      # Here rather than in check-package.mts: that script asks what npm would
       # ship, and the crate version is not part of that answer.
       - name: Cargo.toml carries the npm version
         run: |
@@ -477,7 +477,7 @@ jobs:
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash # Windows runners default to pwsh, which has no ${VAR#v}
-        run: node scripts/set-version.mjs "${GITHUB_REF_NAME#v}" && git add -A
+        run: node scripts/set-version.mts "${GITHUB_REF_NAME#v}" && git add -A
       - run: npm install  # not `npm ci` -- see the build job
       # Trusted publishing: npm trades this job's OIDC token (id-token: write
       # above) for a short-lived publish credential, so no long-lived npm

@@ -11,8 +11,21 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
+/** A package.json, as far as these checks read it. */
+export type Manifest = {
+  name: string
+  version?: string
+  files?: string[]
+  exports?: unknown
+  os?: string[]
+  cpu?: string[]
+  optionalDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+  dependencies?: Record<string, string>
+};
+
 /** A `files[]` entry naming one concrete file, not a pattern. */
-const isLiteral = (entry) => !/[*?[\]{}]/.test(entry) && !entry.endsWith('/');
+const isLiteral = (entry: string): boolean => !/[*?[\]{}]/.test(entry) && !entry.endsWith('/');
 
 /** Rust sources have no business in an npm tarball. */
 const RUST = /^(Cargo\.(toml|lock)|build\.rs|src\/)/;
@@ -20,11 +33,11 @@ const RUST = /^(Cargo\.(toml|lock)|build\.rs|src\/)/;
 /**
  * The root package: every literal files[] entry in the tarball, and no Rust.
  *
- * @param {{name: string, promised: string[], shipped: string[]}} pkg
- * @returns {string[]} what is wrong, empty when nothing is
+ * @param pkg
+ * @returns what is wrong, empty when nothing is
  */
-export function assess({ name, promised, shipped }) {
-  const reasons = [];
+export function assess({ name, promised, shipped }: { name: string; promised: string[]; shipped: string[] }): string[] {
+  const reasons: string[] = [];
   for (const entry of promised.filter(isLiteral)) {
     if (!shipped.includes(entry)) {
       reasons.push(`${name} promises ${entry} in files[] but the tarball has no such path`);
@@ -41,10 +54,10 @@ export function assess({ name, promised, shipped }) {
  * installed: `import 'pkg/helpers'` then fails with ERR_MODULE_NOT_FOUND, on
  * the consumer's machine and nowhere else.
  *
- * @param {unknown} exports  the manifest's `exports`
- * @returns {string[]} the targets, as written (`./helpers.mjs`)
+ * @param exports  the manifest's `exports`
+ * @returns the targets, as written (`./helpers.mjs`)
  */
-export function exportTargets(exports) {
+export function exportTargets(exports: unknown): string[] {
   if (typeof exports === 'string') return [exports];
   if (Array.isArray(exports)) return exports.flatMap(exportTargets);
   if (exports && typeof exports === 'object') return Object.values(exports).flatMap(exportTargets);
@@ -55,11 +68,11 @@ export function exportTargets(exports) {
  * The `exports` targets the tarball does not hold, and the ones that are not
  * a `./` path (Node refuses those).
  *
- * @param {{name: string, exports: unknown, shipped: string[]}} pkg
- * @returns {string[]} what is wrong, empty when nothing is
+ * @param pkg
+ * @returns what is wrong, empty when nothing is
  */
-export function unexported({ name, exports, shipped }) {
-  const reasons = [];
+export function unexported({ name, exports, shipped }: { name: string; exports: unknown; shipped: string[] }): string[] {
+  const reasons: string[] = [];
   for (const target of new Set(exportTargets(exports))) {
     if (!target.startsWith('./')) {
       reasons.push(`${name} exports ${target}, which is not a ./ path`);
@@ -83,10 +96,13 @@ export function unexported({ name, exports, shipped }) {
  * it is the old problem back. The committed root lists it too, so the
  * published manifest is the committed one.
  *
- * @param {Record<string, string>} optional  optionalDependencies
- * @param {Record<string, {name?: string, os?: string[], cpu?: string[]}>} platforms  by package name
+ * @param optional  optionalDependencies
+ * @param platforms  by package name
  */
-export function unconstrained(optional, platforms) {
+export function unconstrained(
+  optional: Record<string, string>,
+  platforms: Record<string, { name?: string; os?: string[]; cpu?: string[] }>,
+): string[] {
   return Object.keys(optional)
     .filter((name) => {
       const m = platforms[name];
@@ -101,9 +117,9 @@ export function unconstrained(optional, platforms) {
  * This repository shipped all the way to a release candidate with every one of
  * them missing, which is how quiet the failure is.
  *
- * @param {{name: string, manifest: Record<string, unknown>}[]} pkgs
+ * @param pkgs
  */
-export function anonymous(pkgs) {
+export function anonymous(pkgs: Array<{ name: string; manifest: Record<string, unknown> }>): string[] {
   const wanted = ['author', 'license', 'repository', 'homepage', 'bugs'];
   return pkgs.flatMap(({ name, manifest }) => {
     const missing = wanted.filter((k) => !manifest[k]);
@@ -124,12 +140,16 @@ export function anonymous(pkgs) {
  * release, so `npm i resvg-napi@0.3.0 resvg-napi-wasm32-wasi@0.3.0` answered
  * ERESOLVE for anyone taking the documented WASI path.
  *
- * @param {string} version  the root version
- * @param {Record<string, string>} pinned  every pin naming a package of this family
- * @param {Record<string, {version?: string}>} platforms  by package name
+ * @param version  the root version
+ * @param pinned  every pin naming a package of this family
+ * @param platforms  by package name
  */
-export function mismatched(version, pinned, platforms) {
-  const why = [];
+export function mismatched(
+  version: string | undefined,
+  pinned: Record<string, string>,
+  platforms: Record<string, { version?: string }>,
+): string[] {
+  const why: string[] = [];
   for (const [name, want] of Object.entries(pinned)) {
     if (want !== version) why.push(`${name} is pinned at ${want}, but this package is ${version}`);
   }
@@ -145,10 +165,12 @@ export function mismatched(version, pinned, platforms) {
  * and `@napi-rs/wasm-runtime`, which track upstream and have no business
  * matching our version.
  *
- * @param {{name: string, optionalDependencies?: Record<string,string>, peerDependencies?: Record<string,string>, dependencies?: Record<string,string>}} manifest
+ * @param manifest
  */
-export function familyPins(manifest) {
-  const family = (m) => Object.entries(m ?? {}).filter(([name]) => name.startsWith(manifest.name));
+export function familyPins(
+  manifest: Pick<Manifest, 'name' | 'optionalDependencies' | 'peerDependencies' | 'dependencies'>,
+): Record<string, string> {
+  const family = (m: Record<string, string> | undefined) => Object.entries(m ?? {}).filter(([name]) => name.startsWith(manifest.name));
   return Object.fromEntries([
     ...family(manifest.optionalDependencies),
     ...family(manifest.peerDependencies),
@@ -167,11 +189,11 @@ export function familyPins(manifest) {
  * the only thing that noticed was the publish job, on the tag, after thirteen
  * targets had already built.
  *
- * @param {Record<string,string>} root  the root's dependencies
- * @param {Record<string,string>} wasm  the wasm package's dependencies
+ * @param root  the root's dependencies
+ * @param wasm  the wasm package's dependencies
  */
-export function wasiDeps(root, wasm) {
-  const why = [];
+export function wasiDeps(root: Record<string, string> | undefined, wasm: Record<string, string> | undefined): string[] {
+  const why: string[] = [];
   for (const [name, want] of Object.entries(wasm ?? {})) {
     const mine = (root ?? {})[name];
     if (!mine) continue;
@@ -184,23 +206,25 @@ export function wasiDeps(root, wasm) {
   return why;
 }
 
-function pack(dir) {
+/** The paths `npm pack` would put in the tarball of the package in `dir`. */
+function pack(dir: string): string[] {
   const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: dir,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
   });
-  return JSON.parse(out)[0].files.map((f) => f.path);
+  const [packed]: Array<{ files: Array<{ path: string }> }> = JSON.parse(out);
+  return packed.files.map((f) => f.path);
 }
 
 if (import.meta.main) {
-  const root = JSON.parse(readFileSync('package.json', 'utf8'));
+  const root: Manifest = JSON.parse(readFileSync('package.json', 'utf8'));
   const shipped = pack('.');
   const platforms = Object.fromEntries(readdirSync('npm')
     .filter((d) => existsSync(join('npm', d, 'package.json')))
     .map((d) => {
-      const m = JSON.parse(readFileSync(join('npm', d, 'package.json'), 'utf8'));
-      return [m.name, m];
+      const m: Manifest = JSON.parse(readFileSync(join('npm', d, 'package.json'), 'utf8'));
+      return [m.name, m] as const;
     }));
   const wasi = platforms[`${root.name}-wasm32-wasi`];
   const reasons = [

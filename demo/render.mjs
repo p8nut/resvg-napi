@@ -8,6 +8,10 @@
 //
 // Variables come from `<template>.json` when it exists, partials from files
 // next to the template, fonts from `demo/fonts` plus `demo/DejaVuSans.ttf`.
+//
+// Plain JS rather than .mts: `npm run test:examples` runs it on every leg of
+// the test matrix, Node 20.3 included, which strips no types. Typed in JSDoc
+// instead, and checked as strictly as the .mts (tsconfig.json).
 import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,6 +54,7 @@ const fontFiles = [join(here, 'DejaVuSans.ttf'),
   ...(existsSync(join(here, 'fonts')) ? readdirSync(join(here, 'fonts'))
     .filter((f) => /\.(ttf|otf)$/i.test(f)).map((f) => join(here, 'fonts', f)) : [])]
   .filter(existsSync);
+/** @type {string | undefined} */
 let family;
 for (const file of fontFiles) {
   const loaded = db.len();
@@ -62,12 +67,17 @@ for (const file of fontFiles) {
 // the system, for the glyphs the local files do not have (emoji, scripts).
 db.loadSystemFonts();
 // The examples ask for `sans-serif`; point every generic family at what we have.
-for (const set of ['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
-                   'setCursiveFamily', 'setFantasyFamily']) {
+if (family === undefined) {
+  console.error('no font: demo/fonts and demo/DejaVuSans.ttf have none');
+  process.exit(2);
+}
+for (const set of /** @type {const} */ (['setSansSerifFamily', 'setSerifFamily', 'setMonospaceFamily',
+                   'setCursiveFamily', 'setFantasyFamily'])) {
   db[set](family);
 }
 const options = { fontFamily: family, languages };
 
+/** @type {import('./svg-filters.mjs').Measure} */
 const measure = (text, opts) => measureText(binding, db, text, opts, options);
 
 // Output lands inside XML, so every `{{ }}` is escaped; a filter that returns
@@ -79,10 +89,12 @@ registerSvgFilters(liquid, { measure });
 
 const source = readFileSync(template, 'utf8');
 const varsFile = template.replace(/\.svg$/, '.json');
+/** @type {Record<string, unknown>} */
 const scope = existsSync(varsFile) ? JSON.parse(readFileSync(varsFile, 'utf8')) : {};
 
 const wanted = [...referencedPartials(liquid, source)];
 
+/** @type {string} */
 const rendered = liquid.parseAndRenderSync(source, scope);
 // An unrendered tag means the template asked for something Liquid did not do,
 // which is a failure and not a warning: resvg would parse the tag as markup.

@@ -22,12 +22,13 @@ await copyFile(join(root, 'resvg-napi.wasm32-wasi.wasm'),
 //
 // `platform: 'browser'`, which is esbuild's default, said out loud: a `node:`
 // import reaching any of these bundles fails the build instead of the page.
-for (const [entry, out, inject = []] of /** @type {[string, string, string[]?][]} */ ([
-  ['resvg-napi.wasi-browser.js', 'resvg.js', [join(here, 'buffer-shim.mjs')]],
+const bundles: Array<[entry: string, out: string, inject?: string[]]> = [
+  ['resvg-napi.wasi-browser.js', 'resvg.js', [join(here, 'buffer-shim.mts')]],
   ['wasi-worker-browser.mjs', 'wasi-worker-browser.mjs'],
-  ['demo/liquid-entry.mjs', 'liquid.js'],
+  ['demo/liquid-entry.mts', 'liquid.js'],
   ['helpers.browser.mjs', 'helpers.js'],
-])) {
+];
+for (const [entry, out, inject = []] of bundles) {
   await build({
     entryPoints: [join(root, entry)],
     outfile: join(here, out),

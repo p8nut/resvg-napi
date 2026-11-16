@@ -33,8 +33,9 @@ pub fn listed(root: &str, name: &str) -> bool {
 
 impl Classes<'_> {
     /// One argument of a twin: its parameter, the statement converting it
-    /// on the main thread into an owned `Send` value, and the expression the
-    /// worker passes. An `Err` says why it cannot cross.
+    /// on the main thread into an owned `Send` value, the expression the
+    /// worker passes, and whether that statement leases the argument. An
+    /// `Err` says why it cannot cross.
     fn twin_arg(
         &self,
         ctx: usize,
@@ -42,7 +43,7 @@ impl Classes<'_> {
         pat: &Ident,
         ty: &Type,
         bounds: &BTreeMap<String, Option<Bound>>,
-    ) -> Result<(TokenStream, Option<TokenStream>, TokenStream), String> {
+    ) -> Result<(TokenStream, Option<TokenStream>, TokenStream, bool), String> {
         let name = lower_camel(&pat.to_string());
         let tmp = format_ident!("__{pat}");
         let (r, inner) = deref(ty);
@@ -52,7 +53,7 @@ impl Classes<'_> {
         {
             // A path or a string, as the sync call takes it: owned already.
             return match (r, b) {
-                (None, Some(_)) => Ok((quote!(#pat: String), None, quote!(#pat))),
+                (None, Some(_)) => Ok((quote!(#pat: String), None, quote!(#pat), false)),
                 _ => Err(format!("`{name}`: its generic bound has no JS form")),
             };
         }
@@ -63,16 +64,18 @@ impl Classes<'_> {
                 quote!(#pat: Uint8Array),
                 Some(quote!(let #tmp = #pat.to_vec();)),
                 quote!(&#tmp),
+                false,
             ));
         }
         if r == Some(false) && matches!(segs.as_deref(), Some([s]) if s == "str") {
-            return Ok((quote!(#pat: String), None, quote!(&#pat)));
+            return Ok((quote!(#pat: String), None, quote!(&#pat), false));
         }
         if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
             return Ok((
                 quote!(#pat: Uint8Array),
                 Some(quote!(let #tmp = #pat.to_vec();)),
                 quote!(#tmp),
+                false,
             ));
         }
         if r.is_none()
@@ -82,7 +85,7 @@ impl Classes<'_> {
             let same = quote!(#pat);
             let conv = p.js_in(&same, &name);
             let pre = (conv.to_string() != same.to_string()).then(|| quote!(let #pat = #conv;));
-            return Ok((quote!(#pat: #js), pre, quote!(#pat)));
+            return Ok((quote!(#pat: #js), pre, quote!(#pat), false));
         }
         if let Some(c) = self.class_of(ctx, this, inner) {
             let id = self.ident(c);
@@ -119,14 +122,15 @@ impl Classes<'_> {
             } else {
                 quote!(#pat: &#id)
             };
-            return Ok((param, Some(pre), fwd));
+            // Every `&mut` here is a lease, and only those are.
+            return Ok((param, Some(pre), fwd, mutable));
         }
         if r == Some(false)
             && let Some(u) = self.union_of(ctx, inner)
         {
             // A projection of its own: owned already.
             let (param, pre, fwd) = self.union_arg(u, pat);
-            return Ok((param, pre, fwd));
+            return Ok((param, pre, fwd, false));
         }
         let missing = || format!("argument `{pat}` has no JS form");
         let segs = segs.ok_or_else(missing)?;
@@ -148,6 +152,7 @@ impl Classes<'_> {
                 quote!(#pat: &mut #id),
                 Some(quote!(let mut #tmp = #pat.__lease()?;)),
                 quote!(&mut #place.#via()),
+                true,
             ));
         }
         if r == Some(false) && config().option_objects.contains(&last.as_str()) {
@@ -156,6 +161,7 @@ impl Classes<'_> {
                 quote!(#pat: Option<#o>),
                 Some(quote!(let #tmp = #pat.unwrap_or_default().to_upstream()?;)),
                 quote!(&#tmp),
+                false,
             ));
         }
         Err(missing())
@@ -190,8 +196,9 @@ impl Classes<'_> {
         }
         let holding = this.map(|c| self.classes[c].holding);
         let ident = &sig.ident;
-        // The receiver, made `Send` on the main thread, and the call on it.
-        let (me, self_pre, call) = match (recv, holding) {
+        // The receiver, made `Send` on the main thread, the call on it, and
+        // whether it is leased.
+        let (me, self_pre, call, self_leased) = match (recv, holding) {
             (Recv::None, _) => {
                 let path = match this {
                     Some(c) => {
@@ -200,42 +207,49 @@ impl Classes<'_> {
                     }
                     None => self.sources[ctx].root.parse().expect("a root path"),
                 };
-                (None, None, quote!(#path::#ident))
+                (None, None, quote!(#path::#ident), false)
             }
             (Recv::Ref, Some(Holding::Projected)) => (
                 Some(quote!(&self)),
                 Some(quote!(let __self = self.__ref()?.clone();)),
                 quote!(__self.get().#ident),
+                false,
             ),
             (Recv::Ref, Some(Holding::Shared | Holding::SharedCow)) => (
                 Some(quote!(&self)),
                 Some(quote!(let __self = self.__ref()?.clone();)),
                 quote!(__self.#ident),
+                false,
             ),
             (Recv::Ref | Recv::Value, Some(Holding::Value)) => (
                 Some(quote!(&self)),
                 Some(quote!(let __self = *self.__ref()?;)),
                 quote!(__self.#ident),
+                false,
             ),
             (Recv::Ref, Some(Holding::Owned)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let __self = self.__lease()?;)),
                 quote!(__self.#ident),
+                true,
             ),
             (Recv::Mut, Some(Holding::Value | Holding::Owned)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let mut __self = self.__lease()?;)),
                 quote!(__self.#ident),
+                true,
             ),
             (Recv::Mut, Some(Holding::SharedCow)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let mut __self = self.__lease()?;)),
                 quote!(std::sync::Arc::make_mut(&mut *__self).#ident),
+                true,
             ),
             (Recv::Value, Some(Holding::Owned)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let __self = self.__take()?;)),
                 quote!(__self.#ident),
+                false,
             ),
             _ => fail("its receiver cannot cross to a worker thread"),
         };
@@ -244,10 +258,6 @@ impl Classes<'_> {
         let (mut params, mut pre, mut fwd) = (Vec::new(), Vec::new(), Vec::new());
         // What the call leases: what the doc names, and the locals holding
         // them, which `spawn` keeps a hold on.
-        let leases = |pre: &Option<TokenStream>| {
-            pre.as_ref()
-                .is_some_and(|p| p.to_string().contains("__lease"))
-        };
         let (mut lent, mut held) = (Vec::new(), Vec::new());
         for input in sig.inputs.iter().skip(usize::from(recv != Recv::None)) {
             let FnArg::Typed(t) = input else { continue };
@@ -255,10 +265,10 @@ impl Classes<'_> {
                 fail("an argument is a pattern")
             };
             let pat = &p.ident;
-            let (param, p, f) = self
+            let (param, p, f, leased) = self
                 .twin_arg(ctx, this, pat, &t.ty, &bounds)
                 .unwrap_or_else(|why| fail(&why));
-            if leases(&p) {
+            if leased {
                 lent.push(format!("`{}`", lower_camel(&pat.to_string())));
                 held.push(format_ident!("__{pat}"));
             }
@@ -266,7 +276,7 @@ impl Classes<'_> {
             pre.extend(p);
             fwd.push(f);
         }
-        if leases(&self_pre) {
+        if self_leased {
             lent.insert(0, "this instance".to_string());
             held.push(format_ident!("__self"));
         }

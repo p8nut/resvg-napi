@@ -618,14 +618,14 @@ export declare namespace resvg {
    *
    * The produced content is in the sRGB color space.
    */
-  export function renderNode(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): boolean | null
+  export function renderNode(node: usvg.Node, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): boolean | null
   /**
    * `renderNode` on a worker thread. The arguments are read now, the call runs
    * off the main thread, and the promise resolves with its result or rejects
    * as `renderNode` throws. `signal` drops the call while it is still queued.
    * Until it settles, `pixmap` is in use: any other use throws `Leased`.
    */
-  export function renderNodeAsync(node: usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap, signal?: AbortSignal | undefined | null): Promise<boolean | null>
+  export function renderNodeAsync(node: usvg.Node, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap, signal?: AbortSignal | undefined | null): Promise<boolean | null>
 }
 
 export declare namespace svgtypes {
@@ -1324,6 +1324,8 @@ export declare namespace tiny_skia {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type TinySkiaTransform = Transform
+  /** Any variant of `PathSegment`. */
+  export type PathSegment = tiny_skia.PathSegmentPlain | tiny_skia.PathSegmentMoveTo | tiny_skia.PathSegmentLineTo | tiny_skia.PathSegmentQuadTo | tiny_skia.PathSegmentCubicTo
   /** `PathSegment::CubicTo`. */
   export interface PathSegmentCubicTo {
     /** Discriminant. Narrow on this. */
@@ -1562,7 +1564,7 @@ export declare namespace usvg {
     /** Element's "layer" bounding box in canvas units. */
     absLayerBoundingBox(): tiny_skia.NonZeroRect | null
     /** Group's children. */
-    children(): Array<usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText>
+    children(): Array<usvg.Node>
     /** Checks if this group should be isolated during rendering. */
     shouldIsolate(): boolean
     /** Returns `true` if the group has any children. */
@@ -1627,7 +1629,7 @@ export declare namespace usvg {
      */
     renderingMode(): usvg.ImageRendering
     /** Image data. */
-    kind(): usvg.ImageKindJpeg | usvg.ImageKindPng | usvg.ImageKindGif | usvg.ImageKindWebp | usvg.ImageKindSvg
+    kind(): usvg.ImageKind
     /**
      * Element's absolute transform.
      *
@@ -1873,7 +1875,7 @@ export declare namespace usvg {
      *
      * All segments are in absolute coordinates.
      */
-    data(): Array<tiny_skia.PathSegmentPlain | tiny_skia.PathSegmentMoveTo | tiny_skia.PathSegmentLineTo | tiny_skia.PathSegmentQuadTo | tiny_skia.PathSegmentCubicTo>
+    data(): Array<tiny_skia.PathSegment>
     /**
      * Element's absolute transform.
      *
@@ -1992,7 +1994,7 @@ export declare namespace usvg {
     get rect(): tiny_skia.NonZeroRect
     get colorInterpolation(): usvg.ColorInterpolation
     get result(): string
-    get kind(): usvg.KindBlend | usvg.KindColorMatrix | usvg.KindComponentTransfer | usvg.KindComposite | usvg.KindConvolveMatrix | usvg.KindDiffuseLighting | usvg.KindDisplacementMap | usvg.KindDropShadow | usvg.KindFlood | usvg.KindGaussianBlur | usvg.KindImage | usvg.KindMerge | usvg.KindMorphology | usvg.KindOffset | usvg.KindSpecularLighting | usvg.KindTile | usvg.KindTurbulence
+    get kind(): usvg.Kind
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
@@ -2255,7 +2257,7 @@ export declare namespace usvg {
      *
      * If an empty ID is provided, than this method will always return `None`.
      */
-    nodeById(id: string): usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText | null
+    nodeById(id: string): usvg.Node | null
     /** Checks if the current tree has any text nodes. */
     hasTextNodes(): boolean
     /** Checks if the current tree has any `defs` nodes. */
@@ -2298,6 +2300,8 @@ export declare namespace usvg {
   export type UsvgTree = Tree
   /** An alignment baseline property. */
   export type AlignmentBaseline = 'auto' | 'baseline' | 'beforeEdge' | 'textBeforeEdge' | 'middle' | 'central' | 'afterEdge' | 'textAfterEdge' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical'
+  /** Any variant of `BaselineShift`. */
+  export type BaselineShift = usvg.BaselineShiftPlain | usvg.BaselineShiftNumber
   /** `BaselineShift::Number`. */
   export interface BaselineShiftNumber {
     /** Discriminant. Narrow on this. */
@@ -2311,8 +2315,8 @@ export declare namespace usvg {
   }
   /** Plain view of a `Blend`. */
   export interface Blend {
-    input1: usvg.InputPlain | usvg.InputReference
-    input2: usvg.InputPlain | usvg.InputReference
+    input1: usvg.Input
+    input2: usvg.Input
     mode: usvg.BlendMode
   }
   /**
@@ -2337,9 +2341,11 @@ export declare namespace usvg {
   export type ColorInterpolation = 'srgb' | 'linearRgb'
   /** Plain view of a `ColorMatrix`. */
   export interface ColorMatrix {
-    input: usvg.InputPlain | usvg.InputReference
-    kind: usvg.ColorMatrixKindPlain | usvg.ColorMatrixKindMatrix | usvg.ColorMatrixKindSaturate | usvg.ColorMatrixKindHueRotate
+    input: usvg.Input
+    kind: usvg.ColorMatrixKind
   }
+  /** Any variant of `ColorMatrixKind`. */
+  export type ColorMatrixKind = usvg.ColorMatrixKindPlain | usvg.ColorMatrixKindMatrix | usvg.ColorMatrixKindSaturate | usvg.ColorMatrixKindHueRotate
   /** `ColorMatrixKind::HueRotate`. */
   export interface ColorMatrixKindHueRotate {
     /** Discriminant. Narrow on this. */
@@ -2365,18 +2371,20 @@ export declare namespace usvg {
   }
   /** Plain view of a `ComponentTransfer`. */
   export interface ComponentTransfer {
-    input: usvg.InputPlain | usvg.InputReference
-    funcR: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
-    funcG: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
-    funcB: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
-    funcA: usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
+    input: usvg.Input
+    funcR: usvg.TransferFunction
+    funcG: usvg.TransferFunction
+    funcB: usvg.TransferFunction
+    funcA: usvg.TransferFunction
   }
   /** Plain view of a `Composite`. */
   export interface Composite {
-    input1: usvg.InputPlain | usvg.InputReference
-    input2: usvg.InputPlain | usvg.InputReference
-    operator: usvg.CompositeOperatorPlain | usvg.CompositeOperatorArithmetic
+    input1: usvg.Input
+    input2: usvg.Input
+    operator: usvg.CompositeOperator
   }
+  /** Any variant of `CompositeOperator`. */
+  export type CompositeOperator = usvg.CompositeOperatorPlain | usvg.CompositeOperatorArithmetic
   /** `CompositeOperator::Arithmetic`. */
   export interface CompositeOperatorArithmetic {
     /** Discriminant. Narrow on this. */
@@ -2393,7 +2401,7 @@ export declare namespace usvg {
   }
   /** Plain view of a `ConvolveMatrix`. */
   export interface ConvolveMatrix {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     matrix: usvg.ConvolveMatrixData
     divisor: number
     bias: number
@@ -2412,16 +2420,16 @@ export declare namespace usvg {
   export const DEFAULT_MAX_DEPTH: number
   /** Plain view of a `DiffuseLighting`. */
   export interface DiffuseLighting {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     surfaceScale: number
     diffuseConstant: number
     lightingColor: usvg.Color
-    lightSource: usvg.LightSourceDistantLight | usvg.LightSourcePointLight | usvg.LightSourceSpotLight
+    lightSource: usvg.LightSource
   }
   /** Plain view of a `DisplacementMap`. */
   export interface DisplacementMap {
-    input1: usvg.InputPlain | usvg.InputReference
-    input2: usvg.InputPlain | usvg.InputReference
+    input1: usvg.Input
+    input2: usvg.Input
     scale: number
     xChannelSelector: usvg.ColorChannel
     yChannelSelector: usvg.ColorChannel
@@ -2435,7 +2443,7 @@ export declare namespace usvg {
   export type DominantBaseline = 'auto' | 'useScript' | 'noChange' | 'resetSize' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical' | 'central' | 'middle' | 'textAfterEdge' | 'textBeforeEdge'
   /** Plain view of a `DropShadow`. */
   export interface DropShadow {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     dx: number
     dy: number
     stdDevX: number
@@ -2449,7 +2457,7 @@ export declare namespace usvg {
   export type ErrorCode = 'NotAnUtf8Str' | 'SvgzFeatureNotEnabled' | 'MalformedGZip' | 'ElementsLimitReached' | 'InvalidSize' | 'ParsingFailed'
   /** Plain view of a `Fill`. */
   export interface Fill {
-    paint: usvg.PaintColor | usvg.PaintLinearGradient | usvg.PaintRadialGradient | usvg.PaintPattern
+    paint: usvg.Paint
     opacity: number
     rule: usvg.FillRule
   }
@@ -2466,12 +2474,14 @@ export declare namespace usvg {
   }
   /** Plain view of a `Font`. */
   export interface Font {
-    families: Array<usvg.FontFamilyPlain | usvg.FontFamilyNamed>
+    families: Array<usvg.FontFamily>
     style: usvg.FontStyle
     stretch: usvg.FontStretch
     weight: number
     variations: Array<usvg.FontVariation>
   }
+  /** Any variant of `FontFamily`. */
+  export type FontFamily = usvg.FontFamilyPlain | usvg.FontFamilyNamed
   /** `FontFamily::Named`. */
   export interface FontFamilyNamed {
     /** Discriminant. Narrow on this. */
@@ -2501,10 +2511,12 @@ export declare namespace usvg {
   }
   /** Plain view of a `GaussianBlur`. */
   export interface GaussianBlur {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     stdDevX: number
     stdDevY: number
   }
+  /** Any variant of `ImageKind`. */
+  export type ImageKind = usvg.ImageKindJpeg | usvg.ImageKindPng | usvg.ImageKindGif | usvg.ImageKindWebp | usvg.ImageKindSvg
   /** `ImageKind::SVG`. */
   export interface ImageKindSvg {
     /** Discriminant. Narrow on this. */
@@ -2517,6 +2529,8 @@ export declare namespace usvg {
    * `image-rendering` attribute in the SVG.
    */
   export type ImageRendering = 'optimizeQuality' | 'optimizeSpeed' | 'smooth' | 'highQuality' | 'crispEdges' | 'pixelated'
+  /** Any variant of `Input`. */
+  export type Input = usvg.InputPlain | usvg.InputReference
   /** The payload-free variants of `Input`. */
   export interface InputPlain {
     /** Discriminant. Narrow on this. */
@@ -2528,6 +2542,8 @@ export declare namespace usvg {
     type: 'reference'
     value: string
   }
+  /** Any variant of `Kind`. */
+  export type Kind = usvg.KindBlend | usvg.KindColorMatrix | usvg.KindComponentTransfer | usvg.KindComposite | usvg.KindConvolveMatrix | usvg.KindDiffuseLighting | usvg.KindDisplacementMap | usvg.KindDropShadow | usvg.KindFlood | usvg.KindGaussianBlur | usvg.KindImage | usvg.KindMerge | usvg.KindMorphology | usvg.KindOffset | usvg.KindSpecularLighting | usvg.KindTile | usvg.KindTurbulence
   /** `Kind::Blend`. */
   export interface KindBlend {
     /** Discriminant. Narrow on this. */
@@ -2632,6 +2648,8 @@ export declare namespace usvg {
   }
   /** A length adjust property. */
   export type LengthAdjust = 'spacing' | 'spacingAndGlyphs'
+  /** Any variant of `LightSource`. */
+  export type LightSource = usvg.LightSourceDistantLight | usvg.LightSourcePointLight | usvg.LightSourceSpotLight
   /** `LightSource::DistantLight`. */
   export interface LightSourceDistantLight {
     /** Discriminant. Narrow on this. */
@@ -2666,17 +2684,19 @@ export declare namespace usvg {
   export type MaskType = 'luminance' | 'alpha'
   /** Plain view of a `Merge`. */
   export interface Merge {
-    inputs: Array<usvg.InputPlain | usvg.InputReference>
+    inputs: Array<usvg.Input>
   }
   /** Plain view of a `Morphology`. */
   export interface Morphology {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     operator: usvg.MorphologyOperator
     radiusX: number
     radiusY: number
   }
   /** A morphology operation. */
   export type MorphologyOperator = 'erode' | 'dilate'
+  /** Any variant of `Node`. */
+  export type Node = usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText
   /** `Node::Group`. */
   export interface NodeGroup {
     /** Discriminant. Narrow on this. */
@@ -2703,7 +2723,7 @@ export declare namespace usvg {
   }
   /** Plain view of a `Offset`. */
   export interface Offset {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     dx: number
     dy: number
   }
@@ -2834,6 +2854,8 @@ export declare namespace usvg {
      */
     maxDepth?: number
   }
+  /** Any variant of `Paint`. */
+  export type Paint = usvg.PaintColor | usvg.PaintLinearGradient | usvg.PaintRadialGradient | usvg.PaintPattern
   /** `Paint::Color`. */
   export interface PaintColor {
     /** Discriminant. Narrow on this. */
@@ -2881,12 +2903,12 @@ export declare namespace usvg {
   export type ShapeRendering = 'optimizeSpeed' | 'crispEdges' | 'geometricPrecision'
   /** Plain view of a `SpecularLighting`. */
   export interface SpecularLighting {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
     surfaceScale: number
     specularConstant: number
     specularExponent: number
     lightingColor: usvg.Color
-    lightSource: usvg.LightSourceDistantLight | usvg.LightSourcePointLight | usvg.LightSourceSpotLight
+    lightSource: usvg.LightSource
   }
   /** Plain view of a `SpotLight`. */
   export interface SpotLight {
@@ -2913,7 +2935,7 @@ export declare namespace usvg {
   }
   /** Plain view of a `Stroke`. */
   export interface Stroke {
-    paint: usvg.PaintColor | usvg.PaintLinearGradient | usvg.PaintRadialGradient | usvg.PaintPattern
+    paint: usvg.Paint
     dasharray?: Array<number>
     dashoffset: number
     miterlimit: number
@@ -2930,7 +2952,7 @@ export declare namespace usvg {
     y?: number
     anchor: usvg.TextAnchor
     spans: Array<usvg.TextSpan>
-    textFlow: usvg.TextFlowPlain | usvg.TextFlowPath
+    textFlow: usvg.TextFlow
     text: string
   }
   /** Plain view of a `TextDecoration`. */
@@ -2944,6 +2966,8 @@ export declare namespace usvg {
     fill?: usvg.Fill
     stroke?: usvg.Stroke
   }
+  /** Any variant of `TextFlow`. */
+  export type TextFlow = usvg.TextFlowPlain | usvg.TextFlowPath
   /** `TextFlow::Path`. */
   export interface TextFlowPath {
     /** Discriminant. Narrow on this. */
@@ -2976,7 +3000,7 @@ export declare namespace usvg {
     decoration: usvg.TextDecoration
     dominantBaseline: usvg.DominantBaseline
     alignmentBaseline: usvg.AlignmentBaseline
-    baselineShift: Array<usvg.BaselineShiftPlain | usvg.BaselineShiftNumber>
+    baselineShift: Array<usvg.BaselineShift>
     isVisible: boolean
     letterSpacing: number
     wordSpacing: number
@@ -2985,8 +3009,10 @@ export declare namespace usvg {
   }
   /** Plain view of a `Tile`. */
   export interface Tile {
-    input: usvg.InputPlain | usvg.InputReference
+    input: usvg.Input
   }
+  /** Any variant of `TransferFunction`. */
+  export type TransferFunction = usvg.TransferFunctionPlain | usvg.TransferFunctionTable | usvg.TransferFunctionDiscrete | usvg.TransferFunctionLinear | usvg.TransferFunctionGamma
   /** `TransferFunction::Discrete`. */
   export interface TransferFunctionDiscrete {
     /** Discriminant. Narrow on this. */

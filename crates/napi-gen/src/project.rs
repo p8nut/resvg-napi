@@ -18,7 +18,7 @@ use syn::{Fields, Type};
 
 use crate::Config;
 use crate::class::{Args, Class, Classes, Holding, Source, args, deref, find_struct, is, segs};
-use crate::emit::stepped;
+use crate::emit::{alias_ident, stepped, union_alias};
 use crate::sources::{derives, find_enum};
 use crate::vocab::{Js, Reason, Vocab, lower_camel, ty_str};
 
@@ -124,22 +124,17 @@ impl Classes<'_> {
         format_ident!("{}_{what}", self.unions[u].name.to_case(Case::Snake))
     }
 
-    /// The union's JS type: `EitherN` of its variants' objects.
+    /// The union's JS type: the alias of `EitherN` of its variants' objects
+    /// (`union_alias`).
     fn union_ty(&self, u: usize) -> TokenStream {
-        let un = &self.unions[u];
-        let objs = un
-            .variants
-            .iter()
-            .map(|(v, _, _)| format_ident!("{}{v}", un.name));
-        let either = match un.variants.len() {
-            2 => format_ident!("Either"),
-            n => format_ident!("Either{n}"),
-        };
-        quote!(#either<#(#objs),*>)
+        let a = alias_ident(&self.unions[u].name);
+        quote!(#a)
     }
 
     /// An argument `&E` of union `u`: the `{ kind, value }` object, whose
-    /// value was reached as a variant of `E`.
+    /// value was reached as a variant of `E`. Typed as the union's alias
+    /// (`union_alias`), by its JS name: the enum's, which no other item of
+    /// its namespace has (`namespaced` reports one that does).
     pub(crate) fn union_arg(
         &self,
         u: usize,
@@ -150,12 +145,7 @@ impl Classes<'_> {
             .config
             .namespace_of(self.sources[un.source].root)
             .map_or(String::new(), |n| format!("{n}."));
-        let ts: Vec<String> = un
-            .variants
-            .iter()
-            .map(|(v, _, _)| format!("{ns}{}{v}", un.name))
-            .collect();
-        let ts = ts.join(" | ");
+        let ts = format!("{ns}{}", un.name);
         let (from, tmp) = (self.helper(u, "from_js"), format_ident!("__{pat}"));
         (
             quote!(#[napi(ts_arg_type = #ts)] #pat: Object),
@@ -298,10 +288,15 @@ impl Classes<'_> {
                     2 => format_ident!("Either"),
                     n => format_ident!("Either{n}"),
                 };
-                let mut code = TokenStream::new();
+                let objs: Vec<Ident> = un
+                    .variants
+                    .iter()
+                    .map(|(v, _, _)| format_ident!("{}{v}", un.name))
+                    .collect();
+                let mut code = union_alias(&un.name, &objs);
                 let (mut to_arms, mut from_arms) = (Vec::new(), Vec::new());
                 for (i, (v, c, boxed)) in un.variants.iter().enumerate() {
-                    let (obj, class) = (format_ident!("{}{v}", un.name), self.ident(*c));
+                    let (obj, class) = (&objs[i], self.ident(*c));
                     let kind = lower_camel(&v.to_string());
                     let (ts, doc) = (format!("'{kind}'"), format!(" `{}::{v}`.", un.name));
                     let letter = format_ident!("{}", char::from(b'A' + u8::try_from(i).expect("26 variants at most")));

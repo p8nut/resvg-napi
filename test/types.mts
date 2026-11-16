@@ -74,12 +74,13 @@ for (const face of fonts.faces()) {
 // 6. the derived shape of a path node. This section exists to be *compiled*,
 // not run: `type` is a string literal in the .d.ts, so narrowing is what proves
 // the union is real -- with `type: string` neither branch below would check.
-const found = usvg.Tree.fromStr(svg).nodeById('p');
+// Each union has a named type, under the enum's name (`usvg.Node`).
+const found: usvg.Node | null = usvg.Tree.fromStr(svg).nodeById('p');
 // @ts-expect-error a node is a union: only a path's value has `data()`
 found?.value.data();
 if (found?.kind === 'path') {
   const shape: usvg.Path = found.value;
-  const segs = shape.data();
+  const segs: tiny_skia.PathSegment[] = shape.data();
   // `tiny_skia_path::PathSegment` as a union: narrowing on `type` gives the
   // payload, one point or a tuple of them.
   for (const seg of segs) {
@@ -93,7 +94,7 @@ if (found?.kind === 'path') {
   }
   console.log(`${segs.length} segments, first is ${segs[0]?.type}`);
 
-  const paint = shape.fill()?.paint;
+  const paint: usvg.Paint | undefined = shape.fill()?.paint;
   if (paint) {
     if (paint.type === 'color') {
       // only the colour branch has `color`

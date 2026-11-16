@@ -25,8 +25,11 @@ export interface Binding {
     svgtypes: typeof svgtypes;
     tiny_skia: typeof tiny_skia;
 }
-/** A `usvg.Node`: what `tree.nodeById` and `group.children()` hand back. */
-export type Node = usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText;
+/**
+ * A `usvg.Node`: what `tree.nodeById` and `group.children()` hand back. The
+ * binding names the union itself now; this stays for code that imported it.
+ */
+export type Node = usvg.Node;
 /**
  * A box in the tree's units, as a plain object: what `nodeExtent` returns,
  * the numbers of Rust's `NonZeroRect`, and what `crop` takes back.
@@ -140,9 +143,9 @@ export interface Helpers {
     /** `renderRaw` off the main thread. */
     renderRawAsync(svg: Source | usvg.Tree, options?: RenderAsyncOptions): Promise<RawImage>;
     /** One node in a PNG sized to its extent (`nodeExtent`). */
-    renderNodePng(node: Node, params?: NodeRenderParams): Buffer;
+    renderNodePng(node: usvg.Node, params?: NodeRenderParams): Buffer;
     /** `renderNodePng` off the main thread. */
-    renderNodePngAsync(node: Node, params?: NodeRenderParams & {
+    renderNodePngAsync(node: usvg.Node, params?: NodeRenderParams & {
         signal?: AbortSignal;
     }): Promise<Buffer>;
     /** The width `text` draws at, in user units: its stroke box. 0 when nothing draws. */
@@ -210,7 +213,7 @@ export declare const MAX_PIXELS: number;
  * `{ x, y, width, height }`, the numbers of Rust's `NonZeroRect`, which `crop`
  * takes back.
  */
-export declare function nodeExtent(node: Node): Box | null;
+export declare function nodeExtent(node: usvg.Node): Box | null;
 /** Elements carrying a width constraint, with the tag text needed to rewrite it. */
 export declare function findWidthConstraints(svg: string): WidthConstraint[];
 /**

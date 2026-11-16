@@ -236,6 +236,15 @@ pub struct TinySkiaPathSegmentCubicTo {
         TinySkiaPointObject,
     ),
 }
+#[doc = " Any variant of `PathSegment`."]
+#[napi(js_name = "PathSegment", namespace = "tiny_skia")]
+pub type TinySkiaPathSegmentUnion = Either5<
+    TinySkiaPathSegmentPlain,
+    TinySkiaPathSegmentMoveTo,
+    TinySkiaPathSegmentLineTo,
+    TinySkiaPathSegmentQuadTo,
+    TinySkiaPathSegmentCubicTo,
+>;
 #[doc = " A color interpolation mode."]
 #[doc = ""]
 #[doc = " The default is `ColorInterpolation::LinearRGB`."]
@@ -875,19 +884,6 @@ pub struct UsvgNodeGroup {
     pub kind: String,
     pub value: UsvgGroup,
 }
-#[doc = " `Node::Path`."]
-#[napi(
-    object,
-    object_from_js = false,
-    js_name = "NodePath",
-    namespace = "usvg"
-)]
-pub struct UsvgNodePath {
-    #[doc = " Discriminant. Narrow on this."]
-    #[napi(ts_type = "'path'")]
-    pub kind: String,
-    pub value: UsvgPath,
-}
 #[doc = " `Node::Image`."]
 #[napi(
     object,
@@ -900,6 +896,19 @@ pub struct UsvgNodeImage {
     #[napi(ts_type = "'image'")]
     pub kind: String,
     pub value: UsvgImage,
+}
+#[doc = " `Node::Path`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "NodePath",
+    namespace = "usvg"
+)]
+pub struct UsvgNodePath {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'path'")]
+    pub kind: String,
+    pub value: UsvgPath,
 }
 #[doc = " `Node::Text`."]
 #[napi(
@@ -914,6 +923,9 @@ pub struct UsvgNodeText {
     pub kind: String,
     pub value: UsvgText,
 }
+#[doc = " Any variant of `Node`."]
+#[napi(js_name = "Node", namespace = "usvg")]
+pub type UsvgNodeUnion = Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>;
 #[doc = " The payload-free variants of `Input`."]
 #[napi(object, js_name = "InputPlain", namespace = "usvg")]
 #[derive(Clone)]
@@ -931,12 +943,15 @@ pub struct UsvgInputReference {
     pub r#type: String,
     pub value: String,
 }
+#[doc = " Any variant of `Input`."]
+#[napi(js_name = "Input", namespace = "usvg")]
+pub type UsvgInputUnion = Either<UsvgInputPlain, UsvgInputReference>;
 #[doc = " Plain view of a `Blend`."]
 #[napi(object, js_name = "Blend", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgBlend {
-    pub input1: Either<UsvgInputPlain, UsvgInputReference>,
-    pub input2: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input1: UsvgInputUnion,
+    pub input2: UsvgInputUnion,
     pub mode: UsvgBlendMode,
 }
 #[doc = " Plain view of a `Color`."]
@@ -982,17 +997,20 @@ pub struct UsvgColorMatrixKindSaturate {
     pub r#type: String,
     pub value: f64,
 }
+#[doc = " Any variant of `ColorMatrixKind`."]
+#[napi(js_name = "ColorMatrixKind", namespace = "usvg")]
+pub type UsvgColorMatrixKindUnion = Either4<
+    UsvgColorMatrixKindPlain,
+    UsvgColorMatrixKindMatrix,
+    UsvgColorMatrixKindSaturate,
+    UsvgColorMatrixKindHueRotate,
+>;
 #[doc = " Plain view of a `ColorMatrix`."]
 #[napi(object, js_name = "ColorMatrix", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgColorMatrix {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
-    pub kind: Either4<
-        UsvgColorMatrixKindPlain,
-        UsvgColorMatrixKindMatrix,
-        UsvgColorMatrixKindSaturate,
-        UsvgColorMatrixKindHueRotate,
-    >,
+    pub input: UsvgInputUnion,
+    pub kind: UsvgColorMatrixKindUnion,
 }
 #[doc = " `TransferFunction::Discrete`."]
 #[napi(object, js_name = "TransferFunctionDiscrete", namespace = "usvg")]
@@ -1041,39 +1059,24 @@ pub struct UsvgTransferFunctionTable {
     pub r#type: String,
     pub value: Vec<f64>,
 }
+#[doc = " Any variant of `TransferFunction`."]
+#[napi(js_name = "TransferFunction", namespace = "usvg")]
+pub type UsvgTransferFunctionUnion = Either5<
+    UsvgTransferFunctionPlain,
+    UsvgTransferFunctionTable,
+    UsvgTransferFunctionDiscrete,
+    UsvgTransferFunctionLinear,
+    UsvgTransferFunctionGamma,
+>;
 #[doc = " Plain view of a `ComponentTransfer`."]
 #[napi(object, js_name = "ComponentTransfer", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgComponentTransfer {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
-    pub func_r: Either5<
-        UsvgTransferFunctionPlain,
-        UsvgTransferFunctionTable,
-        UsvgTransferFunctionDiscrete,
-        UsvgTransferFunctionLinear,
-        UsvgTransferFunctionGamma,
-    >,
-    pub func_g: Either5<
-        UsvgTransferFunctionPlain,
-        UsvgTransferFunctionTable,
-        UsvgTransferFunctionDiscrete,
-        UsvgTransferFunctionLinear,
-        UsvgTransferFunctionGamma,
-    >,
-    pub func_b: Either5<
-        UsvgTransferFunctionPlain,
-        UsvgTransferFunctionTable,
-        UsvgTransferFunctionDiscrete,
-        UsvgTransferFunctionLinear,
-        UsvgTransferFunctionGamma,
-    >,
-    pub func_a: Either5<
-        UsvgTransferFunctionPlain,
-        UsvgTransferFunctionTable,
-        UsvgTransferFunctionDiscrete,
-        UsvgTransferFunctionLinear,
-        UsvgTransferFunctionGamma,
-    >,
+    pub input: UsvgInputUnion,
+    pub func_r: UsvgTransferFunctionUnion,
+    pub func_g: UsvgTransferFunctionUnion,
+    pub func_b: UsvgTransferFunctionUnion,
+    pub func_a: UsvgTransferFunctionUnion,
 }
 #[doc = " `CompositeOperator::Arithmetic`."]
 #[napi(object, js_name = "CompositeOperatorArithmetic", namespace = "usvg")]
@@ -1095,13 +1098,17 @@ pub struct UsvgCompositeOperatorPlain {
     #[napi(ts_type = "'over' | 'in' | 'out' | 'atop' | 'xor' | 'lighter'")]
     pub r#type: String,
 }
+#[doc = " Any variant of `CompositeOperator`."]
+#[napi(js_name = "CompositeOperator", namespace = "usvg")]
+pub type UsvgCompositeOperatorUnion =
+    Either<UsvgCompositeOperatorPlain, UsvgCompositeOperatorArithmetic>;
 #[doc = " Plain view of a `Composite`."]
 #[napi(object, js_name = "Composite", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgComposite {
-    pub input1: Either<UsvgInputPlain, UsvgInputReference>,
-    pub input2: Either<UsvgInputPlain, UsvgInputReference>,
-    pub operator: Either<UsvgCompositeOperatorPlain, UsvgCompositeOperatorArithmetic>,
+    pub input1: UsvgInputUnion,
+    pub input2: UsvgInputUnion,
+    pub operator: UsvgCompositeOperatorUnion,
 }
 #[doc = " Plain view of a `ConvolveMatrixData`."]
 #[napi(object, js_name = "ConvolveMatrixData", namespace = "usvg")]
@@ -1117,7 +1124,7 @@ pub struct UsvgConvolveMatrixData {
 #[napi(object, js_name = "ConvolveMatrix", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgConvolveMatrix {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub matrix: UsvgConvolveMatrixData,
     pub divisor: f64,
     pub bias: f64,
@@ -1179,23 +1186,26 @@ pub struct UsvgLightSourceSpotLight {
     pub r#type: String,
     pub value: UsvgSpotLight,
 }
+#[doc = " Any variant of `LightSource`."]
+#[napi(js_name = "LightSource", namespace = "usvg")]
+pub type UsvgLightSourceUnion =
+    Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>;
 #[doc = " Plain view of a `DiffuseLighting`."]
 #[napi(object, js_name = "DiffuseLighting", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgDiffuseLighting {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub surface_scale: f64,
     pub diffuse_constant: f64,
     pub lighting_color: UsvgColor,
-    pub light_source:
-        Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>,
+    pub light_source: UsvgLightSourceUnion,
 }
 #[doc = " Plain view of a `DisplacementMap`."]
 #[napi(object, js_name = "DisplacementMap", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgDisplacementMap {
-    pub input1: Either<UsvgInputPlain, UsvgInputReference>,
-    pub input2: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input1: UsvgInputUnion,
+    pub input2: UsvgInputUnion,
     pub scale: f64,
     pub x_channel_selector: UsvgColorChannel,
     pub y_channel_selector: UsvgColorChannel,
@@ -1204,7 +1214,7 @@ pub struct UsvgDisplacementMap {
 #[napi(object, js_name = "DropShadow", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgDropShadow {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub dx: f64,
     pub dy: f64,
     pub std_dev_x: f64,
@@ -1248,12 +1258,15 @@ pub struct UsvgPaintRadialGradient {
     pub r#type: String,
     pub id: String,
 }
+#[doc = " Any variant of `Paint`."]
+#[napi(js_name = "Paint", namespace = "usvg")]
+pub type UsvgPaintUnion =
+    Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>;
 #[doc = " Plain view of a `Fill`."]
 #[napi(object, js_name = "Fill", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgFill {
-    pub paint:
-        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
+    pub paint: UsvgPaintUnion,
     pub opacity: f64,
     pub rule: UsvgFillRule,
 }
@@ -1281,6 +1294,9 @@ pub struct UsvgFontFamilyPlain {
     #[napi(ts_type = "'serif' | 'sansSerif' | 'cursive' | 'fantasy' | 'monospace'")]
     pub r#type: String,
 }
+#[doc = " Any variant of `FontFamily`."]
+#[napi(js_name = "FontFamily", namespace = "usvg")]
+pub type UsvgFontFamilyUnion = Either<UsvgFontFamilyPlain, UsvgFontFamilyNamed>;
 #[doc = " Plain view of a `FontVariation`."]
 #[napi(object, js_name = "FontVariation", namespace = "usvg")]
 #[derive(Clone)]
@@ -1292,7 +1308,7 @@ pub struct UsvgFontVariation {
 #[napi(object, js_name = "Font", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgFont {
-    pub families: Vec<Either<UsvgFontFamilyPlain, UsvgFontFamilyNamed>>,
+    pub families: Vec<UsvgFontFamilyUnion>,
     pub style: UsvgFontStyle,
     pub stretch: UsvgFontStretch,
     pub weight: u32,
@@ -1302,7 +1318,7 @@ pub struct UsvgFont {
 #[napi(object, js_name = "GaussianBlur", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgGaussianBlur {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub std_dev_x: f64,
     pub std_dev_y: f64,
 }
@@ -1310,13 +1326,13 @@ pub struct UsvgGaussianBlur {
 #[napi(object, js_name = "Merge", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgMerge {
-    pub inputs: Vec<Either<UsvgInputPlain, UsvgInputReference>>,
+    pub inputs: Vec<UsvgInputUnion>,
 }
 #[doc = " Plain view of a `Morphology`."]
 #[napi(object, js_name = "Morphology", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgMorphology {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub operator: UsvgMorphologyOperator,
     pub radius_x: f64,
     pub radius_y: f64,
@@ -1325,7 +1341,7 @@ pub struct UsvgMorphology {
 #[napi(object, js_name = "Offset", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgOffset {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub dx: f64,
     pub dy: f64,
 }
@@ -1348,13 +1364,12 @@ pub struct UsvgSpan {
 #[napi(object, js_name = "SpecularLighting", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgSpecularLighting {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
     pub surface_scale: f64,
     pub specular_constant: f64,
     pub specular_exponent: f64,
     pub lighting_color: UsvgColor,
-    pub light_source:
-        Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight>,
+    pub light_source: UsvgLightSourceUnion,
 }
 #[doc = " Plain view of a `Stop`."]
 #[napi(object, js_name = "Stop", namespace = "usvg")]
@@ -1368,8 +1383,7 @@ pub struct UsvgStop {
 #[napi(object, js_name = "Stroke", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgStroke {
-    pub paint:
-        Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern>,
+    pub paint: UsvgPaintUnion,
     pub dasharray: Option<Vec<f64>>,
     pub dashoffset: f64,
     pub miterlimit: f64,
@@ -1395,6 +1409,9 @@ pub struct UsvgTextFlowPlain {
     #[napi(ts_type = "'linear'")]
     pub r#type: String,
 }
+#[doc = " Any variant of `TextFlow`."]
+#[napi(js_name = "TextFlow", namespace = "usvg")]
+pub type UsvgTextFlowUnion = Either<UsvgTextFlowPlain, UsvgTextFlowPath>;
 #[doc = " `BaselineShift::Number`."]
 #[napi(object, js_name = "BaselineShiftNumber", namespace = "usvg")]
 #[derive(Clone)]
@@ -1412,6 +1429,9 @@ pub struct UsvgBaselineShiftPlain {
     #[napi(ts_type = "'baseline' | 'subscript' | 'superscript'")]
     pub r#type: String,
 }
+#[doc = " Any variant of `BaselineShift`."]
+#[napi(js_name = "BaselineShift", namespace = "usvg")]
+pub type UsvgBaselineShiftUnion = Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>;
 #[doc = " Plain view of a `TextDecorationStyle`."]
 #[napi(object, js_name = "TextDecorationStyle", namespace = "usvg")]
 #[derive(Clone)]
@@ -1444,7 +1464,7 @@ pub struct UsvgTextSpan {
     pub decoration: UsvgTextDecoration,
     pub dominant_baseline: UsvgDominantBaseline,
     pub alignment_baseline: UsvgAlignmentBaseline,
-    pub baseline_shift: Vec<Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber>>,
+    pub baseline_shift: Vec<UsvgBaselineShiftUnion>,
     pub is_visible: bool,
     pub letter_spacing: f64,
     pub word_spacing: f64,
@@ -1459,14 +1479,14 @@ pub struct UsvgTextChunk {
     pub y: Option<f64>,
     pub anchor: UsvgTextAnchor,
     pub spans: Vec<UsvgTextSpan>,
-    pub text_flow: Either<UsvgTextFlowPlain, UsvgTextFlowPath>,
+    pub text_flow: UsvgTextFlowUnion,
     pub text: String,
 }
 #[doc = " Plain view of a `Tile`."]
 #[napi(object, js_name = "Tile", namespace = "usvg")]
 #[derive(Clone)]
 pub struct UsvgTile {
-    pub input: Either<UsvgInputPlain, UsvgInputReference>,
+    pub input: UsvgInputUnion,
 }
 #[doc = " Plain view of a `Turbulence`."]
 #[napi(object, js_name = "Turbulence", namespace = "usvg")]
@@ -1517,6 +1537,15 @@ pub struct UsvgImageKindSvg {
     pub r#type: String,
     pub value: UsvgTree,
 }
+#[doc = " Any variant of `ImageKind`."]
+#[napi(js_name = "ImageKind", namespace = "usvg")]
+pub type UsvgImageKindUnion = Either5<
+    UsvgImageKindJpeg,
+    UsvgImageKindPng,
+    UsvgImageKindGif,
+    UsvgImageKindWebp,
+    UsvgImageKindSvg,
+>;
 #[doc = " `Kind::Blend`."]
 #[napi(object, js_name = "KindBlend", namespace = "usvg")]
 #[derive(Clone)]
@@ -1674,6 +1703,27 @@ pub struct UsvgKindTurbulence {
     pub r#type: String,
     pub value: UsvgTurbulence,
 }
+#[doc = " Any variant of `Kind`."]
+#[napi(js_name = "Kind", namespace = "usvg")]
+pub type UsvgKindUnion = Either17<
+    UsvgKindBlend,
+    UsvgKindColorMatrix,
+    UsvgKindComponentTransfer,
+    UsvgKindComposite,
+    UsvgKindConvolveMatrix,
+    UsvgKindDiffuseLighting,
+    UsvgKindDisplacementMap,
+    UsvgKindDropShadow,
+    UsvgKindFlood,
+    UsvgKindGaussianBlur,
+    UsvgKindImage,
+    UsvgKindMerge,
+    UsvgKindMorphology,
+    UsvgKindOffset,
+    UsvgKindSpecularLighting,
+    UsvgKindTile,
+    UsvgKindTurbulence,
+>;
 #[doc = " Allows italic or oblique faces to be selected."]
 #[napi(string_enum = "camelCase", js_name = "Style", namespace = "fontdb")]
 #[derive(Copy, Clone)]
@@ -2082,8 +2132,7 @@ pub fn resvg_render_async(
 #[napi(js_name = "renderNode", namespace = "resvg")]
 #[allow(clippy::redundant_closure)]
 pub fn resvg_render_node(
-    #[napi(ts_arg_type = "usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText")]
-    node: Object,
+    #[napi(ts_arg_type = "usvg.Node")] node: Object,
     transform: &TinySkiaTransform,
     pixmap: &mut TinySkiaPixmap,
 ) -> Result<Option<bool>, String> {
@@ -2107,8 +2156,7 @@ pub fn resvg_render_node(
 )]
 #[allow(clippy::redundant_closure)]
 pub fn resvg_render_node_async(
-    #[napi(ts_arg_type = "usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText")]
-    node: Object,
+    #[napi(ts_arg_type = "usvg.Node")] node: Object,
     transform: &TinySkiaTransform,
     pixmap: &mut TinySkiaPixmap,
     env: Env,
@@ -4125,15 +4173,7 @@ impl From<&tiny_skia::Point> for TinySkiaPointObject {
         }
     }
 }
-fn tiny_skia_path_segment_to_js(
-    v: &tiny_skia::PathSegment,
-) -> Either5<
-    TinySkiaPathSegmentPlain,
-    TinySkiaPathSegmentMoveTo,
-    TinySkiaPathSegmentLineTo,
-    TinySkiaPathSegmentQuadTo,
-    TinySkiaPathSegmentCubicTo,
-> {
+fn tiny_skia_path_segment_to_js(v: &tiny_skia::PathSegment) -> TinySkiaPathSegmentUnion {
     match v {
         tiny_skia::PathSegment::Close => Either5::A(TinySkiaPathSegmentPlain {
             r#type: "close".to_string(),
@@ -5111,11 +5151,7 @@ impl UsvgTree {
     #[doc = " If an empty ID is provided, than this method will always return `None`."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn node_by_id(
-        &self,
-        id: String,
-    ) -> Result<Option<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
-    {
+    pub fn node_by_id(&self, id: String) -> Result<Option<UsvgNodeUnion>, String> {
         let __self = self.__ref()?.get();
         let __b = self.__ref()?.clone();
         napi_support::contained("Tree::node_by_id", || {
@@ -5494,10 +5530,7 @@ impl UsvgGroup {
     #[doc = " Group's children."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn children(
-        &self,
-    ) -> Result<Vec<Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText>>, String>
-    {
+    pub fn children(&self) -> Result<Vec<UsvgNodeUnion>, String> {
         let __self = self.__ref()?.get();
         let __b = self.__ref()?.clone();
         napi_support::contained("Group::children", || {
@@ -5660,20 +5693,7 @@ impl UsvgPath {
     #[doc = " All segments are in absolute coordinates."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn data(
-        &self,
-    ) -> Result<
-        Vec<
-            Either5<
-                TinySkiaPathSegmentPlain,
-                TinySkiaPathSegmentMoveTo,
-                TinySkiaPathSegmentLineTo,
-                TinySkiaPathSegmentQuadTo,
-                TinySkiaPathSegmentCubicTo,
-            >,
-        >,
-        String,
-    > {
+    pub fn data(&self) -> Result<Vec<TinySkiaPathSegmentUnion>, String> {
         let __self = self.__ref()?.get();
         let __v =
             napi_support::contained("Path::data", || __self.data()).map_err(napi_support::coded)?;
@@ -5835,18 +5855,7 @@ impl UsvgImage {
     #[doc = " Image data."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn kind(
-        &self,
-    ) -> Result<
-        Either5<
-            UsvgImageKindJpeg,
-            UsvgImageKindPng,
-            UsvgImageKindGif,
-            UsvgImageKindWebp,
-            UsvgImageKindSvg,
-        >,
-        String,
-    > {
+    pub fn kind(&self) -> Result<UsvgImageKindUnion, String> {
         let __self = self.__ref()?.get();
         let __b = self.__ref()?.clone();
         napi_support::contained("Image::kind", || {
@@ -6418,9 +6427,7 @@ impl UsvgPattern {
         self.inner.disposed()
     }
 }
-fn usvg_node_to_js(
-    p: napi_support::Projection<usvg::Node>,
-) -> Either4<UsvgNodeGroup, UsvgNodePath, UsvgNodeImage, UsvgNodeText> {
+fn usvg_node_to_js(p: napi_support::Projection<usvg::Node>) -> UsvgNodeUnion {
     match p.get() {
         usvg::Node::Group(_) => Either4::A(UsvgNodeGroup {
             kind: "group".to_string(),
@@ -6839,30 +6846,7 @@ impl UsvgPrimitive {
         })
     }
     #[napi(getter)]
-    pub fn kind(
-        &self,
-    ) -> Result<
-        Either17<
-            UsvgKindBlend,
-            UsvgKindColorMatrix,
-            UsvgKindComponentTransfer,
-            UsvgKindComposite,
-            UsvgKindConvolveMatrix,
-            UsvgKindDiffuseLighting,
-            UsvgKindDisplacementMap,
-            UsvgKindDropShadow,
-            UsvgKindFlood,
-            UsvgKindGaussianBlur,
-            UsvgKindImage,
-            UsvgKindMerge,
-            UsvgKindMorphology,
-            UsvgKindOffset,
-            UsvgKindSpecularLighting,
-            UsvgKindTile,
-            UsvgKindTurbulence,
-        >,
-        String,
-    > {
+    pub fn kind(&self) -> Result<UsvgKindUnion, String> {
         let __inner = self.inner.get("Primitive")?;
         Ok({
             let __p = __inner;
@@ -7145,9 +7129,7 @@ impl UsvgFilterImage {
         })
     }
 }
-fn usvg_baseline_shift_to_js(
-    v: &usvg::BaselineShift,
-) -> Either<UsvgBaselineShiftPlain, UsvgBaselineShiftNumber> {
+fn usvg_baseline_shift_to_js(v: &usvg::BaselineShift) -> UsvgBaselineShiftUnion {
     match v {
         usvg::BaselineShift::Baseline => Either::A(UsvgBaselineShiftPlain {
             r#type: "baseline".to_string(),
@@ -7164,14 +7146,7 @@ fn usvg_baseline_shift_to_js(
         }),
     }
 }
-fn usvg_color_matrix_kind_to_js(
-    v: &usvg::filter::ColorMatrixKind,
-) -> Either4<
-    UsvgColorMatrixKindPlain,
-    UsvgColorMatrixKindMatrix,
-    UsvgColorMatrixKindSaturate,
-    UsvgColorMatrixKindHueRotate,
-> {
+fn usvg_color_matrix_kind_to_js(v: &usvg::filter::ColorMatrixKind) -> UsvgColorMatrixKindUnion {
     match v {
         usvg::filter::ColorMatrixKind::LuminanceToAlpha => Either4::A(UsvgColorMatrixKindPlain {
             r#type: "luminanceToAlpha".to_string(),
@@ -7192,7 +7167,7 @@ fn usvg_color_matrix_kind_to_js(
 }
 fn usvg_composite_operator_to_js(
     v: &usvg::filter::CompositeOperator,
-) -> Either<UsvgCompositeOperatorPlain, UsvgCompositeOperatorArithmetic> {
+) -> UsvgCompositeOperatorUnion {
     match v {
         usvg::filter::CompositeOperator::Over => Either::A(UsvgCompositeOperatorPlain {
             r#type: "over".to_string(),
@@ -7223,9 +7198,7 @@ fn usvg_composite_operator_to_js(
         }
     }
 }
-fn usvg_font_family_to_js(
-    v: &usvg::FontFamily,
-) -> Either<UsvgFontFamilyPlain, UsvgFontFamilyNamed> {
+fn usvg_font_family_to_js(v: &usvg::FontFamily) -> UsvgFontFamilyUnion {
     match v {
         usvg::FontFamily::Serif => Either::A(UsvgFontFamilyPlain {
             r#type: "serif".to_string(),
@@ -7308,15 +7281,7 @@ impl UsvgImageKindWebp {
         Ok(napi_support::copied(__raw))
     }
 }
-fn usvg_image_kind_to_js(
-    p: napi_support::Projection<usvg::ImageKind>,
-) -> Either5<
-    UsvgImageKindJpeg,
-    UsvgImageKindPng,
-    UsvgImageKindGif,
-    UsvgImageKindWebp,
-    UsvgImageKindSvg,
-> {
+fn usvg_image_kind_to_js(p: napi_support::Projection<usvg::ImageKind>) -> UsvgImageKindUnion {
     match p.get() {
         usvg::ImageKind::JPEG(v) => Either5::A(UsvgImageKindJpeg {
             raw: napi_support::Slot::new(v.clone()),
@@ -7342,7 +7307,7 @@ fn usvg_image_kind_to_js(
         }),
     }
 }
-fn usvg_input_to_js(v: &usvg::filter::Input) -> Either<UsvgInputPlain, UsvgInputReference> {
+fn usvg_input_to_js(v: &usvg::filter::Input) -> UsvgInputUnion {
     match v {
         usvg::filter::Input::SourceGraphic => Either::A(UsvgInputPlain {
             r#type: "sourceGraphic".to_string(),
@@ -7356,27 +7321,7 @@ fn usvg_input_to_js(v: &usvg::filter::Input) -> Either<UsvgInputPlain, UsvgInput
         }),
     }
 }
-fn usvg_kind_to_js(
-    p: napi_support::Projection<usvg::filter::Kind>,
-) -> Either17<
-    UsvgKindBlend,
-    UsvgKindColorMatrix,
-    UsvgKindComponentTransfer,
-    UsvgKindComposite,
-    UsvgKindConvolveMatrix,
-    UsvgKindDiffuseLighting,
-    UsvgKindDisplacementMap,
-    UsvgKindDropShadow,
-    UsvgKindFlood,
-    UsvgKindGaussianBlur,
-    UsvgKindImage,
-    UsvgKindMerge,
-    UsvgKindMorphology,
-    UsvgKindOffset,
-    UsvgKindSpecularLighting,
-    UsvgKindTile,
-    UsvgKindTurbulence,
-> {
+fn usvg_kind_to_js(p: napi_support::Projection<usvg::filter::Kind>) -> UsvgKindUnion {
     match p.get() {
         usvg::filter::Kind::Blend(v) => Either17::A(UsvgKindBlend {
             r#type: "blend".to_string(),
@@ -7454,9 +7399,7 @@ fn usvg_kind_to_js(
         }),
     }
 }
-fn usvg_light_source_to_js(
-    v: &usvg::filter::LightSource,
-) -> Either3<UsvgLightSourceDistantLight, UsvgLightSourcePointLight, UsvgLightSourceSpotLight> {
+fn usvg_light_source_to_js(v: &usvg::filter::LightSource) -> UsvgLightSourceUnion {
     match v {
         usvg::filter::LightSource::DistantLight(v) => Either3::A(UsvgLightSourceDistantLight {
             r#type: "distantLight".to_string(),
@@ -7472,9 +7415,7 @@ fn usvg_light_source_to_js(
         }),
     }
 }
-fn usvg_paint_to_js(
-    v: &usvg::Paint,
-) -> Either4<UsvgPaintColor, UsvgPaintLinearGradient, UsvgPaintRadialGradient, UsvgPaintPattern> {
+fn usvg_paint_to_js(v: &usvg::Paint) -> UsvgPaintUnion {
     match v {
         usvg::Paint::Color(v) => Either4::A(UsvgPaintColor {
             r#type: "color".to_string(),
@@ -7494,7 +7435,7 @@ fn usvg_paint_to_js(
         }),
     }
 }
-fn usvg_text_flow_to_js(v: &usvg::TextFlow) -> Either<UsvgTextFlowPlain, UsvgTextFlowPath> {
+fn usvg_text_flow_to_js(v: &usvg::TextFlow) -> UsvgTextFlowUnion {
     match v {
         usvg::TextFlow::Linear => Either::A(UsvgTextFlowPlain {
             r#type: "linear".to_string(),
@@ -7505,15 +7446,7 @@ fn usvg_text_flow_to_js(v: &usvg::TextFlow) -> Either<UsvgTextFlowPlain, UsvgTex
         }),
     }
 }
-fn usvg_transfer_function_to_js(
-    v: &usvg::filter::TransferFunction,
-) -> Either5<
-    UsvgTransferFunctionPlain,
-    UsvgTransferFunctionTable,
-    UsvgTransferFunctionDiscrete,
-    UsvgTransferFunctionLinear,
-    UsvgTransferFunctionGamma,
-> {
+fn usvg_transfer_function_to_js(v: &usvg::filter::TransferFunction) -> UsvgTransferFunctionUnion {
     match v {
         usvg::filter::TransferFunction::Identity => Either5::A(UsvgTransferFunctionPlain {
             r#type: "identity".to_string(),

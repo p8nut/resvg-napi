@@ -221,15 +221,15 @@ impl PayloadEnum {
         v
     }
 
-    /// `Either<A, B>` / `Either17<..>`, or the bare struct when there is one.
+    /// The union's type: the alias naming it (`crate::emit::union_alias`),
+    /// or the bare struct when there is one.
     pub fn either_ty(&self, name: &str) -> TokenStream {
         let parts = self.parts(name);
         match parts.len() {
             1 => quote!(#(#parts)*),
-            2 => quote!(Either<#(#parts),*>),
-            n => {
-                let e = format_ident!("Either{n}");
-                quote!(#e<#(#parts),*>)
+            _ => {
+                let a = crate::emit::alias_ident(name);
+                quote!(#a)
             }
         }
     }

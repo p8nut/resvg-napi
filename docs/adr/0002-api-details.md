@@ -23,6 +23,12 @@ numbered item matches the decision log (Q21–Q35).
 - napi keys classes by Rust identifier, so the binding prefixes identifiers
   with the crate (`UsvgColor`) and sets `js_name` and `namespace`. The prefix
   is invisible from JS.
+- Each enum mirrored as a union gets a named TypeScript type under the
+  enum's name: `export type Node = NodeGroup | NodePath | NodeImage |
+  NodeText` in `usvg`, and every signature says `usvg.Node`. Where that name
+  is taken in the namespace by an interface, class or other type (fontdb's
+  input form `fontdb.Source`), the union stays spelled out and the
+  generator report says so (`not aliased: ...`).
 
 ## Tree nodes (Q22)
 

@@ -11,13 +11,13 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "3.16.2", default-features = false, features = ["napi8", "napi9"] }
-napi-derive = "3.7.1"
+napi = { workspace = true, features = ["napi8", "napi9"] }
+napi-derive = { workspace = true }
 napi-support = { path = "../napi-support" }
 toy = { path = "../toy" }
 
 [build-dependencies]
-napi-build = "2.6.0"
+napi-build = { workspace = true }
 napi-gen = { path = "../napi-gen" }
 syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
 quote = "1.0.35"

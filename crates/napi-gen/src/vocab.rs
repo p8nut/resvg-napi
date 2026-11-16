@@ -519,9 +519,9 @@ pub fn peel_type(t: &str) -> &str {
             .or_else(|| {
                 ["Result<", "Option<", "Vec<", "Box<"]
                     .iter()
-                    .find_map(|w| t.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
+                    .find_map(|w| t.strip_circumfix(w, '>'))
             })
-            .or_else(|| t.strip_prefix('[').and_then(|r| r.strip_suffix(']')))
+            .or_else(|| t.strip_circumfix('[', ']'))
             .or_else(|| {
                 let r = t.strip_prefix("implIterator<Item=")?;
                 let r = r.trim_suffix("+'_");
@@ -676,8 +676,7 @@ impl Vocab {
             return Some(Js::Class(unref.to_string()));
         }
         if let Some(inner) = unref
-            .strip_prefix("Option<")
-            .and_then(|r| r.strip_suffix('>'))
+            .strip_circumfix("Option<", '>')
             .map(|r| r.trim_start_matches('&'))
             && self.classes.contains(inner)
         {
@@ -693,9 +692,8 @@ impl Vocab {
         }
         // `Vec<(A, B)>`, `&[(A, B)]`: every element must map.
         if let Some(inner) = unref
-            .strip_prefix("Vec<")
-            .and_then(|r| r.strip_suffix('>'))
-            .or_else(|| unref.strip_prefix('[').and_then(|r| r.strip_suffix(']')))
+            .strip_circumfix("Vec<", '>')
+            .or_else(|| unref.strip_circumfix('[', ']'))
             && let Some(elems) = tuple_elems(inner)
         {
             let mapped: Option<Vec<(String, Js)>> = elems
@@ -721,8 +719,7 @@ impl Vocab {
         // `&[BaselineShift]`: a list of one, which reads the same way.
         if let Some(inner) = t
             .trim_start_matches('&')
-            .strip_prefix('[')
-            .and_then(|r| r.strip_suffix(']'))
+            .strip_circumfix('[', ']')
             .map(|r| self.resolve(r.trim_start_matches('&')))
             && let Some(p) = self.payload.get(&inner)
         {
@@ -782,13 +779,10 @@ pub fn classify(
         s if shared_bytes(s) => Js::Bytes,
         s if s.starts_with("Result<(),") => Js::TryUnit,
         // Arc-held definitions can be owned by a wrapper class.
-        s if s.starts_with("&[Arc<") && s.ends_with(">]") => {
-            Js::HandleList(s[6..s.len() - 2].to_string())
+        s if let Some(t) = s.strip_circumfix("&[Arc<", ">]") => Js::HandleList(t.to_string()),
+        s if let Some(t) = s.trim_prefix('&').strip_circumfix("Arc<", '>') => {
+            Js::Handle(t.to_string())
         }
-        s if s.starts_with("&Arc<") && s.ends_with('>') => {
-            Js::Handle(s[5..s.len() - 1].to_string())
-        }
-        s if s.starts_with("Arc<") && s.ends_with('>') => Js::Handle(s[4..s.len() - 1].to_string()),
         s if config().tag4_types.contains(&s) => Js::Tag4,
         other if known_enums.contains(other) => Js::Enum,
         // Payload enums are classified by name here and given their union
@@ -803,8 +797,7 @@ pub fn classify(
 /// `Vec`, a file mapping). Read through `AsRef`, as any bytes are.
 pub fn shared_bytes(ty: &str) -> bool {
     bare_arc(ty.trim_start_matches('&'))
-        .strip_prefix("Arc<dynAsRef<[u8]>")
-        .and_then(|r| r.strip_suffix('>'))
+        .strip_circumfix("Arc<dynAsRef<[u8]>", '>')
         .is_some_and(|markers| {
             markers
                 .split('+')
@@ -834,9 +827,8 @@ pub fn rust_src(ty: &str) -> String {
 pub fn classify_object(ty: &str, objects: &BTreeSet<String>) -> Option<Js> {
     let bare = ty.trim_start_matches('&');
     if let Some(inner) = bare
-        .strip_prefix("[")
-        .and_then(|s| s.strip_suffix("]"))
-        .or_else(|| bare.strip_prefix("Vec<").and_then(|s| s.strip_suffix(">")))
+        .strip_circumfix("[", "]")
+        .or_else(|| bare.strip_circumfix("Vec<", ">"))
     {
         let inner = inner.trim_start_matches('&');
         if objects.contains(inner) {
@@ -851,15 +843,10 @@ pub fn classify_object(ty: &str, objects: &BTreeSet<String>) -> Option<Js> {
         }
     }
     if let Some(inner) = bare
-        .strip_prefix("Option<")
-        .and_then(|s| s.strip_suffix('>'))
+        .strip_circumfix("Option<", '>')
         .map(|s| s.trim_start_matches('&'))
         // `Option<Box<T>>`: a box is how a crate keeps a rare member small.
-        .map(|s| {
-            s.strip_prefix("Box<")
-                .and_then(|b| b.strip_suffix('>'))
-                .unwrap_or(s)
-        })
+        .map(|s| s.strip_circumfix("Box<", '>').unwrap_or(s))
         && objects.contains(inner)
     {
         return Some(Js::OptObject(inner.to_string()));
@@ -928,7 +915,7 @@ pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
 /// A tuple type's elements, `(A,B)` -> `[A, B]`: split at the top level, so
 /// `(Vec<(A,B)>,C)` has two. None for anything but a tuple of two or more.
 pub fn tuple_elems(t: &str) -> Option<Vec<String>> {
-    let inner = t.strip_prefix('(')?.strip_suffix(')')?;
+    let inner = t.strip_circumfix('(', ')')?;
     let (mut out, mut depth, mut cur) = (Vec::new(), 0i32, String::new());
     for c in inner.chars() {
         match c {

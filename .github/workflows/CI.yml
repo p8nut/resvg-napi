@@ -92,9 +92,9 @@ jobs:
       # red here means: raise them in the same pull request as the lock.
       - name: napi minimums match Cargo.lock
         run: |
-          for spec in napi:Cargo.toml napi-derive:Cargo.toml napi:crates/napi-support/Cargo.toml \
-                      napi:crates/toy-napi/Cargo.toml napi-derive:crates/toy-napi/Cargo.toml; do
-            c=${spec%%:*}; f=${spec#*:}
+          # Declared once, in the root's [workspace.dependencies].
+          f=Cargo.toml
+          for c in napi napi-derive; do
             locked=$(awk -v n="$c" '$0 == "name = \"" n "\"" { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
             declared=$(sed -nE "s/^$c = (\{ version = )?\"([^\"]*)\".*/\2/p" "$f")
             echo "$f $c: declares $declared, locked $locked"

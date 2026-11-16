@@ -461,11 +461,11 @@ does this. Copied out on each read.",
             // A class carried alone: an output-only object holding it, which
             // napi does not require to be `Clone`.
             Payload::Value(ty)
-                if matches!(vocab.classify(ty), Some(Js::Owned(_) | Js::Value(_))) =>
+                if let Some(js @ (Js::Owned(_) | Js::Value(_))) = vocab.classify(ty) =>
             {
                 // Borrowed from the enum, when the union is made from a
                 // projection of it (`projects`): the variant found again.
-                let step = vocab.classify(ty).and_then(|js| stepped(&js, vocab));
+                let step = stepped(&js, vocab);
                 let bind = if step.is_some() { quote!(_) } else { quote!(v) };
                 let carried = match step {
                     Some((fty, conv)) => {
@@ -1106,7 +1106,7 @@ pub fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
     let t = jsty.to_string().replace(' ', "");
     // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
     // -- napi only rewrites the type itself, so only those two shapes need it.
-    let (inner, optional) = match t.strip_prefix("Option<").and_then(|r| r.strip_suffix('>')) {
+    let (inner, optional) = match t.strip_circumfix("Option<", '>') {
         Some(i) => (i, true),
         None => (t.as_str(), false),
     };
@@ -1211,10 +1211,7 @@ pub fn data_members(
             return;
         }
         // `Option<T>` where T maps stays optional on the JS side.
-        let raw = ty_s
-            .trim_start_matches('&')
-            .strip_prefix("Option<")
-            .and_then(|s| s.strip_suffix('>'));
+        let raw = ty_s.trim_start_matches('&').strip_circumfix("Option<", '>');
         let is_ref = raw.is_some_and(|s| s.starts_with('&'));
         let inner = raw.map(|s| s.trim_start_matches('&').to_string());
         match inner
@@ -1309,10 +1306,7 @@ pub fn data_members(
             // Copy kinds are read by value. Should upstream make one of them
             // non-Copy, this stops compiling rather than silently cloning.
             let ty_s = ty_str(&f.ty);
-            let inner = ty_s
-                .strip_prefix("Option<")
-                .and_then(|t| t.strip_suffix('>'))
-                .unwrap_or(&ty_s);
+            let inner = ty_s.strip_circumfix("Option<", '>').unwrap_or(&ty_s);
             let copy = matches!(
                 vocab.classify(inner),
                 Some(
@@ -1877,7 +1871,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         let mut name = ty_str(t);
         while let Some(inner) = ["Result<", "Option<"]
             .iter()
-            .find_map(|w| name.strip_prefix(w).and_then(|r| r.strip_suffix('>')))
+            .find_map(|w| name.strip_circumfix(w, '>'))
         {
             // `Result<T, String>`: a string error code, the value is `T`.
             name = inner.trim_suffix(",String").to_string();

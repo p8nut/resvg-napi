@@ -15,7 +15,7 @@ Two pages:
   resvg draws from it, four plain examples (shapes, text, gradient, filter) and
   the Node.js call that does the same (`renderPng` from `resvg-napi/helpers`).
   No templates, no options beyond scale and the nodes' bounding boxes.
-- **`bench.html`** -- the proof bench, linked from the simple page and
+- **`bench.html`** -- the bench, linked from the simple page and
   described below: everything else the API can do.
 
 Both pages, and `render.mjs`, use the API the way a user would:
@@ -23,14 +23,14 @@ Both pages, and `render.mjs`, use the API the way a user would:
 `createHelpers(binding)` on the loaded wasm module in the browser, the
 `resvg-napi/helpers` entry in Node -- and the raw API (`usvg`, `fontdb`,
 `resvg`...) where the helpers stop: the one `fontdb.Database` of the page's
-fonts, the Nodes panel's walk of `tree.root().children()`, the global
+fonts, the Elements panel's walk of `tree.root().children()`, the global
 `takeLogs()`. The demo is the helpers' real-world test (ADR 0001).
 
 The generic families (`sans-serif`...) point at the first font the demo
 loads, by the family fontdb read for it: `db.faces()[n].families[0][0]`, the
 name of the first `[name, language]` pair (English (US) first).
 
-![the proof bench](assets/screenshot.png)
+![the bench](assets/screenshot.png)
 
 The page self-hosts its own typography -- `fonts/` holds Latin subsets of Space
 Mono and IBM Plex Sans, both OFL-1.1, with the notices and the licence in
@@ -38,15 +38,29 @@ Mono and IBM Plex Sans, both OFL-1.1, with the notices and the licence in
 a cross-origin font without a CORP header, which is the same rule the wasm
 needs.
 
-The page is laid out as a prepress proof: a slug line of job metadata, crop
-corners, and the render framed by registration marks with tick rules measuring
-its real extent. Every node's box is drawn over it: where the node draws,
-stroke and filters included (`nodeExtent`), and on request its geometric box
-(`absBoundingBox()`, dotted), so the gap a stroke or a blur adds shows. A row of
-the Nodes list and its box light up together. The content box (the root's
-`absLayerBoundingBox()`) is in registration magenta. Everything both engines said — Liquid errors, unknown filters, and every
-`log` message from usvg — accumulates in a diagnostics list, with a count in the
-slug line so a problem is visible without scrolling.
+The page reads left to right, input then output. On the left: the **SVG
+source** with an example picker, then **Missing files** when the document needs
+something (see below), the **Template variables**, **Fonts and files** (a drop
+zone, and a box to fetch a font by name), and **Render options** -- scale,
+width, background and crop to content up front, the rest (language, extra CSS,
+`data-maxwidth` fitting, strict variables) under *Advanced options*. Every
+change re-renders on its own; *Render now* forces one. A status line under the
+title gives the engine version, the fonts loaded, the document size, the last
+render time and the count of problems, which links to the messages.
+
+On the right: the **Render**, with every element's box drawn over it: where
+the element draws, stroke and filters included (`nodeExtent`), and on request
+its shape box (`absBoundingBox()`, dotted), so the gap a stroke or a blur adds
+shows. The content box (the root's `absLayerBoundingBox()`) is dashed magenta,
+and a legend under the image names the colours. The overlay is sized to the
+image as displayed, so it stays aligned when the column is narrower than the
+PNG. *Render details* holds the measurements. **Messages** collects everything
+both engines said -- Liquid errors, unknown filters, and every `log` message
+from usvg. **Elements** lists the nodes: a row and its box light up together,
+a click pins the highlight, and *PNG* downloads that node alone. **What resvg
+received** holds the SVG after Liquid and the resolved tree (`tree.toString`).
+Below about 1000 px wide the two columns merge, with the render right after the
+source.
 
 The page parses the SVG first and **asks for what the document is missing**, then
 lets you supply it:
@@ -104,7 +118,7 @@ edits and re-renders.
 
 WASI has no system fonts, so `loadSystemFonts()` finds nothing and every glyph
 has to come from a file. Dropping one is not the only way: type a name in the
-**fetch a font** box, or press the **fetch** button on a family the document is
+**Fetch a font by name** box (Enter or *Fetch*), or press the **Fetch** button on a family the document is
 missing.
 
 | you type | it gets |
@@ -165,7 +179,7 @@ templated document can be previewed:
   `{% render %}` reports the failure at line 1 of the partial, where it means
   nothing.
 - `{% render %}` and `{% include %}` work: the partial names the template asks
-  for are read off the parsed tags (`node.file`), listed under **Not resolved**
+  for are read off the parsed tags (`node.file`), listed under **Missing files**
   until you drop them, and served to LiquidJS from a `Map` through a small
   in-memory `fs`. A `.liquid` file is always a fragment; a `.svg` is one only
   when the template renders it by that name, otherwise it is an image.
@@ -199,29 +213,29 @@ re-parsing is debounced to 200 ms, re-rendering to 350 ms, and the fields are
 only rebuilt when the *set* of variables changes — rebuilding them on every
 keystroke destroys the focused input mid-word.
 
-The **rendered source** view under the source box holds the exact string handed
-to resvg. Every Liquid question is a guess without it. Under it, **resolved
-tree** is `usvg.Tree.toString()`: what usvg made of that string, with the CSS
-applied, `use` expanded and inheritance settled. The *keep text nodes* box
+*The SVG after Liquid*, under **What resvg received**, holds the exact string
+handed to resvg. Every Liquid question is a guess without it. Under it, *the
+resolved tree* is `usvg.Tree.toString()`: what usvg made of that string, with the CSS
+applied, `use` expanded and inheritance settled. The *Keep text as text* box
 flips `preserveText`, which is the difference between 23 KB of `<text>` and
 175 KB of outlines on the same document — a good look at what
 `shape-rendering` is actually asked to draw.
 
-The **Nodes** panel is the `usvg.Tree`, indented by depth, one row per element
-with its canvas size. Clicking a row outlines it on the proof (`nodeExtent()`,
-no checkbox needed); *png* saves that element alone, cropped to its own extent,
+The **Elements** panel is the `usvg.Tree`, indented by depth, one row per element
+with its canvas size. Clicking a row outlines it on the render (`nodeExtent()`,
+even with *Element boxes* off); *PNG* saves that element alone, cropped to its own extent,
 through the helpers' `renderNodePng` (`resvg.renderNode` underneath) — no `id`
 needed, and a QR group comes out as a 128×128 transparent PNG. It is the tree
-the proof was drawn from: one parse, dropped images included.
+the render was drawn from: one parse, dropped images included.
 
-The **stylesheet** field is usvg's `style_sheet` option: CSS injected at parse
+The **Extra CSS** field (*Advanced options*) is usvg's `style_sheet` option: CSS injected at parse
 time, so a theme needs no edit to the document. One detail worth knowing, and
-the field's tooltip says it: the injection lands *before* the document's own
+the field's hint says it: the injection lands *before* the document's own
 `<style>`, so an equally specific rule loses. `!important` or a longer selector
 wins, and either beats a presentation attribute.
 
 Four worked examples ship with the page. The **example picker** next to the
-source legend loads one with its data and its fragments — one of them carries a
+*SVG source* heading loads one with its data and its fragments — one of them carries a
 photo as a `data:` URI, which is not something to paste by hand. All four render
 without a browser:
 

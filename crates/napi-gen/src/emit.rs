@@ -1101,7 +1101,7 @@ pub fn map_enums(
         // The upstream path is the upstream name, not the renamed one.
         let up = upstream_path(&e.ident.to_string(), modules, root);
         // The vocabulary is keyed by the upstream name: that is what a member's
-        // type string says, and what `classify` is handed.
+        // type names, and what `classify` looks up.
         names.insert(e.ident.to_string());
         code.extend(quote! {
             #(#doc)*

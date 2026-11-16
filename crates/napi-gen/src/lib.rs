@@ -141,7 +141,7 @@ pub struct View {
 /// type with no JS form of its own whose content an iterator hands out (a
 /// stream of payload-enum segments, say).
 pub struct Iterated {
-    /// The type, as the generator spells it (no spaces, no `&`).
+    /// The type, by the path naming it (`a::B`): no `&`, no arguments.
     pub ty: &'static str,
     /// Its `&self` method returning the iterator.
     pub via: &'static str,

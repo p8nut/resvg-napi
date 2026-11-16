@@ -461,7 +461,7 @@ pub fn payload_enums(
     files: &[syn::File],
     // The module these files contribute to, and the names upstream defines twice.
     // `filter::Kind::Image(Image)` means `filter::Image`, and nothing in the
-    // type string says so -- the variant is written unqualified because it is
+    // type says so -- the variant is written unqualified because it is
     // in the same module.
     module: &str,
     dups: &BTreeSet<String>,

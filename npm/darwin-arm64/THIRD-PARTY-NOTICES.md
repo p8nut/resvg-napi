@@ -49,7 +49,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright {yyyy} {name of copyright owner}
 Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
 
-### ctor 1.0.13
+### ctor 1.0.14
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 Copyright {yyyy} {name of copyright owner}
 
@@ -134,6 +134,10 @@ Copyright (c) 2018 Raph Levien
 ### libc 0.2.191
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) The Rust Project Developers
+
+### link-section 0.19.4
+Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
+Copyright {yyyy} {name of copyright owner}
 
 ### log 0.4.35
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
@@ -308,7 +312,7 @@ Copyright (c) 2020 Yevhenii Reizner All rights reserved
 
 ## ISC
 
-### libloading 0.9.0
+### libloading 0.9.1
 Copyright © 2015, Simonas Kazlauskas
 
 ## MIT

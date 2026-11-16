@@ -672,6 +672,18 @@ test('a union variant may carry a class, and a re-exported enum maps', () => {
   assert.equal(frame.value.backdrop.backdrop, null);
 });
 
+// A generic bound JS can satisfy takes a string, however it is written:
+// `AsRef<Path>` inline or in a `where` clause, `Into<String>`.
+test('a path or string bound takes a string', () => {
+  const t = new toy.toy.Tally();
+  t.push('x');
+  t.pushFile('/tmp/notes.txt');
+  assert.equal(t.joined(), 'x,notes.txt');
+  const album = toy.toy.Scene.demo().album();
+  assert.equal(album.isAlbum('a/b.album'), true);
+  assert.equal(album.isAlbum('a/b.txt'), false);
+});
+
 // `f64` and `&[f64]` cross as they are (an `f32` would read `0.1` as
 // 0.10000000149011612), an `i16` widens, and a `u64` is left out: it may not
 // fit a JS number.

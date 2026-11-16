@@ -3,6 +3,7 @@
 //! it was not written for.
 
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -119,6 +120,17 @@ impl Tally {
 
     pub fn push<S: Into<String>>(&mut self, name: S) {
         self.names.push(name.into());
+    }
+
+    /// Pushes the file name of `path`, if it has one: a bound in a `where`
+    /// clause, `Path` spelled short. JS hands over a string.
+    pub fn push_file<P>(&mut self, path: P)
+    where
+        P: AsRef<Path>,
+    {
+        if let Some(n) = path.as_ref().file_name() {
+            self.names.push(n.to_string_lossy().into_owned());
+        }
     }
 
     pub fn clear(&mut self) {
@@ -783,6 +795,12 @@ impl Album {
     /// The first frame.
     pub fn cover(&self) -> &Frame {
         &self.frames[0]
+    }
+
+    /// Whether `path` names an album file: `AsRef<Path>` spelled short,
+    /// which JS hands over as a string.
+    pub fn is_album<P: AsRef<Path>>(&self, path: P) -> bool {
+        path.as_ref().extension().is_some_and(|e| e == "album")
     }
 }
 

@@ -1617,14 +1617,9 @@ pub fn map_methods(
             }
             let gate = method_gate(imp, f);
 
-            // generic param -> bound text, so `P: AsRef<std::path::Path>` can
+            // generic param -> what its bound takes, so `P: AsRef<Path>` can
             // be classified.
-            let bounds: BTreeMap<String, String> = f
-                .sig
-                .generics
-                .type_params()
-                .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
-                .collect();
+            let bounds = bound_kinds(&f.sig.generics);
 
             let mut inputs = f.sig.inputs.iter();
             let Some(syn::FnArg::Receiver(recv)) = inputs.next() else {
@@ -1647,17 +1642,15 @@ pub fn map_methods(
                 let syn::FnArg::Typed(t) = a else { continue };
                 let ty = ty_str(&t.ty);
                 // A generic parameter is classified through its bound instead.
-                let bound = bounds.get(&ty).map(String::as_str).unwrap_or("");
-                let kind = if bound.contains("AsRef<std::path::Path>") {
-                    Some(Arg::PathStr)
-                } else if bound.contains("Into<String>") {
-                    Some(Arg::Str)
-                } else {
-                    match vocab.classify(&ty) {
+                let kind = match bounds.get(&ty) {
+                    Some(Some(Bound::Path)) => Some(Arg::PathStr),
+                    Some(Some(Bound::Str)) => Some(Arg::Str),
+                    Some(None) => None,
+                    None => match vocab.classify(&ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
                         _ => None,
-                    }
+                    },
                 };
                 match kind {
                     Some(k) => args.push((t.pat.clone(), k)),

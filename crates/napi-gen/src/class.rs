@@ -622,7 +622,7 @@ impl<'a> Classes<'a> {
         this: Option<usize>,
         pat: &Ident,
         ty: &Type,
-        bounds: &BTreeMap<String, String>,
+        bounds: &BTreeMap<String, Option<Bound>>,
     ) -> Option<(TokenStream, Option<TokenStream>, TokenStream)> {
         let name = lower_camel(&pat.to_string());
         let (r, inner) = deref(ty);
@@ -631,10 +631,7 @@ impl<'a> Classes<'a> {
         if let Some([p]) = segs.as_deref()
             && let Some(b) = bounds.get(p)
         {
-            let ok = r.is_none()
-                && (b.contains("AsRef<std::path::Path>")
-                    || b.contains("AsRef<Path>")
-                    || b.contains("Into<String>"));
+            let ok = r.is_none() && b.is_some();
             return ok.then(|| (quote!(#pat: String), None, quote!(#pat)));
         }
         if let (Some(false), Type::Slice(s)) = (r, inner)
@@ -1000,11 +997,7 @@ impl<'a> Classes<'a> {
             (_, None) => return skip(Reason::NoReceiver, None),
         };
 
-        let bounds: BTreeMap<String, String> = sig
-            .generics
-            .type_params()
-            .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
-            .collect();
+        let bounds = bound_kinds(&sig.generics);
         let mut a = Args {
             params: Vec::new(),
             pre: Vec::new(),

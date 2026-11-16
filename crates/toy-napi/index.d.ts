@@ -121,6 +121,11 @@ export declare namespace toy {
     /** The first frame. */
     cover(): toy.Frame
     /**
+     * Whether `path` names an album file: `AsRef<Path>` spelled short,
+     * which JS hands over as a string.
+     */
+    isAlbum(path: string): boolean
+    /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
      * the symbol, for `using`. Harmless twice.
@@ -419,6 +424,11 @@ export declare namespace toy {
      * Until it settles, this instance is in use: any other use throws `Leased`.
      */
     pushAsync(name: string, signal?: AbortSignal | undefined | null): Promise<void>
+    /**
+     * Pushes the file name of `path`, if it has one: a bound in a `where`
+     * clause, `Path` spelled short. JS hands over a string.
+     */
+    pushFile(path: string): void
     clear(): void
     len(): number
     isEmpty(): boolean

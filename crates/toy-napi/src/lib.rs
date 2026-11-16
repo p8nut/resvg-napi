@@ -750,6 +750,13 @@ impl ToyAlbum {
                 .expect("a borrow resolves"),
         ))
     }
+    #[doc = " Whether `path` names an album file: `AsRef<Path>` spelled short,"]
+    #[doc = " which JS hands over as a string."]
+    #[napi]
+    pub fn is_album(&self, path: String) -> Result<bool, String> {
+        let __inner = self.inner.get("Album")?;
+        Ok((*__inner).is_album(path))
+    }
 }
 impl ToyCounter {
     fn wrap(inner: std::sync::Arc<toy::Counter>) -> Self {
@@ -896,6 +903,16 @@ impl ToyTally {
             |__v| Ok(__v),
             signal,
         )
+    }
+    #[doc = " Pushes the file name of `path`, if it has one: a bound in a `where`"]
+    #[doc = " clause, `Path` spelled short. JS hands over a string."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn push_file(&mut self, path: String) -> Result<(), String> {
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
+        napi_support::contained("Tally::push_file", || __self.push_file(path))
+            .map_err(napi_support::coded)?;
+        Ok(())
     }
     #[napi]
     #[allow(clippy::redundant_closure)]

@@ -20,7 +20,7 @@ use syn::{FnArg, ReturnType, Type};
 
 use crate::class::{Classes, Holding, Prim, Recv, args, deref, is, is_unit, receiver, segs};
 use crate::config;
-use crate::vocab::{Vocab, lower_camel, ty_str};
+use crate::vocab::{Bound, Vocab, bound_kinds, lower_camel, ty_str};
 
 /// Whether `Config::asynchronous` lists `name` (`Type::name` for a member)
 /// of the source at `root`.
@@ -41,17 +41,20 @@ impl Classes<'_> {
         this: Option<usize>,
         pat: &Ident,
         ty: &Type,
-        bounds: &BTreeMap<String, String>,
+        bounds: &BTreeMap<String, Option<Bound>>,
     ) -> Result<(TokenStream, Option<TokenStream>, TokenStream), String> {
         let name = lower_camel(&pat.to_string());
         let tmp = format_ident!("__{pat}");
         let (r, inner) = deref(ty);
         let segs = segs(inner);
         if let Some([p]) = segs.as_deref()
-            && bounds.contains_key(p)
+            && let Some(b) = bounds.get(p)
         {
             // A path or a string, as the sync call takes it: owned already.
-            return Ok((quote!(#pat: String), None, quote!(#pat)));
+            return match (r, b) {
+                (None, Some(_)) => Ok((quote!(#pat: String), None, quote!(#pat))),
+                _ => Err(format!("`{name}`: its generic bound has no JS form")),
+            };
         }
         if let (Some(false), Type::Slice(s)) = (r, inner)
             && Prim::of(&s.elem) == Some(Prim::U8)
@@ -237,11 +240,7 @@ impl Classes<'_> {
             _ => fail("its receiver cannot cross to a worker thread"),
         };
 
-        let bounds: BTreeMap<String, String> = sig
-            .generics
-            .type_params()
-            .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
-            .collect();
+        let bounds = bound_kinds(&sig.generics);
         let (mut params, mut pre, mut fwd) = (Vec::new(), Vec::new(), Vec::new());
         // What the call leases: what the doc names, and the locals holding
         // them, which `spawn` keeps a hold on.

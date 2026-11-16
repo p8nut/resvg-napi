@@ -541,6 +541,64 @@ pub fn peel_type(t: &str) -> &str {
     }
 }
 
+/// What JS can hand a generic parameter, by its bound: a string either way.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Bound {
+    /// `P: AsRef<Path>`, by any spelling of `Path`.
+    Path,
+    /// `S: Into<String>`.
+    Str,
+}
+
+/// Every generic type parameter of `g`, with what JS can hand it (`None`:
+/// nothing). Bounds are read inline and from the `where` clause, and matched
+/// by path, not by text: `AsRef<Path>` and `AsRef<std::path::Path>` both, and
+/// not `MyAsRef<PathBuf>`. One bound JS satisfies settles the parameter.
+pub fn bound_kinds(g: &syn::Generics) -> BTreeMap<String, Option<Bound>> {
+    let path_is = |p: &syn::Path, want: &[&[&str]]| {
+        let got: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
+        want.iter().any(|w| got.iter().map(String::as_str).eq(w.iter().copied()))
+    };
+    // The one type argument of the last segment, when it is a path.
+    let arg = |p: &syn::Path| match &p.segments.last()?.arguments {
+        syn::PathArguments::AngleBracketed(a) if a.args.len() == 1 => match &a.args[0] {
+            syn::GenericArgument::Type(Type::Path(t)) if t.qself.is_none() => Some(t.path.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+    let kind = |b: &syn::TypeParamBound| {
+        let syn::TypeParamBound::Trait(t) = b else {
+            return None;
+        };
+        let target = arg(&t.path)?;
+        if path_is(&t.path, &[&["AsRef"], &["std", "convert", "AsRef"]])
+            && path_is(&target, &[&["Path"], &["std", "path", "Path"]])
+        {
+            Some(Bound::Path)
+        } else if path_is(&t.path, &[&["Into"], &["std", "convert", "Into"]])
+            && path_is(&target, &[&["String"], &["std", "string", "String"]])
+        {
+            Some(Bound::Str)
+        } else {
+            None
+        }
+    };
+    let mut out: BTreeMap<String, Option<Bound>> = g
+        .type_params()
+        .map(|p| (p.ident.to_string(), p.bounds.iter().find_map(kind)))
+        .collect();
+    for p in g.where_clause.iter().flat_map(|w| &w.predicates) {
+        if let syn::WherePredicate::Type(t) = p
+            && let Some(slot) = out.get_mut(&ty_str(&t.bounded_ty))
+            && slot.is_none()
+        {
+            *slot = t.bounds.iter().find_map(kind);
+        }
+    }
+    out
+}
+
 /// The first of a generic's arguments: `s` up to its first comma or
 /// unmatched closing bracket, the brackets nested inside it skipped.
 /// `A,B` is `A`, and `&Vec<T>>+'_` (what follows `Item=`) is `&Vec<T>`. A

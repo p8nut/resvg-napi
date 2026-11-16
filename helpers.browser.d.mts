@@ -182,8 +182,11 @@ export interface Adjustment {
     to: number;
     /** The horizontal scale applied: `to / from`. */
     factor: number;
-    /** Measured width after, as a check on the one-pass assumption. */
-    measured: number;
+    /**
+     * Measured width after, as a check on the one-pass assumption. Absent when
+     * the verifying parse threw: `problems` then says why.
+     */
+    measured?: number;
 }
 export interface FitResult {
     /** The source, with a `scale(k 1)` composed onto each fitted element. */

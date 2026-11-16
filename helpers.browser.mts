@@ -197,8 +197,11 @@ export interface Adjustment {
   to: number
   /** The horizontal scale applied: `to / from`. */
   factor: number
-  /** Measured width after, as a check on the one-pass assumption. */
-  measured: number
+  /**
+   * Measured width after, as a check on the one-pass assumption. Absent when
+   * the verifying parse threw: `problems` then says why.
+   */
+  measured?: number
 }
 
 export interface FitResult {
@@ -420,9 +423,7 @@ export function findWidthConstraints(svg: string): WidthConstraint[] {
     if (max === undefined) continue;
     const width = Number(max);
     const id = attr(attrs, 'id');
-    // `id` is undefined, not null, when the tag has none: the public
-    // `WidthConstraint` says null, and both are falsy where it is read.
-    found.push({ tag, name, attrs, id: id as string | null, max: width, index: match.index });
+    found.push({ tag, name, attrs, id: id ?? null, max: width, index: match.index });
   }
   return found;
 }
@@ -565,7 +566,6 @@ export function fitTextWidths(
     const factor = c.max / width;
     splices.push({ index: c.index, length: c.tag.length,
                    text: withHorizontalScale(c.tag, c.attrs, factor) });
-    // @ts-expect-error -- `measured` is set below, by the verifying parse, and stays unset when that parse throws; the public `Adjustment` declares it always there.
     adjustments.push({ id, from: round(width), to: c.max, factor: round(factor) });
   }
 

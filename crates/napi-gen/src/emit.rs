@@ -101,7 +101,9 @@ pub fn js_conv(
     Some(match (js, site) {
         (Js::Bool, _) => plain(quote!(bool), d),
         (Js::I32, _) => plain(quote!(i32), d),
+        (Js::I16, _) => plain(quote!(i32), quote!(i32::from(#d))),
         (Js::F32, _) => plain(quote!(f64), quote!(f64::from(#d))),
+        (Js::F64, _) => plain(quote!(f64), d),
         // A method's integers saturate; a member's widen, which cannot fail.
         (Js::U8 | Js::U16 | Js::U32, Method) => plain(quote!(u32), saturating),
         (Js::U8 | Js::U16, _) => plain(quote!(u32), quote!(u32::from(#d))),
@@ -178,6 +180,7 @@ pub fn js_conv(
             quote!(Vec<f64>),
             quote!(#a.iter().map(|x| f64::from(*x)).collect()),
         ),
+        (Js::F64List, Getter | Field | Carried) => plain(quote!(Vec<f64>), quote!(#a.to_vec())),
         (Js::Enum, _) => {
             let e = enum_ident(&vocab.resolve(src_ty));
             plain(quote!(#e), quote!(#e::from(#d)))
@@ -894,6 +897,12 @@ fn map_field(
                 quote!(f64),
                 quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v); } },
             )),
+            Some(Js::F64) => Some(field(
+                &ident,
+                &doc,
+                quote!(f64),
+                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
+            )),
             Some(Js::U8) => {
                 // A `Config::index_bounded` field indexes an upstream table
                 // without a bounds check, so clamp it to that table's last
@@ -994,11 +1003,13 @@ fn map_field(
             // render option sets.
             | Some(Js::U16)
             | Some(Js::I32)
+            | Some(Js::I16)
             | Some(Js::PayloadEnum(_))
             | Some(Js::PayloadEnumList(_))
             | Some(Js::Iterated(..))
             | Some(Js::Tag4)
             | Some(Js::F32List)
+            | Some(Js::F64List)
             | Some(Js::Handle(_))
             | Some(Js::HandleList(_))
             | Some(Js::Object(_))
@@ -1226,6 +1237,14 @@ pub fn data_members(
                     stepped: false,
                 });
             }
+            Some((_, Js::F64)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<f64>),
+                    value: access,
+                    stepped: false,
+                });
+            }
             Some((_, Js::Scalar)) => {
                 out.push(Member {
                     id,
@@ -1241,6 +1260,14 @@ pub fn data_members(
                     value: quote!(
                         #access.map(|v| v.iter().map(|x| f64::from(*x)).collect())
                     ),
+                    stepped: false,
+                });
+            }
+            Some((_, Js::F64List)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<Vec<f64>>),
+                    value: quote!(#access.map(|v| v.to_vec())),
                     stepped: false,
                 });
             }
@@ -1311,10 +1338,12 @@ pub fn data_members(
                 vocab.classify(inner),
                 Some(
                     Js::F32
+                        | Js::F64
                         | Js::U8
                         | Js::U16
                         | Js::U32
                         | Js::I32
+                        | Js::I16
                         | Js::Bool
                         | Js::Enum
                         | Js::Scalar

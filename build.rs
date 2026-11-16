@@ -54,7 +54,9 @@ fn main() {
         for js in [
             Js::Bool,
             Js::I32,
+            Js::I16,
             Js::F32,
+            Js::F64,
             Js::U8,
             Js::U16,
             Js::U32,

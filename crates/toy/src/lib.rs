@@ -358,6 +358,11 @@ pub struct ReportOptions {
     pub base: Arc<Tally>,
     /// Default: [`Width::Auto`]
     pub width: Width,
+    /// Written after the line as ` xN` unless 1. An `f64`, which JS hands
+    /// over as it is: `0.1` stays `0.1`.
+    ///
+    /// Default: 1
+    pub ratio: f64,
     /// Applied to the finished line.
     ///
     /// Default: unchanged
@@ -371,6 +376,7 @@ impl Default for ReportOptions {
             style_index: 0,
             base: Arc::new(Tally::default()),
             width: Width::Auto,
+            ratio: 1.0,
             finish: |s| s,
         }
     }
@@ -391,6 +397,9 @@ pub fn report(tally: &Tally, options: &ReportOptions) -> String {
         while line.len() < usize::from(n) {
             line.push('.');
         }
+    }
+    if options.ratio != 1.0 {
+        line.push_str(&format!(" x{}", options.ratio));
     }
     (options.finish)(line)
 }
@@ -584,6 +593,10 @@ impl Canvas {
             shades: Vec::new(),
             content: Box::new(Content::Canvas(self.clone())),
             backdrop: None,
+            zoom: 1.0,
+            weights: Vec::new(),
+            tilt: 0,
+            serial: 0,
         })
     }
 
@@ -672,7 +685,15 @@ impl Scene {
                 shades: Vec::new(),
                 content: Box::new(Content::Empty),
                 backdrop: None,
+                zoom: 1.0,
+                weights: Vec::new(),
+                tilt: 0,
+                serial: 0,
             })),
+            zoom: 0.1,
+            weights: vec![0.1, 0.2],
+            tilt: -3,
+            serial: 1 << 60,
         };
         Arc::new(Scene {
             root: Layer {
@@ -784,6 +805,10 @@ pub struct Frame {
     content: Box<Content>,
     /// Boxed, as a crate keeps a rare member small.
     backdrop: Option<Box<Frame>>,
+    zoom: f64,
+    weights: Vec<f64>,
+    tilt: i16,
+    serial: u64,
 }
 
 impl Frame {
@@ -803,6 +828,26 @@ impl Frame {
     /// The frame behind this one, if any.
     pub fn backdrop(&self) -> Option<Box<Frame>> {
         self.backdrop.clone()
+    }
+
+    /// An `f64`, read as it is: `0.1`, not the `f32` nearest it.
+    pub fn zoom(&self) -> f64 {
+        self.zoom
+    }
+
+    /// A list of `f64`, read as they are.
+    pub fn weights(&self) -> &[f64] {
+        &self.weights
+    }
+
+    /// An `i16`, widened to a JS number.
+    pub fn tilt(&self) -> i16 {
+        self.tilt
+    }
+
+    /// A `u64` may not fit a JS number: left out, as `BIG` is.
+    pub fn serial(&self) -> u64 {
+        self.serial
     }
 }
 

@@ -211,10 +211,12 @@ fn main() {
         vocab.payload.insert(name.into(), e);
     }
     vocab.values.insert("Frame".into());
+    // Its `f64`, `&[f64]` and `i16` map; its `u64` cannot fit a JS number.
     let (frame, skipped, _) = value_class(&files, "Frame", &vocab, modules, &root);
+    let skipped: Vec<_> = skipped.iter().map(|s| s.name.as_str()).collect();
     assert!(
-        !frame.is_empty() && skipped.is_empty(),
-        "Frame maps: layer and shades"
+        !frame.is_empty() && skipped == ["serial"],
+        "Frame maps all but serial: {skipped:?}"
     );
     let mut unions = quote!();
     for name in ["Shade", "Content", "Origin"] {

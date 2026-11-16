@@ -262,6 +262,9 @@ export declare namespace toy {
     get shades(): Array<toy.ShadePlain | toy.ShadeNamed>
     get content(): toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
     get backdrop(): toy.Frame | null
+    get zoom(): number
+    get weights(): Array<number>
+    get tilt(): number
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
@@ -672,6 +675,13 @@ export declare namespace toy {
     base?: toy.Tally
     /** Default: [`Width::Auto`] */
     width?: number | 'auto'
+    /**
+     * Written after the line as ` xN` unless 1. An `f64`, which JS hands
+     * over as it is: `0.1` stays `0.1`.
+     *
+     * Default: 1
+     */
+    ratio?: number
   }
   /** A number constant: `toy.SCALE`. */
   export const SCALE: number

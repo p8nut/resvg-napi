@@ -672,6 +672,20 @@ test('a union variant may carry a class, and a re-exported enum maps', () => {
   assert.equal(frame.value.backdrop.backdrop, null);
 });
 
+// `f64` and `&[f64]` cross as they are (an `f32` would read `0.1` as
+// 0.10000000149011612), an `i16` widens, and a `u64` is left out: it may not
+// fit a JS number.
+test('f64 members are read losslessly, i16 widens, u64 is left out', () => {
+  const [, , frame] = toy.toy.Scene.demo().contents();
+  assert.equal(frame.value.zoom, 0.1);
+  assert.deepEqual(frame.value.weights, [0.1, 0.2]);
+  assert.equal(frame.value.tilt, -3);
+  assert.equal('serial' in frame.value, false);
+  const t = new toy.toy.Tally();
+  t.push('x');
+  assert.equal(toy.toy.report(t, { ratio: 0.1 }), 'tally[plain]: x x0.1');
+});
+
 // What is reached from a scene is borrowed from it, not copied out: a
 // `Layer` counts its copies, and reading none makes one. A union's variant
 // (`held`, a projected class; `frame`, a read-only class), a read-only

@@ -32,6 +32,8 @@ pub fn ty_str(ty: &Type) -> String {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Js {
     F32,
+    // `f64`, which a JS number is.
+    F64,
     U32,
     U8,
     Bool,
@@ -78,8 +80,12 @@ pub enum Js {
     IntNewtype(String),
     // `&[f32]` / `Vec<f32>`, e.g. a dash pattern.
     F32List,
+    // `&[f64]` / `Vec<f64>`, read as they are.
+    F64List,
     // `i32`, which napi maps to a JS number directly. A turbulence seed.
     I32,
+    // `i8` / `i16`, widened to i32 on the JS side.
+    I16,
     // `u16`, widened to u32 on the JS side: a font weight, an axis count.
     U16,
     // `[u8; 4]`: an OpenType axis tag, four ASCII bytes -- `b"wght"`. A string
@@ -291,11 +297,14 @@ impl PayloadEnum {
                 Some(
                     Js::Str
                     | Js::F32
+                    | Js::F64
                     | Js::U32
                     | Js::U8
                     | Js::U16
                     | Js::I32
+                    | Js::I16
                     | Js::F32List
+                    | Js::F64List
                     | Js::Scalar
                     | Js::Bool
                     | Js::Enum
@@ -776,10 +785,14 @@ pub fn classify(
         // No `Transform` arm: `Vocab::matrices` answers that one by shape,
         // before this function is reached.
         "f32" => Js::F32,
+        "f64" => Js::F64,
         "u32" => Js::U32,
         "u8" => Js::U8,
         "u16" => Js::U16,
         "i32" => Js::I32,
+        "i8" | "i16" => Js::I16,
+        // No `i64` / `u64` arm: neither fits a JS number, so such a member is
+        // left out and reported, as such a constant is (`emit::constants`).
         "bool" => Js::Bool,
         "usize" => Js::Count,
         "String" | "&str" => Js::Str,
@@ -787,7 +800,8 @@ pub fn classify(
         "Option<std::path::PathBuf>" | "Option<PathBuf>" => Js::OptPath,
         "std::path::PathBuf" | "PathBuf" | "&std::path::Path" | "&Path" => Js::Path,
         "Vec<String>" => Js::StrList,
-        "Vec<f32>" | "&[f32]" | "[f32]" | "Vec<f64>" | "&[f64]" | "[f64]" => Js::F32List,
+        "Vec<f32>" | "&[f32]" | "[f32]" => Js::F32List,
+        "Vec<f64>" | "&[f64]" | "[f64]" => Js::F64List,
         // An Arc around bytes is shared *data*, not a shared entity: it has no
         // identity to name it by, and treating it as a handle is what made
         // `ImageKind`'s image payloads unmappable.

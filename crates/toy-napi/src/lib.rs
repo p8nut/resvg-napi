@@ -142,6 +142,11 @@ pub struct ToyReportOptions<'a> {
     #[doc = " Default: [`Width::Auto`]"]
     #[napi(ts_type = "number | 'auto'")]
     pub width: Option<Either<u32, String>>,
+    #[doc = " Written after the line as ` xN` unless 1. An `f64`, which JS hands"]
+    #[doc = " over as it is: `0.1` stays `0.1`."]
+    #[doc = ""]
+    #[doc = " Default: 1"]
+    pub ratio: Option<f64>,
 }
 #[doc = " How to build a [`Counter`]."]
 #[doc = ""]
@@ -484,6 +489,9 @@ impl ToyReportOptions<'_> {
         if let Some(v) = &self.width {
             o.width = width_from_js(v, "width").map_err(napi_support::coded)?;
         }
+        if let Some(v) = self.ratio {
+            o.ratio = v;
+        }
         Ok(o)
     }
 }
@@ -590,6 +598,33 @@ impl ToyFrame {
             let __p = __inner;
             let v = __p.get();
             v.backdrop().map(|x| ToyFrame::wrap(x.as_ref().clone()))
+        })
+    }
+    #[napi(getter)]
+    pub fn zoom(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.zoom()
+        })
+    }
+    #[napi(getter)]
+    pub fn weights(&self) -> Result<Vec<f64>, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.weights().to_vec()
+        })
+    }
+    #[napi(getter)]
+    pub fn tilt(&self) -> Result<i32, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            i32::from(v.tilt())
         })
     }
 }
@@ -2308,7 +2343,9 @@ impl ToyFrame {
             &env,
             &this,
             "Frame",
-            &["layer", "shades", "content", "backdrop", "disposed"],
+            &[
+                "layer", "shades", "content", "backdrop", "zoom", "weights", "tilt", "disposed",
+            ],
             &[],
             depth,
             options,

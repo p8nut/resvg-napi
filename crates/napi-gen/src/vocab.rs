@@ -19,10 +19,7 @@ use syn::{Fields, ImplItem, Item, ReturnType, Type};
 use crate::Config;
 use crate::sources::{is_pub, self_ident};
 
-/// Normalised textual form of a type, e.g. `Option<std::path::PathBuf>`.
-pub fn ty_str(ty: &Type) -> String {
-    quote!(#ty).to_string().replace(' ', "")
-}
+pub use crate::shape::ty_str;
 
 /// What a Rust type becomes on the JS side.
 ///

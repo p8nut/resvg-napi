@@ -5,6 +5,7 @@
 //! One phase per module:
 //!
 //!   sources  finding and parsing upstream (env override -> cargo registry)
+//!   shape    what a type is built of, read once from `syn`
 //!   vocab    what a Rust type means on the JS side -- newtypes, aliases,
 //!            `Deref` chains, payload enums, naming
 //!   emit     turning those answers into tokens napi can expand
@@ -40,6 +41,7 @@ pub mod class;
 pub mod dispose;
 pub mod emit;
 pub mod project;
+pub mod shape;
 pub mod sources;
 pub mod twin;
 pub mod vocab;

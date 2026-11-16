@@ -557,7 +557,8 @@ pub enum Bound {
 pub fn bound_kinds(g: &syn::Generics) -> BTreeMap<String, Option<Bound>> {
     let path_is = |p: &syn::Path, want: &[&[&str]]| {
         let got: Vec<String> = p.segments.iter().map(|s| s.ident.to_string()).collect();
-        want.iter().any(|w| got.iter().map(String::as_str).eq(w.iter().copied()))
+        want.iter()
+            .any(|w| got.iter().map(String::as_str).eq(w.iter().copied()))
     };
     // The one type argument of the last segment, when it is a path.
     let arg = |p: &syn::Path| match &p.segments.last()?.arguments {
@@ -1236,4 +1237,67 @@ pub fn wrapper_path(
 /// name is an acronym: `ImageKind::PNG` is `png`.
 pub fn lower_camel(s: &str) -> String {
     s.to_case(Case::Camel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peel_type_takes_the_first_generic_argument() {
+        assert_eq!(peel_type("Result<Foo,Error>"), "Foo");
+        assert_eq!(peel_type("Result<Vec<Foo>,Box<Error>>"), "Foo");
+        assert_eq!(peel_type("&Option<Box<Foo>>"), "Foo");
+        assert_eq!(peel_type("implIterator<Item=&Vec<Foo>>+'_"), "Foo");
+        assert_eq!(peel_type("implIterator<Item=Foo>"), "Foo");
+        assert_eq!(peel_type("Arc<Foo>"), "Arc<Foo>");
+    }
+
+    #[test]
+    fn first_arg_skips_nested_brackets() {
+        assert_eq!(first_arg("A,B"), "A");
+        assert_eq!(first_arg("&Vec<T>>+'_"), "&Vec<T>");
+        assert_eq!(first_arg("HashMap<K,V>,E"), "HashMap<K,V>");
+        assert_eq!(first_arg("fn(A)->B,E"), "fn(A)->B");
+    }
+
+    #[test]
+    fn classify_object_reads_an_iterator_item_whole() {
+        let objects = BTreeSet::from(["Foo".to_string()]);
+        assert_eq!(
+            classify_object("implIterator<Item=&Foo>+'_", &objects),
+            Some(Js::ObjectList("Foo".into()))
+        );
+    }
+
+    #[test]
+    fn bound_kinds_match_paths_inline_and_in_where() {
+        let f: syn::ItemFn = syn::parse_quote! {
+            fn f<A: AsRef<Path>, B: AsRef<std::path::Path> + Send, C: Into<String>, D: Copy, E, F: MyAsRef<Path>>(
+                a: A, b: B, c: C, d: D, e: E, f: F,
+            ) where E: AsRef<Path> {}
+        };
+        let got = bound_kinds(&f.sig.generics);
+        let want: BTreeMap<String, Option<Bound>> = [
+            ("A", Some(Bound::Path)),
+            ("B", Some(Bound::Path)),
+            ("C", Some(Bound::Str)),
+            ("D", None),
+            ("E", Some(Bound::Path)),
+            ("F", None),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn f64_lists_are_f64() {
+        let none = BTreeSet::new();
+        assert_eq!(classify("f64", &none, &none), Some(Js::F64));
+        assert_eq!(classify("Vec<f64>", &none, &none), Some(Js::F64List));
+        assert_eq!(classify("&[f64]", &none, &none), Some(Js::F64List));
+        assert_eq!(classify("i16", &none, &none), Some(Js::I16));
+    }
 }

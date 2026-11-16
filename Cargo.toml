@@ -48,10 +48,9 @@ resvg = { version = "0.50.0", default-features = false, features = ["memmap-font
 
 [build-dependencies]
 napi-build = { workspace = true }
-# The generic generator; build.rs fills its config and runs the passes.
+# The generic generator; build.rs fills its config and runs it.
 napi-gen = { path = "crates/napi-gen" }
-# build.rs and build/template.rs write and read tokens themselves too.
-syn = { version = "3.0", features = ["full", "extra-traits", "parsing", "printing"] }
+# build/template.rs writes tokens itself too.
 quote = "1.0.35"
 proc-macro2 = "1.0.91"
 

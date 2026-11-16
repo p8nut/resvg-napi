@@ -1491,7 +1491,7 @@ impl<'a> Classes<'a> {
         let ns = self
             .config
             .namespace_of(root)
-            .unwrap_or_else(|| panic!("no Config::namespaces entry for {root}"));
+            .unwrap_or_else(|| panic!("no Config::crates namespace for {root}"));
         let mut code = TokenStream::new();
         let mut skipped = Vec::new();
         for (r, name) in self.config.functions.iter().filter(|(r, _)| *r == root) {

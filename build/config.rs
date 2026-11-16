@@ -5,66 +5,91 @@
 //! own. Each list is an API decision, not a description of upstream, and each
 //! says why it exists. Wrapping another crate starts by rewriting this file.
 //!
-//! That includes the crates themselves and their roots (`UPSTREAM`), the
-//! index bounds, and the allowlists of classes, functions and async twins.
+//! That includes the crates themselves, their roots and namespaces
+//! (`crates`), the index bounds, and the allowlists of classes, functions and
+//! async twins.
 
-use napi_gen::{Config, Converter, Iterated, Provider, View};
-
-/// One crate the binding wraps.
-pub struct Upstream {
-    /// The Cargo package, and a file that identifies its sources.
-    pub pkg: &'static str,
-    pub marker: &'static str,
-    /// The path its types are reached by from the generated code.
-    pub root: &'static str,
-}
-
-/// The wrapped crates, in the order a bare name is resolved against them. The
-/// first is the primary: the option structs and the clamps below are read
-/// from it.
-pub const UPSTREAM: &[Upstream] = &[
-    Upstream {
-        pkg: "usvg",
-        marker: "parser/options.rs",
-        root: "usvg",
-    },
-    Upstream {
-        pkg: "fontdb",
-        marker: "lib.rs",
-        root: "usvg::fontdb",
-    },
-];
-
-/// What the generated file says it was generated from.
-pub const GENERATED_FROM: &str = "the resvg/usvg/fontdb sources";
-
-/// The path the vocabulary-only crates' types are reached by: tiny-skia
-/// re-exports what of tiny-skia-path can appear (`PathSegment`), and those
-/// types are `tiny_skia.*`.
-pub const VOCAB_ROOT: &str = "tiny_skia";
-
-/// Crates parsed for vocabulary only (newtypes, aliases), never wrapped.
-pub const VOCAB_CRATES: &[&str] = &["tiny-skia-path", "strict-num"];
-
-/// The option structs mapped field by field into JS objects: what
-/// `usvg.Tree` parses with, and what `toString()` writes with.
-pub const PARSE_OPTIONS: &str = "Options";
-pub const WRITE_OPTIONS: &str = "WriteOptions";
+use napi_gen::{Config, Converter, Crate, HandWritten, Iterated, Provider, Role, View};
 
 /// What the generic phases (`napi-gen`) read: resvg's answers to its questions.
 pub const GEN: Config = Config {
-    log_env: crate::CODEGEN_LOG,
+    // The env var that turns the codegen's report (`napi_gen::report!`) on.
+    log_env: "RESVG_NAPI_CODEGEN_LOG",
+    generated_from: "the resvg/usvg/fontdb sources",
+    // The crates, in the order a bare name is resolved against them. One
+    // namespace per crate (ADR 0002, Q21), each type under the crate that
+    // defines it.
+    crates: &[
+        // The wrapped crates, discovered. usvg is the primary: the clamps
+        // below are read from it. fontdb is reached through usvg's re-export,
+        // and is still `fontdb` from JS.
+        Crate {
+            pkgs: &["usvg"],
+            root: "usvg",
+            ns: "usvg",
+            ..Crate::EMPTY
+        },
+        Crate {
+            pkgs: &["fontdb"],
+            root: "usvg::fontdb",
+            ns: "fontdb",
+            ..Crate::EMPTY
+        },
+        // Parsed only for the classes and functions listed below, never for
+        // discovery. tiny-skia re-exports `Transform`, `Rect` and `Size` from
+        // tiny-skia-path, so the two are one source; resvg re-exports both
+        // crates, and tiny-skia and resvg are reached through it.
+        Crate {
+            pkgs: &["tiny-skia", "tiny-skia-path"],
+            root: "tiny_skia",
+            ns: "tiny_skia",
+            role: Role::Classes,
+            modules: &[],
+        },
+        Crate {
+            pkgs: &["svgtypes"],
+            root: "svgtypes",
+            ns: "svgtypes",
+            role: Role::Classes,
+            modules: &[],
+        },
+        Crate {
+            pkgs: &["resvg"],
+            root: "resvg",
+            ns: "resvg",
+            role: Role::Classes,
+            modules: &[],
+        },
+        // Parsed for vocabulary only (newtypes, aliases), never wrapped.
+        // tiny-skia re-exports what of tiny-skia-path can appear
+        // (`PathSegment`), and those types are `tiny_skia.*`.
+        Crate {
+            pkgs: &["tiny-skia-path", "strict-num"],
+            root: "tiny_skia",
+            ns: "tiny_skia",
+            role: Role::Vocabulary,
+            modules: &[],
+        },
+    ],
+    // The crate paths: resvg re-exports the crates read through it.
+    uses: &["resvg::{tiny_skia, usvg}"],
+    // The resvg-specific providers (ADR 0002, Q26), written by hand.
+    hand_written: &[HandWritten {
+        path: "src/guard.rs",
+        doc: "The resvg-specific providers (`guard.*`), written by hand: src/guard.rs.",
+    }],
     // An option field indexing an upstream table without a bounds check, by its
     // name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
     // table's length; the build fails if the suffix matches nothing.
     index_bounded: &[("_precision", "POW_VEC")],
     // The option structs mirrored as plain objects, `usvg.Options` and
-    // `usvg.WriteOptions` (ADR 0002, Q15): every field optional, the rest from
+    // `usvg.WriteOptions` (ADR 0002, Q15): what `usvg.Tree` parses with, and
+    // what `toString()` writes with. Every field optional, the rest from
     // usvg's `Default` -- an empty font database, Times New Roman, the default
     // resolvers. The raw API follows Rust (Q10, Q27).
     // `fontdb.Query` too, the same shape: `Database.query` takes one, its
     // `families` a list of `fontdb.Family` (`{ type, value }`).
-    option_objects: &[PARSE_OPTIONS, WRITE_OPTIONS, "Query"],
+    option_objects: &["Options", "WriteOptions", "Query"],
     // Option fields with no JS form, supplied by a class instance (Q26, Q27).
     // `Options::fontdb` takes a `fontdb.Database`, whose `Arc` is shared, not
     // copied. The resolvers take the hand-written `guard` providers
@@ -153,16 +178,6 @@ pub const GEN: Config = Config {
         // tiny-skia's PNG codec; resvg turns it on, on every target.
         ("png-format", "true"),
     ],
-    // One namespace per crate (ADR 0002, Q21), each type under the crate that
-    // defines it. fontdb is reached through usvg's re-export, and is still
-    // `fontdb` from JS; tiny-skia and resvg through resvg's.
-    namespaces: &[
-        ("usvg", "usvg"),
-        ("usvg::fontdb", "fontdb"),
-        ("tiny_skia", "tiny_skia"),
-        ("svgtypes", "svgtypes"),
-        ("resvg", "resvg"),
-    ],
     // The classes with their constructors, statics, errors and conversions.
     // An allowlist on purpose: tiny-skia alone has forty public types, and
     // these are the ones parsing, rendering, the helpers and the tree's
@@ -228,13 +243,3 @@ pub const GEN: Config = Config {
         ("usvg::fontdb", "Database::load_fonts_dir"),
     ],
 };
-
-/// Crates parsed only for the classes and functions `GEN` lists, never for
-/// discovery: (the Cargo packages, read as one, and the path they are
-/// reached by). tiny-skia re-exports `Transform`, `Rect` and `Size` from
-/// tiny-skia-path, so the two are one source; resvg re-exports both crates.
-pub const CLASS_CRATES: &[(&[&str], &str)] = &[
-    (&["tiny-skia", "tiny-skia-path"], "tiny_skia"),
-    (&["svgtypes"], "svgtypes"),
-    (&["resvg"], "resvg"),
-];

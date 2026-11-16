@@ -745,8 +745,8 @@ pub struct OptionObject {
     pub code: TokenStream,
     /// Fields left out, with the reason: they keep the `Default` value.
     pub skipped: Vec<Skip>,
-    /// How many fields the index bounds matched.
-    pub bounded: usize,
+    /// The index-bound suffixes its fields matched, one per field.
+    pub bounded: Vec<&'static str>,
 }
 
 /// An upstream option struct with `Default`, as an input-only plain object
@@ -768,7 +768,7 @@ pub fn option_object(
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
-    bounds: &[(&str, u32)],
+    bounds: &[(&'static str, u32)],
 ) -> Option<OptionObject> {
     // A listed struct that is gone is upstream moving, not a struct without
     // `Default`: loud, like `struct_fields`.
@@ -797,7 +797,7 @@ pub fn option_object(
     let mut decls = Vec::new();
     let mut assigns = Vec::new();
     let mut skipped = Vec::new();
-    let mut bounded = 0usize;
+    let mut bounded = Vec::new();
     // A provided field holds the instance for the call: `ClassInstance`
     // borrows it from the JS object, and that needs a lifetime.
     let mut borrows = false;
@@ -926,8 +926,8 @@ pub fn option_object(
 fn map_field(
     f: &syn::Field,
     vocab: &Vocab,
-    bounds: &[(&str, u32)],
-    clamped: &mut usize,
+    bounds: &[(&'static str, u32)],
+    clamped: &mut Vec<&'static str>,
 ) -> Option<Field> {
     let ident = f.ident.clone()?;
     let name = ident.to_string();
@@ -955,11 +955,11 @@ fn map_field(
                 // index 242 places past the end of a 13-entry table, reached from
                 // `write_num` for every coordinate. That is an out-of-bounds
                 // panic unwinding out of an `extern "C"` callback, so a process
-                // abort rather than a JS exception. The caller counts what this
-                // matched and fails the build when it matches nothing.
+                // abort rather than a JS exception. The caller collects what
+                // this matched and fails the build when a suffix matches nothing.
                 let max = match bounds.iter().find(|(suffix, _)| name.ends_with(suffix)) {
-                    Some((_, max)) => {
-                        *clamped += 1;
+                    Some((suffix, max)) => {
+                        clamped.push(*suffix);
                         *max
                     }
                     None => u32::from(u8::MAX),
@@ -2041,15 +2041,16 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
 /// `root` is the source's path (`toy`). A constant of a number type that fits
 /// a JS number, a `bool` or a string maps, through type aliases; any other
 /// is left out, and so is one exported by a module with no namespace. Returns
-/// the code by the [`Config::namespaces`](crate::Config::namespaces) root it
-/// goes under, and a report line per constant.
+/// the code by the root it goes under (`toy::alt`, its namespace by
+/// [`Config::namespace_of`](crate::Config::namespace_of)), and a report line
+/// per constant.
 ///
 /// [`ModTree::consts`]: crate::sources::ModTree::consts
 pub fn constants(
     root: &str,
     consts: &[(String, String, syn::ItemConst)],
     vocab: &Vocab,
-) -> (Vec<(&'static str, TokenStream)>, Vec<String>) {
+) -> (Vec<(String, TokenStream)>, Vec<String>) {
     let (mut code, mut report) = (Vec::new(), Vec::new());
     for (module, name, c) in consts {
         let at = if module.is_empty() {
@@ -2078,7 +2079,7 @@ pub fn constants(
                 continue;
             }
         };
-        let Some((r, ns)) = vocab.config.namespaces.iter().find(|(r, _)| *r == at) else {
+        let Some(ns) = vocab.config.namespace_of(&at) else {
             report.push(format!(
                 "{at}::{name} constant not exposed: no namespace for {at}"
             ));
@@ -2090,7 +2091,7 @@ pub fn constants(
         let gate = crate::cfg::attr(&vocab.config, &c.attrs);
         report.push(format!("{at}::{name} is a constant: {ns}.{name}"));
         code.push((
-            *r,
+            at,
             quote! {
                 #(#docs)*
                 #gate
@@ -2791,4 +2792,45 @@ pub fn has_input_lists(files: &[syn::File], ty: &str) -> bool {
             .any(|f| is_pub(&f.vis) && input_list(files, &f.ty).is_some()),
         _ => false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One table: a kind that both a getter and a method can return has the
+    /// same JS type at both, whatever expression each uses to get there.
+    #[test]
+    fn getter_and_method_agree() {
+        let (v, a) = (Vocab::default(), quote!(x));
+        for js in [
+            Js::Bool,
+            Js::I32,
+            Js::I16,
+            Js::F32,
+            Js::F64,
+            Js::U8,
+            Js::U16,
+            Js::U32,
+            Js::Count,
+            Js::Str,
+            Js::Scalar,
+            Js::Class("C".into()),
+            Js::OptClass("C".into()),
+            Js::IntNewtype("N".into()),
+            Js::Value("V".into()),
+            Js::ValueList("V".into()),
+            Js::OptValue("V".into()),
+            Js::Object("O".into()),
+            Js::ObjectList("O".into()),
+        ] {
+            let ty =
+                |site| js_conv(&js, &syn::parse_quote!(T), &v, &a, site).map(|c| c.ty.to_string());
+            assert_eq!(
+                ty(Site::Getter),
+                ty(Site::Method),
+                "{js:?}: getter and method disagree"
+            );
+        }
+    }
 }

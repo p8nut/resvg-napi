@@ -80,9 +80,68 @@ pub fn registry_src(pkg: &str, want: &str) -> Option<PathBuf> {
     None
 }
 
+/// The `src` directory of the workspace member named `pkg`, if the workspace
+/// of [`lockfile`] has one: what Cargo resolves a path dependency to. Read
+/// off the workspace's `members` and each member's `[package] name`, by the
+/// same cheap scan as [`locked_versions`].
+///
+/// ponytail: listed members only, no globs (`crates/*`), no `package.name`
+/// inherited from the workspace.
+pub fn workspace_member(pkg: &str) -> Option<PathBuf> {
+    let lock = lockfile();
+    let root = lock.parent()?;
+    let manifest = fs::read_to_string(root.join("Cargo.toml")).ok()?;
+    // `members = ["a", "b"]`, on one line or several, starting a line.
+    let members = manifest
+        .split_once("\nmembers")
+        .and_then(|(_, rest)| rest.split_once('['))
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map(|(list, _)| list)
+        .unwrap_or_default();
+    let name_of = |dir: &Path| {
+        let text = fs::read_to_string(dir.join("Cargo.toml")).ok()?;
+        text.lines()
+            .map(str::trim)
+            .find_map(|l| l.strip_prefix("name = "))
+            .map(|v| v.trim_matches('"').to_string())
+    };
+    std::iter::once(root.to_path_buf())
+        .chain(
+            members
+                .split(',')
+                .map(|m| m.trim().trim_matches('"'))
+                .filter(|m| !m.is_empty())
+                .map(|m| root.join(m)),
+        )
+        .find(|dir| name_of(dir).as_deref() == Some(pkg))
+        .map(|dir| {
+            println!(
+                "cargo::rerun-if-changed={}",
+                dir.join("Cargo.toml").display()
+            );
+            dir.join("src")
+        })
+}
+
+/// The files of the crate a `use` names (`a_b`, the package `a_b` or `a-b`),
+/// when Cargo.lock has it once: what [`inline_reexported_enums`] loads a
+/// re-exported enum from. None for a crate not in the lockfile, or in it
+/// twice.
+pub fn dependency_files(
+    krate: &str,
+    locked: &BTreeMap<String, Vec<String>>,
+) -> Option<Vec<syn::File>> {
+    let pkg = [krate.to_string(), krate.replace('_', "-")]
+        .into_iter()
+        .find(|p| locked.get(p).is_some_and(|v| v.len() == 1))?;
+    let dir = locate(&pkg, "lib.rs", locked);
+    Some(parse_crate(&dir).into_iter().map(|(_, f)| f).collect())
+}
+
 /// Resolution order, most explicit first:
 ///   1. `<PKG>_SRC_DIR` env var (vendored checkout / git submodule anywhere)
-///   2. cargo registry cache, exact locked version
+///   2. a member of the workspace (a path dependency)
+///   3. cargo registry cache, exact locked version
 ///
 /// There is no "newest version present" fallback: a registry cache shared
 /// with other projects would hand over sources the resolver never picked.
@@ -96,6 +155,9 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, Vec<String>>) -
             "{key} points at {}, but {marker} is missing there",
             p.display()
         );
+        return p;
+    }
+    if let Some(p) = workspace_member(pkg).filter(|p| p.join(marker).exists()) {
         return p;
     }
 

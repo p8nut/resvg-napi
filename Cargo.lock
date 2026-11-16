@@ -575,7 +575,6 @@ dependencies = [
  "quote",
  "resvg",
  "svgtypes",
- "syn",
 ]
 
 [[package]]

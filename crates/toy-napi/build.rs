@@ -8,7 +8,7 @@ use napi_gen::class::{Classes, Holding, Source};
 use napi_gen::emit::*;
 use napi_gen::sources::{ModTree, inline_reexported_enums, parse_crate};
 use napi_gen::vocab::{Vocab, payload_enums};
-use napi_gen::{Config, Converter, Iterated, Provider, View};
+use napi_gen::{Config, Converter, Crate, Iterated, Provider, View};
 use quote::quote;
 
 /// The toy has no font tag and no feature gates: those answers are empty.
@@ -49,7 +49,13 @@ const GEN: Config = Config {
     not_data: &[],
     features: &[],
     // The crate root's items under `toy`, the `alt` module's under `alt`.
-    namespaces: &[("toy", "toy"), ("toy::alt", "alt")],
+    crates: &[Crate {
+        pkgs: &["toy"],
+        root: "toy",
+        ns: "toy",
+        modules: &[("alt", "alt")],
+        ..Crate::EMPTY
+    }],
     // One class of each holding: `Counter` shared, `Tally` copied on
     // write, `Vec2` and `Color` by value, `Canvas` owned. `Vec2` and
     // `alt::Color` are plain data, and the two `Color`s share a JS name.
@@ -97,6 +103,7 @@ const GEN: Config = Config {
     // A `Scene`'s nodes are borrowed from it: `Layer` and `Dot` become
     // classes holding a projection, and `Item` a union of the two.
     projections: &[("toy", "Item"), ("toy", "Layer"), ("toy", "Dot")],
+    ..Config::EMPTY
 };
 
 fn main() {
@@ -295,7 +302,7 @@ fn main() {
                     "{name}: only Filter borrows lists"
                 );
                 assert_eq!(skipped, want, "{name}: what is left out");
-                assert_eq!(obj.bounded, bounded, "{name}: style_index is clamped");
+                assert_eq!(obj.bounded.len(), bounded, "{name}: style_index is clamped");
                 options.extend(obj.code);
             }
             None => assert_eq!(*name, "Counter", "{name} has Default"),
@@ -389,7 +396,7 @@ fn main() {
         "what becomes a constant"
     );
     for (root, code) in consts {
-        match root {
+        match root.as_str() {
             "toy" => toy_part.extend(code),
             _ => alt_part.extend(code),
         }

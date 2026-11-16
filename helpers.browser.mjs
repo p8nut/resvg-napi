@@ -161,7 +161,7 @@ export function nodeExtent({ kind, value }) {
 
 /** `usvg::Node::abs_layer_bounding_box`: the box `resvg::render_node` offsets a node by. */
 function layerBox({ kind, value }) {
-  return box(kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox().toNonZeroRect());
+  return box(kind === 'group' ? value.absLayerBoundingBox() : value.absBoundingBox()?.toNonZeroRect());
 }
 
 /**

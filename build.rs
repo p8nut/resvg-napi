@@ -486,7 +486,7 @@ fn main() {
         }
         let scoped = t.rsplit_once("::").and_then(|(m, _)| by_module.get(m));
         let (source, root) = if let Some(files) = scoped {
-            (files, quote!(usvg))
+            (files, primary.root.clone())
         } else if let Some(src) = defines(&t) {
             (&src.files, src.root.clone())
         } else {

@@ -524,7 +524,7 @@ pub fn peel_type(t: &str) -> &str {
             .or_else(|| t.strip_prefix('[').and_then(|r| r.strip_suffix(']')))
             .or_else(|| {
                 let r = t.strip_prefix("implIterator<Item=")?;
-                let r = r.strip_suffix("+'_").unwrap_or(r);
+                let r = r.trim_suffix("+'_");
                 r.strip_suffix('>')
             });
         match next {

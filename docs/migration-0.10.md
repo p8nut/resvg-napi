@@ -300,7 +300,7 @@ Step 11 added `resvg-napi/helpers` (CONTRIBUTING, "The helpers";
 
 Step 12 moved the demo to the helpers and the conformance harness to the raw
 API (CONTRIBUTING, "The helpers"; `demo/README.md`). Nothing in `demo/` or
-`scripts/conformance.mjs` names `Resvg`, `FontDatabase` or `RenderOptions`
+`scripts/conformance.mts` names `Resvg`, `FontDatabase` or `RenderOptions`
 any more. What it found:
 
 - `demo/render.mjs` imports the package by its own name (`resvg-napi`,
@@ -328,7 +328,7 @@ any more. What it found:
   (`demo/font-names.mjs`; it agrees with `FontFace.families[0]` on all 369
   fonts of a Fedora system, the demo's and the corpus's). A generic mapping
   of the pair, or of its name alone, would let step 13 or later drop it.
-- `scripts/conformance.mjs` makes upstream's calls: `usvg.Tree.fromData`
+- `scripts/conformance.mts` makes upstream's calls: `usvg.Tree.fromData`
   with `fontdb` and `resourcesDir` and usvg's default resolvers (no guard, as
   upstream; the corpus's only outward hrefs are `../../../resources/*`, which
   the old `resourcesRoot` fence allowed anyway), `toIntSize().scaleToWidth(300)`,

@@ -13,12 +13,28 @@
 // proof before merging rather than after.
 import { readFileSync } from 'node:fs';
 
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+/** One build: a target, the runner that builds it, and what it uploads. */
+export interface Entry {
+  target: string
+  host: string
+  build_args: string
+  artifact_path: string
+}
+
+/** One test run: a built target, on a runner, under a Node version. */
+export interface Test {
+  target: string
+  host: string
+  node: string | number
+}
+
+const pkg: { name: string; napi: { binaryName?: string; targets: string[] } } =
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 /** The file stem napi gives the binaries and the WASI shims. */
 const binaryName = pkg.napi?.binaryName ?? pkg.name;
 
 /** Host, cross flag and upload glob for one triple. */
-export function entry(target) {
+export function entry(target: string): Entry {
   const host = target.includes('-darwin') ? 'macos-latest'
     : target.includes('-windows') ? 'windows-latest'
     : 'ubuntu-latest';
@@ -38,7 +54,7 @@ export function entry(target) {
 /** What a pull request builds: the two that can fail in a way nothing else catches. */
 const SLIM = ['x86_64-unknown-linux-gnu', 'wasm32-wasip1-threads'];
 
-const TESTS = [
+const TESTS: Test[] = [
   // The engines floor exactly, not the latest 20.x: napi9 needs 20.3.
   { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: '20.3.0' },
   { target: 'x86_64-unknown-linux-gnu', host: 'ubuntu-latest', node: 22 },
@@ -48,23 +64,23 @@ const TESTS = [
 ];
 
 /** A pull request stays slim unless it asks not to. Everything else is full. */
-export function isFull(event, labels) {
+export function isFull(event: string, labels: string[]): boolean {
   if (event !== 'pull_request') return true;
   return labels.includes('full-matrix');
 }
 
-export function matrix(full, targets = pkg.napi.targets) {
+export function matrix(full: boolean, targets: string[] = pkg.napi.targets): Entry[] {
   return (full ? targets : SLIM).map(entry);
 }
 
 /** Only targets that were built can be tested. */
-export function tests(full, targets = pkg.napi.targets) {
+export function tests(full: boolean, targets: string[] = pkg.napi.targets): Test[] {
   const built = new Set(matrix(full, targets).map((t) => t.target));
   return TESTS.filter((t) => built.has(t.target));
 }
 
 /** What the script writes to GITHUB_OUTPUT: one `key=value` per line. */
-export function emit(full, targets = pkg.napi.targets) {
+export function emit(full: boolean, targets: string[] = pkg.napi.targets): string {
   return [
     `full=${full}`,
     `targets=${JSON.stringify(matrix(full, targets))}`,

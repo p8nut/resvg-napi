@@ -1,6 +1,7 @@
-// Compile-time check that helpers.d.mts and helpers.browser.d.mts describe
-// helpers.mjs and helpers.browser.mjs. Hand-written, so they can drift; this
-// uses every member the way test/helpers/ does at run time.
+// Compile-time check of the helpers' types: helpers.mts and
+// helpers.browser.mts, and through `resvg-napi/helpers` the helpers.d.mts tsc
+// emits from them. This uses every member the way test/helpers/ does at run
+// time.
 import helpers, {
   MAX_PIXELS, createHelpers, fitTextWidths, measureText, nodeExtent, parse, parseAsync,
   renderNodePng, renderNodePngAsync, renderPng, renderPngAsync, renderRaw, renderRawAsync,

@@ -8845,6 +8845,13 @@ fn fontdb_source_to_js(
         }),
     }
 }
+#[doc = " The constants of `usvg`, apart: they keep their Rust names."]
+mod usvg_consts {
+    use super::*;
+    #[doc = " The default nesting limit when parsing."]
+    #[napi(namespace = "usvg")]
+    pub const DEFAULT_MAX_DEPTH: u32 = usvg::DEFAULT_MAX_DEPTH;
+}
 #[napi(namespace = "usvg")]
 impl UsvgFilter {
     #[doc = " Drops this instance's value now, not at garbage collection: every later"]

@@ -8,9 +8,24 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 pub mod alt;
+mod limits;
 
+/// A constant of a private module, re-exported: `toy::MAX_LAYERS` to a
+/// caller, `toy.MAX_LAYERS` in JS. `limits::HIDDEN` is not exported.
+pub use limits::MAX_LAYERS;
 /// Another crate's enum, re-exported: `toy::Shade` to a caller.
 pub use toy_dep::Shade;
+
+/// The library's name: a string constant, `toy.NAME`. `alt.NAME` is another.
+pub const NAME: &str = "toy";
+/// A number constant: `toy.SCALE`.
+pub const SCALE: f64 = 0.5;
+/// A boolean constant: `toy.STRICT`.
+pub const STRICT: bool = true;
+/// A `u64` may not fit a JS number: left out.
+pub const BIG: u64 = 1 << 60;
+/// A struct is no JS value of its own: left out.
+pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 };
 
 /// Which way a counter counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

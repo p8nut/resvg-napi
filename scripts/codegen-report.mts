@@ -13,9 +13,12 @@
 import { readFileSync, writeFileSync, utimesSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-/** The Cargo package name, as cargo prints it in `warning: <name>@<version>:`. */
+/**
+ * The Cargo package name, as cargo prints it in `warning: <name>@<version>:`.
+ * The root Cargo.toml always has a `[package]` with a `name`.
+ */
 const crateName = readFileSync(new URL('../Cargo.toml', import.meta.url), 'utf8')
-  .match(/^\[package\][^[]*?^name\s*=\s*"([^"]+)"/ms)[1];
+  .match(/^\[package\][^[]*?^name\s*=\s*"([^"]+)"/ms)![1];
 
 const warning = `warning: ${crateName}@`;
 
@@ -28,7 +31,7 @@ const SNAPSHOT = 'codegen-report.txt';
  * registry -- different on every machine, and the crate directory is the only
  * part worth pinning: it carries the version, so a bump shows up as a diff.
  */
-export function normalise(stderr) {
+export function normalise(stderr: string): string {
   return stderr
     .split('\n')
     // Belt as well as braces: the spawn forces colour off, but a line that
@@ -42,7 +45,8 @@ export function normalise(stderr) {
     .concat('\n');
 }
 
-function generate() {
+/** cargo's stderr from a build that reran build.rs. */
+function generate(): string {
   // The report only prints when build.rs reruns, and it only reruns when it
   // looks newer than its output.
   const now = new Date();

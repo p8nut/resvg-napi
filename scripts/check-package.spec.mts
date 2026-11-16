@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assess, exportTargets, unexported, unconstrained, anonymous, mismatched, familyPins, wasiDeps } from './check-package.mjs';
+import { assess, exportTargets, unexported, unconstrained, anonymous, mismatched, familyPins, wasiDeps } from './check-package.mts';
 
 test('assess: the root tarball keeps its files[] promises', () => {
   assert.deepEqual(assess({ name: 'a', promised: ['x.js'], shipped: ['x.js', 'package.json'] }), []);

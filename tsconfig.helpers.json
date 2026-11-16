@@ -1,0 +1,17 @@
+{
+  // The helpers' TypeScript sources, emitted beside themselves: the
+  // helpers*.mjs and helpers*.d.mts that package.json exports and ships.
+  // `npm run build:helpers`; the output is committed, and CI's drift check
+  // fails when it differs from the sources.
+  "compilerOptions": {
+    "strict": true,
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "declaration": true,
+    "newLine": "lf",
+    "skipLibCheck": false
+  },
+  "files": ["helpers.browser.mts", "helpers.mts"]
+}

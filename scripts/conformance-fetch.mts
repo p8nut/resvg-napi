@@ -9,14 +9,14 @@ const DEST = 'conformance/resvg';
 // `registry+https://...crates.io-index#resvg@0.49.0`
 const tag = `v${execFileSync('cargo', ['pkgid', 'resvg'], { encoding: 'utf8' }).trim().split('@').pop()}`;
 
-const git = (...args) => spawnSync('git', args, { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8' });
+const git = (...args: string[]) => spawnSync('git', args, { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8' });
 
 const have = existsSync(DEST) ? git('-C', DEST, 'describe', '--tags', '--exact-match', 'HEAD').stdout?.trim() : null;
 if (have === tag) {
   console.log(`corpus at ${tag} already in ${DEST}`);
 } else {
   if (existsSync(DEST)) rmSync(DEST, { recursive: true, force: true });
-  const run = (...args) => {
+  const run = (...args: string[]) => {
     const r = spawnSync('git', args, { stdio: 'inherit' });
     if (r.status !== 0) process.exit(r.status ?? 1);
   };

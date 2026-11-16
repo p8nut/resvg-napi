@@ -2132,6 +2132,29 @@ impl From<&toy::alt::Color> for AltColorObject {
         }
     }
 }
+#[doc = " The constants of `toy`, apart: they keep their Rust names."]
+mod toy_consts {
+    use super::*;
+    #[doc = " The library's name: a string constant, `toy.NAME`. `alt.NAME` is another."]
+    #[napi(namespace = "toy")]
+    pub const NAME: &str = toy::NAME;
+    #[doc = " A number constant: `toy.SCALE`."]
+    #[napi(namespace = "toy")]
+    pub const SCALE: f64 = toy::SCALE;
+    #[doc = " A boolean constant: `toy.STRICT`."]
+    #[napi(namespace = "toy")]
+    pub const STRICT: bool = toy::STRICT;
+    #[doc = " How many layers a scene may hold: `toy::MAX_LAYERS`."]
+    #[napi(namespace = "toy")]
+    pub const MAX_LAYERS: u32 = toy::MAX_LAYERS;
+}
+#[doc = " The constants of `alt`, apart: they keep their Rust names."]
+mod alt_consts {
+    use super::*;
+    #[doc = " The module's name: `alt.NAME`, beside `toy.NAME`."]
+    #[napi(namespace = "alt")]
+    pub const NAME: &str = toy::alt::NAME;
+}
 #[doc = " A second handle on the same `Tally`: shared until one of them writes."]
 #[napi(js_name = "share", namespace = "toy")]
 pub fn toy_share(t: &ToyTally) -> Result<ToyTally, String> {

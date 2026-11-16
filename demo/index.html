@@ -166,7 +166,7 @@ writeFileSync('out.png', png)`;
   $('scale').oninput = () => { showCode(); render(); };
 
   try {
-    if (!globalThis.crossOriginIsolated) throw new Error('This page needs cross-origin isolation; reload it, or serve it with demo/serve.mjs.');
+    if (!globalThis.crossOriginIsolated) throw new Error('This page needs cross-origin isolation; reload it, or serve it with demo/serve.mts.');
     // The wasm binding, and `resvg-napi/helpers` built on it: helpers.js is
     // helpers.browser.mjs, what a bundler's `browser` condition resolves to.
     const mod = await import('./resvg.js');

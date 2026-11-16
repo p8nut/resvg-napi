@@ -7,7 +7,7 @@
 //
 // The wasm is built for wasm32-wasip1-threads, so it asks for a shared
 // WebAssembly.Memory -- SharedArrayBuffer, which needs cross-origin isolation,
-// which needs COOP/COEP response headers. demo/serve.mjs sends them; GitHub
+// which needs COOP/COEP response headers. demo/serve.mts sends them; GitHub
 // Pages cannot send any header at all. This service worker adds them to its own
 // responses instead, and reloads the page once on a first visit so the document
 // is served through it.

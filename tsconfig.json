@@ -1,4 +1,11 @@
 {
+  // Everything typed, strict: the declarations (index.d.ts, the emitted
+  // helpers*.d.mts), the tests' .mts, and the scripts and the demo. Those are
+  // .mts that Node runs as they are, by stripping the types: erasable syntax
+  // only, `.mts` in import specifiers, `import type` for types. The few that
+  // the oldest Node of the test matrix runs (demo/render.mjs and what it
+  // imports, scripts/api-diff.mjs, which a test imports) stay .mjs, typed in
+  // JSDoc and checked as strictly (checkJs).
   "compilerOptions": {
     "strict": true,
     "target": "es2022",
@@ -8,6 +15,11 @@
       "node"
     ],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowJs": true,
+    "checkJs": true,
     "skipLibCheck": false
   },
   "include": [
@@ -15,6 +27,11 @@
     "helpers.d.mts",
     "index.d.ts",
     "test/helpers-types.mts",
-    "test/types.mts"
+    "test/types.mts",
+    "scripts/*.mts",
+    "scripts/api-diff.mjs",
+    "demo/*.mts",
+    "demo/render.mjs",
+    "demo/svg-filters.mjs"
   ]
 }

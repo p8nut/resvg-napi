@@ -364,6 +364,29 @@ fn main() {
     let (functions, skipped) = classes.functions("toy", &lib, &vocab);
     assert!(skipped.is_empty(), "report and paint map");
     toy_part.extend(functions);
+    // The constants the crate exports, in the namespace of the module that
+    // exports them: `MAX_LAYERS` re-exported from a private module, `NAME`
+    // in both namespaces, and two with no JS value.
+    let (consts, report) = constants("toy", &tree.consts, &vocab);
+    assert_eq!(
+        report,
+        [
+            "toy::NAME is a constant: toy.NAME",
+            "toy::SCALE is a constant: toy.SCALE",
+            "toy::STRICT is a constant: toy.STRICT",
+            "toy::BIG constant not exposed: u64 (no JS value)",
+            "toy::ORIGIN constant not exposed: Point (no JS value)",
+            "toy::alt::NAME is a constant: alt.NAME",
+            "toy::MAX_LAYERS is a constant: toy.MAX_LAYERS",
+        ],
+        "what becomes a constant"
+    );
+    for (root, code) in consts {
+        match root {
+            "toy" => toy_part.extend(code),
+            _ => alt_part.extend(code),
+        }
+    }
     for (s, code) in classes.error_codes() {
         assert_eq!(classes.sources[s].root, "toy", "the errors are toy's");
         toy_part.extend(code);

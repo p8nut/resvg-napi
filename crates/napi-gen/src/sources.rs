@@ -359,6 +359,10 @@ pub struct ModTree {
     /// (file, type name) -> the name an export gives it, when it differs:
     /// `pub use other_crate::Width as Stretch`.
     pub renamed: BTreeMap<(PathBuf, String), String>,
+    /// Every `pub const` an export reaches, as a caller of the crate writes
+    /// it: (the namespace it is reachable at, `""` the root; its public name;
+    /// the item, under that name). Root wins, as for types.
+    pub consts: Vec<(String, String, syn::ItemConst)>,
 }
 
 impl ModTree {
@@ -406,6 +410,7 @@ impl ModTree {
         #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
         enum Target {
             Type(Vec<String>, String),
+            Const(Vec<String>, String),
             Module(Vec<String>),
         }
         fn exports(
@@ -508,6 +513,12 @@ impl ModTree {
                             }
                         }
                     }
+                    Item::Const(c) if is_pub(&c.vis) => {
+                        out.push((
+                            c.ident.to_string(),
+                            Target::Const(m.to_vec(), c.ident.to_string()),
+                        ));
+                    }
                     _ => {
                         if let Some(id) = item_ident(item) {
                             out.push((id.to_string(), Target::Type(m.to_vec(), id.to_string())));
@@ -522,6 +533,8 @@ impl ModTree {
         let mut paths: BTreeMap<String, String> = BTreeMap::new();
         let mut reached: BTreeMap<(Vec<String>, String), String> = BTreeMap::new();
         let mut renames: BTreeMap<(Vec<String>, String), String> = BTreeMap::new();
+        // (module, const) -> (namespace, public name).
+        let mut const_reached: BTreeMap<(Vec<String>, String), (String, String)> = BTreeMap::new();
         let mut todo = vec![(String::new(), Vec::<String>::new())];
         let mut seen = BTreeSet::new();
         while let Some((ns, module)) = todo.pop() {
@@ -545,6 +558,15 @@ impl ModTree {
                             reached.insert(key, ns.clone());
                         }
                     }
+                    Target::Const(def, c) => {
+                        let key = (def, c);
+                        if const_reached
+                            .get(&key)
+                            .is_none_or(|(old, _)| old.len() > ns.len())
+                        {
+                            const_reached.insert(key, (ns.clone(), name));
+                        }
+                    }
                     Target::Module(m) => {
                         let sub = if ns.is_empty() {
                             name
@@ -560,11 +582,20 @@ impl ModTree {
         let mut file_ns = BTreeMap::new();
         let mut private = BTreeSet::new();
         let mut renamed = BTreeMap::new();
+        let mut consts = Vec::new();
         for (module, file) in &modules {
             let Some(f) = files.get(file.as_path()) else {
                 continue;
             };
             for item in &f.items {
+                if let Item::Const(c) = item
+                    && let Some((ns, name)) =
+                        const_reached.get(&(module.clone(), c.ident.to_string()))
+                {
+                    let mut c = c.clone();
+                    c.ident = Ident::new(name, c.ident.span());
+                    consts.push((ns.clone(), name.clone(), c));
+                }
                 let Some(name) = item_ident(item).map(ToString::to_string) else {
                     continue;
                 };
@@ -591,6 +622,7 @@ impl ModTree {
             file_ns,
             private,
             renamed,
+            consts,
         }
     }
 

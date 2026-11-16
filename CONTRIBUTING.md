@@ -234,7 +234,14 @@ The demo parses only through the helpers.
 
 `resvg-napi/helpers` is JS on the generated API, nothing else
 ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md), "Helpers sit beside it,
-in JS"). Two files and their hand-written declarations:
+in JS"). It is written in TypeScript, strict: two sources, `helpers.browser.mts`
+and `helpers.mts`, from which `npm run build:helpers` (`tsc -p
+tsconfig.helpers.json`) emits the `.mjs` and `.d.mts` the package ships, beside
+them. Edit the `.mts` and run it: the emitted files are committed, so that no
+install compiles anything (TypeScript 7 does not run on Node 20.3, which
+`engines` allows), and CI's drift check fails when they differ from the
+sources. The declarations are the sources' own, with their doc comments;
+`npm run typecheck` checks them against `test/helpers-types.mts`.
 
 - `helpers.browser.mjs` (`helpers.browser.d.mts`) loads no binding.
   `createHelpers(binding)` builds the set on the binding it is given, one set
@@ -356,6 +363,19 @@ Q34):
   `Array<{ type: 'moveTo', value: PointObject } | ...>`.
 - Panics are contained (`napi_support::contained`), and `unsafe fn`s are left
   out.
+
+**Constants** need no allowlist: every public `const` a wrapped crate
+exports (`UPSTREAM` in `build/config.rs`, not `CLASS_CRATES`) is a value
+of the namespace of the module that exports it, under its Rust name
+(`usvg.DEFAULT_MAX_DEPTH`, ADR 0002, Q21), when its type is a number that
+fits a JS number, a `bool` or a string (`napi_gen::emit::constants`). Any
+other is left out, and the report says so. `ModTree::consts` finds them
+through re-exports, as it finds types. napi registers a `#[napi] const`
+under its Rust identifier, whatever its `js_name`, so the namespace prefix
+cannot apply: each namespace's constants sit in a module of their own
+(`usvg_consts`). The toy has one of each (`toy.NAME` and `alt.NAME`,
+`MAX_LAYERS` re-exported from a private module, a `u64` and a struct left
+out).
 
 Two namespaces may each have a class of one name (`toy.Color` and
 `alt.Color`, `tiny_skia.Color` and `svgtypes.Color`). napi builds an instance
@@ -569,7 +589,8 @@ npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
 npm run conformance   # resvg's corpus against its references (conformance:fetch first)
-npm run typecheck     # tsc --strict over the .d.ts / .d.mts files and test/*.mts
+npm run typecheck     # tsc --strict over the .d.ts / .d.mts, every .mts, and the JSDoc of the .mjs below
+npm run build:helpers # emits helpers*.mjs and helpers*.d.mts from the .mts (commit them)
 npm run demo          # builds the wasm bundle and serves demo/ on :8787
 ```
 
@@ -588,12 +609,23 @@ there is none. The env-var prefix is POSIX-shell syntax; on Windows use
 ```
 cargo fmt --all --check
 cargo clippy --workspace --release --all-targets -- -D warnings
-node --test "scripts/*.spec.mjs" # the scripts' own tests, offline
+node --test "scripts/*.spec.mts" # the scripts' own tests, offline
 npm run check:package            # what publish would ship: root tarball, manifests
 ```
 
-The scripts' tests are `*.spec.mjs`, not `*.test.mjs`: plain `node --test`,
+The scripts' tests are `*.spec.mts`, not `*.test.mts`: plain `node --test`,
 which `npm test` runs, would pick the latter up on every test-matrix entry.
+
+The scripts and the demo's Node side are TypeScript, strict, and nothing
+compiles them: Node runs a `.mts` as it is, stripping the types (CI's Node 22
+does). So they use erasable syntax only (no `enum`, no `namespace`, no
+parameter properties), import each other with the `.mts` extension and types
+with `import type`, which `tsconfig.json` enforces (`erasableSyntaxOnly`,
+`verbatimModuleSyntax`). Three files stay `.mjs`, because the test matrix
+runs them on Node 20.3, which strips no types: `demo/render.mjs`
+(`test:examples`), `demo/svg-filters.mjs` (it imports it, and so do two
+tests) and `scripts/api-diff.mjs` (a test imports it). They are typed in
+JSDoc instead, and `tsconfig.json` checks them as strictly (`checkJs`).
 
 The compiler is the one `rust-toolchain.toml` pins, locally and in CI: rustup
 installs it on first use. A new stable lands through that file, in its own pull
@@ -611,7 +643,7 @@ It does not build all thirteen targets on a pull request. It builds
 `wasm32-wasip1-threads`, which is a different code path. The other eleven build
 on the merge, on a `v*` tag, on a manual dispatch, or on a pull request labelled
 `full-matrix`. Adding a target means the triple in `package.json` under
-`napi.targets`, then `npm run create-npm-dirs`; `scripts/ci-targets.mjs` reads
+`napi.targets`, then `npm run create-npm-dirs`; `scripts/ci-targets.mts` reads
 that list and derives the host and cross flag from the triple.
 
 The codegen keeps a report of everything it derived and everything it left
@@ -714,7 +746,7 @@ git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z
 ```
 
 The repository stays at version 0.0.0. On a `v*` tag, CI runs
-`scripts/set-version.mjs` with the tag's version before it builds, packs and
+`scripts/set-version.mts` with the tag's version before it builds, packs and
 publishes. That one script writes the version into the seven places it
 lives, and every one of them has failed a release at least once:
 - `package.json`, its `optionalDependencies` and the wasm `peerDependencies`

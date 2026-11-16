@@ -16,6 +16,10 @@ numbered item matches the decision log (Q21–Q35).
   and `tiny_skia.Color` are different types, and the namespaces keep them
   apart.
 - Methods are camelCase (`node_by_id` becomes `nodeById`).
+- Constants keep their Rust name, `SCREAMING_CASE` included:
+  `usvg::DEFAULT_MAX_DEPTH` is `usvg.DEFAULT_MAX_DEPTH`. Every public `const`
+  a wrapped crate exports, of a number, boolean or string type, is mirrored
+  without an allowlist; any other type is left out and reported.
 - napi keys classes by Rust identifier, so the binding prefixes identifiers
   with the crate (`UsvgColor`) and sets `js_name` and `namespace`. The prefix
   is invisible from JS.

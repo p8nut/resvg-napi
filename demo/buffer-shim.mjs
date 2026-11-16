@@ -11,10 +11,10 @@ class BufferPolyfill extends Uint8Array {
     const isBuf = src instanceof ArrayBuffer
       || (typeof SharedArrayBuffer !== 'undefined' && src instanceof SharedArrayBuffer);
     return isBuf
-      ? new BufferPolyfill(src, offset, length)
+      ? new BufferPolyfill(/** @type {ArrayBuffer} */ (src), offset, length)
       : new BufferPolyfill(Uint8Array.from(src));
   }
   static alloc(size) { return new BufferPolyfill(size); }
   static isBuffer(value) { return value instanceof BufferPolyfill; }
 }
-globalThis.Buffer ??= BufferPolyfill;
+globalThis.Buffer ??= /** @type {any} */ (BufferPolyfill);

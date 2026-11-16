@@ -104,7 +104,7 @@ function licenceFiles(dir) {
  * Target-specific edges are kept whatever their target: thirteen platforms are
  * published from this graph, so the union is what ships.
  *
- * @param {{nodes: Array<{id: string, deps: Array<{pkg: string, dep_kinds: Array<{kind: string|null}>}>}>, root?: string}} resolve
+ * @param {{nodes: Array<{id: string, deps: Array<{pkg: string, dep_kinds: Array<{kind: string|null, target?: string|null}>}>}>, root?: string}} resolve
  */
 export function linkedIds(resolve, rootId) {
   const nodes = new Map(resolve.nodes.map((n) => [n.id, n]));

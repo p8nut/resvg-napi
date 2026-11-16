@@ -29,7 +29,7 @@ const round = (n) => Math.round(n * 100) / 100;
  * @param fontSize, family  defaults: 12, `options.fontFamily`
  * @param options extra `usvg.Options` (e.g. `languages`, `fontFamily`)
  */
-export function measureText(binding, db, text, { fontSize = 12, family } = {}, options = {}) {
+export function measureText(binding, db, text, { fontSize = 12, family } = /** @type {any} */ ({}), options = {}) {
   try {
     return createHelpers(binding).measureText(text, { ...options, fontSize, family, fonts: db });
   } catch {
@@ -47,7 +47,7 @@ export function measureText(binding, db, text, { fontSize = 12, family } = {}, o
  * @param text  value to encode
  * @param dark  colour of the modules (default black)
  * @param light colour behind them; `#00000000` for transparent (default none)
- * @param level error correction: L, M, Q or H (default M)
+ * @param {'L' | 'M' | 'Q' | 'H'} [level] error correction (default M)
  */
 export function qrSvg(text, dark = '#000000', light = 'none', level = 'M') {
   const value = String(text ?? '');

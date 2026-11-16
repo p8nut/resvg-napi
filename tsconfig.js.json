@@ -1,0 +1,18 @@
+{
+  // The plain JS, checked against its JSDoc and the libraries' types. Not
+  // strict: untyped parameters are `any`, as in JS.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["helpers.browser.mjs", "helpers.mjs", "scripts/*.mjs", "demo/*.mjs"],
+  // esbuild output (demo/build.mjs), not ours.
+  "exclude": ["demo/wasi-worker-browser.mjs"]
+}

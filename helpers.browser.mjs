@@ -16,9 +16,7 @@ const SVGZ = 'SVGZ is not supported: inflate it first, e.g. zlib.gunzipSync(data
 
 /** An `Error` carrying a `code`, as the binding's own errors do. */
 function coded(message, code) {
-  const e = new Error(message);
-  e.code = code;
-  return e;
+  return Object.assign(new Error(message), { code });
 }
 
 /** usvg refuses SVGZ with its own wording; #167 asked for advice instead. */
@@ -274,7 +272,7 @@ function ensureIds(svg) {
  *                 plus the resolver's `images` and `resourcesRoot`
  * @returns (svg) => usvg.Tree
  */
-export function guardedParse({ usvg, guard }, { images, resourcesRoot, ...options } = {}) {
+export function guardedParse({ usvg, guard }, { images, resourcesRoot, ...options } = /** @type {any} */ ({})) {
   return (svg) => usvg.Tree.fromStr(svg, {
     ...options,
     imageHrefResolver: new guard.ImageHrefResolver({ images, resourcesRoot }),
@@ -290,7 +288,7 @@ export function guardedParse({ usvg, guard }, { images, resourcesRoot, ...option
  *                 usvg.Tree.fromStr resolves <image href> from any local path:
  *                 do not pass untrusted SVG through it without a
  *                 `guard.ImageHrefResolver`.
- * @returns { svg, adjustments, problems }
+ * @returns `{ svg, adjustments, problems }`
  */
 export function fitTextWidths(svg, render) {
   const problems = [];
@@ -649,7 +647,7 @@ function build(binding) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-  function measureText(text, { fontSize = 12, family, ...options } = {}) {
+  function measureText(text, { fontSize = 12, family, ...options } = /** @type {any} */ ({})) {
     const fam = family ?? options.fontFamily ?? 'sans-serif';
     const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
       + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`

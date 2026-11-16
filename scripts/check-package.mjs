@@ -84,7 +84,7 @@ export function unexported({ name, exports, shipped }) {
  * published manifest is the committed one.
  *
  * @param {Record<string, string>} optional  optionalDependencies
- * @param {Record<string, {os?: string[], cpu?: string[]}>} platforms  by package name
+ * @param {Record<string, {name?: string, os?: string[], cpu?: string[]}>} platforms  by package name
  */
 export function unconstrained(optional, platforms) {
   return Object.keys(optional)

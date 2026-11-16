@@ -42,6 +42,12 @@ export declare namespace tiny_skia {
   export interface Color {
     [Symbol.dispose](): void
   }
+  export interface ColorU8 {
+    [Symbol.dispose](): void
+  }
+  export interface IntRect {
+    [Symbol.dispose](): void
+  }
   export interface IntSize {
     [Symbol.dispose](): void
   }
@@ -52,6 +58,12 @@ export declare namespace tiny_skia {
     [Symbol.dispose](): void
   }
   export interface Point {
+    [Symbol.dispose](): void
+  }
+  export interface PremultipliedColor {
+    [Symbol.dispose](): void
+  }
+  export interface PremultipliedColorU8 {
     [Symbol.dispose](): void
   }
   export interface Rect {

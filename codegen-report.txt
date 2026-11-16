@@ -31,32 +31,33 @@ svgtypes::Color is a class: Value, plain data, a JS name another namespace has
 tiny_skia::Color is a class: Value, a JS name another namespace has
 tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)
 tiny_skia::Color member not in the class: from_rgba_unchecked (unsafe)
-tiny_skia::Color member not in the class: premultiply (returns PremultipliedColor)
-tiny_skia::Color member not in the class: to_color_u8 (returns ColorU8)
+tiny_skia::ColorU8 is a class: Value
+tiny_skia::ColorU8 reached by tiny_skia::Color::to_color_u8: a class, held by value
+tiny_skia::IntRect is a class: Value
+tiny_skia::IntRect reached by tiny_skia::Pixmap::clone_rect: a class, held by value
 tiny_skia::IntSize is a class: Value
-tiny_skia::IntSize member not in the class: to_int_rect (returns IntRect)
 tiny_skia::NonZeroRect is a class: Value
-tiny_skia::NonZeroRect member not in the class: to_int_rect (returns IntRect)
 tiny_skia::Pixmap is a class: Owned
 tiny_skia::Pixmap member not in the class: apply_mask (arg: &Mask)
 tiny_skia::Pixmap member not in the class: as_mut (returns PixmapMut<'_>)
 tiny_skia::Pixmap member not in the class: as_ref (returns PixmapRef<'_>)
-tiny_skia::Pixmap member not in the class: clone_rect (arg: IntRect)
 tiny_skia::Pixmap member not in the class: data_mut (returns &mut[u8])
 tiny_skia::Pixmap member not in the class: draw_pixmap (arg: PixmapRef)
 tiny_skia::Pixmap member not in the class: fill_path (arg: &Path)
 tiny_skia::Pixmap member not in the class: fill_rect (arg: &Paint)
-tiny_skia::Pixmap member not in the class: pixel (returns PremultipliedColorU8)
 tiny_skia::Pixmap member not in the class: pixels (returns &[PremultipliedColorU8])
 tiny_skia::Pixmap member not in the class: pixels_mut (returns &mut[PremultipliedColorU8])
 tiny_skia::Pixmap member not in the class: stroke_path (arg: &Path)
 tiny_skia::Point is a class: Value, plain data
 tiny_skia::Point member not in the class: from_f32x2 (arg: f32x2)
 tiny_skia::Point member not in the class: to_f32x2 (returns f32x2)
+tiny_skia::PremultipliedColor is a class: Value
+tiny_skia::PremultipliedColor member not in the class: demultiply (returns Color, a class whose JS name another namespace has: only its constructor and factories may)
+tiny_skia::PremultipliedColor reached by tiny_skia::Color::premultiply: a class, held by value
+tiny_skia::PremultipliedColorU8 is a class: Value
+tiny_skia::PremultipliedColorU8 reached by tiny_skia::Pixmap::pixel: a class, held by value
 tiny_skia::Rect is a class: Value
 tiny_skia::Rect member not in the class: from_points (arg: &[Point])
-tiny_skia::Rect member not in the class: round (returns IntRect)
-tiny_skia::Rect member not in the class: round_out (returns IntRect)
 tiny_skia::Size is a class: Value
 tiny_skia::Transform is a class: Value, plain data
 tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])

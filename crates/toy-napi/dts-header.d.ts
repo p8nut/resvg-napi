@@ -11,6 +11,21 @@ export declare namespace alt {
   }
 }
 
+export declare namespace dep {
+  export interface Area {
+    [Symbol.dispose](): void
+  }
+  export interface Cell {
+    [Symbol.dispose](): void
+  }
+  export interface Grid {
+    [Symbol.dispose](): void
+  }
+  export interface Mark {
+    [Symbol.dispose](): void
+  }
+}
+
 export declare namespace toy {
   export interface Album {
     [Symbol.dispose](): void

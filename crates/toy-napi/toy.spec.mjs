@@ -55,7 +55,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   // Nothing at the root but the generic prelude: one constructor per class
   // name, whatever the namespace, and every class is in its namespace.
   assert.deepEqual(Object.keys(toy).filter((k) => !k.startsWith('__')).sort(),
-    ['alt', 'setLogLevel', 'takeLogs', 'toy']);
+    ['alt', 'dep', 'setLogLevel', 'takeLogs', 'toy']);
   assert.equal(toy.Counter, undefined);
   assert.equal(typeof ns.Counter, 'function');
   assert.equal(ns.Counter.name, 'Counter');
@@ -759,4 +759,38 @@ test('a public constant is a value of its namespace, under its Rust name', () =>
   // No JS value: a u64, a struct.
   assert.ok(!('BIG' in toy.toy));
   assert.ok(!('ORIGIN' in toy.toy));
+});
+
+// `dep.Grid` is the one class of `toy-dep`, a crate read for its listed
+// classes alone. The value types its members take and return are classes
+// too, listed nowhere: `Area` and `Cell`, and `Mark`, which only `Cell`
+// reaches.
+test('the value types a listed class reaches are classes, to a fixpoint', () => {
+  const dep = toy.dep;
+  assert.deepEqual(Object.keys(dep).sort(), ['Area', 'Cell', 'Grid', 'Mark']);
+  const grid = new dep.Grid(3, 2);
+  const bounds = grid.bounds();
+  assert.ok(bounds instanceof dep.Area);
+  assert.deepEqual([bounds.x(), bounds.y(), bounds.width(), bounds.height()], [0, 0, 3, 2]);
+  // Taken by value: the class's value is copied in.
+  const cell = new dep.Cell(7);
+  assert.equal(grid.set(2, 1, cell), true);
+  assert.equal(grid.set(3, 0, cell), false);
+  assert.equal(cell.value(), 7);
+  assert.equal(grid.cell(2, 1).value(), 7);
+  assert.equal(grid.cell(3, 0), null);
+  // An argument of a reached class, and a static of it.
+  const crop = grid.crop(dep.Area.fromXywh(1, 1, 5, 5));
+  assert.deepEqual([crop.width(), crop.height()], [2, 1]);
+  assert.equal(crop.cell(1, 0).value(), 7);
+  assert.equal(dep.Area.fromXywh(0, 0, 0, 1), null);
+  // Reached through a reached class: plain data, so `toObject` too.
+  const mark = crop.cell(1, 0).mark();
+  assert.ok(mark instanceof dep.Mark);
+  assert.equal(mark.on, true);
+  assert.deepEqual(mark.flipped().toObject(), { on: false });
+  // A slice of a value class and a `Copy` type with nothing to call stay out.
+  assert.equal(grid.cells, undefined);
+  assert.equal(grid.stamp, undefined);
+  assert.ok(!('Token' in dep));
 });

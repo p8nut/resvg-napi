@@ -426,6 +426,44 @@ pub struct AltColorObject {
     pub green: u32,
     pub blue: u32,
 }
+#[doc = " A grid of one-byte cells, row by row: a class of a crate read for its"]
+#[doc = " classes alone. What its members take and return, no config lists:"]
+#[doc = " `Area` and `Cell` are classes because `Grid`'s members reach them, and"]
+#[doc = " `Mark` because `Cell`'s do."]
+#[doc = ""]
+#[doc = " A shared `toy_dep::Grid`, copied on the first write while shared."]
+#[napi(js_name = "Grid", namespace = "dep")]
+pub struct DepGrid {
+    inner: napi_support::Slot<std::sync::Arc<toy_dep::Grid>>,
+}
+#[doc = " A rectangle of cells, its fields private: a class with a static and"]
+#[doc = " getters, reached by `Grid::bounds` and `Grid::crop`."]
+#[doc = ""]
+#[doc = " A `toy_dep::Area`, held by value."]
+#[napi(js_name = "Area", namespace = "dep")]
+pub struct DepArea {
+    inner: napi_support::Slot<toy_dep::Area>,
+}
+#[doc = " One cell's byte, reached by `Grid::cell` and `Grid::set`."]
+#[doc = ""]
+#[doc = " A `toy_dep::Cell`, held by value."]
+#[napi(js_name = "Cell", namespace = "dep")]
+pub struct DepCell {
+    inner: napi_support::Slot<toy_dep::Cell>,
+}
+#[doc = " A cell's on/off state: plain data, reached only through `Cell::mark`."]
+#[doc = ""]
+#[doc = " A `toy_dep::Mark`, held by value."]
+#[napi(js_name = "Mark", namespace = "dep")]
+pub struct DepMark {
+    inner: napi_support::Slot<toy_dep::Mark>,
+}
+#[doc = " A `Mark`'s public fields, as a plain object."]
+#[napi(object, js_name = "MarkObject", namespace = "dep")]
+#[derive(Clone)]
+pub struct DepMarkObject {
+    pub on: bool,
+}
 impl From<ToyDirection> for toy::Direction {
     fn from(v: ToyDirection) -> Self {
         match v {
@@ -2237,6 +2275,314 @@ impl From<&toy::alt::Color> for AltColorObject {
         }
     }
 }
+impl DepGrid {
+    fn wrap(inner: std::sync::Arc<toy_dep::Grid>) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __from(inner: toy_dep::Grid) -> Self {
+        Self::wrap(std::sync::Arc::new(inner))
+    }
+    fn __ref(&self) -> Result<&std::sync::Arc<toy_dep::Grid>, String> {
+        self.inner.get("Grid")
+    }
+    fn __mut(&mut self) -> Result<&mut std::sync::Arc<toy_dep::Grid>, String> {
+        self.inner.get_mut("Grid")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<std::sync::Arc<toy_dep::Grid>>, String> {
+        self.inner.lease("Grid")
+    }
+}
+#[napi(namespace = "dep")]
+impl DepGrid {
+    #[doc = " A `width` x `height` grid of empty cells; none when either is zero."]
+    #[napi(constructor)]
+    #[allow(clippy::redundant_closure)]
+    pub fn new(width: u32, height: u32) -> Result<Self, String> {
+        let __v = napi_support::contained("Grid::new", || <toy_dep::Grid>::new(width, height))
+            .map_err(napi_support::coded)?;
+        let __v = __v.ok_or_else(|| {
+            napi_support::thrown(
+                "InvalidArg",
+                "Grid::new returned None: no value for these arguments",
+            )
+        })?;
+        Ok(DepGrid::__from(__v))
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Grid::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Grid::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " The whole grid, as an area."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn bounds(&self) -> Result<DepArea, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Grid::bounds", || __self.bounds())
+            .map_err(napi_support::coded)?;
+        Ok(DepArea::__from(__v))
+    }
+    #[doc = " The cell at `(x, y)`; none outside the grid."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn cell(&self, x: u32, y: u32) -> Result<Option<DepCell>, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Grid::cell", || __self.cell(x, y))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| DepCell::__from(__v)))
+    }
+    #[doc = " Writes the cell at `(x, y)`; false outside the grid."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn set(&mut self, x: u32, y: u32, cell: &DepCell) -> Result<bool, String> {
+        let __cell = *cell.__ref()?;
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
+        let __v = napi_support::contained("Grid::set", || __self.set(x, y, __cell))
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " The cells of `area` as a grid of their own, clipped to this one; none"]
+    #[doc = " when it misses the grid."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn crop(&self, area: &DepArea) -> Result<Option<DepGrid>, String> {
+        let __area = *area.__ref()?;
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Grid::crop", || __self.crop(__area))
+            .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| DepGrid::__from(__v)))
+    }
+    #[doc = " Drops this instance's reference now, not at garbage collection: every"]
+    #[doc = " later call throws `Disposed`. The value lives on while another instance"]
+    #[doc = " holds it."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Grid")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+impl DepArea {
+    fn __from(inner: toy_dep::Area) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy_dep::Area, String> {
+        self.inner.get("Area")
+    }
+    fn __mut(&mut self) -> Result<&mut toy_dep::Area, String> {
+        self.inner.get_mut("Area")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy_dep::Area>, String> {
+        self.inner.lease("Area")
+    }
+}
+#[napi(namespace = "dep")]
+impl DepArea {
+    #[doc = " None when it is empty."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_xywh(x: u32, y: u32, width: u32, height: u32) -> Result<Option<DepArea>, String> {
+        let __v = napi_support::contained("Area::from_xywh", || {
+            <toy_dep::Area>::from_xywh(x, y, width, height)
+        })
+        .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| DepArea::__from(__v)))
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn x(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Area::x", || __self.x()).map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn y(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Area::y", || __self.y()).map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn width(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Area::width", || __self.width())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn height(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Area::height", || __self.height())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Area")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+impl DepCell {
+    fn __from(inner: toy_dep::Cell) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy_dep::Cell, String> {
+        self.inner.get("Cell")
+    }
+    fn __mut(&mut self) -> Result<&mut toy_dep::Cell, String> {
+        self.inner.get_mut("Cell")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy_dep::Cell>, String> {
+        self.inner.lease("Cell")
+    }
+}
+#[napi(namespace = "dep")]
+impl DepCell {
+    #[napi(constructor)]
+    #[allow(clippy::redundant_closure)]
+    pub fn new(value: u32) -> Result<Self, String> {
+        let value = u8::try_from(value).map_err(|_| napi_support::invalid("value", value))?;
+        let __v = napi_support::contained("Cell::new", || <toy_dep::Cell>::new(value))
+            .map_err(napi_support::coded)?;
+        Ok(DepCell::__from(__v))
+    }
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn value(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Cell::value", || __self.value())
+            .map_err(napi_support::coded)?;
+        Ok(u32::from(__v))
+    }
+    #[doc = " Whether the cell is set: reached through `Cell` alone."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn mark(&self) -> Result<DepMark, String> {
+        let __self = self.__ref()?;
+        let __v =
+            napi_support::contained("Cell::mark", || __self.mark()).map_err(napi_support::coded)?;
+        Ok(DepMark::__from(__v))
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Cell")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+impl DepMark {
+    fn __from(inner: toy_dep::Mark) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+    fn __ref(&self) -> Result<&toy_dep::Mark, String> {
+        self.inner.get("Mark")
+    }
+    fn __mut(&mut self) -> Result<&mut toy_dep::Mark, String> {
+        self.inner.get_mut("Mark")
+    }
+    fn __lease(&mut self) -> Result<napi_support::Lease<toy_dep::Mark>, String> {
+        self.inner.lease("Mark")
+    }
+}
+#[napi(namespace = "dep")]
+impl DepMark {
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn flipped(&self) -> Result<DepMark, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Mark::flipped", || __self.flipped())
+            .map_err(napi_support::coded)?;
+        Ok(DepMark::__from(__v))
+    }
+    #[napi(getter, js_name = "on")]
+    pub fn field_on(&self) -> Result<bool, String> {
+        let __v = self.__ref()?;
+        Ok(__v.on)
+    }
+    #[napi(setter, js_name = "on")]
+    pub fn set_field_on(&mut self, value: bool) -> Result<(), String> {
+        self.__mut()?.on = value;
+        Ok(())
+    }
+    #[doc = " A `Mark` from a plain object of its fields."]
+    #[napi]
+    pub fn from_object(obj: DepMarkObject) -> Result<Self, String> {
+        Ok(Self::__from(toy_dep::Mark { on: obj.on }))
+    }
+    #[doc = " Its fields, as a plain object `fromObject` takes back."]
+    #[napi]
+    pub fn to_object(&self) -> Result<DepMarkObject, String> {
+        let __v = self.__ref()?;
+        Ok(DepMarkObject { on: __v.on })
+    }
+    #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
+    #[doc = " so nothing is freed: this is for uniformity."]
+    #[doc = " Throws `Leased` while an async call is using it."]
+    #[doc = " Also `[Symbol.dispose]` where the runtime has the symbol, for `using`."]
+    #[doc = " Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Mark")?;
+        Ok(())
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+impl From<&toy_dep::Mark> for DepMarkObject {
+    fn from(__v: &toy_dep::Mark) -> Self {
+        Self { on: __v.on }
+    }
+}
 #[doc = " The constants of `toy`, apart: they keep their Rust names."]
 mod toy_consts {
     use super::*;
@@ -2342,6 +2688,10 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
     }
     let classes: &[(Option<&str>, &str)] = &[
         (Some("alt"), "Color"),
+        (Some("dep"), "Area"),
+        (Some("dep"), "Cell"),
+        (Some("dep"), "Grid"),
+        (Some("dep"), "Mark"),
         (Some("toy"), "Album"),
         (Some("toy"), "Canvas"),
         (Some("toy"), "Color"),
@@ -2774,5 +3124,121 @@ impl AltColor {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Color".to_string()
+    }
+}
+#[napi(namespace = "dep")]
+impl DepGrid {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Grid",
+            &["disposed"],
+            &["width", "height"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Grid".to_string()
+    }
+}
+#[napi(namespace = "dep")]
+impl DepArea {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Area",
+            &["disposed"],
+            &["x", "y", "width", "height"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Area".to_string()
+    }
+}
+#[napi(namespace = "dep")]
+impl DepCell {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Cell",
+            &["disposed"],
+            &["value"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Cell".to_string()
+    }
+}
+#[napi(namespace = "dep")]
+impl DepMark {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Mark",
+            &["on", "disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Mark".to_string()
     }
 }

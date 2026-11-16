@@ -81,6 +81,11 @@ struct ClassCrate {
     lib: Vec<syn::File>,
     modules: BTreeMap<String, String>,
     root: &'static str,
+    /// The types a caller reaches by the crate's root path: what its first
+    /// package exports, its own and what its `lib.rs` re-exports by name of
+    /// the others. A later package's export the first does not re-export (an
+    /// internal helper type) is not one.
+    exported: BTreeSet<String>,
 }
 
 /// A source of classes and functions inside a discovered crate: its root
@@ -283,15 +288,20 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         .crates_of(Role::Classes)
         .map(|c| {
             let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
-            for pkg in c.pkgs {
+            let mut exported = BTreeSet::new();
+            for (i, pkg) in c.pkgs.iter().enumerate() {
                 let dir = locate(pkg, "lib.rs", &locked);
                 let all = parse_crate(&dir);
                 let tree = ModTree::load(&dir, &all);
                 for (path, file) in tree.public_view(&all, &dir) {
                     if path == dir.join("lib.rs") && lib.is_empty() {
+                        exported.extend(reexported_names(&file));
                         lib.push(file.clone());
                     }
                     files.push(file);
+                }
+                if i == 0 {
+                    exported.extend(tree.paths.keys().cloned());
                 }
                 for (name, at) in tree.paths {
                     modules.entry(name).or_insert(at);
@@ -302,10 +312,11 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                 lib,
                 modules,
                 root: c.root,
+                exported,
             }
         })
         .collect();
-    let mut classes = Classes::new(
+    let class_sources = || {
         scopes
             .iter()
             .map(|s| ClassSource {
@@ -318,9 +329,40 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                 files: &c.files,
                 modules: &c.modules,
             }))
-            .collect(),
-        config,
-    );
+            .collect()
+    };
+    let mut classes = Classes::new(class_sources(), config);
+    // The value types the listed classes reach (ADR 0001: the surface is
+    // what the listed members reach), to a fixpoint: a `Copy` struct a
+    // member of a class of a `Role::Classes` crate takes or returns is a
+    // class too, held by value, and its own members reach further. Such a
+    // crate is read for its classes alone, so nothing else gives the type a
+    // JS form, and the member would be left out. A discovered crate finds
+    // its data types on its own. Settled before anything reads the list, as
+    // the option objects are below.
+    let config = {
+        let mut listed: Vec<(&'static str, &'static str)> = config.classes.to_vec();
+        loop {
+            let found = reached_values(&classes, &extra_crates);
+            if found.is_empty() {
+                break;
+            }
+            for (root, name, by) in found {
+                say!(
+                    log,
+                    "{root}::{name} reached by {by}: a class, held by value"
+                );
+                // A build script runs once: the merged list lives as long as it.
+                listed.push((root, Box::leak(name.into_boxed_str())));
+            }
+            let config = Config {
+                classes: Box::leak(listed.clone().into_boxed_slice()),
+                ..config
+            };
+            classes = Classes::new(class_sources(), config);
+        }
+        classes.config
+    };
     // The option objects (`Config::option_objects`): what the listed members
     // take by `&T`, and what the config lists beside them. Settled before
     // anything reads the list.
@@ -1171,6 +1213,104 @@ fn derived_option_objects(classes: &Classes, scopes: &[&Scope]) -> BTreeSet<Stri
     out
 }
 
+/// The `Copy` structs the classes of a [`Role::Classes`] crate take or return
+/// (by value, by `&`, in an `Option` or a `Result`) that no class covers yet,
+/// each with its crate's root and the first member reaching it
+/// (`toy_dep::Grid::bounds`). Only what the crate exports at its root path,
+/// with no generic parameter and a public inherent function. A slice or a
+/// list of one is not followed: an array of instances is a poor form for
+/// what is usually a buffer.
+fn reached_values(classes: &Classes, crates: &[ClassCrate]) -> Vec<(&'static str, String, String)> {
+    let mut out: Vec<(&'static str, String, String)> = Vec::new();
+    for krate in crates {
+        let of_crate = classes
+            .classes
+            .iter()
+            .filter(|c| classes.sources[c.source].root == krate.root);
+        for c in of_crate {
+            let sigs = inherent_impls(&krate.files, &c.name)
+                .flat_map(|imp| &imp.items)
+                .filter_map(|it| match it {
+                    syn::ImplItem::Fn(f) if is_pub(&f.vis) => Some(&f.sig),
+                    _ => None,
+                });
+            for sig in sigs {
+                let args = sig.inputs.iter().filter_map(|a| match a {
+                    syn::FnArg::Typed(t) => Some(&*t.ty),
+                    syn::FnArg::Receiver(_) => None,
+                });
+                let ret = match &sig.output {
+                    syn::ReturnType::Type(_, t) => Some(&**t),
+                    syn::ReturnType::Default => None,
+                };
+                for ty in args.chain(ret) {
+                    let Some(name) = value_named(ty) else {
+                        continue;
+                    };
+                    let value = !classes.lists(krate.root, &name)
+                        && !out.iter().any(|(r, n, _)| *r == krate.root && *n == name)
+                        && krate.exported.contains(&name)
+                        && crate::class::find_struct(&krate.files, &name)
+                            .is_some_and(|st| st.generics.params.is_empty())
+                        && derives(&krate.files, &name, "Copy")
+                        // Something to call: a class of no member is an
+                        // opaque token JS can neither build nor read.
+                        && inherent_impls(&krate.files, &name)
+                            .flat_map(|imp| &imp.items)
+                            .any(|it| matches!(it, syn::ImplItem::Fn(f) if is_pub(&f.vis)));
+                    if value {
+                        let by = format!("{}::{}::{}", krate.root, c.name, sig.ident);
+                        out.push((krate.root, name, by));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The type a signature names, as a bare name, under `&`, `Option` and
+/// `Result`'s `Ok`: `Option<&Ty>` is `Ty`. A path qualified by anything but
+/// `crate` or `self` is another crate's type, and not one.
+fn value_named(ty: &syn::Type) -> Option<String> {
+    match Shape::of(ty) {
+        Shape::Ref { inner, .. } | Shape::Option(inner) | Shape::Result { ok: inner, .. } => {
+            value_named(inner)
+        }
+        Shape::Path { segs, args } if args.is_empty() => match segs.as_slice() {
+            [name] => Some(name.clone()),
+            [q, name] if q == "crate" || q == "self" => Some(name.clone()),
+            _ => None,
+        }
+        .filter(|n| n != "Self"),
+        _ => None,
+    }
+}
+
+/// The names a crate root re-exports by name (`pub use dep::{A, B as C}`
+/// gives `A` and `C`). ponytail: a glob (`pub use dep::*`) gives nothing; no
+/// crate read here re-exports that way.
+fn reexported_names(lib: &syn::File) -> Vec<String> {
+    fn leaves(t: &syn::UseTree, out: &mut Vec<String>) {
+        match t {
+            syn::UseTree::Path(p) => leaves(&p.tree, out),
+            syn::UseTree::Name(n) => out.push(n.ident.to_string()),
+            syn::UseTree::Rename(r) => out.push(r.rename.to_string()),
+            syn::UseTree::Glob(_) => {}
+            syn::UseTree::Group(g) => g.items.iter().for_each(|i| leaves(i, out)),
+        }
+    }
+    let mut out = Vec::new();
+    for item in &lib.items {
+        if let Item::Use(u) = item
+            && is_pub(&u.vis)
+        {
+            leaves(&u.tree, &mut out);
+        }
+    }
+    out
+}
+
 /// The generated file's header after its first line.
 const HEADER_REST: &str = concat!(
     "// Regenerate with `touch build.rs && cargo build`.\n",
@@ -1200,4 +1340,28 @@ fn rustfmt(path: &Path) {
         .arg("--edition=2024")
         .arg(path)
         .status();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_value_is_named_through_refs_options_and_results() {
+        let named = |t: &str| value_named(&syn::parse_str(t).unwrap());
+        assert_eq!(named("Area").as_deref(), Some("Area"));
+        assert_eq!(named("Option<&crate::Area>").as_deref(), Some("Area"));
+        assert_eq!(named("Result<Area, Error>").as_deref(), Some("Area"));
+        // Another crate's, a generic, a slice, a list, `Self`: none.
+        for t in ["other::Area", "Cell<u8>", "&[Area]", "Vec<Area>", "Self"] {
+            assert_eq!(named(t), None, "{t}");
+        }
+    }
+
+    #[test]
+    fn a_root_reexports_by_name() {
+        let lib: syn::File =
+            syn::parse_str("pub use dep::{A, b::B as C}; pub use dep::*; use dep::D;").unwrap();
+        assert_eq!(reexported_names(&lib), ["A", "C"]);
+    }
 }

@@ -573,6 +573,13 @@ impl<'a> Classes<'a> {
         if segs == ["Self"] {
             return this;
         }
+        // A class has no generic parameter (`Classes::new`), so a type with
+        // arguments is another of the same name: `std::cell::Cell<T>` is not
+        // a listed `Cell`, which the re-export fallback below would take it
+        // for.
+        if matches!(Shape::of(ty), Shape::Path { args, .. } if !args.is_empty()) {
+            return None;
+        }
         let name = segs.last()?;
         let s = self.resolve(ctx, &segs, |s| {
             self.classes

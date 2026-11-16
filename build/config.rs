@@ -185,6 +185,11 @@ pub const GEN: Config = Config {
     // members need. `Transform` is tiny-skia's, so `tiny_skia.Transform`
     // (Q21); `NonZeroRect` is what usvg's boxes are, and `Point` what a path
     // segment holds; `svgtypes.Color` parses CSS colours (Q33).
+    // Not listed, derived: the `Copy` types these members take and return
+    // -- `IntRect` (`Pixmap::clone_rect`, `Rect::round`), `ColorU8`,
+    // `PremultipliedColor` and `PremultipliedColorU8` (`Pixmap::pixel`) --
+    // are classes held by value. `Pixmap::pixels`, a slice of them, stays
+    // out: `data()` has the same bytes.
     classes: &[
         ("usvg::fontdb", "Database"),
         ("usvg::fontdb", "ID"),

@@ -42,6 +42,12 @@ export declare namespace tiny_skia {
   export interface Color {
     [Symbol.dispose](): void
   }
+  export interface ColorU8 {
+    [Symbol.dispose](): void
+  }
+  export interface IntRect {
+    [Symbol.dispose](): void
+  }
   export interface IntSize {
     [Symbol.dispose](): void
   }
@@ -52,6 +58,12 @@ export declare namespace tiny_skia {
     [Symbol.dispose](): void
   }
   export interface Point {
+    [Symbol.dispose](): void
+  }
+  export interface PremultipliedColor {
+    [Symbol.dispose](): void
+  }
+  export interface PremultipliedColorU8 {
     [Symbol.dispose](): void
   }
   export interface Rect {
@@ -767,6 +779,10 @@ export declare namespace tiny_skia {
      * Alpha == 1.0
      */
     isOpaque(): boolean
+    /** Converts into a premultiplied color. */
+    premultiply(): tiny_skia.PremultipliedColor
+    /** Converts into `ColorU8`. */
+    toColorU8(): tiny_skia.ColorU8
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
@@ -781,6 +797,111 @@ export declare namespace tiny_skia {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type TinySkiaColor = Color
+  /**
+   * A 32-bit RGBA color value.
+   *
+   * Byteorder: RGBA (relevant for bytemuck casts)
+   *
+   * A `tiny_skia::ColorU8`, held by value.
+   */
+  export class ColorU8 {
+    /** Creates a new color. */
+    static fromRgba(r: number, g: number, b: number, a: number): tiny_skia.ColorU8
+    /** Returns color's red component. */
+    red(): number
+    /** Returns color's green component. */
+    green(): number
+    /** Returns color's blue component. */
+    blue(): number
+    /** Returns color's alpha component. */
+    alpha(): number
+    /**
+     * Check that color is opaque.
+     *
+     * Alpha == 255
+     */
+    isOpaque(): boolean
+    /** Converts into a premultiplied color. */
+    premultiply(): tiny_skia.PremultipliedColorU8
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaColorU8 = ColorU8
+  /**
+   * An integer rectangle.
+   *
+   * # Guarantees
+   *
+   * - Width and height are in 1..=i32::MAX range.
+   * - x+width and y+height does not overflow.
+   *
+   * A `tiny_skia::IntRect`, held by value.
+   */
+  export class IntRect {
+    /** Creates a new `IntRect`. */
+    static fromXywh(x: number, y: number, width: number, height: number): tiny_skia.IntRect | null
+    /** Creates a new `IntRect`. */
+    static fromLtrb(left: number, top: number, right: number, bottom: number): tiny_skia.IntRect | null
+    /** Returns rect's X position. */
+    x(): number
+    /** Returns rect's Y position. */
+    y(): number
+    /** Returns rect's width. */
+    width(): number
+    /** Returns rect's height. */
+    height(): number
+    /** Returns rect's left edge. */
+    left(): number
+    /** Returns rect's top edge. */
+    top(): number
+    /** Returns rect's right edge. */
+    right(): number
+    /** Returns rect's bottom edge. */
+    bottom(): number
+    /** Returns rect's size. */
+    size(): tiny_skia.IntSize
+    /** Checks that the rect is completely includes `other` Rect. */
+    contains(other: tiny_skia.IntRect): boolean
+    /**
+     * Returns an intersection of two rectangles.
+     *
+     * Returns `None` otherwise.
+     */
+    intersect(other: tiny_skia.IntRect): tiny_skia.IntRect | null
+    /** Insets the rectangle. */
+    inset(dx: number, dy: number): tiny_skia.IntRect | null
+    /** Outsets the rectangle. */
+    makeOutset(dx: number, dy: number): tiny_skia.IntRect | null
+    /** Translates the rect by the specified offset. */
+    translate(tx: number, ty: number): tiny_skia.IntRect | null
+    /** Translates the rect to the specified position. */
+    translateTo(x: number, y: number): tiny_skia.IntRect | null
+    /** Converts into `Rect`. */
+    toRect(): tiny_skia.Rect
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaIntRect = IntRect
   /**
    * An integer size.
    *
@@ -809,6 +930,8 @@ export declare namespace tiny_skia {
     scaleToHeight(newHeight: number): tiny_skia.IntSize | null
     /** Converts into [`Size`]. */
     toSize(): tiny_skia.Size
+    /** Converts into [`IntRect`] at the provided position. */
+    toIntRect(x: number, y: number): tiny_skia.IntRect
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
@@ -873,6 +996,8 @@ export declare namespace tiny_skia {
     bboxTransform(bbox: tiny_skia.NonZeroRect): tiny_skia.NonZeroRect
     /** Converts into [`Rect`]. */
     toRect(): tiny_skia.Rect
+    /** Converts into [`IntRect`]. */
+    toIntRect(): tiny_skia.IntRect
     /**
      * Ends this instance: every later call throws `Disposed`. It holds a copy,
      * so nothing is freed: this is for uniformity.
@@ -953,6 +1078,12 @@ export declare namespace tiny_skia {
      */
     data(): Buffer
     /**
+     * Returns a pixel color.
+     *
+     * Returns `None` when position is out of bounds.
+     */
+    pixel(x: number, y: number): tiny_skia.PremultipliedColorU8 | null
+    /**
      * Consumes the internal data.
      *
      * Byteorder: RGBA
@@ -964,6 +1095,12 @@ export declare namespace tiny_skia {
      * Byteorder: RGBA
      */
     takeDemultiplied(): Buffer
+    /**
+     * Returns a copy of the pixmap that intersects the `rect`.
+     *
+     * Returns `None` when `Pixmap`'s rect doesn't contain `rect`.
+     */
+    cloneRect(rect: tiny_skia.IntRect): tiny_skia.Pixmap | null
     /**
      * Frees the value now, not at garbage collection: every later call throws
      * `Disposed`.
@@ -1067,6 +1204,116 @@ export declare namespace tiny_skia {
   }
   export type TinySkiaPoint = Point
   /**
+   * A premultiplied RGBA color value, holding four floating point components.
+   *
+   * # Guarantees
+   *
+   * - All values are in 0..=1 range.
+   * - RGB components are <= A.
+   *
+   * A `tiny_skia::PremultipliedColor`, held by value.
+   */
+  export class PremultipliedColor {
+    /**
+     * Returns color's red component.
+     *
+     * - The value is guarantee to be in a 0..=1 range.
+     * - The value is <= alpha.
+     */
+    red(): number
+    /**
+     * Returns color's green component.
+     *
+     * - The value is guarantee to be in a 0..=1 range.
+     * - The value is <= alpha.
+     */
+    green(): number
+    /**
+     * Returns color's blue component.
+     *
+     * - The value is guarantee to be in a 0..=1 range.
+     * - The value is <= alpha.
+     */
+    blue(): number
+    /**
+     * Returns color's alpha component.
+     *
+     * - The value is guarantee to be in a 0..=1 range.
+     */
+    alpha(): number
+    /** Converts into `PremultipliedColorU8`. */
+    toColorU8(): tiny_skia.PremultipliedColorU8
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaPremultipliedColor = PremultipliedColor
+  /**
+   * A 32-bit premultiplied RGBA color value.
+   *
+   * Byteorder: RGBA (relevant for bytemuck casts)
+   *
+   * A `tiny_skia::PremultipliedColorU8`, held by value.
+   */
+  export class PremultipliedColorU8 {
+    /**
+     * Creates a new premultiplied color.
+     *
+     * RGB components must be <= alpha.
+     */
+    static fromRgba(r: number, g: number, b: number, a: number): tiny_skia.PremultipliedColorU8 | null
+    /**
+     * Returns color's red component.
+     *
+     * The value is <= alpha.
+     */
+    red(): number
+    /**
+     * Returns color's green component.
+     *
+     * The value is <= alpha.
+     */
+    green(): number
+    /**
+     * Returns color's blue component.
+     *
+     * The value is <= alpha.
+     */
+    blue(): number
+    /** Returns color's alpha component. */
+    alpha(): number
+    /**
+     * Check that color is opaque.
+     *
+     * Alpha == 255
+     */
+    isOpaque(): boolean
+    /** Returns a demultiplied color. */
+    demultiply(): tiny_skia.ColorU8
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type TinySkiaPremultipliedColorU8 = PremultipliedColorU8
+  /**
    * A rectangle defined by left, top, right and bottom edges.
    *
    * Can have zero width and/or height. But not a negative one.
@@ -1103,6 +1350,18 @@ export declare namespace tiny_skia {
     height(): number
     /** Returns true if the rect is empty. */
     isEmpty(): boolean
+    /**
+     * Converts into an `IntRect` by adding 0.5 and discarding the fractional portion.
+     *
+     * Width and height are guarantee to be >= 1.
+     */
+    round(): tiny_skia.IntRect | null
+    /**
+     * Converts into an `IntRect` rounding outwards.
+     *
+     * Width and height are guarantee to be >= 1.
+     */
+    roundOut(): tiny_skia.IntRect | null
     /**
      * Returns an intersection of two rectangles.
      *

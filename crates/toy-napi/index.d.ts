@@ -11,6 +11,21 @@ export declare namespace alt {
   }
 }
 
+export declare namespace dep {
+  export interface Area {
+    [Symbol.dispose](): void
+  }
+  export interface Cell {
+    [Symbol.dispose](): void
+  }
+  export interface Grid {
+    [Symbol.dispose](): void
+  }
+  export interface Mark {
+    [Symbol.dispose](): void
+  }
+}
+
 export declare namespace toy {
   export interface Album {
     [Symbol.dispose](): void
@@ -112,6 +127,130 @@ export declare namespace alt {
   }
   /** The module's name: `alt.NAME`, beside `toy.NAME`. */
   export const NAME: string
+}
+
+export declare namespace dep {
+  /**
+   * A rectangle of cells, its fields private: a class with a static and
+   * getters, reached by `Grid::bounds` and `Grid::crop`.
+   *
+   * A `toy_dep::Area`, held by value.
+   */
+  export class Area {
+    /** None when it is empty. */
+    static fromXywh(x: number, y: number, width: number, height: number): dep.Area | null
+    x(): number
+    y(): number
+    width(): number
+    height(): number
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type DepArea = Area
+  /**
+   * One cell's byte, reached by `Grid::cell` and `Grid::set`.
+   *
+   * A `toy_dep::Cell`, held by value.
+   */
+  export class Cell {
+    constructor(value: number)
+    value(): number
+    /** Whether the cell is set: reached through `Cell` alone. */
+    mark(): dep.Mark
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type DepCell = Cell
+  /**
+   * A grid of one-byte cells, row by row: a class of a crate read for its
+   * classes alone. What its members take and return, no config lists:
+   * `Area` and `Cell` are classes because `Grid`'s members reach them, and
+   * `Mark` because `Cell`'s do.
+   *
+   * A shared `toy_dep::Grid`, copied on the first write while shared.
+   */
+  export class Grid {
+    /** A `width` x `height` grid of empty cells; none when either is zero. */
+    constructor(width: number, height: number)
+    width(): number
+    height(): number
+    /** The whole grid, as an area. */
+    bounds(): dep.Area
+    /** The cell at `(x, y)`; none outside the grid. */
+    cell(x: number, y: number): dep.Cell | null
+    /** Writes the cell at `(x, y)`; false outside the grid. */
+    set(x: number, y: number, cell: dep.Cell): boolean
+    /**
+     * The cells of `area` as a grid of their own, clipped to this one; none
+     * when it misses the grid.
+     */
+    crop(area: dep.Area): dep.Grid | null
+    /**
+     * Drops this instance's reference now, not at garbage collection: every
+     * later call throws `Disposed`. The value lives on while another instance
+     * holds it.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type DepGrid = Grid
+  /**
+   * A cell's on/off state: plain data, reached only through `Cell::mark`.
+   *
+   * A `toy_dep::Mark`, held by value.
+   */
+  export class Mark {
+    flipped(): dep.Mark
+    get on(): boolean
+    set on(value: boolean)
+    /** A `Mark` from a plain object of its fields. */
+    static fromObject(obj: dep.MarkObject): dep.Mark
+    /** Its fields, as a plain object `fromObject` takes back. */
+    toObject(): dep.MarkObject
+    /**
+     * Ends this instance: every later call throws `Disposed`. It holds a copy,
+     * so nothing is freed: this is for uniformity.
+     * Throws `Leased` while an async call is using it.
+     * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
+     * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  export type DepMark = Mark
+  /** A `Mark`'s public fields, as a plain object. */
+  export interface MarkObject {
+    on: boolean
+  }
 }
 
 export declare namespace toy {

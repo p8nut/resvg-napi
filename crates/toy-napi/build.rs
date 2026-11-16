@@ -4,7 +4,7 @@
 //! `toy` is in `GEN` and the small template below; the assertions read the
 //! codegen's report.
 
-use napi_gen::{Config, Converter, Crate, Iterated};
+use napi_gen::{Config, Converter, Crate, Iterated, Role};
 use quote::quote;
 
 /// The toy has no font tag and no feature gates: those answers are empty.
@@ -12,13 +12,24 @@ const GEN: Config = Config {
     log_env: "TOY_NAPI_CODEGEN_LOG",
     generated_from: "the toy crate's sources",
     // The crate root's items under `toy`, the `alt` module's under `alt`.
-    crates: &[Crate {
-        pkgs: &["toy"],
-        root: "toy",
-        ns: "toy",
-        modules: &[("alt", "alt")],
-        ..Crate::EMPTY
-    }],
+    // `toy-dep` is read for its listed classes alone, under `dep`: `Grid`,
+    // and the value types its members reach.
+    crates: &[
+        Crate {
+            pkgs: &["toy"],
+            root: "toy",
+            ns: "toy",
+            modules: &[("alt", "alt")],
+            ..Crate::EMPTY
+        },
+        Crate {
+            pkgs: &["toy-dep"],
+            root: "toy_dep",
+            ns: "dep",
+            role: Role::Classes,
+            modules: &[],
+        },
+    ],
     // `ReportOptions::style_index` indexes `STYLES` unchecked.
     index_bounded: &[("_index", "STYLES")],
     // `ReportOptions`, `Options` and `Filter` need no entry: `report`,
@@ -59,6 +70,7 @@ const GEN: Config = Config {
         ("toy::alt", "Color"),
         ("toy", "Scene"),
         ("toy", "Key"),
+        ("toy_dep", "Grid"),
     ],
     functions: &[
         ("toy", "report"),
@@ -147,14 +159,14 @@ fn main() {
         ["toy index bound for `*_index` derived from STYLES: 2"],
         "STYLES has three entries"
     );
-    // The classes a borrowing member hands out a copy of: `Canvas` (owned)
-    // and `Tally`; `Layer` and `Dot` (projected) are borrowed instead, when
-    // reached from a projection: the `layer` of a `Frame`, a `Content`
-    // holding a `Layer`.
+    // The classes a borrowing member hands out a copy of: `Canvas` (owned),
+    // `Tally` and `dep.Grid`; `Layer` and `Dot` (projected) are borrowed
+    // instead, when reached from a projection: the `layer` of a `Frame`, a
+    // `Content` holding a `Layer`.
     assert_eq!(
         lines("classes a borrowing member"),
         [
-            "classes a borrowing member copies: Canvas, Tally",
+            "classes a borrowing member copies: Canvas, Grid, Tally",
             "classes a borrowing member borrows from a projection, copies otherwise: Dot, Layer",
         ],
         "the Clone classes not held by value, and those held as a projection"
@@ -238,6 +250,20 @@ fn main() {
     // - `Canvas::as_view`: a view has no JS form of its own; `paint` borrows it.
     // - `Tally`: a `Cell` over an array is no inline vector, and `alt` takes
     //   its `Hue` nowhere, so emits no input form of it.
+    // - `dep.Grid::cells`: a slice of a value class is not followed (an
+    //   array of instances), and `stamp` takes a `Token`, `Copy` but with
+    //   nothing to call, so no class.
+    // `dep.Area`, `dep.Cell` and `dep.Mark` are listed nowhere: `Grid`'s
+    // members reach the first two, `Cell::mark` the third (the fixpoint).
+    assert_eq!(
+        lines("reached by"),
+        [
+            "toy_dep::Area reached by toy_dep::Grid::bounds: a class, held by value",
+            "toy_dep::Cell reached by toy_dep::Grid::cell: a class, held by value",
+            "toy_dep::Mark reached by toy_dep::Cell::mark: a class, held by value",
+        ],
+        "the value classes the listed members reach"
+    );
     assert_eq!(
         lines("is a class:")
             .into_iter()
@@ -252,6 +278,10 @@ fn main() {
             "toy::alt::Color is a class: Value, plain data, a JS name another namespace has",
             "toy::Scene is a class: Shared",
             "toy::Key is a class: Value",
+            "toy_dep::Grid is a class: SharedCow",
+            "toy_dep::Area is a class: Value",
+            "toy_dep::Cell is a class: Value",
+            "toy_dep::Mark is a class: Value, plain data",
             "toy::Layer is a class: Projected",
             "toy::Dot is a class: Projected",
             "toy::Tally member not in the class: first_keys (returns std::cell::Cell<[Key;2]>)",
@@ -259,6 +289,8 @@ fn main() {
             "toy::Color member not in the class: checked (returns Self, a class whose JS name \
              another namespace has: only its constructor and factories may)",
             "toy::Canvas member not in the class: as_view (returns CanvasView<'_>)",
+            "toy_dep::Grid member not in the class: cells (returns &[Cell])",
+            "toy_dep::Grid member not in the class: stamp (arg: Token)",
         ],
         "the classes, and what each leaves out"
     );

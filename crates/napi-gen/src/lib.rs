@@ -118,7 +118,11 @@ pub struct Config {
     /// `FromStr` and `Display` become `fromStr` and `toString`, and a struct
     /// whose fields are all public and convertible gets `fromObject` and
     /// `toObject`. How a class holds its value is read off the type (see
-    /// [`class::Holding`]). An allowlist: a type is a class only when listed.
+    /// [`class::Holding`]). An allowlist: a type is a class only when listed,
+    /// or when it is a `Copy` struct with a public inherent function that a
+    /// class of a [`Role::Classes`] crate takes or returns, by value, `&`,
+    /// `Option` or `Result` (not in a slice): a class held by value with no
+    /// entry, to a fixpoint, and reported.
     pub classes: &'static [(&'static str, &'static str)],
     /// Free functions mirrored into their source's namespace, by source root
     /// and name (`("toy", "paint")`). An allowlist, like `classes`.
@@ -177,7 +181,9 @@ pub enum Role {
     /// own, and its listed classes and functions are emitted.
     Discover,
     /// Read only for the classes and functions [`Config::classes`] and
-    /// [`Config::functions`] list for it.
+    /// [`Config::functions`] list for it, and the value types their classes'
+    /// members reach (see [`Config::classes`]): nothing else of it is
+    /// discovered, so nothing else would give those a JS form.
     Classes,
     /// Read only for vocabulary (newtypes, aliases, payload enums), never
     /// wrapped: a dependency whose types the others re-export.

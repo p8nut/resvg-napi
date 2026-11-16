@@ -3,5 +3,5 @@
 # under `-D warnings`, for code none of them touched. The weekly `lock` job in
 # CI.yml says when a newer stable is out; bump this line by hand then.
 [toolchain]
-channel = "1.99.1"
+channel = "1.100.0"
 components = ["clippy", "rustfmt"]

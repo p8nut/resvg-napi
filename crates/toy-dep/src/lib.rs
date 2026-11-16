@@ -13,6 +13,10 @@ pub enum Shade {
     Named(String),
 }
 
+/// The bytes a cell takes. A constant of a crate read for its classes
+/// alone: seen, reported, never emitted.
+pub const CELL_BYTES: usize = 1;
+
 /// A grid of one-byte cells, row by row: a class of a crate read for its
 /// classes alone. What its members take and return, no config lists:
 /// `Area` and `Cell` are classes because `Grid`'s members reach them, and

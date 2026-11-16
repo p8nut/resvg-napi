@@ -302,6 +302,30 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                 }
                 if i == 0 {
                     exported.extend(tree.paths.keys().cloned());
+                    // Its constants are seen, never emitted: only a
+                    // discovered crate's are (`emit::constants`). Said, so
+                    // their absence reads as a choice. A `Role::Vocabulary`
+                    // crate is not read through its module tree, so what it
+                    // exports, constants included, is never seen.
+                    let consts: Vec<String> = tree
+                        .consts
+                        .iter()
+                        .map(|(m, name, _)| {
+                            if m.is_empty() {
+                                name.clone()
+                            } else {
+                                format!("{m}::{name}")
+                            }
+                        })
+                        .collect();
+                    if !consts.is_empty() {
+                        say!(
+                            log,
+                            "{} constants not exposed: {} (read only for its listed classes and functions)",
+                            c.root,
+                            consts.join(", ")
+                        );
+                    }
                 }
                 for (name, at) in tree.paths {
                     modules.entry(name).or_insert(at);
@@ -669,7 +693,17 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         } else if let Some(src) = defines(&t) {
             (&src.files, src.root.clone())
         } else {
-            say!(log, "object {t} skipped: not a public struct");
+            // Claimed by another mapping, it has a JS form already: a payload
+            // enum (a union, or its own report line), a scalar, a handle's
+            // `Arc`, a class. Only a type nothing maps is a gap.
+            let claimed = vocab.payload.contains_key(&t)
+                || syn::parse_str::<syn::Type>(&t)
+                    .ok()
+                    .and_then(|ty| vocab.classify(&ty))
+                    .is_some();
+            if !claimed {
+                say!(log, "object {t} skipped: not a public struct");
+            }
             continue;
         };
         vocab.objects.insert(t.clone());
@@ -1001,7 +1035,17 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
     let mut unions: Vec<String> = Vec::new();
     for (name, info) in &vocab.payload {
         if let Some(why) = info.payload_blocker(&vocab) {
-            say!(log, "payload enum {name} not mapped: {why}");
+            // Not a union, but given a JS form by another mapping: thrown
+            // with its `code`, taken in its input form, or a union of
+            // projections. Only an enum with no form at all is a gap.
+            let claimed = classes.throws(name)
+                || classes.unions.iter().any(|u| u.name == *name)
+                || sources
+                    .iter()
+                    .any(|s| is_input(&s.files, bare(name), &config));
+            if !claimed {
+                say!(log, "payload enum {name} not mapped: {why}");
+            }
             continue;
         }
         match payload_enum_code(name, info, &vocab, modules) {

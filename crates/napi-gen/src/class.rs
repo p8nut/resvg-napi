@@ -1608,6 +1608,12 @@ impl<'a> Classes<'a> {
         (code, skipped)
     }
 
+    /// Whether error enum `name` is thrown by something emitted, so it has
+    /// a JS form (its `code`) of its own. Read once emission is done.
+    pub fn throws(&self, name: &str) -> bool {
+        self.errors.borrow().iter().any(|(_, n)| n == name)
+    }
+
     /// The type of codes each thrown error enum gets (Q23), by source:
     /// `<Enum>Code`, the variant names as a string enum.
     pub fn error_codes(&self) -> Vec<(usize, TokenStream)> {

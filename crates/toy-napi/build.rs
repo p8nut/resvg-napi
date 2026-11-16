@@ -205,12 +205,24 @@ fn main() {
         ["payload enums emitted as unions: Content, Label, Origin, PaintError, Shade, Step"],
         "the unions"
     );
-    assert!(
-        lines("payload enum Weighted").contains(
-            &"payload enum Weighted not mapped: Held carries Canvas, and Canvas is a class, \
-              which can only be carried alone"
-        ),
-        "a class is carried alone or not at all"
+    // Only a real gap is reported. `Item` (a union of projections),
+    // `ParseError` (thrown with its `code`) and `Tag` (an input enum) are no
+    // unions, but have a JS form: not reported. `Weighted` has none.
+    assert_eq!(
+        lines("not mapped"),
+        [
+            "payload enum Weighted not mapped: Held carries Canvas, and Canvas is a class, \
+             which can only be carried alone"
+        ],
+        "a class is carried alone or not at all, and a claimed enum is no gap"
+    );
+    // The same for the data types: what a payload or a member reaches but
+    // another mapping claims (the unions, `f64`, the `Arc<Dot>` a handle
+    // holds) is not reported; `Frame::serial`'s `u64` has no JS form at all.
+    assert_eq!(
+        lines("not a public struct"),
+        ["object u64 skipped: not a public struct"],
+        "only a type nothing maps is a skipped data type"
     );
     // The input enums: `Tag` (`{ type, value }`, borrowed for the call) and
     // `Origin` (`{ type, bytes }` or `{ type, value }`, given). `Label` has
@@ -309,10 +321,13 @@ fn main() {
     );
     // The constants the crate exports, in the namespace of the module that
     // exports them: `MAX_LAYERS` re-exported from a private module, `NAME`
-    // in both namespaces, and two with no JS value.
+    // in both namespaces, and two with no JS value. `toy_dep`, read for its
+    // classes alone, has its `CELL_BYTES` reported, never emitted.
     assert_eq!(
         lines("constant"),
         [
+            "toy_dep constants not exposed: CELL_BYTES (read only for its listed classes and \
+             functions)",
             "toy::NAME is a constant: toy.NAME",
             "toy::SCALE is a constant: toy.SCALE",
             "toy::STRICT is a constant: toy.STRICT",

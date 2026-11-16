@@ -2845,6 +2845,27 @@ impl TinySkiaColor {
         self.inner.disposed()
     }
 }
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaColor {
+    #[doc = " A transparent color."]
+    #[napi(factory, js_name = "TRANSPARENT", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn TRANSPARENT() -> Self {
+        Self::__from(tiny_skia::Color::TRANSPARENT)
+    }
+    #[doc = " A black color."]
+    #[napi(factory, js_name = "BLACK", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn BLACK() -> Self {
+        Self::__from(tiny_skia::Color::BLACK)
+    }
+    #[doc = " A white color."]
+    #[napi(factory, js_name = "WHITE", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn WHITE() -> Self {
+        Self::__from(tiny_skia::Color::WHITE)
+    }
+}
 impl TinySkiaIntSize {
     fn __from(inner: tiny_skia::IntSize) -> Self {
         Self {
@@ -4412,6 +4433,15 @@ impl TinySkiaPremultipliedColorU8 {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+#[napi(namespace = "tiny_skia")]
+impl TinySkiaPremultipliedColorU8 {
+    #[doc = " A transparent color."]
+    #[napi(js_name = "TRANSPARENT", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn TRANSPARENT() -> Self {
+        Self::__from(tiny_skia::PremultipliedColorU8::TRANSPARENT)
     }
 }
 impl TinySkiaIntRect {
@@ -9646,8 +9676,7 @@ impl FontdbSourceSharedFile {
 #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
 #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
 #[doc = " the whole module without it. The `.d.ts` header declares it."]
-#[napi(module_exports)]
-pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
     let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
     let key: Unknown = symbol.get_named_property("dispose")?;
     if key.get_type()? != ValueType::Symbol {
@@ -9704,6 +9733,45 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         let dispose: Unknown = proto.get_named_property("dispose")?;
         proto.set_property(key, dispose)?;
     }
+    Ok(())
+}
+#[doc = " The associated constants, static read-only: each class's hidden static"]
+#[doc = " methods become getters, and a type with no class gets a frozen object of"]
+#[doc = " its name. The `.d.ts` header declares them."]
+fn define_statics(env: &Env, exports: Object) -> Result<()> {
+    let classes: &[(&str, &str, &[&str])] = &[
+        ("tiny_skia", "Color", &["TRANSPARENT", "BLACK", "WHITE"]),
+        ("tiny_skia", "PremultipliedColorU8", &["TRANSPARENT"]),
+    ];
+    for (ns, class, names) in classes {
+        let class: Object =
+            napi_support::namespace(env, &exports, ns)?.get_named_property_unchecked(class)?;
+        napi_support::static_getters(env, &class, names)?;
+    }
+    {
+        let mut object = Object::new(env)?;
+        object.set_named_property("THIN", u32::from(usvg::fontdb::Weight::THIN.0))?;
+        object.set_named_property(
+            "EXTRA_LIGHT",
+            u32::from(usvg::fontdb::Weight::EXTRA_LIGHT.0),
+        )?;
+        object.set_named_property("LIGHT", u32::from(usvg::fontdb::Weight::LIGHT.0))?;
+        object.set_named_property("NORMAL", u32::from(usvg::fontdb::Weight::NORMAL.0))?;
+        object.set_named_property("MEDIUM", u32::from(usvg::fontdb::Weight::MEDIUM.0))?;
+        object.set_named_property("SEMIBOLD", u32::from(usvg::fontdb::Weight::SEMIBOLD.0))?;
+        object.set_named_property("BOLD", u32::from(usvg::fontdb::Weight::BOLD.0))?;
+        object.set_named_property("EXTRA_BOLD", u32::from(usvg::fontdb::Weight::EXTRA_BOLD.0))?;
+        object.set_named_property("BLACK", u32::from(usvg::fontdb::Weight::BLACK.0))?;
+        object.freeze()?;
+        napi_support::namespace(env, &exports, "fontdb")?.set_named_property("Weight", object)?;
+    }
+    Ok(())
+}
+#[doc = " What the module sets when it loads, after napi registers its items."]
+#[napi(module_exports)]
+pub fn on_load(env: Env, exports: Object) -> Result<()> {
+    alias_dispose(&env, exports)?;
+    define_statics(&env, exports)?;
     Ok(())
 }
 #[napi(namespace = "svgtypes")]

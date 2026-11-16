@@ -322,12 +322,19 @@ fn main() {
     // The constants the crate exports, in the namespace of the module that
     // exports them: `MAX_LAYERS` re-exported from a private module, `NAME`
     // in both namespaces, and two with no JS value. `toy_dep`, read for its
-    // classes alone, has its `CELL_BYTES` reported, never emitted.
+    // classes alone, has its `CELL_BYTES` reported, never emitted, and so
+    // is the associated constant of a type of it that is no class
+    // (`Token::SIZE`). The associated constants left out: a `u64` (on a
+    // class and on a number newtype), and `Self` on a class not held by
+    // value, which could not hand out a copy per read.
     assert_eq!(
         lines("constant"),
         [
-            "toy_dep constants not exposed: CELL_BYTES (read only for its listed classes and \
-             functions)",
+            "toy_dep constants not exposed: CELL_BYTES, Token::SIZE (read only for its listed \
+             classes and functions)",
+            "toy::Color::BITS constant not exposed: u64 (no JS value)",
+            "toy::Canvas::EMPTY constant not exposed: Canvas is not held by value, so no copy \
+             per read",
             "toy::NAME is a constant: toy.NAME",
             "toy::SCALE is a constant: toy.SCALE",
             "toy::STRICT is a constant: toy.STRICT",
@@ -335,8 +342,28 @@ fn main() {
             "toy::ORIGIN constant not exposed: Point (no JS value)",
             "toy::alt::NAME is a constant: alt.NAME",
             "toy::MAX_LAYERS is a constant: toy.MAX_LAYERS",
+            "toy::MinLen::HUGE constant not exposed: u64 (no JS value)",
         ],
         "what becomes a constant"
+    );
+    // The associated constants with a JS form, static read-only: on a class,
+    // a number, a string, and `Self` held by value (a fresh instance per
+    // read, the class's name shared or not, of a listed class or of one a
+    // listed class reaches); on a number newtype, which has no class, an
+    // object of its name holding numbers.
+    assert_eq!(
+        lines("is a static"),
+        [
+            "toy::Color::BLACK is a static: toy.Color.BLACK",
+            "toy::Color::CHANNELS is a static: toy.Color.CHANNELS",
+            "toy::Color::KIND is a static: toy.Color.KIND",
+            "toy::Key::LAST is a static: toy.Key.LAST",
+            "toy_dep::Area::UNIT is a static: dep.Area.UNIT",
+            "toy::MinLen::NONE is a static: toy.MinLen.NONE",
+            "toy::MinLen::WORD is a static: toy.MinLen.WORD",
+            "toy::MinLen::MAX is a static: toy.MinLen.MAX",
+        ],
+        "what becomes a static"
     );
     // Nothing is left out of the surface. Each union gets a named type
     // (`toy.Step`), but `Origin`'s name is its input form's, an interface:

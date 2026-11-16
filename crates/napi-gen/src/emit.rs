@@ -2078,6 +2078,28 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     out
 }
 
+/// What a constant of type `ty` is in JS, through type aliases: its Rust
+/// type for napi and its TypeScript type. A number type that fits a JS
+/// number, a `bool` or a string; `None` for any other (ADR 0002, Q21).
+pub fn const_type(ty: &Type, vocab: &Vocab) -> Option<(TokenStream, &'static str)> {
+    let ty = vocab.resolve(ty);
+    let shape = Shape::of(ty);
+    match shape.key().as_deref() {
+        Some("u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64") => {
+            Some((ty.to_token_stream(), "number"))
+        }
+        Some("bool") => Some((ty.to_token_stream(), "boolean")),
+        Some("String") => Some((ty.to_token_stream(), "string")),
+        // `&str` and `&'static str` alike.
+        _ => match shape {
+            Shape::Ref { inner, .. } if key(inner).as_deref() == Some("str") => {
+                Some((quote!(&str), "string"))
+            }
+            _ => None,
+        },
+    }
+}
+
 /// The public constants a source exports ([`ModTree::consts`]), each as a
 /// `#[napi] const` of the namespace of the module that exports it, under its
 /// Rust name: `toy::LIMIT` is `toy.LIMIT`, `toy::alt::LIMIT` is `alt.LIMIT`.
@@ -2101,26 +2123,12 @@ pub fn constants(
         } else {
             format!("{root}::{module}")
         };
-        let ty = vocab.resolve(&c.ty);
-        let js_ty = match Shape::of(ty) {
-            s if matches!(
-                s.key().as_deref(),
-                Some(
-                    "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64" | "bool" | "String"
-                )
-            ) =>
-            {
-                ty.to_token_stream()
-            }
-            // `&str` and `&'static str` alike.
-            Shape::Ref { inner, .. } if key(inner).as_deref() == Some("str") => quote!(&str),
-            _ => {
-                report.push(format!(
-                    "{at}::{name} constant not exposed: {} (no JS value)",
-                    ty_str(&c.ty)
-                ));
-                continue;
-            }
+        let Some((js_ty, _)) = const_type(&c.ty, vocab) else {
+            report.push(format!(
+                "{at}::{name} constant not exposed: {} (no JS value)",
+                ty_str(&c.ty)
+            ));
+            continue;
         };
         let Some(ns) = vocab.config.namespace_of(&at) else {
             report.push(format!(

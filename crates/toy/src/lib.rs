@@ -311,6 +311,9 @@ pub enum Label {
 pub struct Key(u32);
 
 impl Key {
+    /// The last key: an associated constant of type `Self`, `toy.Key.LAST`.
+    pub const LAST: Key = Key(u32::MAX);
+
     pub fn first() -> Self {
         Key(0)
     }
@@ -332,6 +335,17 @@ pub enum Tag<'a> {
 /// A shortest length, as a number newtype.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct MinLen(pub u16);
+
+impl MinLen {
+    /// No shortest length: a number newtype's constant, `toy.MinLen.NONE`.
+    pub const NONE: MinLen = MinLen(0);
+    /// The type by `Self`.
+    pub const WORD: Self = MinLen(4);
+    /// A number of its own.
+    pub const MAX: u16 = 64;
+    /// No JS value.
+    pub const HUGE: u64 = 1 << 40;
+}
 
 /// What [`Tally::find`] looks for: a list it borrows.
 #[derive(Clone, Copy, Debug, Default)]
@@ -526,6 +540,15 @@ pub struct Color {
 }
 
 impl Color {
+    /// Black: a fresh `toy.Color` on each read, `toy.Color.BLACK`.
+    pub const BLACK: Color = Color { r: 0, g: 0, b: 0 };
+    /// How many channels: a number, `toy.Color.CHANNELS`.
+    pub const CHANNELS: u8 = 3;
+    /// Its name, a string.
+    pub const KIND: &str = "rgb";
+    /// No JS value.
+    pub const BITS: u64 = 24;
+
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
         Color { r, g, b }
     }
@@ -560,6 +583,12 @@ pub struct Canvas {
 }
 
 impl Canvas {
+    /// Not held by value: no copy per read, so left out.
+    pub const EMPTY: Canvas = Canvas {
+        width: 0,
+        data: Vec::new(),
+    };
+
     /// `None` when a side is zero.
     pub fn new(width: u32, height: u32) -> Option<Self> {
         if width == 0 || height == 0 {

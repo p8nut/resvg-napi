@@ -297,7 +297,8 @@ fn disposable(file: &syn::File) -> BTreeMap<Option<String>, BTreeSet<String>> {
 
 /// What `using` needs for every class of `file` with a `dispose()`:
 ///
-/// - a `#[napi(module_exports)]` hook setting `[Symbol.dispose]` to
+/// - `alias_dispose`, which the `#[napi(module_exports)]` hook calls
+///   (napi runs one, `generate`'s), setting `[Symbol.dispose]` to
 ///   `dispose` on each prototype when the module loads, only where the
 ///   runtime has the symbol. napi's `well_known_symbol` would fail the whole
 ///   module without it (Node before 20.4, iOS Safari as of 2026), so the
@@ -337,8 +338,7 @@ pub fn aliases(file: &syn::File) -> (TokenStream, String) {
         #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
         #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
         #[doc = " the whole module without it. The `.d.ts` header declares it."]
-        #[napi(module_exports)]
-        pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+        fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
             let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
             let key: Unknown = symbol.get_named_property("dispose")?;
             if key.get_type()? != ValueType::Symbol {

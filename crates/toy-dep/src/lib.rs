@@ -107,6 +107,14 @@ pub struct Area {
 }
 
 impl Area {
+    /// One cell at the origin: a reached class's constant, `dep.Area.UNIT`.
+    pub const UNIT: Area = Area {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+
     /// None when it is empty.
     pub fn from_xywh(x: u32, y: u32, width: u32, height: u32) -> Option<Area> {
         (width > 0 && height > 0).then_some(Area {
@@ -168,3 +176,8 @@ impl Mark {
 /// `Copy`, but with nothing to call: never a class.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Token;
+
+impl Token {
+    /// A constant of a type that is no class: reported, never emitted.
+    pub const SIZE: u8 = 0;
+}

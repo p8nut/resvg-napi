@@ -15,6 +15,7 @@
 //!            constructors, statics, `Result` errors, conversions
 //!   project  classes and unions over values borrowed from an owner
 //!   dispose  `dispose()` and `[Symbol.dispose]` for every class
+//!   statics  associated constants, as static read-only properties
 //!   twin     `*Async` twins, on a worker thread, with leases
 //!   generate the whole pipeline, in order, writing the binding crate's
 //!            `src/lib.rs`: what a build script calls
@@ -47,6 +48,7 @@ pub mod generate;
 pub mod project;
 pub mod shape;
 pub mod sources;
+pub mod statics;
 pub mod twin;
 pub mod vocab;
 

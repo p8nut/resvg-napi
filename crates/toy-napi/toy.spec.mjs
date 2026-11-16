@@ -44,7 +44,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'NAME',
+    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
     'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Tally', 'Vec2', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
@@ -759,6 +759,44 @@ test('a public constant is a value of its namespace, under its Rust name', () =>
   // No JS value: a u64, a struct.
   assert.ok(!('BIG' in toy.toy));
   assert.ok(!('ORIGIN' in toy.toy));
+});
+
+test('an associated constant is a static read-only property, under its Rust name', () => {
+  const { Color, Key, Canvas, MinLen } = toy.toy;
+  // A number and a string on a class.
+  assert.equal(Color.CHANNELS, 3);
+  assert.equal(Color.KIND, 'rgb');
+  // `Self` on a class held by value: a fresh instance per read, of the class
+  // it is read on (`toy.Color`, not `alt.Color`, which shares its name).
+  const black = Color.BLACK;
+  assert.ok(black instanceof Color);
+  assert.ok(!(black instanceof toy.alt.Color));
+  assert.equal(black.red(), 0);
+  assert.ok(black.isGray());
+  black.setRed(9);
+  assert.equal(Color.BLACK.red(), 0);
+  assert.notEqual(Color.BLACK, Color.BLACK);
+  assert.ok(Key.LAST instanceof Key);
+  assert.equal(Key.LAST.toString(), String(2 ** 32 - 1));
+  // Of a class a listed class reaches, in a crate read for its classes.
+  assert.ok(toy.dep.Area.UNIT instanceof toy.dep.Area);
+  assert.equal(toy.dep.Area.UNIT.width(), 1);
+  // Read-only: a getter with no setter, which stays.
+  const d = Object.getOwnPropertyDescriptor(Color, 'CHANNELS');
+  assert.equal(typeof d.get, 'function');
+  assert.equal(d.set, undefined);
+  assert.equal(d.configurable, false);
+  assert.throws(() => { Color.CHANNELS = 4; }, TypeError);
+  assert.equal(Color.CHANNELS, 3);
+  // Left out: a u64, and `Self` on a class not held by value.
+  assert.ok(!('BITS' in Color));
+  assert.ok(!('EMPTY' in Canvas));
+  // A number newtype has no class: a frozen object of its name, its values
+  // numbers as the newtype is.
+  assert.deepEqual({ ...MinLen }, { NONE: 0, WORD: 4, MAX: 64 });
+  assert.ok(Object.isFrozen(MinLen));
+  // Its `u64` is left out.
+  assert.ok(!('HUGE' in MinLen));
 });
 
 // `dep.Grid` is the one class of `toy-dep`, a crate read for its listed

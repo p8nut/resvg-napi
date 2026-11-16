@@ -18,6 +18,9 @@ tiny_skia constants not exposed: ALPHA_U8_TRANSPARENT, ALPHA_U8_OPAQUE, ALPHA_TR
 tiny_skia::Color is a class: Value, a JS name another namespace has
 tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)
 tiny_skia::Color member not in the class: from_rgba_unchecked (unsafe)
+tiny_skia::Color::BLACK is a static: tiny_skia.Color.BLACK
+tiny_skia::Color::TRANSPARENT is a static: tiny_skia.Color.TRANSPARENT
+tiny_skia::Color::WHITE is a static: tiny_skia.Color.WHITE
 tiny_skia::ColorU8 is a class: Value
 tiny_skia::ColorU8 reached by tiny_skia::Color::to_color_u8: a class, held by value
 tiny_skia::IntRect is a class: Value
@@ -43,6 +46,7 @@ tiny_skia::PremultipliedColor member not in the class: demultiply (returns Color
 tiny_skia::PremultipliedColor reached by tiny_skia::Color::premultiply: a class, held by value
 tiny_skia::PremultipliedColorU8 is a class: Value
 tiny_skia::PremultipliedColorU8 reached by tiny_skia::Pixmap::pixel: a class, held by value
+tiny_skia::PremultipliedColorU8::TRANSPARENT is a static: tiny_skia.PremultipliedColorU8.TRANSPARENT
 tiny_skia::Rect is a class: Value
 tiny_skia::Rect member not in the class: from_points (arg: &[Point])
 tiny_skia::Size is a class: Value
@@ -72,5 +76,14 @@ usvg::fontdb::Database member not in the class: push_face_info (arg: FaceInfo)
 usvg::fontdb::Family is an input enum: { type, value }
 usvg::fontdb::ID is a class: Value
 usvg::fontdb::Source is an input enum: { type, value }
+usvg::fontdb::Weight::BLACK is a static: fontdb.Weight.BLACK
+usvg::fontdb::Weight::BOLD is a static: fontdb.Weight.BOLD
+usvg::fontdb::Weight::EXTRA_BOLD is a static: fontdb.Weight.EXTRA_BOLD
+usvg::fontdb::Weight::EXTRA_LIGHT is a static: fontdb.Weight.EXTRA_LIGHT
+usvg::fontdb::Weight::LIGHT is a static: fontdb.Weight.LIGHT
+usvg::fontdb::Weight::MEDIUM is a static: fontdb.Weight.MEDIUM
+usvg::fontdb::Weight::NORMAL is a static: fontdb.Weight.NORMAL
+usvg::fontdb::Weight::SEMIBOLD is a static: fontdb.Weight.SEMIBOLD
+usvg::fontdb::Weight::THIN is a static: fontdb.Weight.THIN
 vocabulary derived: 7 f32 newtypes, 7 type aliases
 wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database

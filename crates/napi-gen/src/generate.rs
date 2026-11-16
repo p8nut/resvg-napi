@@ -86,6 +86,9 @@ struct ClassCrate {
     /// the others. A later package's export the first does not re-export (an
     /// internal helper type) is not one.
     exported: BTreeSet<String>,
+    /// The constants its first package exports, as a caller names them
+    /// (`module::NAME`): seen, never emitted.
+    consts: Vec<String>,
 }
 
 /// A source of classes and functions inside a discovered crate: its root
@@ -289,6 +292,7 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         .map(|c| {
             let (mut files, mut lib, mut modules) = (Vec::new(), Vec::new(), BTreeMap::new());
             let mut exported = BTreeSet::new();
+            let mut consts = Vec::new();
             for (i, pkg) in c.pkgs.iter().enumerate() {
                 let dir = locate(pkg, "lib.rs", &locked);
                 let all = parse_crate(&dir);
@@ -302,12 +306,7 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                 }
                 if i == 0 {
                     exported.extend(tree.paths.keys().cloned());
-                    // Its constants are seen, never emitted: only a
-                    // discovered crate's are (`emit::constants`). Said, so
-                    // their absence reads as a choice. A `Role::Vocabulary`
-                    // crate is not read through its module tree, so what it
-                    // exports, constants included, is never seen.
-                    let consts: Vec<String> = tree
+                    consts = tree
                         .consts
                         .iter()
                         .map(|(m, name, _)| {
@@ -318,14 +317,6 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                             }
                         })
                         .collect();
-                    if !consts.is_empty() {
-                        say!(
-                            log,
-                            "{} constants not exposed: {} (read only for its listed classes and functions)",
-                            c.root,
-                            consts.join(", ")
-                        );
-                    }
                 }
                 for (name, at) in tree.paths {
                     modules.entry(name).or_insert(at);
@@ -337,6 +328,7 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
                 modules,
                 root: c.root,
                 exported,
+                consts,
             }
         })
         .collect();
@@ -406,6 +398,25 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         }
     };
     classes.config = config;
+    // A Role::Classes crate's constants are seen, never emitted: only a
+    // discovered crate's are (`emit::constants`), and only its listed
+    // classes' associated ones (`statics::of_class`). Said, so their absence
+    // reads as a choice. A `Role::Vocabulary` crate is not read through its
+    // module tree, so what it exports, constants included, is never seen.
+    for c in &extra_crates {
+        let mut consts = c.consts.clone();
+        consts.extend(crate::statics::unexposed(&c.files, &c.exported, |t| {
+            classes.lists(c.root, t)
+        }));
+        if !consts.is_empty() {
+            say!(
+                log,
+                "{} constants not exposed: {} (read only for its listed classes and functions)",
+                c.root,
+                consts.join(", ")
+            );
+        }
+    }
 
     // Each index-bounded field's highest usable index, read off its table.
     let bounds = index_bounds(primary_files, &config);
@@ -960,6 +971,8 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         done.iter().cloned().collect::<Vec<_>>().join(", ")
     );
 
+    // The associated constants, static read-only (`crate::statics`).
+    let mut statics = Vec::new();
     for (i, c) in classes.classes.iter().enumerate() {
         let root = classes.sources[c.source].root;
         let (code, skipped) = classes.class(i, &vocab);
@@ -975,6 +988,12 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
             say!(log, "{root}::{} member not in the class: {s}", c.name);
         }
         put(root, code);
+        let (code, found, lines) = crate::statics::of_class(&classes, i, &vocab);
+        for line in lines {
+            say!(log, "{line}");
+        }
+        put(root, code);
+        statics.extend(found);
     }
     let libs = scopes
         .iter()
@@ -997,6 +1016,19 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         for (root, code) in code {
             put(&root, code);
         }
+        // Its types' associated constants, those of a type with no class.
+        let (found, lines) = crate::statics::of_values(
+            src.root_str,
+            &src.root,
+            &src.parsed,
+            &src.tree,
+            |t| classes.lists(src.root_str, t),
+            &vocab,
+        );
+        for line in lines {
+            say!(log, "{line}");
+        }
+        statics.extend(found);
     }
     for u in &classes.unions {
         let root = classes.sources[u.source].root;
@@ -1165,10 +1197,31 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
         for (_, m) in &hand_written {
             whole.items.extend(m.items.iter().cloned());
         }
-        let (alias, dts_header) = crate::dispose::aliases(&whole);
+        let (alias, mut dts_header) = crate::dispose::aliases(&whole);
+        // The associated constants: getters and objects set when the module
+        // loads, declared in the same header.
+        let (statics, statics_dts, lines) = crate::statics::hook(&whole, statics);
+        for line in lines {
+            say!(log, "{line}");
+        }
+        dts_header.push_str(&statics_dts);
         write_if_changed(&manifest.join(DTS_HEADER), &dts_header);
         let inspect = inspect_members(&whole);
-        quote! { #file #alias #inspect }
+        // napi runs one `module_exports` hook: this one, calling the rest.
+        let define = (!statics.is_empty()).then(|| quote!(define_statics(&env, exports)?;));
+        quote! {
+            #file
+            #alias
+            #statics
+            #[doc = " What the module sets when it loads, after napi registers its items."]
+            #[napi(module_exports)]
+            pub fn on_load(env: Env, exports: Object) -> Result<()> {
+                alias_dispose(&env, exports)?;
+                #define
+                Ok(())
+            }
+            #inspect
+        }
     };
 
     let header = format!(

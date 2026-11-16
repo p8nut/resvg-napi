@@ -1241,6 +1241,27 @@ impl ToyColor {
         self.inner.disposed()
     }
 }
+#[napi(namespace = "toy")]
+impl ToyColor {
+    #[doc = " Black: a fresh `toy.Color` on each read, `toy.Color.BLACK`."]
+    #[napi(factory, js_name = "BLACK", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn BLACK() -> Self {
+        Self::__from(toy::Color::BLACK)
+    }
+    #[doc = " How many channels: a number, `toy.Color.CHANNELS`."]
+    #[napi(js_name = "CHANNELS", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn CHANNELS() -> u8 {
+        toy::Color::CHANNELS
+    }
+    #[doc = " Its name, a string."]
+    #[napi(js_name = "KIND", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn KIND() -> &'static str {
+        toy::Color::KIND
+    }
+}
 impl ToyCanvas {
     fn __from(inner: toy::Canvas) -> Self {
         Self {
@@ -1591,6 +1612,15 @@ impl ToyKey {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyKey {
+    #[doc = " The last key: an associated constant of type `Self`, `toy.Key.LAST`."]
+    #[napi(js_name = "LAST", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn LAST() -> Self {
+        Self::__from(toy::Key::LAST)
     }
 }
 impl From<&toy::Layer> for ToyLayer {
@@ -2456,6 +2486,15 @@ impl DepArea {
         self.inner.disposed()
     }
 }
+#[napi(namespace = "dep")]
+impl DepArea {
+    #[doc = " One cell at the origin: a reached class's constant, `dep.Area.UNIT`."]
+    #[napi(js_name = "UNIT", configurable = true, skip_typescript)]
+    #[allow(non_snake_case)]
+    pub fn UNIT() -> Self {
+        Self::__from(toy_dep::Area::UNIT)
+    }
+}
 impl DepCell {
     fn __from(inner: toy_dep::Cell) -> Self {
         Self {
@@ -2679,8 +2718,7 @@ impl ToyOriginPinned {
 #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
 #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
 #[doc = " the whole module without it. The `.d.ts` header declares it."]
-#[napi(module_exports)]
-pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
     let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
     let key: Unknown = symbol.get_named_property("dispose")?;
     if key.get_type()? != ValueType::Symbol {
@@ -2716,6 +2754,37 @@ pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
         let dispose: Unknown = proto.get_named_property("dispose")?;
         proto.set_property(key, dispose)?;
     }
+    Ok(())
+}
+#[doc = " The associated constants, static read-only: each class's hidden static"]
+#[doc = " methods become getters, and a type with no class gets a frozen object of"]
+#[doc = " its name. The `.d.ts` header declares them."]
+fn define_statics(env: &Env, exports: Object) -> Result<()> {
+    let classes: &[(&str, &str, &[&str])] = &[
+        ("dep", "Area", &["UNIT"]),
+        ("toy", "Color", &["BLACK", "CHANNELS", "KIND"]),
+        ("toy", "Key", &["LAST"]),
+    ];
+    for (ns, class, names) in classes {
+        let class: Object =
+            napi_support::namespace(env, &exports, ns)?.get_named_property_unchecked(class)?;
+        napi_support::static_getters(env, &class, names)?;
+    }
+    {
+        let mut object = Object::new(env)?;
+        object.set_named_property("NONE", u32::from(toy::MinLen::NONE.0))?;
+        object.set_named_property("WORD", u32::from(toy::MinLen::WORD.0))?;
+        object.set_named_property("MAX", toy::MinLen::MAX)?;
+        object.freeze()?;
+        napi_support::namespace(env, &exports, "toy")?.set_named_property("MinLen", object)?;
+    }
+    Ok(())
+}
+#[doc = " What the module sets when it loads, after napi registers its items."]
+#[napi(module_exports)]
+pub fn on_load(env: Env, exports: Object) -> Result<()> {
+    alias_dispose(&env, exports)?;
+    define_statics(&env, exports)?;
     Ok(())
 }
 #[napi(namespace = "toy")]

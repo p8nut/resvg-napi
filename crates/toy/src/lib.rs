@@ -3,6 +3,7 @@
 //! it was not written for.
 
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -119,6 +120,17 @@ impl Tally {
 
     pub fn push<S: Into<String>>(&mut self, name: S) {
         self.names.push(name.into());
+    }
+
+    /// Pushes the file name of `path`, if it has one: a bound in a `where`
+    /// clause, `Path` spelled short. JS hands over a string.
+    pub fn push_file<P>(&mut self, path: P)
+    where
+        P: AsRef<Path>,
+    {
+        if let Some(n) = path.as_ref().file_name() {
+            self.names.push(n.to_string_lossy().into_owned());
+        }
     }
 
     pub fn clear(&mut self) {
@@ -299,6 +311,9 @@ pub enum Label {
 pub struct Key(u32);
 
 impl Key {
+    /// The last key: an associated constant of type `Self`, `toy.Key.LAST`.
+    pub const LAST: Key = Key(u32::MAX);
+
     pub fn first() -> Self {
         Key(0)
     }
@@ -320,6 +335,17 @@ pub enum Tag<'a> {
 /// A shortest length, as a number newtype.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct MinLen(pub u16);
+
+impl MinLen {
+    /// No shortest length: a number newtype's constant, `toy.MinLen.NONE`.
+    pub const NONE: MinLen = MinLen(0);
+    /// The type by `Self`.
+    pub const WORD: Self = MinLen(4);
+    /// A number of its own.
+    pub const MAX: u16 = 64;
+    /// No JS value.
+    pub const HUGE: u64 = 1 << 40;
+}
 
 /// What [`Tally::find`] looks for: a list it borrows.
 #[derive(Clone, Copy, Debug, Default)]
@@ -358,6 +384,15 @@ pub struct ReportOptions {
     pub base: Arc<Tally>,
     /// Default: [`Width::Auto`]
     pub width: Width,
+    /// The first of the tally's own names written: an opaque key.
+    ///
+    /// Default: the first
+    pub from: Key,
+    /// Written after the line as ` xN` unless 1. An `f64`, which JS hands
+    /// over as it is: `0.1` stays `0.1`.
+    ///
+    /// Default: 1
+    pub ratio: f64,
     /// Applied to the finished line.
     ///
     /// Default: unchanged
@@ -371,6 +406,8 @@ impl Default for ReportOptions {
             style_index: 0,
             base: Arc::new(Tally::default()),
             width: Width::Auto,
+            from: Key::first(),
+            ratio: 1.0,
             finish: |s| s,
         }
     }
@@ -382,7 +419,7 @@ pub fn report(tally: &Tally, options: &ReportOptions) -> String {
         .base
         .names
         .iter()
-        .chain(&tally.names)
+        .chain(tally.names.iter().skip(options.from.0 as usize))
         .map(String::as_str)
         .collect();
     let style = STYLES[usize::from(options.style_index)];
@@ -391,6 +428,9 @@ pub fn report(tally: &Tally, options: &ReportOptions) -> String {
         while line.len() < usize::from(n) {
             line.push('.');
         }
+    }
+    if options.ratio != 1.0 {
+        line.push_str(&format!(" x{}", options.ratio));
     }
     (options.finish)(line)
 }
@@ -500,6 +540,15 @@ pub struct Color {
 }
 
 impl Color {
+    /// Black: a fresh `toy.Color` on each read, `toy.Color.BLACK`.
+    pub const BLACK: Color = Color { r: 0, g: 0, b: 0 };
+    /// How many channels: a number, `toy.Color.CHANNELS`.
+    pub const CHANNELS: u8 = 3;
+    /// Its name, a string.
+    pub const KIND: &str = "rgb";
+    /// No JS value.
+    pub const BITS: u64 = 24;
+
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
         Color { r, g, b }
     }
@@ -534,6 +583,12 @@ pub struct Canvas {
 }
 
 impl Canvas {
+    /// Not held by value: no copy per read, so left out.
+    pub const EMPTY: Canvas = Canvas {
+        width: 0,
+        data: Vec::new(),
+    };
+
     /// `None` when a side is zero.
     pub fn new(width: u32, height: u32) -> Option<Self> {
         if width == 0 || height == 0 {
@@ -584,6 +639,10 @@ impl Canvas {
             shades: Vec::new(),
             content: Box::new(Content::Canvas(self.clone())),
             backdrop: None,
+            zoom: 1.0,
+            weights: Vec::new(),
+            tilt: 0,
+            serial: 0,
         })
     }
 
@@ -672,7 +731,15 @@ impl Scene {
                 shades: Vec::new(),
                 content: Box::new(Content::Empty),
                 backdrop: None,
+                zoom: 1.0,
+                weights: Vec::new(),
+                tilt: 0,
+                serial: 0,
             })),
+            zoom: 0.1,
+            weights: vec![0.1, 0.2],
+            tilt: -3,
+            serial: 1 << 60,
         };
         Arc::new(Scene {
             root: Layer {
@@ -763,6 +830,12 @@ impl Album {
     pub fn cover(&self) -> &Frame {
         &self.frames[0]
     }
+
+    /// Whether `path` names an album file: `AsRef<Path>` spelled short,
+    /// which JS hands over as a string.
+    pub fn is_album<P: AsRef<Path>>(&self, path: P) -> bool {
+        path.as_ref().extension().is_some_and(|e| e == "album")
+    }
 }
 
 /// A slot's content: a variant may carry a class JS can write (`Canvas`),
@@ -784,6 +857,10 @@ pub struct Frame {
     content: Box<Content>,
     /// Boxed, as a crate keeps a rare member small.
     backdrop: Option<Box<Frame>>,
+    zoom: f64,
+    weights: Vec<f64>,
+    tilt: i16,
+    serial: u64,
 }
 
 impl Frame {
@@ -803,6 +880,26 @@ impl Frame {
     /// The frame behind this one, if any.
     pub fn backdrop(&self) -> Option<Box<Frame>> {
         self.backdrop.clone()
+    }
+
+    /// An `f64`, read as it is: `0.1`, not the `f32` nearest it.
+    pub fn zoom(&self) -> f64 {
+        self.zoom
+    }
+
+    /// A list of `f64`, read as they are.
+    pub fn weights(&self) -> &[f64] {
+        &self.weights
+    }
+
+    /// An `i16`, widened to a JS number.
+    pub fn tilt(&self) -> i16 {
+        self.tilt
+    }
+
+    /// A `u64` may not fit a JS number: left out, as `BIG` is.
+    pub fn serial(&self) -> u64 {
+        self.serial
     }
 }
 

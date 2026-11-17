@@ -22,10 +22,11 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Fields, FnArg, ImplItem, Item, ReturnType, Type};
 
+use crate::Config;
 use crate::emit::{Site, js_conv, method_gate};
+use crate::shape::{deref, segs};
 use crate::sources::{derives, find_enum, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
-use crate::{config, namespace_of};
 
 /// One source of classes and functions: its root path from the generated
 /// code (`toy`, `toy::alt`), its files, and where its types are exported
@@ -85,7 +86,13 @@ pub struct Classes<'a> {
     pub unions: Vec<crate::project::Union>,
     /// Error enums thrown by something emitted: (source, name). Each gets a
     /// type of its codes from [`Classes::error_codes`].
+    ///
+    /// Filled while [`Classes::class`] and [`Classes::functions`] emit, read
+    /// once they are done: one pass, local to this table. A `RefCell` because
+    /// the error mapper that finds one sits deep under `&self`.
     errors: RefCell<BTreeSet<(usize, String)>>,
+    /// The build script's config: the allowlists the table is read from.
+    pub config: Config,
 }
 
 /// What a JS number, boolean or string becomes upstream, both ways.
@@ -159,61 +166,9 @@ impl Prim {
     }
 }
 
-/// A type's path segments, references and lifetimes aside: `&a::B<'_>` is
-/// `[a, B]`. None for anything but a path.
-pub(crate) fn segs(ty: &Type) -> Option<Vec<String>> {
-    match ty {
-        Type::Path(p) if p.qself.is_none() => Some(
-            p.path
-                .segments
-                .iter()
-                .map(|s| s.ident.to_string())
-                .collect(),
-        ),
-        Type::Group(g) => segs(&g.elem),
-        Type::Paren(p) => segs(&p.elem),
-        _ => None,
-    }
-}
-
-/// The type arguments of a path's last segment: `Result<A, B>` is `[A, B]`.
-pub(crate) fn args(ty: &Type) -> Vec<&Type> {
-    let Type::Path(p) = ty else {
-        return Vec::new();
-    };
-    let Some(syn::PathArguments::AngleBracketed(a)) = p.path.segments.last().map(|s| &s.arguments)
-    else {
-        return Vec::new();
-    };
-    a.args
-        .iter()
-        .filter_map(|a| match a {
-            syn::GenericArgument::Type(t) => Some(t),
-            _ => None,
-        })
-        .collect()
-}
-
-/// `&T` is `(Some(false), T)`, `&mut T` `(Some(true), T)`, `T` `(None, T)`.
-pub(crate) fn deref(ty: &Type) -> (Option<bool>, &Type) {
-    match ty {
-        Type::Reference(r) => (Some(r.mutability.is_some()), &r.elem),
-        _ => (None, ty),
-    }
-}
-
-pub(crate) fn is_unit(ty: &Type) -> bool {
-    matches!(ty, Type::Tuple(t) if t.elems.is_empty())
-}
-
-/// The last segment is `name`, with `n` type arguments.
 /// The small-vector types over an array (`X<[T; N]>`), by name: they
 /// iterate by value, as a `Vec` does.
 const INLINE_VECTORS: &[&str] = &["TinyVec", "SmallVec", "ArrayVec"];
-
-pub(crate) fn is(ty: &Type, name: &str, n: usize) -> bool {
-    segs(ty).is_some_and(|s| s.last().is_some_and(|l| l == name)) && args(ty).len() == n
-}
 
 /// What a method's receiver is.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -264,7 +219,7 @@ fn callbacks(sig: &syn::Signature) -> BTreeMap<String, (Vec<Type>, String)> {
         .iter()
         .flat_map(|w| &w.predicates)
         .filter_map(|p| match p {
-            syn::WherePredicate::Type(t) => Some((ty_str(&t.bounded_ty), &t.bounds)),
+            syn::WherePredicate::Type(t) => Some((key(&t.bounded_ty)?, &t.bounds)),
             _ => None,
         });
     let mut out = BTreeMap::new();
@@ -380,6 +335,35 @@ fn holding(files: &[syn::File], name: &str) -> Holding {
     }
 }
 
+/// The views a type's methods borrow: each public `&mut self` method taking
+/// nothing else and returning a type with a lifetime (`V<'_>`), as the
+/// view's name and the method's.
+fn view_methods(files: &[syn::File], name: &str) -> Vec<(String, String)> {
+    inherent_impls(files, name)
+        .flat_map(|imp| &imp.items)
+        .filter_map(|it| match it {
+            ImplItem::Fn(f)
+                if is_pub(&f.vis)
+                    && receiver(&f.sig) == Some(Recv::Mut)
+                    && f.sig.inputs.len() == 1 =>
+            {
+                let ReturnType::Type(_, t) = &f.sig.output else {
+                    return None;
+                };
+                let Shape::Path { segs, args } = Shape::of(t) else {
+                    return None;
+                };
+                let borrows = args
+                    .iter()
+                    .any(|a| matches!(a, syn::GenericArgument::Lifetime(_)));
+                let view = segs.last().filter(|_| borrows)?;
+                Some((view.clone(), f.sig.ident.to_string()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The public fields, when every field is public and of a [`Prim`] type and
 /// the struct can be built from them (not `#[non_exhaustive]`).
 fn plain_fields(st: &syn::ItemStruct) -> Vec<(Ident, Prim)> {
@@ -417,13 +401,13 @@ pub(crate) struct Ret {
 }
 
 /// Why a function or method was left out.
-pub(crate) type Why = (Reason, Option<String>);
+pub(crate) type Why = (Reason, Option<Box<Type>>);
 
 impl<'a> Classes<'a> {
     /// The table of `Config::classes`, over `sources`.
-    pub fn new(sources: Vec<Source<'a>>) -> Self {
+    pub fn new(sources: Vec<Source<'a>>, config: Config) -> Self {
         let mut classes = Vec::new();
-        for (root, name) in config().classes {
+        for (root, name) in config.classes {
             let source = sources
                 .iter()
                 .position(|s| s.root == *root)
@@ -449,8 +433,8 @@ impl<'a> Classes<'a> {
                 of: None,
             });
         }
-        let unions = crate::project::projections(&sources, &mut classes);
-        let ns = |c: &Class| namespace_of(sources[c.source].root);
+        let unions = crate::project::projections(&sources, &mut classes, &config);
+        let ns = |c: &Class| config.namespace_of(sources[c.source].root);
         for i in 0..classes.len() {
             classes[i].shared_name = classes
                 .iter()
@@ -461,6 +445,7 @@ impl<'a> Classes<'a> {
             classes,
             unions,
             errors: RefCell::new(BTreeSet::new()),
+            config,
         }
     }
 
@@ -491,6 +476,16 @@ impl<'a> Classes<'a> {
                     self.sources[c.source].root,
                 )
             })
+    }
+
+    /// The classes held behind an `Arc` (`Shared`, `SharedCow`), by upstream
+    /// name, each with the root of its source: what `Vocab::shared` starts
+    /// from.
+    pub fn behind_arc(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.classes
+            .iter()
+            .filter(|c| matches!(c.holding, Holding::Shared | Holding::SharedCow))
+            .map(|c| (c.name.as_str(), self.sources[c.source].root))
     }
 
     /// The classes not held by value whose upstream type is `Clone`, by
@@ -578,6 +573,13 @@ impl<'a> Classes<'a> {
         if segs == ["Self"] {
             return this;
         }
+        // A class has no generic parameter (`Classes::new`), so a type with
+        // arguments is another of the same name: `std::cell::Cell<T>` is not
+        // a listed `Cell`, which the re-export fallback below would take it
+        // for.
+        if matches!(Shape::of(ty), Shape::Path { args, .. } if !args.is_empty()) {
+            return None;
+        }
         let name = segs.last()?;
         let s = self.resolve(ctx, &segs, |s| {
             self.classes
@@ -596,6 +598,44 @@ impl<'a> Classes<'a> {
             && !matches!(quals, [q] if q == "crate" || q == "self")
             && !self.sources[s].root.ends_with(&quals.join("::"));
         (!foreign || self.classes[c].holding != Holding::Projected).then_some(c)
+    }
+
+    /// The class an argument `&mut <segs>` is a view of, and its method
+    /// borrowing the view: `Config::views` lists it, or exactly one `&mut
+    /// self` method of a listed class, taking nothing else, returns it with a
+    /// lifetime (`as_view(&mut self) -> CanvasView<'_>`). Two such methods
+    /// are ambiguous, and an entry settles which.
+    pub(crate) fn view_of(
+        &self,
+        ctx: usize,
+        this: Option<usize>,
+        segs: &[String],
+    ) -> Option<(usize, Ident)> {
+        let last = segs.last()?;
+        let (class, via, derived) = match self.config.views.iter().find(|v| v.ty == last) {
+            Some(v) => (v.class.to_string(), v.via.to_string(), None),
+            None => {
+                let mut found = self.classes.iter().enumerate().flat_map(|(i, c)| {
+                    view_methods(self.sources[c.source].files, &c.name)
+                        .into_iter()
+                        .filter(|(ty, _)| ty == last)
+                        .map(move |(_, via)| (i, via))
+                });
+                let (i, via) = found.next()?;
+                if found.next().is_some() {
+                    return None;
+                }
+                (self.classes[i].name.clone(), via, Some(i))
+            }
+        };
+        // Resolved where the view is named: the class of that crate.
+        let mut class_segs = segs.to_vec();
+        *class_segs.last_mut()? = class;
+        let fake: Type = syn::parse_str(&class_segs.join("::")).ok()?;
+        let c = self.class_of(ctx, this, &fake)?;
+        derived
+            .is_none_or(|i| i == c)
+            .then(|| (c, format_ident!("{via}")))
     }
 
     pub(crate) fn ident(&self, c: usize) -> Ident {
@@ -622,7 +662,7 @@ impl<'a> Classes<'a> {
         this: Option<usize>,
         pat: &Ident,
         ty: &Type,
-        bounds: &BTreeMap<String, String>,
+        bounds: &BTreeMap<String, Option<Bound>>,
     ) -> Option<(TokenStream, Option<TokenStream>, TokenStream)> {
         let name = lower_camel(&pat.to_string());
         let (r, inner) = deref(ty);
@@ -631,10 +671,7 @@ impl<'a> Classes<'a> {
         if let Some([p]) = segs.as_deref()
             && let Some(b) = bounds.get(p)
         {
-            let ok = r.is_none()
-                && (b.contains("AsRef<std::path::Path>")
-                    || b.contains("AsRef<Path>")
-                    || b.contains("Into<String>"));
+            let ok = r.is_none() && b.is_some();
             return ok.then(|| (quote!(#pat: String), None, quote!(#pat)));
         }
         if let (Some(false), Type::Slice(s)) = (r, inner)
@@ -645,7 +682,8 @@ impl<'a> Classes<'a> {
         if r == Some(false) && matches!(segs.as_deref(), Some([s]) if s == "str") {
             return Some((quote!(#pat: String), None, quote!(&#pat)));
         }
-        if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
+        if r.is_none() && matches!(Shape::of(inner), Shape::Vec(e) if Prim::of(e) == Some(Prim::U8))
+        {
             return Some((quote!(#pat: Uint8Array), None, quote!(#pat.to_vec())));
         }
         if r.is_none()
@@ -684,15 +722,11 @@ impl<'a> Classes<'a> {
         }
         let segs = segs?;
         let last = segs.last()?;
-        // `Config::views`: borrowed from its class for the call.
+        // A view (`Classes::view_of`): borrowed from its class for the call.
         if r == Some(true)
-            && let Some(v) = config().views.iter().find(|v| v.ty == last)
+            && let Some((c, via)) = self.view_of(ctx, this, &segs)
         {
-            let mut class_segs = segs.clone();
-            *class_segs.last_mut()? = v.class.to_string();
-            let fake: Type = syn::parse_str(&class_segs.join("::")).ok()?;
-            let c = self.class_of(ctx, this, &fake)?;
-            let (id, via) = (self.ident(c), format_ident!("{}", v.via));
+            let id = self.ident(c);
             let from = match self.classes[c].holding {
                 Holding::Owned | Holding::Value => quote!(#pat.__mut()?),
                 Holding::SharedCow => quote!(std::sync::Arc::make_mut(#pat.__mut()?)),
@@ -707,7 +741,7 @@ impl<'a> Classes<'a> {
         }
         // An option object (`Config::option_objects`): optional, `Default`
         // under what JS provided.
-        if r == Some(false) && config().option_objects.contains(&last.as_str()) {
+        if r == Some(false) && self.config.option_objects.contains(&last.as_str()) {
             let s = self.resolve(ctx, &segs, |s| {
                 crate::sources::has_default(self.sources[s].files, last)
             })?;
@@ -735,7 +769,7 @@ impl<'a> Classes<'a> {
         if r != Some(true)
             && self
                 .resolve(ctx, &segs, |s| {
-                    crate::emit::is_input(self.sources[s].files, last)
+                    crate::emit::is_input(self.sources[s].files, last, &self.config)
                 })
                 .is_some()
         {
@@ -802,7 +836,7 @@ impl<'a> Classes<'a> {
         vocab: &Vocab,
     ) -> Result<Ret, Reason> {
         let v = quote!(__v);
-        if is_unit(ty) {
+        if Shape::of(ty).is_unit() {
             return Ok(Ret {
                 ty: quote!(()),
                 conv: v,
@@ -818,7 +852,8 @@ impl<'a> Classes<'a> {
                 conv: quote!(#v.to_vec().into()),
             });
         }
-        if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
+        if r.is_none() && matches!(Shape::of(inner), Shape::Vec(e) if Prim::of(e) == Some(Prim::U8))
+        {
             return Ok(Ret {
                 ty: quote!(Buffer),
                 conv: quote!(#v.into()),
@@ -849,7 +884,7 @@ impl<'a> Classes<'a> {
                 .map(|(i, e)| {
                     let i = syn::Index::from(i);
                     let at = quote!(#v.#i);
-                    if is(e, "Vec", 1) && Prim::of(args(e)[0]) == Some(Prim::U8) {
+                    if matches!(Shape::of(e), Shape::Vec(b) if Prim::of(b) == Some(Prim::U8)) {
                         return Some((quote!(Buffer), quote!(#at.into())));
                     }
                     if let Some(p) = Prim::of(e) {
@@ -857,9 +892,8 @@ impl<'a> Classes<'a> {
                     }
                     // Anything else the vocabulary maps for a getter: a
                     // union, a class held by value.
-                    let t = ty_str(e);
-                    let js = vocab.classify(&t)?;
-                    js_conv(&js, &t, vocab, &at, Site::Getter)
+                    let js = vocab.classify(e)?;
+                    js_conv(&js, e, vocab, &at, Site::Getter)
                         .filter(|c| !c.is_result)
                         .map(|c| (c.ty, c.expr))
                 })
@@ -872,8 +906,8 @@ impl<'a> Classes<'a> {
             });
         }
         // `Arc<T>` of a class holding an `Arc`.
-        if is(inner, "Arc", 1)
-            && let Some(c) = self.class_of(ctx, this, args(inner)[0])
+        if let Shape::Arc(held) = Shape::of(inner)
+            && let Some(c) = self.class_of(ctx, this, held)
             && matches!(
                 self.classes[c].holding,
                 Holding::Shared | Holding::SharedCow
@@ -896,10 +930,14 @@ impl<'a> Classes<'a> {
         // vector over an array (`TinyVec<[T; N]>`). Either iterates by value;
         // another generic over an array (`Box`, `Cell`) need not.
         if r.is_none()
-            && let [elem] = args(inner)[..]
-            && let Some(item) = match elem {
-                Type::Array(a) if INLINE_VECTORS.iter().any(|n| is(inner, n, 1)) => Some(&*a.elem),
-                _ if is(inner, "Vec", 1) => Some(elem),
+            && let Some(item) = match Shape::of(inner) {
+                Shape::Vec(elem) => Some(elem),
+                s if s.last().is_some_and(|l| INLINE_VECTORS.contains(&l)) => {
+                    match s.type_args()[..] {
+                        [Type::Array(a)] => Some(&*a.elem),
+                        _ => None,
+                    }
+                }
                 _ => None,
             }
             && let Some(c) = self.class_of(ctx, this, item)
@@ -933,12 +971,11 @@ impl<'a> Classes<'a> {
         // What the vocabulary maps, for a method: a handle class hands out
         // the handles and data it reaches.
         if with_self {
-            let t = ty_str(ty);
             // A getter's conversion where a method has none (a payload
             // enum, a list of numbers): the call is the same.
-            if let Some(js) = vocab.classify(&t)
-                && let Some(c) = js_conv(&js, &t, vocab, &v, Site::Method)
-                    .or_else(|| js_conv(&js, &t, vocab, &v, Site::Getter))
+            if let Some(js) = vocab.classify(ty)
+                && let Some(c) = js_conv(&js, ty, vocab, &v, Site::Method)
+                    .or_else(|| js_conv(&js, ty, vocab, &v, Site::Getter))
                 && !c.is_result
             {
                 return Ok(Ret {
@@ -965,7 +1002,7 @@ impl<'a> Classes<'a> {
         vocab: &Vocab,
     ) -> Result<TokenStream, Why> {
         let name = sig.ident.to_string();
-        let skip = |r: Reason, t: Option<String>| Err((r, t));
+        let skip = |r: Reason, t: Option<Box<Type>>| Err((r, t));
         if matches!(sig.safety, syn::Safety::Unsafe(_)) {
             return skip(Reason::Unsafe, None);
         }
@@ -1000,11 +1037,7 @@ impl<'a> Classes<'a> {
             (_, None) => return skip(Reason::NoReceiver, None),
         };
 
-        let bounds: BTreeMap<String, String> = sig
-            .generics
-            .type_params()
-            .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
-            .collect();
+        let bounds = bound_kinds(&sig.generics);
         let mut a = Args {
             params: Vec::new(),
             pre: Vec::new(),
@@ -1016,7 +1049,7 @@ impl<'a> Classes<'a> {
         for input in sig.inputs.iter().skip(usize::from(recv != Recv::None)) {
             let FnArg::Typed(t) = input else { continue };
             let syn::Pat::Ident(p) = &*t.pat else {
-                return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                return skip(Reason::Arg, Some(t.ty.clone()));
             };
             // A callback whose result the function returns (`with_data(id,
             // |data, index| ..)`): no JS argument; the closure copies out what
@@ -1025,14 +1058,14 @@ impl<'a> Classes<'a> {
                 && let Some((inputs, result)) = callbacks.get(seg)
             {
                 let Some((closure, ty)) = copy_out(inputs) else {
-                    return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                    return skip(Reason::Arg, Some(t.ty.clone()));
                 };
                 a.fwd.push(closure);
                 copied = Some((result.clone(), ty));
                 continue;
             }
             let Some((param, pre, fwd)) = self.arg(ctx, this, &p.ident, &t.ty, &bounds) else {
-                return skip(Reason::Arg, Some(ty_str(&t.ty)));
+                return skip(Reason::Arg, Some(t.ty.clone()));
             };
             a.params.push(param);
             a.pre.extend(pre);
@@ -1044,30 +1077,26 @@ impl<'a> Classes<'a> {
             ReturnType::Default => syn::parse_quote!(()),
             ReturnType::Type(_, t) => (**t).clone(),
         };
-        let (out, err) = if is(&out, "Result", 2) || is(&out, "Result", 1) {
-            let a = args(&out);
-            (a[0].clone(), Some(a.get(1).copied().cloned()))
-        } else {
-            (out, None)
+        let (out, err) = match Shape::of(&out) {
+            Shape::Result { ok, err } => (ok.clone(), Some(err.cloned())),
+            _ => (out.clone(), None),
         };
-        let (out, optional) = if is(&out, "Option", 1) {
-            (args(&out)[0].clone(), true)
-        } else {
-            (out, false)
+        let (out, optional) = match Shape::of(&out) {
+            Shape::Option(inner) => (inner.clone(), true),
+            _ => (out.clone(), false),
         };
         let out = match &copied {
             Some((result, ty)) if matches!(segs(&out).as_deref(), Some([s]) if s == result) => {
                 ty.clone()
             }
-            Some(_) => return skip(Reason::Returns, Some(ty_str(&out))),
+            Some(_) => return skip(Reason::Returns, Some(Box::new(out.clone()))),
             None => out,
         };
         // Only a class's own constructor and factories build it from the
         // class they are called on.
-        let target = if is(&out, "Arc", 1) {
-            args(&out)[0]
-        } else {
-            deref(&out).1
+        let target = match Shape::of(&out) {
+            Shape::Arc(held) => held,
+            _ => deref(&out).1,
         };
         let returns_this = this.is_some() && self.class_of(ctx, this, target) == this;
         let factory = recv == Recv::None && returns_this && !optional;
@@ -1085,7 +1114,7 @@ impl<'a> Classes<'a> {
         };
         let (body, ret_ty) = match projected {
             Some(p) => {
-                let (ty, bind, value) = p.map_err(|r| (r, Some(ty_str(&out))))?;
+                let (ty, bind, value) = p.map_err(|r| (r, Some(Box::new(out.clone()))))?;
                 let pre = &a.pre;
                 let body = quote! {
                     #(#pre)*
@@ -1097,17 +1126,17 @@ impl<'a> Classes<'a> {
             }
             None => {
                 // `Option<()>` says whether it did anything: `true` or `null`.
-                let ret = if is_unit(&out) && optional {
+                let ret = if Shape::of(&out).is_unit() && optional {
                     Ret {
                         ty: quote!(bool),
                         conv: quote!(true),
                     }
                 } else {
                     self.ret(ctx, this, &out, factory || is_new, me.is_some(), vocab)
-                        .map_err(|r| (r, Some(ty_str(&out))))?
+                        .map_err(|r| (r, Some(Box::new(out.clone()))))?
                 };
                 if is_new && !returns_this {
-                    return skip(Reason::Returns, Some(ty_str(&out)));
+                    return skip(Reason::Returns, Some(Box::new(out.clone())));
                 }
 
                 let path = match this {
@@ -1145,7 +1174,7 @@ impl<'a> Classes<'a> {
                     #(#pre)*
                     #self_pre
                 };
-                let (js_ty, value) = if is_unit(&out) && !optional {
+                let (js_ty, value) = if Shape::of(&out).is_unit() && !optional {
                     body.extend(quote!(#value;));
                     (&ret.ty, &quote!(()))
                 } else {
@@ -1239,7 +1268,7 @@ impl<'a> Classes<'a> {
                 if !is_pub(&f.vis) || !taken.insert(f.sig.ident.to_string()) {
                     continue;
                 }
-                let gate = method_gate(imp, f);
+                let gate = method_gate(imp, f, &self.config);
                 let member = format!("{name}::{}", f.sig.ident);
                 match self.function(
                     class.source,
@@ -1252,7 +1281,7 @@ impl<'a> Classes<'a> {
                 ) {
                     Ok(code) => {
                         methods.extend(code);
-                        if crate::twin::listed(src.root, &member) {
+                        if self.listed(src.root, &member) {
                             let twin = format!("{}_async", f.sig.ident);
                             assert!(
                                 taken.insert(twin),
@@ -1276,7 +1305,7 @@ impl<'a> Classes<'a> {
                 }
             }
         }
-        for (r, member) in config().asynchronous {
+        for (r, member) in self.config.asynchronous {
             assert!(
                 *r != src.root
                     || member.split_once("::").is_none_or(|(t, _)| t != name)
@@ -1539,11 +1568,13 @@ impl<'a> Classes<'a> {
             .iter()
             .position(|s| s.root == root)
             .unwrap_or_else(|| panic!("Config::functions: no source with root {root}"));
-        let ns =
-            namespace_of(root).unwrap_or_else(|| panic!("no Config::namespaces entry for {root}"));
+        let ns = self
+            .config
+            .namespace_of(root)
+            .unwrap_or_else(|| panic!("no Config::crates namespace for {root}"));
         let mut code = TokenStream::new();
         let mut skipped = Vec::new();
-        for (r, name) in config().functions.iter().filter(|(r, _)| *r == root) {
+        for (r, name) in self.config.functions.iter().filter(|(r, _)| *r == root) {
             let f = files
                 .iter()
                 .flat_map(|f| &f.items)
@@ -1552,13 +1583,13 @@ impl<'a> Classes<'a> {
                     _ => None,
                 })
                 .unwrap_or_else(|| panic!("upstream: `pub fn {name}` not found in {r}"));
-            let gate = match crate::cfg::gate(&crate::cfg::of(&f.attrs)) {
+            let gate = match crate::cfg::gate(&crate::cfg::of(&self.config, &f.attrs)) {
                 crate::cfg::Gate::Always => None,
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
             };
             let js = lower_camel(name);
             let napi = quote!(#[napi(js_name = #js, namespace = #ns)]);
-            let twin = crate::twin::listed(root, name);
+            let twin = self.listed(root, name);
             match self.function(ctx, None, &f.sig, &f.attrs, gate.clone(), napi, vocab) {
                 Ok(c) => code.extend(c),
                 Err((reason, ty)) => {
@@ -1575,6 +1606,12 @@ impl<'a> Classes<'a> {
             }
         }
         (code, skipped)
+    }
+
+    /// Whether error enum `name` is thrown by something emitted, so it has
+    /// a JS form (its `code`) of its own. Read once emission is done.
+    pub fn throws(&self, name: &str) -> bool {
+        self.errors.borrow().iter().any(|(_, n)| n == name)
     }
 
     /// The type of codes each thrown error enum gets (Q23), by source:

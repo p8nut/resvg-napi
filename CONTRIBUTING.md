@@ -22,12 +22,16 @@ which calls get a worker-thread twin, which option fields take a class) and the
 resvg-specific guards of `src/guard.rs`.
 
 It is a handful of files, one per phase. The generic phases are a crate of
-their own, `crates/napi-gen`, a build-dependency of this one: `build.rs` fills
-its `Config` and hands it over with `napi_gen::configure` before running them.
+their own, `crates/napi-gen`, a build-dependency of this one, and so is the
+order they run in: `build.rs` fills its `Config` and calls
+`napi_gen::generate::generate`, which hands the config to the phases (inside
+the `Vocab` and `Classes` most of them take, or as an argument to the few that
+run before either exists) and writes the files.
 
 | | |
 |---|---|
-| `crates/napi-gen/src/sources.rs` | finding and parsing upstream: env override, then the cargo registry at the version the workspace's `Cargo.lock` names |
+| `crates/napi-gen/src/generate.rs` | the pipeline: the passes, their order, the fixpoints, the generic assertions, and writing `src/lib.rs` and `dts-header.d.ts`. Returns the report for a build script to assert on |
+| `crates/napi-gen/src/sources.rs` | finding and parsing upstream: env override, then a workspace member (a path dependency), then the cargo registry at the version the workspace's `Cargo.lock` names |
 | `crates/napi-gen/src/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand: data types, unions, option objects, the namespaces, the prelude every generated file starts with |
 | `crates/napi-gen/src/class.rs` | the classes and free functions of the namespaced surface: constructors, statics, `Result` errors, owned and shared values, conversions |
@@ -36,10 +40,10 @@ its `Config` and hands it over with `napi_gen::configure` before running them.
 | `crates/napi-gen/src/twin.rs` | the `*Async` twins `Config::asynchronous` lists: arguments made owned on the main thread, the call on a worker thread, leases |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
 | `crates/napi-gen/src/lib.rs` | `Config`: what the phases ask the binding crate, and the `report!` macro |
-| `build/config.rs` | **everything specific to resvg**: the upstream crates and their roots, the allowlists, the hooks, feature gates, and the `napi_gen::Config` (`GEN`) they fill. Wrapping another crate starts by rewriting this file and `template.rs`, as `crates/toy-napi/build.rs` does |
-| `build/template.rs` | **the resvg-specific items of the generated file, by hand**: the crate paths, `mod guard;`, and `indent_from_js`, the one converter `GEN` names. About thirty lines |
+| `build/config.rs` | **everything specific to resvg**: the `napi_gen::Config` (`GEN`): the crates with their roots, roles and namespaces, the crate paths (`uses`), the hand-written `guard` module, the allowlists, the hooks and the feature gates. Wrapping another crate starts by rewriting this file and `template.rs` (see [Binding a new crate](#binding-a-new-crate)) |
+| `build/template.rs` | **the resvg-specific items of the generated file, by hand**: `indent_from_js`, the one converter `GEN` names |
 | `src/guard.rs` | **the resvg-specific guards, written by hand**: the `guard` providers (below) |
-| `build.rs` | the passes, their order, the fixpoints, the assertions, and writing `src/lib.rs` |
+| `build.rs` | `napi_build::setup()`, the `rerun-if-changed` lines for `build/`, and the call to `generate` |
 
 What the generated code needs at run time that has nothing to do with resvg
 lives in its own crate, `crates/napi-support`: `contained` (a panic becomes a
@@ -57,7 +61,9 @@ another library can take it as is.
 `resvg`, `fontdb`, `tiny_skia`, `tiny-skia` or `svgtypes`, as whole words, in
 code or in comments ([ADR 0002, Q35](docs/adr/0002-api-details.md)). CI greps
 for them and fails on a match. Whatever the generator has to know about
-resvg is a `napi_gen::Config` field that `build/config.rs` fills: the
+resvg is a `napi_gen::Config` field that `build/config.rs` fills: the crates
+and what each is read for (`crates`, below), how the generated file reaches
+them (`uses`) and the modules written by hand beside it (`hand_written`), the
 option-object hooks (`index_bounded`, `option_objects`, `providers`,
 `converters`, below), the class and function allowlists (`classes`,
 `functions`, `views`, below), the types borrowed from an owner
@@ -81,8 +87,10 @@ rule's three shapes: `Tally::pairs` (`Vec<(String, u32)>`), `Vec2::parts`
 iterates (`Config::iterated`), a union whose `Line(Vec2, Vec2)` carries a
 tuple of plain-data classes.
 `toy-napi` binds it
-with the same generator, through its own `Config` and a template a few lines
-long in its `build.rs`. Its `src/lib.rs`, `index.d.ts` and `dts-header.d.ts` are committed and
+with the same pipeline, `napi_gen::generate::generate`, through its own
+`Config` and a template a few lines long in its `build.rs`, which then asserts
+on the codegen report: discovery, the fixpoints and the namespacing run on the
+toy exactly as they run on resvg. Its `src/lib.rs`, `index.d.ts` and `dts-header.d.ts` are committed and
 drift-checked like the root's. The linux-gnu CI job builds it and runs its
 tests:
 
@@ -97,6 +105,69 @@ pick it up. Neither toy crate is published, and neither is in the npm tarball
 or the third-party notices. If a change to the generator breaks the toy, the
 change is resvg-shaped. Fix the generator, not the toy.
 
+### Binding a new crate
+
+A binding crate is a `cdylib` with `napi`, `napi-derive` and `napi-support`
+as dependencies, `napi-build`, `napi-gen` and `quote` as build-dependencies,
+the wrapped crate as a dependency (so it is in `Cargo.lock`), and a
+`build.rs` that fills a `Config` and calls `generate`. `crates/toy-napi` is
+the worked example; its `build.rs`, without the assertions, is all of it:
+
+```rust
+use napi_gen::{Config, Crate};
+use quote::quote;
+
+const GEN: Config = Config {
+    log_env: "TOY_NAPI_CODEGEN_LOG",
+    generated_from: "the toy crate's sources",
+    // Walked for its enums, data types, handles, input enums and
+    // constants; its `alt` module is a namespace of its own.
+    crates: &[Crate {
+        pkgs: &["toy"],
+        root: "toy",
+        ns: "toy",
+        modules: &[("alt", "alt")],
+        ..Crate::EMPTY
+    }],
+    // Every list is an API decision, and empty unless named.
+    classes: &[("toy", "Counter"), ("toy", "Canvas")],
+    functions: &[("toy", "report")],
+    // `Options` and `ReportOptions` need no entry: `Counter::new` and
+    // `report` take them by `&`, which makes them option objects.
+    ..Config::EMPTY
+};
+
+fn main() {
+    napi_build::setup();
+    println!("cargo::rerun-if-changed=build.rs");
+    // `head`: the template's own items (the converters `Config::converters`
+    // names); `tail`: anything that must come after the generated items.
+    let report = napi_gen::generate::generate(&GEN, quote!(), quote!()).report;
+    assert!(report.iter().all(|l| !l.contains("function not exposed")));
+}
+```
+
+`generate` locates each package (a `<PKG>_SRC_DIR` override, a workspace
+member, or the registry at the locked version), writes `src/lib.rs` and
+`dts-header.d.ts` beside `Cargo.toml` (point `napi.dtsHeaderFile` in
+`package.json` at the latter), and returns the report, which it also prints as
+cargo warnings when `log_env` is set. Then:
+
+- `Config::crates` lists each crate with a `Role`: `Discover` (walked; the
+  first is the primary, where `index_bounded` tables are read), `Classes`
+  (only its listed classes and functions, for a crate another one
+  re-exports), `Vocabulary` (only newtypes, aliases and payload enums).
+- A crate reached through another one's re-export takes that path as its
+  `root` (`usvg::fontdb`) and the generated file's `use` of it in
+  `Config::uses`.
+- A module of the binding crate written by hand (resvg's `src/guard.rs`) is a
+  `Config::hand_written` entry: the generated file declares it, imports the
+  classes of it the providers name, and gives its classes `dispose` and
+  `util.inspect`.
+- Run the build with `log_env` set and read the report: every type left out
+  says why. Each allowlist entry is a decision recorded beside it, as in
+  `build/config.rs`.
+
 ### The namespaces
 
 The generator emits one namespace per crate, `usvg.*`, `fontdb.*`,
@@ -105,10 +176,11 @@ The generator emits one namespace per crate, `usvg.*`, `fontdb.*`,
 but `setLogLevel` and `takeLogs` (and the hand-written `guard.*`). Three rules
 make it, all generic:
 
-- **One namespace per source.** `Config::namespaces` maps a source's root to
-  its namespace (`("usvg::fontdb", "fontdb")`). A type goes in the namespace
+- **One namespace per source.** Each `Config::crates` entry gives its root
+  a namespace (`usvg::fontdb` is `fontdb`), and `Crate::modules` a module of
+  it one of its own (the toy's `alt`). A type goes in the namespace
   of the source that defines it. tiny-skia, svgtypes and resvg are sources of
-  the classes and functions `GEN` lists only (`config::CLASS_CRATES`), never
+  the classes and functions `GEN` lists only (`Role::Classes`), never
   of discovery, and tiny-skia is read with tiny-skia-path, whose
   `Transform`, `Rect` and `Size` it re-exports: they are `tiny_skia.*`. A type
   usvg only re-exports from them is not `usvg.*`.
@@ -156,8 +228,9 @@ the generator hooks that served only it (`shapes`, `size_new`,
 
 An upstream option struct is a plain object on the namespaced surface
 ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md)): `usvg.Options`,
-`usvg.WriteOptions`. `Config::option_objects` lists the structs, and
-`napi_gen::emit::option_object` makes each one an input-only
+`usvg.WriteOptions`. A struct with `Default` that a listed member takes by
+`&` is one (`Tree::from_data(&Options)`), and `Config::option_objects` lists
+any other; then `napi_gen::emit::option_object` makes each one an input-only
 `#[napi(object, object_to_js = false)]` with every field optional, plus a
 `to_upstream(&self) -> Result<Upstream>` that starts from upstream's
 `Default` and overrides only the fields JS provided. A field left out, or
@@ -168,14 +241,18 @@ out: it is to become a class with a constructor. A field maps by its type
 (numbers, strings, string lists, enums, paths), or through one of three
 hooks:
 
-- **Providers** (`Config::providers`): "a field of type `T` is supplied by an
-  instance of class `C` providing it". The field takes the instance as a
-  `ClassInstance<'a, C>`, so the object gets a lifetime, and the provider's
-  expression makes the value out of it. `Options::fontdb` takes a
-  `fontdb.Database` and shares its `Arc`; `imageHrefResolver` and
-  `fontResolver` take the `guard` classes (below, ADR 0002, Q26);
-  `defaultSize` a `tiny_skia.Size` (Q39: its fields are private, so no
-  `fromObject`; JS writes `tiny_skia.Size.fromWh(w, h)`). napi checks
+- **Providers**: "a field of type `T` is supplied by an instance of class `C`
+  providing it". The field takes the instance as a `ClassInstance<'a, C>`, so
+  the object gets a lifetime, and the provider's expression makes the value
+  out of it. A listed class provides on its own, with no entry: an `Arc<C>`
+  field of a class held behind an `Arc` shares it (`Options::fontdb` takes a
+  `fontdb.Database`), and a `C` field of a class held by value, not plain
+  data, copies it (`defaultSize` takes a `tiny_skia.Size`, Q39: its fields
+  are private, so no `fromObject`; JS writes `tiny_skia.Size.fromWh(w, h)`).
+  `Config::providers` lists the rest, the classes the template writes:
+  `imageHrefResolver` and `fontResolver` take the `guard` classes (below,
+  ADR 0002, Q26). An entry with no `class` (`Provider::DOC`) only adds a
+  paragraph to a derived provider's field doc. napi checks
   the class: another class's instance, or a plain object, throws (natively by
   type tag, on WASI by the class recorded at wrap time). A field with no JS
   form and no provider is left out of the type and keeps its default, and the
@@ -201,9 +278,10 @@ and the clamp.
 
 `src/guard.rs` is hand-written and resvg-specific, like the template, so it
 lives at the root, outside the boundary grep ([ADR 0001](docs/adr/0001-thin-generic-wrapper.md),
-"Safety"). The generated `src/lib.rs` declares it (`mod guard;`, from the
-template), and `build.rs` reads it beside the generated file so its classes
-get `[Symbol.dispose]` and `util.inspect` like the others. It holds:
+"Safety"). It is `GEN.hand_written`: the generated `src/lib.rs` declares it
+(`mod guard;`) and imports the classes the providers name, and `generate`
+reads it beside the generated file so its classes get `[Symbol.dispose]` and
+`util.inspect` like the others. It holds:
 
 - `guard.ImageHrefResolver({ images, resourcesDir, resourcesRoot })`, the
   provider of `usvg.Options.imageHrefResolver`: supplied buffers first, then
@@ -333,9 +411,10 @@ Q34):
   `dispose()` empties (below).
 - **Arguments**: numbers, booleans, strings and bytes; a listed class, by
   value (`Copy`), `&` or `&mut` as its holding allows; an option object; and a
-  **view** (`Config::views`): `&mut V` that a class's method returns for the
-  call, so `paint(view: &mut CanvasView)` takes the `Canvas` and calls
-  `as_view()` on it. A generic `P: AsRef<Path>` or `S: Into<String>` is a
+  **view**: `&mut V` that a class's method returns for the call, so
+  `paint(view: &mut CanvasView)` takes the `Canvas` and calls `as_view()` on
+  it. Derived when exactly one `&mut self` method of a listed class returns
+  `V<'_>`; `Config::views` settles two. A generic `P: AsRef<Path>` or `S: Into<String>` is a
   string.
 - **Conversions** come from Rust's traits, one direction each and with
   nothing reported when the other is missing (Q34): `FromStr` gives a static
@@ -365,7 +444,7 @@ Q34):
   out.
 
 **Constants** need no allowlist: every public `const` a wrapped crate
-exports (`UPSTREAM` in `build/config.rs`, not `CLASS_CRATES`) is a value
+exports (a `Role::Discover` crate of `GEN.crates`) is a value
 of the namespace of the module that exports it, under its Rust name
 (`usvg.DEFAULT_MAX_DEPTH`, ADR 0002, Q21), when its type is a number that
 fits a JS number, a `bool` or a string (`napi_gen::emit::constants`). Any
@@ -471,7 +550,7 @@ value says whether the call did anything.
 
 The root lists `usvg::Node` and the four node types: `tree.root()` is a
 `usvg.Group`, `group.children()` and `tree.nodeById(id)` hand out
-`usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText`, and
+`usvg.Node` (`usvg.NodeGroup | usvg.NodePath | usvg.NodeImage | usvg.NodeText`), and
 `resvg.renderNode(node, transform, pixmap)` takes one back. It lists the
 definitions that own content too, `ClipPath`, `Mask` and `Pattern`: from the
 tree's tables (`tree.clipPaths()`) or from what refers to them

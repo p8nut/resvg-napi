@@ -17,8 +17,8 @@ use syn::visit_mut::VisitMut;
 use syn::{Fields, ImplItem, Item, ReturnType};
 
 use crate::emit::{class_of, napi_args};
+use crate::shape::{Shape, key};
 use crate::sources::{inherent_impls, self_ident};
-use crate::vocab::ty_str;
 
 /// A class [`slotted`] puts in a slot: its field and JS name.
 struct Target {
@@ -47,7 +47,7 @@ pub fn slotted(file: &mut syn::File) {
         if fields
             .named
             .iter()
-            .any(|f| ty_str(&f.ty).starts_with("napi_support::Slot<"))
+            .any(|f| matches!(Shape::of(&f.ty), Shape::Path { segs, .. } if segs == ["napi_support", "Slot"]))
         {
             continue;
         }
@@ -144,50 +144,54 @@ fn guard(f: &mut syn::ImplItemFn, t: &Target, napi: bool, class: &str) {
         ReturnType::Type(_, t) => Some((**t).clone()),
         ReturnType::Default => None,
     };
-    let out_str = out.as_ref().map(ty_str).unwrap_or_default();
-    let (block, ret): (syn::Block, syn::Type) =
-        if out_str.starts_with("Result<") && out_str.ends_with(",String>") {
-            let stmts = &body.stmts;
-            (
-                syn::parse_quote!({ #take #(#stmts)* }),
-                out.expect("a Result"),
-            )
-        } else if out_str.starts_with("Result<") {
-            // napi's `Result<T>`: its `Status` becomes the code.
-            let out = out.expect("a Result");
-            let inner = crate::class::args(&out)[0].clone();
-            (
-                syn::parse_quote!({
-                    #take
-                    #[allow(clippy::redundant_closure_call)]
-                    (|| -> #out #body)().map_err(napi_support::coded)
-                }),
-                syn::parse_quote!(Result<#inner, String>),
-            )
+    let result = out.as_ref().and_then(|o| match Shape::of(o) {
+        Shape::Result { ok, err } => Some((ok.clone(), err.and_then(key))),
+        _ => None,
+    });
+    let (block, ret): (syn::Block, syn::Type) = if result
+        .as_ref()
+        .is_some_and(|(_, e)| e.as_deref() == Some("String"))
+    {
+        let stmts = &body.stmts;
+        (
+            syn::parse_quote!({ #take #(#stmts)* }),
+            out.expect("a Result"),
+        )
+    } else if let Some((inner, _)) = result {
+        // napi's `Result<T>`: its `Status` becomes the code.
+        let out = out.expect("a Result");
+        (
+            syn::parse_quote!({
+                #take
+                #[allow(clippy::redundant_closure_call)]
+                (|| -> #out #body)().map_err(napi_support::coded)
+            }),
+            syn::parse_quote!(Result<#inner, String>),
+        )
+    } else {
+        let t = out.unwrap_or_else(|| syn::parse_quote!(()));
+        let mut ret = Returns(false);
+        ret.visit_block_mut(&mut f.block.clone());
+        let block = if ret.0 {
+            // A closure, so the body's own `return` keeps its meaning.
+            syn::parse_quote!({
+                #take
+                #[allow(clippy::redundant_closure_call)]
+                Ok((|| #body)())
+            })
+        } else if let [syn::Stmt::Expr(e, None)] = &body.stmts[..] {
+            syn::parse_quote!({
+                #take
+                Ok(#e)
+            })
         } else {
-            let t = out.unwrap_or_else(|| syn::parse_quote!(()));
-            let mut ret = Returns(false);
-            ret.visit_block_mut(&mut f.block.clone());
-            let block = if ret.0 {
-                // A closure, so the body's own `return` keeps its meaning.
-                syn::parse_quote!({
-                    #take
-                    #[allow(clippy::redundant_closure_call)]
-                    Ok((|| #body)())
-                })
-            } else if let [syn::Stmt::Expr(e, None)] = &body.stmts[..] {
-                syn::parse_quote!({
-                    #take
-                    Ok(#e)
-                })
-            } else {
-                syn::parse_quote!({
-                    #take
-                    Ok(#body)
-                })
-            };
-            (block, syn::parse_quote!(Result<#t, String>))
+            syn::parse_quote!({
+                #take
+                Ok(#body)
+            })
         };
+        (block, syn::parse_quote!(Result<#t, String>))
+    };
     f.block = block;
     f.sig.output = syn::parse_quote!(-> #ret);
 }
@@ -293,7 +297,8 @@ fn disposable(file: &syn::File) -> BTreeMap<Option<String>, BTreeSet<String>> {
 
 /// What `using` needs for every class of `file` with a `dispose()`:
 ///
-/// - a `#[napi(module_exports)]` hook setting `[Symbol.dispose]` to
+/// - `alias_dispose`, which the `#[napi(module_exports)]` hook calls
+///   (napi runs one, `generate`'s), setting `[Symbol.dispose]` to
 ///   `dispose` on each prototype when the module loads, only where the
 ///   runtime has the symbol. napi's `well_known_symbol` would fail the whole
 ///   module without it (Node before 20.4, iOS Safari as of 2026), so the
@@ -333,8 +338,7 @@ pub fn aliases(file: &syn::File) -> (TokenStream, String) {
         #[doc = " `[Symbol.dispose]` on the prototype of every class with a `dispose()`,"]
         #[doc = " only where the runtime has the symbol: napi's `well_known_symbol` fails"]
         #[doc = " the whole module without it. The `.d.ts` header declares it."]
-        #[napi(module_exports)]
-        pub fn alias_dispose(env: Env, exports: Object) -> Result<()> {
+        fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
             let symbol: Object = env.get_global()?.get_named_property_unchecked("Symbol")?;
             let key: Unknown = symbol.get_named_property("dispose")?;
             if key.get_type()? != ValueType::Symbol {

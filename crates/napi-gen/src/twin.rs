@@ -18,40 +18,44 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{FnArg, ReturnType, Type};
 
-use crate::class::{Classes, Holding, Prim, Recv, args, deref, is, is_unit, receiver, segs};
-use crate::config;
-use crate::vocab::{Vocab, lower_camel, ty_str};
-
-/// Whether `Config::asynchronous` lists `name` (`Type::name` for a member)
-/// of the source at `root`.
-pub fn listed(root: &str, name: &str) -> bool {
-    config()
-        .asynchronous
-        .iter()
-        .any(|(r, n)| *r == root && *n == name)
-}
+use crate::class::{Classes, Holding, Prim, Recv, receiver};
+use crate::shape::{Shape, deref, segs, ty_str};
+use crate::vocab::{Bound, Vocab, bound_kinds, lower_camel};
 
 impl Classes<'_> {
+    /// Whether `Config::asynchronous` lists `name` (`Type::name` for a member)
+    /// of the source at `root`.
+    pub fn listed(&self, root: &str, name: &str) -> bool {
+        self.config
+            .asynchronous
+            .iter()
+            .any(|(r, n)| *r == root && *n == name)
+    }
+
     /// One argument of a twin: its parameter, the statement converting it
-    /// on the main thread into an owned `Send` value, and the expression the
-    /// worker passes. An `Err` says why it cannot cross.
+    /// on the main thread into an owned `Send` value, the expression the
+    /// worker passes, and whether that statement leases the argument. An
+    /// `Err` says why it cannot cross.
     fn twin_arg(
         &self,
         ctx: usize,
         this: Option<usize>,
         pat: &Ident,
         ty: &Type,
-        bounds: &BTreeMap<String, String>,
-    ) -> Result<(TokenStream, Option<TokenStream>, TokenStream), String> {
+        bounds: &BTreeMap<String, Option<Bound>>,
+    ) -> Result<(TokenStream, Option<TokenStream>, TokenStream, bool), String> {
         let name = lower_camel(&pat.to_string());
         let tmp = format_ident!("__{pat}");
         let (r, inner) = deref(ty);
         let segs = segs(inner);
         if let Some([p]) = segs.as_deref()
-            && bounds.contains_key(p)
+            && let Some(b) = bounds.get(p)
         {
             // A path or a string, as the sync call takes it: owned already.
-            return Ok((quote!(#pat: String), None, quote!(#pat)));
+            return match (r, b) {
+                (None, Some(_)) => Ok((quote!(#pat: String), None, quote!(#pat), false)),
+                _ => Err(format!("`{name}`: its generic bound has no JS form")),
+            };
         }
         if let (Some(false), Type::Slice(s)) = (r, inner)
             && Prim::of(&s.elem) == Some(Prim::U8)
@@ -60,16 +64,19 @@ impl Classes<'_> {
                 quote!(#pat: Uint8Array),
                 Some(quote!(let #tmp = #pat.to_vec();)),
                 quote!(&#tmp),
+                false,
             ));
         }
         if r == Some(false) && matches!(segs.as_deref(), Some([s]) if s == "str") {
-            return Ok((quote!(#pat: String), None, quote!(&#pat)));
+            return Ok((quote!(#pat: String), None, quote!(&#pat), false));
         }
-        if r.is_none() && is(inner, "Vec", 1) && Prim::of(args(inner)[0]) == Some(Prim::U8) {
+        if r.is_none() && matches!(Shape::of(inner), Shape::Vec(e) if Prim::of(e) == Some(Prim::U8))
+        {
             return Ok((
                 quote!(#pat: Uint8Array),
                 Some(quote!(let #tmp = #pat.to_vec();)),
                 quote!(#tmp),
+                false,
             ));
         }
         if r.is_none()
@@ -79,7 +86,7 @@ impl Classes<'_> {
             let same = quote!(#pat);
             let conv = p.js_in(&same, &name);
             let pre = (conv.to_string() != same.to_string()).then(|| quote!(let #pat = #conv;));
-            return Ok((quote!(#pat: #js), pre, quote!(#pat)));
+            return Ok((quote!(#pat: #js), pre, quote!(#pat), false));
         }
         if let Some(c) = self.class_of(ctx, this, inner) {
             let id = self.ident(c);
@@ -116,26 +123,23 @@ impl Classes<'_> {
             } else {
                 quote!(#pat: &#id)
             };
-            return Ok((param, Some(pre), fwd));
+            // Every `&mut` here is a lease, and only those are.
+            return Ok((param, Some(pre), fwd, mutable));
         }
         if r == Some(false)
             && let Some(u) = self.union_of(ctx, inner)
         {
             // A projection of its own: owned already.
             let (param, pre, fwd) = self.union_arg(u, pat);
-            return Ok((param, pre, fwd));
+            return Ok((param, pre, fwd, false));
         }
         let missing = || format!("argument `{pat}` has no JS form");
         let segs = segs.ok_or_else(missing)?;
         let last = segs.last().ok_or_else(missing)?;
         if r == Some(true)
-            && let Some(v) = config().views.iter().find(|v| v.ty == last)
+            && let Some((c, via)) = self.view_of(ctx, this, &segs)
         {
-            let mut class_segs = segs.clone();
-            *class_segs.last_mut().ok_or_else(missing)? = v.class.to_string();
-            let fake: Type = syn::parse_str(&class_segs.join("::")).map_err(|e| e.to_string())?;
-            let c = self.class_of(ctx, this, &fake).ok_or_else(missing)?;
-            let (id, via) = (self.ident(c), format_ident!("{}", v.via));
+            let id = self.ident(c);
             let place = match self.classes[c].holding {
                 Holding::Owned | Holding::Value => quote!((*#tmp)),
                 Holding::SharedCow => quote!(std::sync::Arc::make_mut(&mut *#tmp)),
@@ -145,14 +149,16 @@ impl Classes<'_> {
                 quote!(#pat: &mut #id),
                 Some(quote!(let mut #tmp = #pat.__lease()?;)),
                 quote!(&mut #place.#via()),
+                true,
             ));
         }
-        if r == Some(false) && config().option_objects.contains(&last.as_str()) {
+        if r == Some(false) && self.config.option_objects.contains(&last.as_str()) {
             let o = format_ident!("{last}");
             return Ok((
                 quote!(#pat: Option<#o>),
                 Some(quote!(let #tmp = #pat.unwrap_or_default().to_upstream()?;)),
                 quote!(&#tmp),
+                false,
             ));
         }
         Err(missing())
@@ -187,8 +193,9 @@ impl Classes<'_> {
         }
         let holding = this.map(|c| self.classes[c].holding);
         let ident = &sig.ident;
-        // The receiver, made `Send` on the main thread, and the call on it.
-        let (me, self_pre, call) = match (recv, holding) {
+        // The receiver, made `Send` on the main thread, the call on it, and
+        // whether it is leased.
+        let (me, self_pre, call, self_leased) = match (recv, holding) {
             (Recv::None, _) => {
                 let path = match this {
                     Some(c) => {
@@ -197,58 +204,57 @@ impl Classes<'_> {
                     }
                     None => self.sources[ctx].root.parse().expect("a root path"),
                 };
-                (None, None, quote!(#path::#ident))
+                (None, None, quote!(#path::#ident), false)
             }
             (Recv::Ref, Some(Holding::Projected)) => (
                 Some(quote!(&self)),
                 Some(quote!(let __self = self.__ref()?.clone();)),
                 quote!(__self.get().#ident),
+                false,
             ),
             (Recv::Ref, Some(Holding::Shared | Holding::SharedCow)) => (
                 Some(quote!(&self)),
                 Some(quote!(let __self = self.__ref()?.clone();)),
                 quote!(__self.#ident),
+                false,
             ),
             (Recv::Ref | Recv::Value, Some(Holding::Value)) => (
                 Some(quote!(&self)),
                 Some(quote!(let __self = *self.__ref()?;)),
                 quote!(__self.#ident),
+                false,
             ),
             (Recv::Ref, Some(Holding::Owned)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let __self = self.__lease()?;)),
                 quote!(__self.#ident),
+                true,
             ),
             (Recv::Mut, Some(Holding::Value | Holding::Owned)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let mut __self = self.__lease()?;)),
                 quote!(__self.#ident),
+                true,
             ),
             (Recv::Mut, Some(Holding::SharedCow)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let mut __self = self.__lease()?;)),
                 quote!(std::sync::Arc::make_mut(&mut *__self).#ident),
+                true,
             ),
             (Recv::Value, Some(Holding::Owned)) => (
                 Some(quote!(&mut self)),
                 Some(quote!(let __self = self.__take()?;)),
                 quote!(__self.#ident),
+                false,
             ),
             _ => fail("its receiver cannot cross to a worker thread"),
         };
 
-        let bounds: BTreeMap<String, String> = sig
-            .generics
-            .type_params()
-            .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
-            .collect();
+        let bounds = bound_kinds(&sig.generics);
         let (mut params, mut pre, mut fwd) = (Vec::new(), Vec::new(), Vec::new());
         // What the call leases: what the doc names, and the locals holding
         // them, which `spawn` keeps a hold on.
-        let leases = |pre: &Option<TokenStream>| {
-            pre.as_ref()
-                .is_some_and(|p| p.to_string().contains("__lease"))
-        };
         let (mut lent, mut held) = (Vec::new(), Vec::new());
         for input in sig.inputs.iter().skip(usize::from(recv != Recv::None)) {
             let FnArg::Typed(t) = input else { continue };
@@ -256,10 +262,10 @@ impl Classes<'_> {
                 fail("an argument is a pattern")
             };
             let pat = &p.ident;
-            let (param, p, f) = self
+            let (param, p, f, leased) = self
                 .twin_arg(ctx, this, pat, &t.ty, &bounds)
                 .unwrap_or_else(|why| fail(&why));
-            if leases(&p) {
+            if leased {
                 lent.push(format!("`{}`", lower_camel(&pat.to_string())));
                 held.push(format_ident!("__{pat}"));
             }
@@ -267,7 +273,7 @@ impl Classes<'_> {
             pre.extend(p);
             fwd.push(f);
         }
-        if leases(&self_pre) {
+        if self_leased {
             lent.insert(0, "this instance".to_string());
             held.push(format_ident!("__self"));
         }
@@ -277,21 +283,18 @@ impl Classes<'_> {
             ReturnType::Default => syn::parse_quote!(()),
             ReturnType::Type(_, t) => (**t).clone(),
         };
-        let (out, err) = if is(&out, "Result", 2) || is(&out, "Result", 1) {
-            let a = args(&out);
-            (a[0].clone(), Some(a.get(1).copied().cloned()))
-        } else {
-            (out, None)
+        let (out, err) = match Shape::of(&out) {
+            Shape::Result { ok, err } => (ok.clone(), Some(err.cloned())),
+            _ => (out.clone(), None),
         };
-        let (out, optional) = if is(&out, "Option", 1) {
-            (args(&out)[0].clone(), true)
-        } else {
-            (out, false)
+        let (out, optional) = match Shape::of(&out) {
+            Shape::Option(inner) => (inner.clone(), true),
+            _ => (out.clone(), false),
         };
         if deref(&out).0.is_some() {
             fail("it returns a borrow, which cannot leave the worker thread");
         }
-        let (js_ty, conv) = if is_unit(&out) {
+        let (js_ty, conv) = if Shape::of(&out).is_unit() {
             if optional {
                 (quote!(Option<bool>), quote!(__v.map(|_| true)))
             } else {
@@ -353,7 +356,7 @@ impl Classes<'_> {
         let doc = doc.iter().map(|l| quote!(#[doc = #l]));
         // `Promise<void>`, where napi would say `Promise<undefined>`, and the
         // sync call's `boolean | null` for `Option<()>`.
-        let ts = match (is_unit(&out), optional) {
+        let ts = match (Shape::of(&out).is_unit(), optional) {
             (true, false) => Some(quote!(ts_return_type = "Promise<void>")),
             (true, true) => Some(quote!(ts_return_type = "Promise<boolean | null>")),
             _ => None,

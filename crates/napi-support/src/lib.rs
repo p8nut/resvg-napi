@@ -546,6 +546,39 @@ impl FromNapiValue for Signal {
     }
 }
 
+/// The namespace object `ns` of a module's `exports`, made when nothing
+/// else put an item there.
+pub fn namespace<'e>(env: &'e Env, exports: &Object<'e>, ns: &str) -> Result<Object<'e>> {
+    match exports.get_named_property::<Option<Object>>(ns)? {
+        Some(o) => Ok(o),
+        None => {
+            let o = Object::new(env)?;
+            let mut exports = *exports;
+            exports.set_named_property(ns, o)?;
+            Ok(o)
+        }
+    }
+}
+
+/// Turns each static method `names` of `class` into a getter of the same
+/// name, so `Class.NAME` reads like a static property: napi declares no
+/// static getter. The method runs on each read, with the class as `this`,
+/// which is how a factory builds its instance: a fresh one per read. The
+/// method must be configurable; the getter is not, so it stays a constant.
+pub fn static_getters(env: &Env, class: &Object, names: &[&str]) -> Result<()> {
+    let object: Object = env.get_global()?.get_named_property_unchecked("Object")?;
+    let define: Function<FnArgs<(Object, &str, Object)>, Unknown> =
+        object.get_named_property_unchecked("defineProperty")?;
+    for name in names {
+        let get: Unknown = class.get_named_property(name)?;
+        let mut descriptor = Object::new(env)?;
+        descriptor.set_named_property("get", get)?;
+        descriptor.set_named_property("configurable", false)?;
+        define.call((*class, *name, descriptor).into())?;
+    }
+    Ok(())
+}
+
 /// Bytes behind any pointer to them -- `Vec<u8>`, `Arc<Vec<u8>>`,
 /// `Arc<dyn AsRef<[u8]>>` -- copied into a `Buffer`: the one copy, made
 /// when JS reads them.

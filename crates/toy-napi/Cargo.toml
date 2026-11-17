@@ -15,6 +15,7 @@ napi = { workspace = true, features = ["napi8", "napi9"] }
 napi-derive = { workspace = true }
 napi-support = { path = "../napi-support" }
 toy = { path = "../toy" }
+toy-dep = { path = "../toy-dep" }
 
 [build-dependencies]
 napi-build = { workspace = true }

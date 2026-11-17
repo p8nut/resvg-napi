@@ -16,11 +16,12 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{Fields, Type};
 
-use crate::class::{Args, Class, Classes, Holding, Source, args, deref, find_struct, is, segs};
-use crate::emit::stepped;
+use crate::Config;
+use crate::class::{Args, Class, Classes, Holding, Source, find_struct};
+use crate::emit::{alias_ident, stepped, union_alias};
+use crate::shape::{Shape, deref, segs};
 use crate::sources::{derives, find_enum};
-use crate::vocab::{Js, Reason, Vocab, lower_camel, ty_str};
-use crate::{config, namespace_of};
+use crate::vocab::{Js, Reason, Vocab, lower_camel};
 
 /// A `Config::projections` enum, mirrored as a union of projections.
 pub struct Union {
@@ -32,14 +33,18 @@ pub struct Union {
 
 /// Adds the structs `Config::projections` lists to `classes`, and returns
 /// its enums as unions of them.
-pub(crate) fn projections(sources: &[Source], classes: &mut Vec<Class>) -> Vec<Union> {
+pub(crate) fn projections(
+    sources: &[Source],
+    classes: &mut Vec<Class>,
+    config: &Config,
+) -> Vec<Union> {
     let source_of = |root: &str| {
         sources
             .iter()
             .position(|s| s.root == root)
             .unwrap_or_else(|| panic!("Config::projections: no source with root {root}"))
     };
-    for (root, name) in config().projections {
+    for (root, name) in config.projections {
         let source = source_of(root);
         if find_struct(sources[source].files, name).is_some() {
             classes.push(Class {
@@ -53,7 +58,7 @@ pub(crate) fn projections(sources: &[Source], classes: &mut Vec<Class>) -> Vec<U
         }
     }
     let mut unions = Vec::new();
-    for (root, name) in config().projections {
+    for (root, name) in config.projections {
         let source = source_of(root);
         if find_struct(sources[source].files, name).is_some() {
             continue;
@@ -73,9 +78,11 @@ pub(crate) fn projections(sources: &[Source], classes: &mut Vec<Class>) -> Vec<U
                     v.ident
                 ),
             };
-            let boxed = is(carried, "Box", 1);
-            let ty = if boxed { args(carried)[0] } else { carried };
-            let carried = segs(ty).and_then(|s| s.last().cloned());
+            let (boxed, ty) = match Shape::of(carried) {
+                Shape::Box(inner) => (true, inner),
+                _ => (false, carried),
+            };
+            let carried = Shape::of(ty).last().map(str::to_string);
             let c = classes
                 .iter()
                 .position(|c| {
@@ -120,36 +127,28 @@ impl Classes<'_> {
         format_ident!("{}_{what}", self.unions[u].name.to_case(Case::Snake))
     }
 
-    /// The union's JS type: `EitherN` of its variants' objects.
+    /// The union's JS type: the alias of `EitherN` of its variants' objects
+    /// (`union_alias`).
     fn union_ty(&self, u: usize) -> TokenStream {
-        let un = &self.unions[u];
-        let objs = un
-            .variants
-            .iter()
-            .map(|(v, _, _)| format_ident!("{}{v}", un.name));
-        let either = match un.variants.len() {
-            2 => format_ident!("Either"),
-            n => format_ident!("Either{n}"),
-        };
-        quote!(#either<#(#objs),*>)
+        let a = alias_ident(&self.unions[u].name);
+        quote!(#a)
     }
 
     /// An argument `&E` of union `u`: the `{ kind, value }` object, whose
-    /// value was reached as a variant of `E`.
+    /// value was reached as a variant of `E`. Typed as the union's alias
+    /// (`union_alias`), by its JS name: the enum's, which no other item of
+    /// its namespace has (`namespaced` reports one that does).
     pub(crate) fn union_arg(
         &self,
         u: usize,
         pat: &Ident,
     ) -> (TokenStream, Option<TokenStream>, TokenStream) {
         let un = &self.unions[u];
-        let ns =
-            namespace_of(self.sources[un.source].root).map_or(String::new(), |n| format!("{n}."));
-        let ts: Vec<String> = un
-            .variants
-            .iter()
-            .map(|(v, _, _)| format!("{ns}{}{v}", un.name))
-            .collect();
-        let ts = ts.join(" | ");
+        let ns = self
+            .config
+            .namespace_of(self.sources[un.source].root)
+            .map_or(String::new(), |n| format!("{n}."));
+        let ts = format!("{ns}{}", un.name);
         let (from, tmp) = (self.helper(u, "from_js"), format_ident!("__{pat}"));
         (
             quote!(#[napi(ts_arg_type = #ts)] #pat: Object),
@@ -183,8 +182,10 @@ impl Classes<'_> {
             t => (false, t),
         };
         // An `Arc` in a table (`&[Arc<T>]`) is stepped through to the `T`.
-        let arc = is(elem, "Arc", 1);
-        let elem = if arc { args(elem)[0] } else { elem };
+        let (arc, elem) = match Shape::of(elem) {
+            Shape::Arc(held) => (true, held),
+            _ => (false, elem),
+        };
         let through = arc.then(|| quote!(.map(|__a| &**__a)));
         let (ty, conv) = if let Some(c) = self
             .class_of(ctx, None, elem)
@@ -201,7 +202,7 @@ impl Classes<'_> {
             // a read-only `Arc`. Elsewhere it stays a copy: a projection
             // into a copy-on-write `Arc` would keep it shared, and the next
             // write would copy the whole of it.
-            let js = vocab.classify(&ty_str(elem))?;
+            let js = vocab.classify(elem)?;
             let stepped = stepped(&js, vocab).filter(|_| !matches!(js, Js::Owned(_)))?;
             if !matches!(h, Holding::Projected | Holding::Shared) {
                 return None;
@@ -292,10 +293,15 @@ impl Classes<'_> {
                     2 => format_ident!("Either"),
                     n => format_ident!("Either{n}"),
                 };
-                let mut code = TokenStream::new();
+                let objs: Vec<Ident> = un
+                    .variants
+                    .iter()
+                    .map(|(v, _, _)| format_ident!("{}{v}", un.name))
+                    .collect();
+                let mut code = union_alias(&un.name, &objs);
                 let (mut to_arms, mut from_arms) = (Vec::new(), Vec::new());
                 for (i, (v, c, boxed)) in un.variants.iter().enumerate() {
-                    let (obj, class) = (format_ident!("{}{v}", un.name), self.ident(*c));
+                    let (obj, class) = (&objs[i], self.ident(*c));
                     let kind = lower_camel(&v.to_string());
                     let (ts, doc) = (format!("'{kind}'"), format!(" `{}::{v}`.", un.name));
                     let letter = format_ident!("{}", char::from(b'A' + u8::try_from(i).expect("26 variants at most")));

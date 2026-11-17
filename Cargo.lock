@@ -575,7 +575,6 @@ dependencies = [
  "quote",
  "resvg",
  "svgtypes",
- "syn",
 ]
 
 [[package]]
@@ -771,6 +770,7 @@ dependencies = [
  "quote",
  "syn",
  "toy",
+ "toy-dep",
 ]
 
 [[package]]

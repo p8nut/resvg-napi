@@ -140,7 +140,7 @@ pixmap.encodePng()                                     // Buffer
 |---|---|
 | `usvg` | `Tree` (`fromStr`, `fromData`, `toString`, `root()`, `nodeById`, the definition tables), the nodes (`Group`, `Path`, `Image`, `Text`, as a `{ kind, value }` union), `ClipPath`, `Mask`, `Pattern`, the paint servers and filters, `Options` and `WriteOptions` as plain objects |
 | `resvg` | `render(tree, transform, pixmap)`, `renderNode(node, transform, pixmap)` |
-| `tiny_skia` | `Pixmap` (`encodePng`, `decodePng`, `data`, `takeDemultiplied`...), `Transform`, `Rect`, `NonZeroRect`, `Size`, `IntSize`, `Point`, `Color`; a path's segments |
+| `tiny_skia` | `Pixmap` (`encodePng`, `decodePng`, `data`, `takeDemultiplied`, `pixel`, `cloneRect`...), `Transform`, `Rect`, `NonZeroRect`, `IntRect`, `Size`, `IntSize`, `Point`, `Color`, `ColorU8`, `PremultipliedColor`, `PremultipliedColorU8`; a path's segments |
 | `fontdb` | `Database` (`loadSystemFonts`, `loadFontData`, `loadFontFile`, `loadFontsDir`, `faces()`, the generic-family setters), `FaceInfo` |
 | `svgtypes` | `Color.fromStr`, CSS colours as an SVG attribute reads them |
 | `guard` | `ImageHrefResolver`, `FontResolver`: the [untrusted SVG](#untrusted-svg) opt-in, resvg-napi's own |

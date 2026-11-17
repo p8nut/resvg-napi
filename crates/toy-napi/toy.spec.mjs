@@ -44,7 +44,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'NAME',
+    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
     'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Tally', 'Vec2', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
@@ -55,7 +55,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   // Nothing at the root but the generic prelude: one constructor per class
   // name, whatever the namespace, and every class is in its namespace.
   assert.deepEqual(Object.keys(toy).filter((k) => !k.startsWith('__')).sort(),
-    ['alt', 'setLogLevel', 'takeLogs', 'toy']);
+    ['alt', 'dep', 'setLogLevel', 'takeLogs', 'toy']);
   assert.equal(toy.Counter, undefined);
   assert.equal(typeof ns.Counter, 'function');
   assert.equal(ns.Counter.name, 'Counter');
@@ -126,6 +126,17 @@ test('a provider field takes a class instance, shared not copied', () => {
   assert.throws(() => toy.toy.report(t, { base: {} }));
   assert.throws(() => toy.toy.report(t, { base: new toy.toy.Counter() }), /Tally/);
   assert.throws(() => toy.toy.report(t, { base: 'a' }));
+});
+
+test('a provider field of a class held by value takes a copy of the instance', () => {
+  const t = new toy.toy.Tally();
+  t.push('x');
+  t.push('y');
+  const from = t.key(1);
+  assert.equal(toy.toy.report(t, { from }), 'tally[plain]: y');
+  assert.equal(toy.toy.report(t, { from: toy.toy.Key.first() }), 'tally[plain]: x,y');
+  assert.throws(() => toy.toy.report(t, { from: 1 }));
+  assert.throws(() => toy.toy.report(t, { from: new toy.toy.Vec2(0, 0) }), /Key/);
 });
 
 test('a converter field takes its JS form, and refuses anything else', () => {
@@ -672,6 +683,32 @@ test('a union variant may carry a class, and a re-exported enum maps', () => {
   assert.equal(frame.value.backdrop.backdrop, null);
 });
 
+// A generic bound JS can satisfy takes a string, however it is written:
+// `AsRef<Path>` inline or in a `where` clause, `Into<String>`.
+test('a path or string bound takes a string', () => {
+  const t = new toy.toy.Tally();
+  t.push('x');
+  t.pushFile('/tmp/notes.txt');
+  assert.equal(t.joined(), 'x,notes.txt');
+  const album = toy.toy.Scene.demo().album();
+  assert.equal(album.isAlbum('a/b.album'), true);
+  assert.equal(album.isAlbum('a/b.txt'), false);
+});
+
+// `f64` and `&[f64]` cross as they are (an `f32` would read `0.1` as
+// 0.10000000149011612), an `i16` widens, and a `u64` is left out: it may not
+// fit a JS number.
+test('f64 members are read losslessly, i16 widens, u64 is left out', () => {
+  const [, , frame] = toy.toy.Scene.demo().contents();
+  assert.equal(frame.value.zoom, 0.1);
+  assert.deepEqual(frame.value.weights, [0.1, 0.2]);
+  assert.equal(frame.value.tilt, -3);
+  assert.equal('serial' in frame.value, false);
+  const t = new toy.toy.Tally();
+  t.push('x');
+  assert.equal(toy.toy.report(t, { ratio: 0.1 }), 'tally[plain]: x x0.1');
+});
+
 // What is reached from a scene is borrowed from it, not copied out: a
 // `Layer` counts its copies, and reading none makes one. A union's variant
 // (`held`, a projected class; `frame`, a read-only class), a read-only
@@ -722,4 +759,76 @@ test('a public constant is a value of its namespace, under its Rust name', () =>
   // No JS value: a u64, a struct.
   assert.ok(!('BIG' in toy.toy));
   assert.ok(!('ORIGIN' in toy.toy));
+});
+
+test('an associated constant is a static read-only property, under its Rust name', () => {
+  const { Color, Key, Canvas, MinLen } = toy.toy;
+  // A number and a string on a class.
+  assert.equal(Color.CHANNELS, 3);
+  assert.equal(Color.KIND, 'rgb');
+  // `Self` on a class held by value: a fresh instance per read, of the class
+  // it is read on (`toy.Color`, not `alt.Color`, which shares its name).
+  const black = Color.BLACK;
+  assert.ok(black instanceof Color);
+  assert.ok(!(black instanceof toy.alt.Color));
+  assert.equal(black.red(), 0);
+  assert.ok(black.isGray());
+  black.setRed(9);
+  assert.equal(Color.BLACK.red(), 0);
+  assert.notEqual(Color.BLACK, Color.BLACK);
+  assert.ok(Key.LAST instanceof Key);
+  assert.equal(Key.LAST.toString(), String(2 ** 32 - 1));
+  // Of a class a listed class reaches, in a crate read for its classes.
+  assert.ok(toy.dep.Area.UNIT instanceof toy.dep.Area);
+  assert.equal(toy.dep.Area.UNIT.width(), 1);
+  // Read-only: a getter with no setter, which stays.
+  const d = Object.getOwnPropertyDescriptor(Color, 'CHANNELS');
+  assert.equal(typeof d.get, 'function');
+  assert.equal(d.set, undefined);
+  assert.equal(d.configurable, false);
+  assert.throws(() => { Color.CHANNELS = 4; }, TypeError);
+  assert.equal(Color.CHANNELS, 3);
+  // Left out: a u64, and `Self` on a class not held by value.
+  assert.ok(!('BITS' in Color));
+  assert.ok(!('EMPTY' in Canvas));
+  // A number newtype has no class: a frozen object of its name, its values
+  // numbers as the newtype is.
+  assert.deepEqual({ ...MinLen }, { NONE: 0, WORD: 4, MAX: 64 });
+  assert.ok(Object.isFrozen(MinLen));
+  // Its `u64` is left out.
+  assert.ok(!('HUGE' in MinLen));
+});
+
+// `dep.Grid` is the one class of `toy-dep`, a crate read for its listed
+// classes alone. The value types its members take and return are classes
+// too, listed nowhere: `Area` and `Cell`, and `Mark`, which only `Cell`
+// reaches.
+test('the value types a listed class reaches are classes, to a fixpoint', () => {
+  const dep = toy.dep;
+  assert.deepEqual(Object.keys(dep).sort(), ['Area', 'Cell', 'Grid', 'Mark']);
+  const grid = new dep.Grid(3, 2);
+  const bounds = grid.bounds();
+  assert.ok(bounds instanceof dep.Area);
+  assert.deepEqual([bounds.x(), bounds.y(), bounds.width(), bounds.height()], [0, 0, 3, 2]);
+  // Taken by value: the class's value is copied in.
+  const cell = new dep.Cell(7);
+  assert.equal(grid.set(2, 1, cell), true);
+  assert.equal(grid.set(3, 0, cell), false);
+  assert.equal(cell.value(), 7);
+  assert.equal(grid.cell(2, 1).value(), 7);
+  assert.equal(grid.cell(3, 0), null);
+  // An argument of a reached class, and a static of it.
+  const crop = grid.crop(dep.Area.fromXywh(1, 1, 5, 5));
+  assert.deepEqual([crop.width(), crop.height()], [2, 1]);
+  assert.equal(crop.cell(1, 0).value(), 7);
+  assert.equal(dep.Area.fromXywh(0, 0, 0, 1), null);
+  // Reached through a reached class: plain data, so `toObject` too.
+  const mark = crop.cell(1, 0).mark();
+  assert.ok(mark instanceof dep.Mark);
+  assert.equal(mark.on, true);
+  assert.deepEqual(mark.flipped().toObject(), { on: false });
+  // A slice of a value class and a `Copy` type with nothing to call stay out.
+  assert.equal(grid.cells, undefined);
+  assert.equal(grid.stamp, undefined);
+  assert.ok(!('Token' in dep));
 });

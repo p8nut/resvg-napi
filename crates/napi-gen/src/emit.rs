@@ -13,9 +13,9 @@ use convert_case::Casing;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
-use syn::{Fields, ImplItem, Item, ReturnType};
+use syn::{Fields, ImplItem, Item, ReturnType, Type};
 
-use crate::config;
+use crate::Config;
 use crate::sources::{derives, has_default, inherent_impls, is_pub, self_ident};
 use crate::vocab::*;
 
@@ -64,10 +64,10 @@ pub struct Conv {
 }
 
 /// The one Js -> JS table. `access` is the Rust expression to convert; `src_ty`
-/// its type text, for the `&` it may already carry. None: no form at this site.
+/// its type, for the `&` it may already carry. None: no form at this site.
 pub fn js_conv(
     js: &Js,
-    src_ty: &str,
+    src_ty: &Type,
     vocab: &Vocab,
     access: &TokenStream,
     site: Site,
@@ -91,17 +91,21 @@ pub fn js_conv(
         reached: Some(t.to_string()),
         ..plain(ty, expr)
     };
-    // `&x` unless the member already is a reference.
-    let by_ref = if src_ty.starts_with('&') {
-        quote!(#a)
-    } else {
-        quote!(&#a)
+    let is_ref = matches!(Shape::of(src_ty), Shape::Ref { .. });
+    // What an `Option` member holds, a plain `&` aside.
+    let opt = match Shape::of(unref(src_ty)) {
+        Shape::Option(inner) => Some(Shape::of(inner)),
+        _ => None,
     };
+    // `&x` unless the member already is a reference.
+    let by_ref = if is_ref { quote!(#a) } else { quote!(&#a) };
     let saturating = quote!(u32::try_from(#a).unwrap_or(u32::MAX));
     Some(match (js, site) {
         (Js::Bool, _) => plain(quote!(bool), d),
         (Js::I32, _) => plain(quote!(i32), d),
+        (Js::I16, _) => plain(quote!(i32), quote!(i32::from(#d))),
         (Js::F32, _) => plain(quote!(f64), quote!(f64::from(#d))),
+        (Js::F64, _) => plain(quote!(f64), d),
         // A method's integers saturate; a member's widen, which cannot fail.
         (Js::U8 | Js::U16 | Js::U32, Method) => plain(quote!(u32), saturating),
         (Js::U8 | Js::U16, _) => plain(quote!(u32), quote!(u32::from(#d))),
@@ -127,11 +131,7 @@ pub fn js_conv(
         (Js::Class(_), Field | Carried) => return None,
         (Js::Class(t), Getter | Method) => {
             let c = format_ident!("{t}");
-            let v = if src_ty.starts_with('&') {
-                quote!(*#a)
-            } else {
-                quote!(#a)
-            };
+            let v = if is_ref { quote!(*#a) } else { quote!(#a) };
             plain(quote!(#c), quote!(#c::__from(#v)))
         }
         // A copy of the borrowed value, wrapped as the class wraps its own.
@@ -141,7 +141,7 @@ pub fn js_conv(
         }
         (Js::OptClass(t), Getter | Method) => {
             let c = format_ident!("{t}");
-            let f = if src_ty.contains("Option<&") {
+            let f = if matches!(opt, Some(Shape::Ref { .. })) {
                 quote!(|x| #c::__from(*x))
             } else {
                 quote!(#c::__from)
@@ -166,7 +166,8 @@ pub fn js_conv(
         }
         (Js::Iterated(item, via), Getter | Field | Method) => {
             let via = format_ident!("{via}");
-            let c = js_conv(item, "", vocab, &quote!(x), Getter)?;
+            // The item, handed by value.
+            let c = js_conv(item, &syn::parse_quote!(_), vocab, &quote!(x), Getter)?;
             let (ty, e) = (c.ty, c.expr);
             plain(quote!(Vec<#ty>), quote!(#a.#via().map(|x| #e).collect()))
         }
@@ -178,8 +179,9 @@ pub fn js_conv(
             quote!(Vec<f64>),
             quote!(#a.iter().map(|x| f64::from(*x)).collect()),
         ),
+        (Js::F64List, Getter | Field | Carried) => plain(quote!(Vec<f64>), quote!(#a.to_vec())),
         (Js::Enum, _) => {
-            let e = enum_ident(&vocab.resolve(src_ty));
+            let e = enum_ident(&key(vocab.resolve(src_ty)).expect("an enum is named by a path"));
             plain(quote!(#e), quote!(#e::from(#d)))
         }
         // A value class owns its upstream value, so a nested one is cloned
@@ -202,7 +204,8 @@ pub fn js_conv(
         // `iter` for a slice, `into_iter` for an iterator of references.
         (Js::ValueList(t), Method) => {
             let c = data_ident(t);
-            let iter = if src_ty.starts_with("&[") {
+            let iter = if matches!(Shape::of(src_ty), Shape::Ref { inner, .. } if matches!(Shape::of(inner), Shape::Slice(_)))
+            {
                 quote!(iter)
             } else {
                 quote!(into_iter)
@@ -213,7 +216,13 @@ pub fn js_conv(
         (Js::OptValue(t), Getter | Method) => {
             let c = data_ident(t);
             // A boxed member wraps what the box holds.
-            let e = if src_ty.contains("Option<Box<") {
+            let e = if opt
+                .map(|o| match o {
+                    Shape::Ref { inner, .. } => Shape::of(inner),
+                    o => o,
+                })
+                .is_some_and(|o| matches!(o, Shape::Box(_)))
+            {
                 quote!(#a.map(|x| #c::wrap(x.as_ref().clone())))
             } else {
                 quote!(#a.map(|x| #c::wrap(x.clone())))
@@ -230,7 +239,7 @@ pub fn js_conv(
         (Js::PayloadEnum(t), Getter | Field) if vocab.payload[t].projects(vocab) => {
             let info = &vocab.payload[t];
             let (ety, conv) = (info.either_ty(t), info.conv_ident(t));
-            let own = if src_ty.starts_with('&') {
+            let own = if is_ref {
                 quote!(#a.clone())
             } else {
                 quote!(#a)
@@ -326,15 +335,41 @@ pub fn stepped(js: &Js, vocab: &Vocab) -> Option<(TokenStream, TokenStream)> {
 /// `payload_blocker` is the authority on *whether*, this is the *how*.
 pub fn carried_field(
     vocab: &Vocab,
-    ty: &str,
+    ty: &Type,
     access: &TokenStream,
 ) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
     let c = js_conv(&vocab.classify(ty)?, ty, vocab, access, Site::Carried)?;
     Some((c.field, c.ty, c.expr))
 }
 
+/// The Rust name of the alias naming the union of enum `name`: `NodeUnion`.
+/// Not the enum's own name, which its input form ([`enum_input`]) may hold
+/// in the same namespace: [`namespaced`] tells the two apart by JS name,
+/// the enum's for both, and spells a clashing alias out where it is used.
+pub fn alias_ident(name: &str) -> proc_macro2::Ident {
+    format_ident!("{name}Union")
+}
+
+/// `pub type NodeUnion = Either4<..>`, exported as `Node`: napi writes it as
+/// `export type Node = NodeGroup | ..`, and every signature naming the alias
+/// as `Node`, so the union has a name TypeScript code can use.
+pub fn union_alias(name: &str, parts: &[proc_macro2::Ident]) -> TokenStream {
+    let a = alias_ident(name);
+    let e = match parts.len() {
+        2 => format_ident!("Either"),
+        n => format_ident!("Either{n}"),
+    };
+    let doc = format!(" Any variant of `{name}`.");
+    quote! {
+        #[doc = #doc]
+        #[napi(js_name = #name)]
+        pub type #a = #e<#(#parts),*>;
+    }
+}
+
 /// The union for one payload enum: a struct per payload variant, one shared
-/// struct for the unit ones, and the converter that produces them.
+/// struct for the unit ones, the alias naming their union ([`union_alias`])
+/// and the converter that produces them.
 ///
 /// Err with a reason rather than a partial union: half a discriminated union is
 /// worse than none, because the missing arm is invisible at the call site.
@@ -372,7 +407,7 @@ pub fn payload_enum_code(
                 pub r#type: String,
             }
         });
-        let arm = info.either_arm(name, 0);
+        let arm = |v: TokenStream| info.either_arm(name, 0, v);
         for (n, _) in info
             .variants
             .iter()
@@ -380,8 +415,9 @@ pub fn payload_enum_code(
         {
             let vid = format_ident!("{}", n);
             let tag = lower_camel(n);
-            let g = info.gate(n);
-            arms.push(quote!(#g #up::#vid => #arm(#unit { r#type: #tag.to_string() }),));
+            let g = info.gate(n, &vocab.config);
+            let value = arm(quote!(#unit { r#type: #tag.to_string() }));
+            arms.push(quote!(#g #up::#vid => #value,));
         }
         i = 1;
     }
@@ -394,8 +430,9 @@ pub fn payload_enum_code(
         let vid = format_ident!("{}", n);
         let tag = lower_camel(n);
         let ts = format!("'{tag}'");
-        let arm = info.either_arm(name, i);
-        let g = info.gate(n);
+        let n_arm = i;
+        let arm = |v: TokenStream| info.either_arm(name, n_arm, v);
+        let g = info.gate(n, &vocab.config);
         i += 1;
 
         // What the struct declares, how the arm binds it, and how each field is
@@ -404,7 +441,9 @@ pub fn payload_enum_code(
             Payload::None => unreachable!("skipped above"),
             Payload::Value(ty) if vocab.classify(ty).is_none() => {
                 report!(
-                    "{name}::{n} carries {ty}, which has no mappable data: emitted without a value"
+                    vocab.config,
+                    "{name}::{n} carries {}, which has no mappable data: emitted without a value",
+                    ty_str(ty)
                 );
                 (Vec::new(), quote!(#up::#vid(_)), Vec::new())
             }
@@ -428,9 +467,7 @@ does this. Copied out on each read.",
                 // Qualified: the generated file imports the napi prelude and the
                 // wrapped crates, not `std::sync`, and the rest of it spells
                 // `Arc` out in full.
-                let raw_src = rust_src(ty);
-                let raw_ty: syn::Type = syn::parse_str(&raw_src)
-                    .unwrap_or_else(|e| panic!("{name}::{n} carries {ty}, unparseable: {e}"));
+                let raw_ty = std_arc(ty);
                 items.extend(quote! {
                     #[doc = #doc]
                     #[napi]
@@ -455,7 +492,8 @@ does this. Copied out on each read.",
                         }
                     }
                 });
-                arms.push(quote!(#g #up::#vid(v) => #arm(#sid { raw: v.clone() }),));
+                let value = arm(quote!(#sid { raw: v.clone() }));
+                arms.push(quote!(#g #up::#vid(v) => #value,));
                 continue;
             }
             // A class carried alone: an output-only object holding it, which
@@ -475,7 +513,10 @@ does this. Copied out on each read.",
                     None => carried_field(vocab, ty, &quote!(v)).map(|(_, fty, expr)| (fty, expr)),
                 };
                 let Some((fty, expr)) = carried else {
-                    return Err(format!("{name}::{n} carries {ty}, which cannot be carried"));
+                    return Err(format!(
+                        "{name}::{n} carries {}, which cannot be carried",
+                        ty_str(ty)
+                    ));
                 };
                 let doc = format!(" `{name}::{n}`.");
                 items.extend(quote! {
@@ -488,16 +529,20 @@ does this. Copied out on each read.",
                         pub value: #fty,
                     }
                 });
-                arms.push(quote!(#g #up::#vid(#bind) => #arm(#sid {
+                let value = arm(quote!(#sid {
                     r#type: #tag.to_string(),
                     value: #expr,
-                }),));
+                }));
+                arms.push(quote!(#g #up::#vid(#bind) => #value,));
                 continue;
             }
             Payload::Value(ty) => {
                 let access = quote!(v);
                 let Some((hint, fty, expr)) = carried_field(vocab, ty, &access) else {
-                    return Err(format!("{name}::{n} carries {ty}, which cannot be a field"));
+                    return Err(format!(
+                        "{name}::{n} carries {}, which cannot be a field",
+                        ty_str(ty)
+                    ));
                 };
                 let field = format_ident!("{}", hint.unwrap_or("value"));
                 (
@@ -518,16 +563,15 @@ does this. Copied out on each read.",
                     (Vec::new(), Vec::new(), Vec::new(), Vec::new());
                 for (j, ty) in tys.iter().enumerate() {
                     let b = format_ident!("v{j}");
-                    let raw_ty: syn::Type = syn::parse_str(&rust_src(ty)).unwrap_or_else(|e| {
-                        panic!("{name}::{n}.{j} carries {ty}, unparseable: {e}")
-                    });
+                    let raw_ty = std_arc(ty);
                     // Each bound by reference, as a union's payload is.
                     let (jty, conv) = if matches!(vocab.classify(ty), Some(Js::Bytes)) {
                         (quote!(Buffer), quote!(napi_support::copied(#b)))
                     } else {
                         let Some((_, jty, conv)) = carried_field(vocab, ty, &quote!(#b)) else {
                             return Err(format!(
-                                "{name}::{n}.{j} carries {ty}, which cannot be a field"
+                                "{name}::{n}.{j} carries {}, which cannot be a field",
+                                ty_str(ty)
                             ));
                         };
                         (jty, conv)
@@ -558,9 +602,10 @@ does this. Copied out on each read.",
                         }
                     }
                 });
-                arms.push(quote!(#g #up::#vid(#(#binds),*) => #arm(#sid {
+                let value = arm(quote!(#sid {
                     raw: (#(#binds.clone(),)*),
-                }),));
+                }));
+                arms.push(quote!(#g #up::#vid(#(#binds),*) => #value,));
                 continue;
             }
             // Several unnamed fields: `value` is a tuple of them, an array
@@ -571,7 +616,8 @@ does this. Copied out on each read.",
                     let id = format_ident!("v{j}");
                     let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(#id)) else {
                         return Err(format!(
-                            "{name}::{n}.{j} carries {ty}, which cannot be a field"
+                            "{name}::{n}.{j} carries {}, which cannot be a field",
+                            ty_str(ty)
                         ));
                     };
                     binds.push(id);
@@ -593,7 +639,8 @@ does this. Copied out on each read.",
                     let access = quote!(#id);
                     let Some((_, fty, expr)) = carried_field(vocab, ty, &access) else {
                         return Err(format!(
-                            "{name}::{n}.{fname} carries {ty}, which cannot be a field"
+                            "{name}::{n}.{fname} carries {}, which cannot be a field",
+                            ty_str(ty)
                         ));
                     };
                     decls.push(quote!(pub #id: #fty,));
@@ -616,12 +663,17 @@ does this. Copied out on each read.",
                 #(#decls)*
             }
         });
-        arms.push(quote!(#g #pattern => #arm(#sid {
+        let value = arm(quote!(#sid {
             r#type: #tag.to_string(),
             #(#inits)*
-        }),));
+        }));
+        arms.push(quote!(#g #pattern => #value,));
     }
 
+    let parts = info.parts(name);
+    if parts.len() > 1 {
+        items.extend(union_alias(name, &parts));
+    }
     let conv = info.conv_ident(name);
     let ety = info.either_ty(name);
     // A union carrying a value it can borrow is made from a projection of
@@ -679,8 +731,8 @@ pub fn prelude() -> TokenStream {
 /// `Config::index_bounded`, each suffix with the highest index its table
 /// allows, read off the upstream `static` in `files`. A table that is gone
 /// fails the build.
-pub fn index_bounds(files: &[syn::File]) -> Vec<(&'static str, u32)> {
-    config()
+pub fn index_bounds(files: &[syn::File], config: &Config) -> Vec<(&'static str, u32)> {
+    config
         .index_bounded
         .iter()
         .map(|(suffix, table)| {
@@ -699,8 +751,30 @@ pub struct OptionObject {
     pub code: TokenStream,
     /// Fields left out, with the reason: they keep the `Default` value.
     pub skipped: Vec<Skip>,
-    /// How many fields the index bounds matched.
-    pub bounded: usize,
+    /// The index-bound suffixes its fields matched, one per field.
+    pub bounded: Vec<&'static str>,
+}
+
+/// The provider a listed class makes of an option field, with no
+/// `Config::providers` entry: `Arc<T>` of a class held behind an `Arc`
+/// (`Vocab::shared`), the `Arc` shared; `T` of a class held by value
+/// (`Vocab::classes`), copied. Not a plain-data class: JS passes its
+/// `<Name>Object` instead. The class by its upstream name, and the
+/// expression of `v` giving the value.
+fn derived_provider(ty: &Type, vocab: &Vocab) -> Option<(String, &'static str)> {
+    let (by_value, of, provide) = match Shape::of(ty) {
+        Shape::Arc(inner) => (false, inner, "v.__ref()?.clone()"),
+        Shape::Path { .. } => (true, ty, "*v.__ref()?"),
+        _ => return None,
+    };
+    let k = key(of)?;
+    let name = bare(&k);
+    let provides = if by_value {
+        vocab.classes.contains(name) && !vocab.plain.contains(name)
+    } else {
+        vocab.shared.contains(name)
+    };
+    provides.then(|| (name.to_string(), provide))
 }
 
 /// An upstream option struct with `Default`, as an input-only plain object
@@ -722,7 +796,7 @@ pub fn option_object(
     vocab: &Vocab,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
-    bounds: &[(&str, u32)],
+    bounds: &[(&'static str, u32)],
 ) -> Option<OptionObject> {
     // A listed struct that is gone is upstream moving, not a struct without
     // `Default`: loud, like `struct_fields`.
@@ -751,7 +825,7 @@ pub fn option_object(
     let mut decls = Vec::new();
     let mut assigns = Vec::new();
     let mut skipped = Vec::new();
-    let mut bounded = 0usize;
+    let mut bounded = Vec::new();
     // A provided field holds the instance for the call: `ClassInstance`
     // borrows it from the JS object, and that needs a lifetime.
     let mut borrows = false;
@@ -766,16 +840,31 @@ pub fn option_object(
         let name = ident.to_string();
         let fty = ty_str(&f.ty);
         let doc = docs(&f.attrs);
-        if let Some(p) = config().providers.iter().find(|p| p.ty == fty) {
-            let class = format_ident!("{}", p.class);
+        // Supplied by a class instance: a provider `Config::providers`
+        // lists, or one derived from the listed classes. An entry with no
+        // `class` only adds its doc to the derived one.
+        let listed = vocab.config.providers.iter().find(|p| p.ty == fty);
+        let provider = match listed {
+            Some(p) if !p.class.is_empty() => Some((p.class.to_string(), p.provide)),
+            Some(p) => Some(derived_provider(&f.ty, vocab).unwrap_or_else(|| {
+                panic!(
+                    "Config::providers: `{}` names no class, and no listed class provides it",
+                    p.ty
+                )
+            })),
+            None => derived_provider(&f.ty, vocab),
+        };
+        if let Some((class, provide)) = provider {
+            let doc_extra = listed.map_or("", |p| p.doc);
+            let class = format_ident!("{class}");
             let provide: syn::Expr =
-                syn::parse_str(p.provide).expect("a Config::providers expression");
+                syn::parse_str(provide).expect("a Config::providers expression");
             borrows = true;
-            let extra: Vec<TokenStream> = if p.doc.is_empty() {
+            let extra: Vec<TokenStream> = if doc_extra.is_empty() {
                 Vec::new()
             } else {
                 std::iter::once(String::new())
-                    .chain(p.doc.lines().map(|l| format!(" {l}")))
+                    .chain(doc_extra.lines().map(|l| format!(" {l}")))
                     .map(|l| quote!(#[doc = #l]))
                     .collect()
             };
@@ -787,7 +876,7 @@ pub fn option_object(
             );
             continue;
         }
-        if let Some(c) = config().converters.iter().find(|c| c.ty == fty) {
+        if let Some(c) = vocab.config.converters.iter().find(|c| c.ty == fty) {
             let js: syn::Type = syn::parse_str(c.js).expect("a Config::converters type");
             let convert = format_ident!("{}", c.convert);
             let (ts, label) = (c.ts, lower_camel(&name));
@@ -818,7 +907,7 @@ pub fn option_object(
                 decls.push(m.decl);
                 assigns.push(m.assign);
             }
-            None => skipped.push(Skip::new(&name, Some(&fty), Reason::Unprovided)),
+            None => skipped.push(Skip::new(&name, Some(&f.ty), Reason::Unprovided)),
         }
     }
     let (generics, anon) = if borrows {
@@ -880,19 +969,24 @@ pub fn option_object(
 fn map_field(
     f: &syn::Field,
     vocab: &Vocab,
-    bounds: &[(&str, u32)],
-    clamped: &mut usize,
+    bounds: &[(&'static str, u32)],
+    clamped: &mut Vec<&'static str>,
 ) -> Option<Field> {
     let ident = f.ident.clone()?;
     let name = ident.to_string();
-    let ty = ty_str(&f.ty);
     let doc = docs(&f.attrs);
-    match vocab.classify(&ty) {
+    match vocab.classify(&f.ty) {
             Some(Js::F32) => Some(field(
                 &ident,
                 &doc,
                 quote!(f64),
                 quote! { if let Some(v) = self.#ident { o.#ident = to_f32(v); } },
+            )),
+            Some(Js::F64) => Some(field(
+                &ident,
+                &doc,
+                quote!(f64),
+                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
             )),
             Some(Js::U8) => {
                 // A `Config::index_bounded` field indexes an upstream table
@@ -904,11 +998,11 @@ fn map_field(
                 // index 242 places past the end of a 13-entry table, reached from
                 // `write_num` for every coordinate. That is an out-of-bounds
                 // panic unwinding out of an `extern "C"` callback, so a process
-                // abort rather than a JS exception. The caller counts what this
-                // matched and fails the build when it matches nothing.
+                // abort rather than a JS exception. The caller collects what
+                // this matched and fails the build when a suffix matches nothing.
                 let max = match bounds.iter().find(|(suffix, _)| name.ends_with(suffix)) {
-                    Some((_, max)) => {
-                        *clamped += 1;
+                    Some((suffix, max)) => {
+                        clamped.push(*suffix);
                         *max
                     }
                     None => u32::from(u8::MAX),
@@ -958,7 +1052,7 @@ fn map_field(
             )),
             Some(Js::Enum) => {
                 // The JS name, after `Config::enum_renames`, as every other site spells it.
-                let e = enum_ident(&vocab.resolve(&ty));
+                let e = enum_ident(&key(vocab.resolve(&f.ty)).expect("an enum is named by a path"));
                 Some(field(
                     &ident,
                     &doc,
@@ -994,11 +1088,13 @@ fn map_field(
             // render option sets.
             | Some(Js::U16)
             | Some(Js::I32)
+            | Some(Js::I16)
             | Some(Js::PayloadEnum(_))
             | Some(Js::PayloadEnumList(_))
             | Some(Js::Iterated(..))
             | Some(Js::Tag4)
             | Some(Js::F32List)
+            | Some(Js::F64List)
             | Some(Js::Handle(_))
             | Some(Js::HandleList(_))
             | Some(Js::Object(_))
@@ -1034,7 +1130,7 @@ pub fn map_enums(
         }
         // A payload enum is mapped elsewhere, as a union, when its shape
         // allows; when it does not, this is the one place that says so.
-        if let Err(why) = payload_shape(e, &|t| t) {
+        if let Err(why) = payload_shape(e, &|t| t.clone()) {
             rejected.push((e.ident.to_string(), why));
             continue;
         }
@@ -1048,7 +1144,7 @@ pub fn map_enums(
         // The upstream path is the upstream name, not the renamed one.
         let up = upstream_path(&e.ident.to_string(), modules, root);
         // The vocabulary is keyed by the upstream name: that is what a member's
-        // type string says, and what `classify` is handed.
+        // type names, and what `classify` looks up.
         names.insert(e.ident.to_string());
         code.extend(quote! {
             #(#doc)*
@@ -1101,27 +1197,37 @@ pub struct Member {
 /// member typed `String`, `char`, `OsStr` or `PathBuf` *is* the std type, and
 /// napi's `string` is right for it: forcing the name there declared `String`,
 /// the wrapper object type, which a `string` is not assignable to.
+/// Whether `ts` names `id` anywhere in it: `Result<(String, Buffer), String>`
+/// names `Buffer`.
+fn names(ts: TokenStream, id: &str) -> bool {
+    ts.into_iter().any(|t| match t {
+        proc_macro2::TokenTree::Ident(i) => i == id,
+        proc_macro2::TokenTree::Group(g) => names(g.stream(), id),
+        _ => false,
+    })
+}
+
 pub fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
     const CLASHES: [&str; 5] = ["Path", "BigInt", "Symbol", "Null", "JsFunction"];
-    let t = jsty.to_string().replace(' ', "");
+    let t: Type = syn::parse2(jsty.clone()).ok()?;
     // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
     // -- napi only rewrites the type itself, so only those two shapes need it.
-    let (inner, optional) = match t.strip_circumfix("Option<", '>') {
-        Some(i) => (i, true),
-        None => (t.as_str(), false),
+    let (inner, optional) = match Shape::of(&t) {
+        Shape::Option(i) => (key(i)?, true),
+        s => (s.key()?, false),
     };
-    if !CLASHES.contains(&inner) {
+    if !CLASHES.contains(&inner.as_str()) {
         return None;
     }
     // A field keeps its own optionality: napi derives `?` from the Rust type
     // independently of `ts_type`, so spelling the union here would give
     // `underline?: Path | null`. A getter's return type does not, so it does.
     Some((
-        inner.to_string(),
+        inner.clone(),
         if optional {
             format!("{inner} | null")
         } else {
-            inner.to_string()
+            inner
         },
     ))
 }
@@ -1153,15 +1259,16 @@ pub fn data_members(
 
     // `step` borrows the member from `__v`, a reference to the value, when
     // it can be borrowed (a field, an accessor returning a reference).
-    let mut push = |name: &str, ty_s: &str, access: TokenStream, step: Option<TokenStream>| {
-        if config().not_data.contains(&name) {
+    let mut push = |name: &str, ty: &Type, access: TokenStream, step: Option<TokenStream>| {
+        if vocab.config.not_data.contains(&name) {
             return;
         }
-        let peeled = peel_type(ty_s);
-        let js = vocab.classify(ty_s);
+        let js = vocab.classify(ty);
         // A node type a listed class copies (`Js::Owned`) is that class, and
         // reaches nothing behind it.
-        if config().node_types.contains(&bare(peeled)) && !matches!(js, Some(Js::Owned(_))) {
+        if key(peel(ty)).is_some_and(|k| vocab.config.node_types.contains(&bare(&k)))
+            && !matches!(js, Some(Js::Owned(_)))
+        {
             return;
         }
         let id = format_ident!("{}", name);
@@ -1172,7 +1279,7 @@ pub fn data_members(
             && !nested_values
             && vocab.payload[t].holds_class(vocab)
         {
-            skipped.push(Skip::new(name, Some(ty_s), Reason::UnionWithClasses));
+            skipped.push(Skip::new(name, Some(ty), Reason::UnionWithClasses));
             return;
         }
         // A read-only class holds a projection of its value: a member it can
@@ -1199,7 +1306,7 @@ pub fn data_members(
         };
         if let Some(c) = js
             .as_ref()
-            .and_then(|j| js_conv(j, ty_s, vocab, &access, site))
+            .and_then(|j| js_conv(j, ty, vocab, &access, site))
         {
             reached.extend(c.reached);
             out.push(Member {
@@ -1211,11 +1318,13 @@ pub fn data_members(
             return;
         }
         // `Option<T>` where T maps stays optional on the JS side.
-        let raw = ty_s.trim_start_matches('&').strip_circumfix("Option<", '>');
-        let is_ref = raw.is_some_and(|s| s.starts_with('&'));
-        let inner = raw.map(|s| s.trim_start_matches('&').to_string());
-        match inner
-            .as_deref()
+        let raw = match Shape::of(unref(ty)) {
+            Shape::Option(inner) => Some(inner),
+            _ => None,
+        };
+        let is_ref = raw.is_some_and(|i| matches!(Shape::of(i), Shape::Ref { .. }));
+        match raw
+            .map(unref)
             .and_then(|i| vocab.classify(i).map(|j| (i, j)))
         {
             Some((_, Js::F32)) => {
@@ -1223,6 +1332,14 @@ pub fn data_members(
                     id,
                     jsty: quote!(Option<f64>),
                     value: quote!(#access.map(f64::from)),
+                    stepped: false,
+                });
+            }
+            Some((_, Js::F64)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<f64>),
+                    value: access,
                     stepped: false,
                 });
             }
@@ -1244,6 +1361,14 @@ pub fn data_members(
                     stepped: false,
                 });
             }
+            Some((_, Js::F64List)) => {
+                out.push(Member {
+                    id,
+                    jsty: quote!(Option<Vec<f64>>),
+                    value: quote!(#access.map(|v| v.to_vec())),
+                    stepped: false,
+                });
+            }
             Some((_, Js::Object(t))) => {
                 let o = data_ident(&t);
                 reached.insert(t);
@@ -1260,7 +1385,7 @@ pub fn data_members(
                 });
             }
             _ => {
-                skipped.push(Skip::new(name, Some(ty_s), Reason::Member));
+                skipped.push(Skip::new(name, Some(ty), Reason::Member));
             }
         }
     };
@@ -1289,9 +1414,8 @@ pub fn data_members(
             };
             let id = &f.sig.ident;
             seen.insert(id.to_string());
-            let out = ty_str(o);
-            let step = out.starts_with('&').then(|| quote!(__v.#id()));
-            push(&id.to_string(), &out, quote!(v.#id()), step);
+            let step = matches!(Shape::of(o), Shape::Ref { .. }).then(|| quote!(__v.#id()));
+            push(&id.to_string(), o, quote!(v.#id()), step);
         }
     }
     if let Some(Fields::Named(named)) = struct_fields_opt(files, bare(ty)) {
@@ -1305,16 +1429,20 @@ pub fn data_members(
             }
             // Copy kinds are read by value. Should upstream make one of them
             // non-Copy, this stops compiling rather than silently cloning.
-            let ty_s = ty_str(&f.ty);
-            let inner = ty_s.strip_circumfix("Option<", '>').unwrap_or(&ty_s);
+            let inner = match Shape::of(&f.ty) {
+                Shape::Option(inner) => inner,
+                _ => &f.ty,
+            };
             let copy = matches!(
                 vocab.classify(inner),
                 Some(
                     Js::F32
+                        | Js::F64
                         | Js::U8
                         | Js::U16
                         | Js::U32
                         | Js::I32
+                        | Js::I16
                         | Js::Bool
                         | Js::Enum
                         | Js::Scalar
@@ -1327,7 +1455,7 @@ pub fn data_members(
             } else {
                 quote!(v.#id.clone())
             };
-            push(&id.to_string(), &ty_s, access, Some(quote!(&__v.#id)));
+            push(&id.to_string(), &f.ty, access, Some(quote!(&__v.#id)));
         }
     }
     (out, skipped, reached)
@@ -1495,7 +1623,7 @@ pub fn wrapper_class(
     let reached = skipped
         .iter()
         .filter_map(|s| {
-            let t = s.ty.as_deref().filter(|_| s.reason == Reason::Returns)?;
+            let t = s.ty.as_ref().filter(|_| s.reason == Reason::Returns)?;
             match vocab.classify(t) {
                 Some(Js::Handle(x)) | Some(Js::HandleList(x)) => Some(x),
                 _ => None,
@@ -1586,16 +1714,11 @@ pub fn map_methods(
             if taken.contains(&name) || !twins.insert(name.clone()) {
                 continue;
             }
-            let gate = method_gate(imp, f);
+            let gate = method_gate(imp, f, &vocab.config);
 
-            // generic param -> bound text, so `P: AsRef<std::path::Path>` can
+            // generic param -> what its bound takes, so `P: AsRef<Path>` can
             // be classified.
-            let bounds: BTreeMap<String, String> = f
-                .sig
-                .generics
-                .type_params()
-                .map(|p| (p.ident.to_string(), quote!(#p).to_string().replace(' ', "")))
-                .collect();
+            let bounds = bound_kinds(&f.sig.generics);
 
             let mut inputs = f.sig.inputs.iter();
             let Some(syn::FnArg::Receiver(recv)) = inputs.next() else {
@@ -1616,25 +1739,23 @@ pub fn map_methods(
             let mut ok = true;
             for a in inputs {
                 let syn::FnArg::Typed(t) = a else { continue };
-                let ty = ty_str(&t.ty);
+                let ty = &*t.ty;
                 // A generic parameter is classified through its bound instead.
-                let bound = bounds.get(&ty).map(String::as_str).unwrap_or("");
-                let kind = if bound.contains("AsRef<std::path::Path>") {
-                    Some(Arg::PathStr)
-                } else if bound.contains("Into<String>") {
-                    Some(Arg::Str)
-                } else {
-                    match vocab.classify(&ty) {
+                let kind = match key(ty).and_then(|k| bounds.get(&k)) {
+                    Some(Some(Bound::Path)) => Some(Arg::PathStr),
+                    Some(Some(Bound::Str)) => Some(Arg::Str),
+                    Some(None) => None,
+                    None => match vocab.classify(ty) {
                         Some(Js::Bytes) => Some(Arg::Bytes),
                         Some(Js::Str) => Some(Arg::Str),
                         _ => None,
-                    }
+                    },
                 };
                 match kind {
                     Some(k) => args.push((t.pat.clone(), k)),
                     None => {
                         ok = false;
-                        skipped.push(Skip::new(&name, Some(&ty), Reason::Arg));
+                        skipped.push(Skip::new(&name, Some(ty), Reason::Arg));
                         break;
                     }
                 }
@@ -1648,16 +1769,16 @@ pub fn map_methods(
             let ret = match &f.sig.output {
                 ReturnType::Default => None,
                 ReturnType::Type(_, t) => {
-                    let ty = ty_str(t);
-                    match vocab.classify(&ty) {
+                    let ty = &**t;
+                    match vocab.classify(ty) {
                         Some(js)
-                            if js_conv(&js, &ty, vocab, &TokenStream::new(), Site::Method)
+                            if js_conv(&js, ty, vocab, &TokenStream::new(), Site::Method)
                                 .is_some() =>
                         {
                             Some((js, ty))
                         }
                         _ => {
-                            skipped.push(Skip::new(&name, Some(&ty), Reason::Returns));
+                            skipped.push(Skip::new(&name, Some(ty), Reason::Returns));
                             continue;
                         }
                     }
@@ -1702,11 +1823,15 @@ pub fn map_methods(
                 // A read-only class borrowed from a read-only `Arc`: a step
                 // into it, as `Classes::projected` takes one, not a copy.
                 Some((Js::Value(t), ty)) | Some((Js::ValueList(t), ty))
-                    if readonly && !mutable && fwd.is_empty() && ty.starts_with('&') =>
+                    if readonly
+                        && !mutable
+                        && fwd.is_empty()
+                        && matches!(Shape::of(ty), Shape::Ref { .. }) =>
                 {
                     let c = data_ident(t);
+                    let slice = matches!(Shape::of(ty), Shape::Ref { inner, .. } if matches!(Shape::of(inner), Shape::Slice(_)));
                     let b = quote!(napi_support::Projection::of(#receiver.clone()));
-                    let value = if ty.starts_with("&[") {
+                    let value = if slice {
                         quote!({
                             let __b = #b;
                             (0..__b.get().#ident().len())
@@ -1717,11 +1842,7 @@ pub fn map_methods(
                     } else {
                         quote!(#c::__proj(#b.then(|__s| Some(__s.#ident())).expect("a borrow resolves")))
                     };
-                    let ty = if ty.starts_with("&[") {
-                        quote!(Vec<#c>)
-                    } else {
-                        quote!(#c)
-                    };
+                    let ty = if slice { quote!(Vec<#c>) } else { quote!(#c) };
                     (ty, value, false)
                 }
                 Some((js, ty)) => {
@@ -1788,14 +1909,18 @@ pub fn map_methods(
 /// `#[cfg]`, so a gated method cannot be compiled out. It is kept on every
 /// target, with its body gated instead: where the upstream item is missing
 /// it throws, and the JS surface stays the same everywhere.
-pub fn method_gate(imp: &syn::ItemImpl, f: &syn::ImplItemFn) -> Option<(TokenStream, TokenStream)> {
+pub fn method_gate(
+    imp: &syn::ItemImpl,
+    f: &syn::ImplItemFn,
+    config: &Config,
+) -> Option<(TokenStream, TokenStream)> {
     let gated = crate::cfg::Pred::Any(
         imp.items
             .iter()
             .filter_map(|i| match i {
                 ImplItem::Fn(g) if g.sig.ident == f.sig.ident => Some(crate::cfg::Pred::All(vec![
-                    crate::cfg::of(&imp.attrs),
-                    crate::cfg::of(&g.attrs),
+                    crate::cfg::of(config, &imp.attrs),
+                    crate::cfg::of(config, &g.attrs),
                 ])),
                 _ => None,
             })
@@ -1867,16 +1992,21 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
         let ReturnType::Type(_, t) = ret else {
             return false;
         };
-        // Result and Option only, not peel_type: a list is not cheap.
-        let mut name = ty_str(t);
-        while let Some(inner) = ["Result<", "Option<"]
-            .iter()
-            .find_map(|w| name.strip_circumfix(w, '>'))
-        {
-            // `Result<T, String>`: a string error code, the value is `T`.
-            name = inner.trim_suffix(",String").to_string();
+        // Result and Option only, not `peel`: a list is not cheap.
+        let mut t: &Type = t;
+        loop {
+            t = match Shape::of(t) {
+                // `Result<T, String>`: a string error code, the value is `T`.
+                Shape::Result { ok, err }
+                    if err.is_none_or(|e| key(e).as_deref() == Some("String")) =>
+                {
+                    ok
+                }
+                Shape::Option(inner) => inner,
+                _ => break,
+            };
         }
-        scalars.contains(&name)
+        key(t).is_some_and(|k| scalars.contains(&k))
     };
     // `#[napi(object)]` and the enums are plain values, which print fine
     // already.
@@ -1902,7 +2032,7 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
             if args.contains_key("getter") {
                 // A getter handing out bytes copies them on each read: a
                 // whole font, for a face's source. Printing leaves it out.
-                if !matches!(&f.sig.output, ReturnType::Type(_, t) if ty_str(t).contains("Buffer"))
+                if !matches!(&f.sig.output, ReturnType::Type(_, t) if names(t.to_token_stream(), "Buffer"))
                 {
                     getters.push(js);
                 }
@@ -1948,21 +2078,44 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
     out
 }
 
+/// What a constant of type `ty` is in JS, through type aliases: its Rust
+/// type for napi and its TypeScript type. A number type that fits a JS
+/// number, a `bool` or a string; `None` for any other (ADR 0002, Q21).
+pub fn const_type(ty: &Type, vocab: &Vocab) -> Option<(TokenStream, &'static str)> {
+    let ty = vocab.resolve(ty);
+    let shape = Shape::of(ty);
+    match shape.key().as_deref() {
+        Some("u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64") => {
+            Some((ty.to_token_stream(), "number"))
+        }
+        Some("bool") => Some((ty.to_token_stream(), "boolean")),
+        Some("String") => Some((ty.to_token_stream(), "string")),
+        // `&str` and `&'static str` alike.
+        _ => match shape {
+            Shape::Ref { inner, .. } if key(inner).as_deref() == Some("str") => {
+                Some((quote!(&str), "string"))
+            }
+            _ => None,
+        },
+    }
+}
+
 /// The public constants a source exports ([`ModTree::consts`]), each as a
 /// `#[napi] const` of the namespace of the module that exports it, under its
 /// Rust name: `toy::LIMIT` is `toy.LIMIT`, `toy::alt::LIMIT` is `alt.LIMIT`.
 /// `root` is the source's path (`toy`). A constant of a number type that fits
 /// a JS number, a `bool` or a string maps, through type aliases; any other
 /// is left out, and so is one exported by a module with no namespace. Returns
-/// the code by the [`Config::namespaces`](crate::Config::namespaces) root it
-/// goes under, and a report line per constant.
+/// the code by the root it goes under (`toy::alt`, its namespace by
+/// [`Config::namespace_of`](crate::Config::namespace_of)), and a report line
+/// per constant.
 ///
 /// [`ModTree::consts`]: crate::sources::ModTree::consts
 pub fn constants(
     root: &str,
     consts: &[(String, String, syn::ItemConst)],
     vocab: &Vocab,
-) -> (Vec<(&'static str, TokenStream)>, Vec<String>) {
+) -> (Vec<(String, TokenStream)>, Vec<String>) {
     let (mut code, mut report) = (Vec::new(), Vec::new());
     for (module, name, c) in consts {
         let at = if module.is_empty() {
@@ -1970,21 +2123,14 @@ pub fn constants(
         } else {
             format!("{root}::{module}")
         };
-        let ty = vocab.resolve(&ty_str(&c.ty));
-        let js_ty = match ty.as_str() {
-            "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "f32" | "f64" | "bool" | "String" => {
-                ty.parse::<TokenStream>().expect("a primitive type")
-            }
-            t if t.starts_with('&') && t.ends_with("str") => quote!(&str),
-            _ => {
-                report.push(format!(
-                    "{at}::{name} constant not exposed: {} (no JS value)",
-                    ty_str(&c.ty)
-                ));
-                continue;
-            }
+        let Some((js_ty, _)) = const_type(&c.ty, vocab) else {
+            report.push(format!(
+                "{at}::{name} constant not exposed: {} (no JS value)",
+                ty_str(&c.ty)
+            ));
+            continue;
         };
-        let Some((r, ns)) = config().namespaces.iter().find(|(r, _)| *r == at) else {
+        let Some(ns) = vocab.config.namespace_of(&at) else {
             report.push(format!(
                 "{at}::{name} constant not exposed: no namespace for {at}"
             ));
@@ -1993,10 +2139,10 @@ pub fn constants(
         let id = &c.ident;
         let path: TokenStream = format!("{at}::{name}").parse().expect("a path");
         let docs = docs(&c.attrs);
-        let gate = crate::cfg::attr(&c.attrs);
+        let gate = crate::cfg::attr(&vocab.config, &c.attrs);
         report.push(format!("{at}::{name} is a constant: {ns}.{name}"));
         code.push((
-            *r,
+            at,
             quote! {
                 #(#docs)*
                 #gate
@@ -2060,14 +2206,48 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
     // What is left out, with the reason; the rest follows from it below.
     let mut out_why: BTreeMap<String, String> = BTreeMap::new();
     let mut classes: BTreeSet<String> = BTreeSet::new();
+    // Per namespace, each union alias whose JS name a struct or enum of the
+    // namespace has (an input form, `enum_input`): a TypeScript type may not
+    // share a name with an interface, a class or another type. Its uses get
+    // the union spelled out instead, and the alias is left out.
+    let mut inlined: BTreeMap<&str, BTreeMap<String, TokenStream>> = BTreeMap::new();
     for (ns, file) in &parsed {
         let pascal = ns.to_case(convert_case::Case::Pascal);
         let snake = ns.to_case(convert_case::Case::Snake);
+        let types: BTreeSet<String> = file
+            .items
+            .iter()
+            .filter(|i| matches!(i, Item::Struct(_) | Item::Enum(_)))
+            .map(item_name)
+            .collect();
         for item in &file.items {
             let (id, new) = match item {
                 Item::Struct(s) => (&s.ident, format_ident!("{pascal}{}", s.ident)),
                 Item::Enum(e) => (&e.ident, format_ident!("{pascal}{}", e.ident)),
                 Item::Fn(f) => (&f.sig.ident, format_ident!("{snake}_{}", f.sig.ident)),
+                Item::Type(t) => {
+                    let js = alias_js_name(t);
+                    if types.contains(&js) {
+                        report.push(format!(
+                            "not aliased: {ns}.{js}: a type named {js} exists already, \
+                             so its union is spelled out"
+                        ));
+                        let ty = &t.ty;
+                        inlined
+                            .entry(ns)
+                            .or_default()
+                            .insert(t.ident.to_string(), quote!(#ty));
+                        continue;
+                    }
+                    let new = format_ident!("{pascal}{}", t.ident);
+                    let prior = names.insert(key(&t.ident.to_string(), ns), (new, js, ns));
+                    assert!(
+                        prior.is_none(),
+                        "{} is defined twice in namespace {ns}",
+                        t.ident
+                    );
+                    continue;
+                }
                 _ => continue,
             };
             let js = id.to_string();
@@ -2129,8 +2309,17 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
                 renames.entry(id.to_string()).or_insert_with(|| new.clone());
             }
         }
+        let spelled = inlined.get(ns);
         for item in file.items.iter().filter(|i| !matches!(i, Item::Const(_))) {
-            let mut item = item.clone();
+            if let (Item::Type(t), Some(s)) = (item, spelled)
+                && s.contains_key(&t.ident.to_string())
+            {
+                continue;
+            }
+            let mut item = match spelled {
+                Some(s) => syn::parse2(spell_out(quote!(#item), s)).expect("an item"),
+                None => item.clone(),
+            };
             let own = match &mut item {
                 Item::Struct(s) => Some((s.ident.to_string(), &mut s.attrs)),
                 Item::Enum(e) => Some((e.ident.to_string(), &mut e.attrs)),
@@ -2139,6 +2328,9 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
             if let Some((id, attrs)) = own {
                 let (_, js, ns) = &names[&key(&id, ns)];
                 with_napi_args(attrs, quote!(js_name = #js, namespace = #ns));
+            } else if let Item::Type(t) = &mut item {
+                // Its `js_name` is set already: the enum's.
+                with_napi_args(&mut t.attrs, quote!(namespace = #ns));
             } else if let Item::Impl(imp) = &mut item {
                 // An impl joins its class in the `.d.ts` only under the
                 // class's namespace.
@@ -2148,7 +2340,7 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
                     .map_or(*ns, |(_, _, n)| n);
                 with_napi_args(&mut imp.attrs, quote!(namespace = #ns));
             }
-            let is_def = matches!(item, Item::Struct(_) | Item::Enum(_));
+            let is_def = matches!(item, Item::Struct(_) | Item::Enum(_) | Item::Type(_));
             let id = match item_name(&item) {
                 n if n.is_empty() => n,
                 n => key(&n, ns),
@@ -2252,14 +2444,52 @@ pub(crate) fn class_of(item: &Item) -> Option<(&syn::Ident, String, Option<Strin
     Some((&s.ident, js, args.remove("namespace").flatten()))
 }
 
-/// The name a struct, enum or function declares, or empty.
+/// The name a struct, enum, function or type alias declares, or empty.
 fn item_name(item: &Item) -> String {
     match item {
         Item::Struct(s) => s.ident.to_string(),
         Item::Enum(e) => e.ident.to_string(),
         Item::Fn(f) => f.sig.ident.to_string(),
+        Item::Type(t) => t.ident.to_string(),
         _ => String::new(),
     }
+}
+
+/// The JS name of a type alias ([`union_alias`]): its `js_name`, or its ident.
+fn alias_js_name(t: &syn::ItemType) -> String {
+    napi_args(&t.attrs)
+        .and_then(|mut a| a.remove("js_name").flatten())
+        .unwrap_or_else(|| t.ident.to_string())
+}
+
+/// `ts` with every identifier in `aliases` replaced by the type it aliases,
+/// except where it names something else (after `::` or `.`).
+fn spell_out(ts: TokenStream, aliases: &BTreeMap<String, TokenStream>) -> TokenStream {
+    use proc_macro2::{Group, TokenTree};
+    let toks: Vec<TokenTree> = ts.into_iter().collect();
+    let punct =
+        |i: usize, c: char| matches!(toks.get(i), Some(TokenTree::Punct(p)) if p.as_char() == c);
+    let mut out = TokenStream::new();
+    for (i, t) in toks.iter().enumerate() {
+        match t {
+            TokenTree::Ident(id)
+                if !(i >= 2 && punct(i - 1, ':') && punct(i - 2, ':'))
+                    && !(i >= 1 && punct(i - 1, '.')) =>
+            {
+                match aliases.get(&id.to_string()) {
+                    Some(ty) => out.extend(ty.clone()),
+                    None => out.extend([t.clone()]),
+                }
+            }
+            TokenTree::Group(g) => {
+                let mut ng = Group::new(g.delimiter(), spell_out(g.stream(), aliases));
+                ng.set_span(g.span());
+                out.extend([TokenTree::Group(ng)]);
+            }
+            _ => out.extend([t.clone()]),
+        }
+    }
+    out
 }
 
 /// Adds `extra` to an item's `#[napi]` or `#[napi(..)]`; nothing without one.
@@ -2338,17 +2568,28 @@ enum InputField {
 }
 
 fn input_field(t: &syn::Type) -> Option<InputField> {
-    if let syn::Type::Reference(r) = t
-        && r.mutability.is_none()
-        && ty_str(&r.elem) == "str"
-    {
-        return Some(InputField::BorrowedStr);
-    }
-    let s = ty_str(t);
-    match s.as_str() {
-        "String" | "PathBuf" | "std::path::PathBuf" => Some(InputField::Str),
-        "Vec<u8>" => Some(InputField::Bytes),
-        _ if bare_arc(&s) == "Arc<Vec<u8>>" || shared_bytes(&s) => Some(InputField::SharedBytes),
+    let u8s = |e: &Type| key(e).as_deref() == Some("u8");
+    match Shape::of(t) {
+        Shape::Ref {
+            mutable: false,
+            inner,
+            ..
+        } if key(inner).as_deref() == Some("str") => Some(InputField::BorrowedStr),
+        s if matches!(
+            s.key().as_deref(),
+            Some("String" | "PathBuf" | "std::path::PathBuf")
+        ) =>
+        {
+            Some(InputField::Str)
+        }
+        Shape::Vec(e) if u8s(e) => Some(InputField::Bytes),
+        Shape::Arc(i) if matches!(Shape::of(i), Shape::Vec(e) if u8s(e)) => {
+            Some(InputField::SharedBytes)
+        }
+        // Behind a plain `&` too, as shared bytes are read anywhere.
+        _ if matches!(Shape::of(unref(t)), Shape::Arc(i) if Shape::of(i) == Shape::DynBytes) => {
+            Some(InputField::SharedBytes)
+        }
         _ => None,
     }
 }
@@ -2381,17 +2622,17 @@ pub fn is_enum_input(e: &syn::ItemEnum) -> bool {
 /// The [`is_enum_input`] enums of `files` that JS has somewhere to pass: an
 /// argument of a function, or a list in an option object
 /// (`Config::option_objects`). The rest would be types nothing takes.
-pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
+pub fn input_enums<'f>(files: &'f [syn::File], config: &Config) -> Vec<&'f syn::ItemEnum> {
     let mut taken = BTreeSet::new();
     let take = |taken: &mut BTreeSet<String>, sig: &syn::Signature| {
         for i in &sig.inputs {
             if let syn::FnArg::Typed(t) = i {
                 let mut ty = &*t.ty;
-                while let syn::Type::Reference(r) = ty {
-                    ty = &r.elem;
+                while let Shape::Ref { inner, .. } = Shape::of(ty) {
+                    ty = inner;
                 }
-                if let Some(n) = crate::class::segs(ty).and_then(|mut v| v.pop()) {
-                    taken.insert(n);
+                if let Some(n) = Shape::of(ty).last() {
+                    taken.insert(n.to_string());
                 }
             }
         }
@@ -2414,7 +2655,7 @@ pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
                 })
             }
             Item::Struct(st)
-                if config()
+                if config
                     .option_objects
                     .contains(&st.ident.to_string().as_str()) =>
             {
@@ -2444,9 +2685,9 @@ pub fn input_enums(files: &[syn::File]) -> Vec<&syn::ItemEnum> {
 /// Whether `files` emit the input form of enum `name` ([`input_enums`]):
 /// the one test of what a member may take as an input enum, so none names a
 /// form that was never emitted. The shape is checked first, being cheaper.
-pub fn is_input(files: &[syn::File], name: &str) -> bool {
+pub fn is_input(files: &[syn::File], name: &str, config: &Config) -> bool {
     crate::sources::find_enum(files, name).is_some_and(is_enum_input)
-        && input_enums(files).iter().any(|e| e.ident == name)
+        && input_enums(files, config).iter().any(|e| e.ident == name)
 }
 
 /// The input form of an [`is_enum_input`] enum, named as upstream for
@@ -2457,6 +2698,7 @@ pub fn enum_input(
     e: &syn::ItemEnum,
     modules: &BTreeMap<String, String>,
     root: &TokenStream,
+    config: &Config,
 ) -> TokenStream {
     let name = e.ident.to_string();
     let ident = format_ident!("{name}");
@@ -2515,7 +2757,7 @@ pub fn enum_input(
     }
     let arms = e.variants.iter().zip(&tags).map(|(v, tag)| {
         let vid = &v.ident;
-        let g = crate::cfg::attr(&v.attrs);
+        let g = crate::cfg::attr(config, &v.attrs);
         let missing = |what: &str| format!("{name} '{tag}' needs {what}");
         let value = |m: String| {
             quote!(self.value.as_deref().ok_or_else(|| napi_support::thrown("InvalidArg", #m))?)
@@ -2576,16 +2818,18 @@ pub fn enum_input(
 /// The input enum a field `&'a [E<'a>]` lists, when `E` is one
 /// ([`is_enum_input`]).
 fn input_list<'f>(files: &'f [syn::File], ty: &syn::Type) -> Option<&'f syn::ItemEnum> {
-    let syn::Type::Reference(r) = ty else {
+    let Shape::Ref {
+        mutable: false,
+        inner,
+        ..
+    } = Shape::of(ty)
+    else {
         return None;
     };
-    let syn::Type::Slice(sl) = &*r.elem else {
+    let Shape::Slice(elem) = Shape::of(inner) else {
         return None;
     };
-    if r.mutability.is_some() {
-        return None;
-    }
-    let name = crate::class::segs(&sl.elem)?.pop()?;
+    let name = Shape::of(elem).last()?.to_string();
     crate::sources::find_enum(files, &name).filter(|e| is_enum_input(e))
 }
 
@@ -2599,4 +2843,45 @@ pub fn has_input_lists(files: &[syn::File], ty: &str) -> bool {
             .any(|f| is_pub(&f.vis) && input_list(files, &f.ty).is_some()),
         _ => false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One table: a kind that both a getter and a method can return has the
+    /// same JS type at both, whatever expression each uses to get there.
+    #[test]
+    fn getter_and_method_agree() {
+        let (v, a) = (Vocab::default(), quote!(x));
+        for js in [
+            Js::Bool,
+            Js::I32,
+            Js::I16,
+            Js::F32,
+            Js::F64,
+            Js::U8,
+            Js::U16,
+            Js::U32,
+            Js::Count,
+            Js::Str,
+            Js::Scalar,
+            Js::Class("C".into()),
+            Js::OptClass("C".into()),
+            Js::IntNewtype("N".into()),
+            Js::Value("V".into()),
+            Js::ValueList("V".into()),
+            Js::OptValue("V".into()),
+            Js::Object("O".into()),
+            Js::ObjectList("O".into()),
+        ] {
+            let ty =
+                |site| js_conv(&js, &syn::parse_quote!(T), &v, &a, site).map(|c| c.ty.to_string());
+            assert_eq!(
+                ty(Site::Getter),
+                ty(Site::Method),
+                "{js:?}: getter and method disagree"
+            );
+        }
+    }
 }

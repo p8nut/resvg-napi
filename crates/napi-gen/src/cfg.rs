@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::config;
+use crate::Config;
 
 /// A cfg predicate, features already translated.
 #[derive(Clone)]
@@ -38,28 +38,28 @@ pub enum Gate {
 
 /// `#[cfg(..)]` for what `attrs` gate, translated (`of`), or nothing when
 /// it is built everywhere.
-pub fn attr(attrs: &[syn::Attribute]) -> TokenStream {
-    match gate(&of(attrs)) {
+pub fn attr(config: &Config, attrs: &[syn::Attribute]) -> TokenStream {
+    match gate(&of(config, attrs)) {
         Gate::When(on, _) => quote!(#[cfg(#on)]),
         Gate::Always => TokenStream::new(),
     }
 }
 
 /// The translated predicate of every `#[cfg]` in `attrs`, all of them holding.
-pub fn of(attrs: &[syn::Attribute]) -> Pred {
+pub fn of(config: &Config, attrs: &[syn::Attribute]) -> Pred {
     Pred::All(
         attrs
             .iter()
             .filter(|a| a.path().is_ident("cfg"))
             .map(|a| {
                 let meta: syn::Meta = a.parse_args().expect("a #[cfg(..)] whose predicate parses");
-                translate(&meta)
+                translate(config, &meta)
             })
             .collect(),
     )
 }
 
-fn translate(meta: &syn::Meta) -> Pred {
+fn translate(config: &Config, meta: &syn::Meta) -> Pred {
     match meta {
         syn::Meta::List(l) if ["all", "any", "not"].iter().any(|k| l.path.is_ident(k)) => {
             let inner: Vec<Pred> = l
@@ -68,7 +68,7 @@ fn translate(meta: &syn::Meta) -> Pred {
                 )
                 .expect("a cfg combinator over predicates")
                 .iter()
-                .map(translate)
+                .map(|m| translate(config, m))
                 .collect();
             if l.path.is_ident("all") {
                 Pred::All(inner)
@@ -92,11 +92,12 @@ fn translate(meta: &syn::Meta) -> Pred {
                 panic!("cfg(feature = ..) without a string");
             };
             let name = s.value();
-            match config().features.iter().find(|(f, _)| *f == name) {
+            match config.features.iter().find(|(f, _)| *f == name) {
                 Some((_, "true")) => Pred::True,
-                Some((_, ours)) => {
-                    translate(&syn::parse_str(ours).expect("a Config::features cfg that parses"))
-                }
+                Some((_, ours)) => translate(
+                    config,
+                    &syn::parse_str(ours).expect("a Config::features cfg that parses"),
+                ),
                 None => panic!(
                     "an emitted upstream method is gated on feature {name:?}, which Config::features \
                      does not list: say whether this crate always builds it (\"true\") or under \
@@ -216,5 +217,42 @@ pub fn gate(p: &Pred) -> Gate {
             tokens(&simplify(p)),
             tokens(&simplify(&Pred::Not(Box::new(p.clone())))),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gated() -> Vec<syn::Attribute> {
+        let item: syn::ItemFn = syn::parse_quote! {
+            #[cfg(feature = "x")]
+            fn f() {}
+        };
+        item.attrs
+    }
+
+    /// `Config::features` decides what an upstream feature gate becomes:
+    /// two configs in one test binary, each its own answer.
+    #[test]
+    fn features_translate_by_the_config() {
+        let attr_under = |features| {
+            let config = Config {
+                features,
+                ..Config::default()
+            };
+            attr(&config, &gated()).to_string()
+        };
+        assert_eq!(attr_under(&[("x", "true")]), "");
+        assert_eq!(
+            attr_under(&[("x", "unix")]),
+            quote!(#[cfg(unix)]).to_string()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "which Config::features")]
+    fn an_unlisted_feature_fails() {
+        attr(&Config::default(), &gated());
     }
 }

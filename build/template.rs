@@ -1,7 +1,8 @@
 //! What the generated file holds beside the generated items, written by hand:
-//! the paths to the wrapped crates, the `guard` module, and the one converter
-//! `config::GEN` names. Everything generic (the napi imports, `to_f32`, the
-//! log functions) is `napi_gen::emit::prelude`.
+//! the one converter `config::GEN` names. Everything generic (the napi
+//! imports, `to_f32`, the log functions) is `napi_gen::emit::prelude`; the
+//! crate paths and the `guard` module are `config::GEN.uses` and
+//! `config::GEN.hand_written`.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -9,12 +10,6 @@ use quote::quote;
 /// The resvg-specific items of `src/lib.rs`.
 pub fn template() -> TokenStream {
     quote! {
-        use resvg::{tiny_skia, usvg};
-
-        #[doc = " The resvg-specific providers (`guard.*`), written by hand: src/guard.rs."]
-        mod guard;
-        use guard::{GuardFontResolver, GuardImageHrefResolver};
-
         #[doc = " A number of spaces (0-255), `'tabs'` or `'none'` as a `usvg::Indent`:"]
         #[doc = " `config::GEN.converters`. `Indent` is xmlwriter's, a crate the"]
         #[doc = " generator does not read."]

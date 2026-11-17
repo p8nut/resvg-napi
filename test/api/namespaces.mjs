@@ -72,6 +72,25 @@ test('a public constant is a value under its Rust name', () => {
   assert.equal(binding.usvg.DEFAULT_MAX_DEPTH, 1024);
 });
 
+test('an associated constant is a static read-only property under its Rust name', () => {
+  const { fontdb, tiny_skia } = binding;
+  // `fontdb::Weight` is a number in JS: its constants are a frozen object.
+  assert.equal(fontdb.Weight.BOLD, 700);
+  assert.equal(fontdb.Weight.THIN, 100);
+  assert.equal(fontdb.Weight.BLACK, 900);
+  assert.ok(Object.isFrozen(fontdb.Weight));
+  // `tiny_skia::Color` is a class: a fresh `tiny_skia.Color` per read.
+  const black = tiny_skia.Color.BLACK;
+  assert.ok(black instanceof tiny_skia.Color);
+  assert.deepEqual([black.red(), black.green(), black.blue(), black.alpha()], [0, 0, 0, 1]);
+  const white = tiny_skia.Color.WHITE;
+  assert.deepEqual([white.red(), white.green(), white.blue(), white.alpha()], [1, 1, 1, 1]);
+  assert.equal(tiny_skia.Color.TRANSPARENT.alpha(), 0);
+  black.setRed(1);
+  assert.equal(tiny_skia.Color.BLACK.red(), 0, 'a write to one read changes no other');
+  assert.throws(() => { tiny_skia.Color.BLACK = white; }, TypeError);
+});
+
 test('the Rust names, and nothing else at the root', () => {
   const { fontdb, usvg } = binding;
   assert.equal(typeof fontdb.FaceInfo, 'function', 'fontdb.FaceInfo, not FontFace');

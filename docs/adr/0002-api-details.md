@@ -20,9 +20,32 @@ numbered item matches the decision log (Q21–Q35).
   `usvg::DEFAULT_MAX_DEPTH` is `usvg.DEFAULT_MAX_DEPTH`. Every public `const`
   a wrapped crate exports, of a number, boolean or string type, is mirrored
   without an allowlist; any other type is left out and reported.
+- Associated constants (`impl T { pub const X }`) keep their Rust name too,
+  as static read-only properties `T.X`:
+  - On a class, a constant of a number, boolean or string type is that
+    value, and a constant of type `Self` on a class held by value is a
+    fresh instance on each read: `tiny_skia.Color.BLACK`.
+  - On a type JS reads as a number, boolean or string, which has no class,
+    they are a frozen object of the type's name in its namespace, each
+    value converted as the type is: `fontdb.Weight.BOLD === 700`. Only a
+    discovered crate's types get one.
+  - napi declares no static property: the constants of a class are hidden
+    static methods, turned into getters when the module loads, and the
+    `.d.ts` header declares them, merged into the class by a namespace of
+    its name.
+  - Anything else is left out and reported. So is every constant of a crate
+    read only for its listed classes (`Role::Classes`) that is neither on one
+    of those classes nor associated with one: tiny-skia's `BYTES_PER_PIXEL`
+    and `ALPHA_*`. Its surface is what its listed classes reach.
 - napi keys classes by Rust identifier, so the binding prefixes identifiers
   with the crate (`UsvgColor`) and sets `js_name` and `namespace`. The prefix
   is invisible from JS.
+- Each enum mirrored as a union gets a named TypeScript type under the
+  enum's name: `export type Node = NodeGroup | NodePath | NodeImage |
+  NodeText` in `usvg`, and every signature says `usvg.Node`. Where that name
+  is taken in the namespace by an interface, class or other type (fontdb's
+  input form `fontdb.Source`), the union stays spelled out and the
+  generator report says so (`not aliased: ...`).
 
 ## Tree nodes (Q22)
 

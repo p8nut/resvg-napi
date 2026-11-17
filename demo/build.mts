@@ -48,4 +48,10 @@ const heads = await Promise.all(files.map((f) =>
 const names = files.filter((_, i) => /<svg[\s>]/.test(heads[i]));
 await writeFile(join(examples, 'index.json'), `${JSON.stringify(names)}\n`);
 
+// The resvg the wasm was built from, for the bench's slug line: the binding
+// exports no version, and a number typed into the page went stale (0.48).
+const resvg = (await readFile(join(root, 'Cargo.toml'), 'utf8')).match(/^resvg = \{ version = "([^"]+)"/m)?.[1];
+if (!resvg) throw new Error('resvg version not found in Cargo.toml');
+await writeFile(join(here, 'engine.json'), `${JSON.stringify({ resvg })}\n`);
+
 console.log(`demo/: wasm, 4 bundles, ${names.length} examples`);

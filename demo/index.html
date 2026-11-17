@@ -39,7 +39,18 @@
   input[type="number"] { width: 4.5rem; font: inherit; padding: .15rem .3rem; }
   .out { display: grid; place-items: center; min-height: 340px; border-radius: 4px;
          background: repeating-conic-gradient(#e9eef2 0 25%, #fff 0 50%) 0 0 / 16px 16px; overflow: auto; }
-  .out img { max-width: 100%; height: auto; }
+  .out img { max-width: 100%; height: auto; display: block; }
+  /* The node boxes, in the tree's own units: the viewBox scales them with the image. */
+  .frame { position: relative; }
+  #boxes { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  #boxes rect { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: all; }
+  #boxes rect:hover { stroke-width: 3; }
+  #boxes .group { stroke: var(--dim); stroke-dasharray: 4 3; }
+  #boxes .path { stroke: var(--err); }
+  #boxes .text { stroke: var(--accent); }
+  #boxes .image { stroke: #b07800; }
+  .legend { font-size: .8rem; color: var(--dim); }
+  .legend b { font-weight: 600; }
   .status { font-size: .85rem; color: var(--dim); margin-top: .5rem; min-height: 1.4em; }
   .status.err { color: var(--err); }
   pre { margin: 0; font: 13px/1.6 var(--mono); overflow-x: auto; }
@@ -63,9 +74,13 @@
       <h2>PNG rendered by resvg</h2>
       <div class="bar">
         <label>scale <input id="scale" type="number" min="0.25" max="8" step="0.25" value="2"></label>
+        <label><input id="showBoxes" type="checkbox"> bounding boxes</label>
         <a id="download" download="render.png" hidden>download PNG</a>
       </div>
-      <div class="out"><img id="out" alt="rendered PNG" hidden></div>
+      <div class="out"><div class="frame"><img id="out" alt="rendered PNG" hidden><svg id="boxes" hidden></svg></div></div>
+      <div class="legend" id="legend" hidden>where each node draws, stroke and filters included (<code>nodeExtent</code>):
+        <b style="color:var(--err)">path</b> · <b style="color:var(--accent)">text</b> ·
+        <b style="color:#b07800">image</b> · <b style="color:var(--dim)">group</b> (dashed). Hover a box for its node.</div>
       <div class="status" id="status">loading the wasm…</div>
     </section>
   </div>
@@ -143,12 +158,51 @@ writeFileSync('out.png', png)`;
   select('shapes');
   showCode();
 
-  let helpers, db, url;
+  let helpers, nodeExtent, db, url;
+
+  // Every node under the root, depth first, with the box it draws in: the
+  // tree's units, the same the viewBox below is in.
+  function boxesOf(tree) {
+    const out = [];
+    const walk = (nodes, depth) => {
+      for (const node of nodes) {
+        const box = nodeExtent(node);
+        if (box) out.push({ kind: node.kind, id: node.value.id(), depth, box });
+        if (node.kind === 'group') walk(node.value.children(), depth + 1);
+      }
+    };
+    walk(tree.root().children(), 0);
+    return out;
+  }
+
+  function drawBoxes(tree) {
+    const svg = $('boxes'), on = $('showBoxes').checked;
+    svg.hidden = $('legend').hidden = !on;
+    svg.replaceChildren();
+    if (!on) return;
+    const size = tree.size();
+    svg.setAttribute('viewBox', `0 0 ${size.width()} ${size.height()}`);
+    const NS = 'http://www.w3.org/2000/svg';
+    for (const { kind, id, depth, box } of boxesOf(tree)) {
+      const r = document.createElementNS(NS, 'rect');
+      for (const k of ['x', 'y', 'width', 'height']) r.setAttribute(k, box[k]);
+      r.setAttribute('class', kind);
+      const t = document.createElementNS(NS, 'title');
+      const n = (v) => +v.toFixed(1);
+      t.textContent = `${kind}${id ? ' #' + id : ''} (depth ${depth}): ${n(box.width)} × ${n(box.height)} at ${n(box.x)}, ${n(box.y)}`;
+      r.append(t);
+      svg.append(r);
+    }
+  }
+
   function render() {
     if (!helpers) return;
     const t0 = performance.now();
+    let tree;
     try {
-      const png = helpers.renderPng($('src').value, { fonts: db, scale: Number($('scale').value) || 1 });
+      // Parsed once, for the PNG and for the boxes drawn over it.
+      ({ tree } = helpers.parse($('src').value, { fonts: db }));
+      const png = helpers.renderPng(tree, { scale: Number($('scale').value) || 1 });
       // A view over the wasm's shared memory: Blob refuses it, so copy out.
       const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
       if (url) URL.revokeObjectURL(url);
@@ -156,21 +210,26 @@ writeFileSync('out.png', png)`;
       $('out').src = $('download').href = url;
       $('out').hidden = $('download').hidden = false;
       status(`${png.length.toLocaleString()} bytes in ${(performance.now() - t0).toFixed(1)} ms`);
+      drawBoxes(tree);
     } catch (e) {
       status(e.message, true);
+    } finally {
+      tree?.dispose();
     }
   }
 
   let timer;
   $('src').oninput = () => { select(null); clearTimeout(timer); timer = setTimeout(render, 250); };
   $('scale').oninput = () => { showCode(); render(); };
+  $('showBoxes').onchange = render;
 
   try {
     if (!globalThis.crossOriginIsolated) throw new Error('This page needs cross-origin isolation; reload it, or serve it with demo/serve.mts.');
     // The wasm binding, and `resvg-napi/helpers` built on it: helpers.js is
     // helpers.browser.mjs, what a bundler's `browser` condition resolves to.
     const mod = await import('./resvg.js');
-    const { createHelpers } = await import('./helpers.js');
+    const { createHelpers, nodeExtent: extent } = await import('./helpers.js');
+    nodeExtent = extent;
     db = new mod.fontdb.Database();
     // The browser sandbox has no system fonts: load one and point the generic
     // families at it, or the text example draws nothing. The family is the one

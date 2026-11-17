@@ -578,7 +578,7 @@ runs locally too:
 npm run demo
 ```
 
-![the proof bench](https://raw.githubusercontent.com/p8nut/resvg-napi/main/demo/assets/screenshot.png)
+![the bench](https://raw.githubusercontent.com/p8nut/resvg-napi/main/demo/assets/screenshot.png)
 
 [demo/README.md](demo/README.md) describes the page.
 

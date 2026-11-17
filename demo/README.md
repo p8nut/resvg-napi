@@ -87,7 +87,7 @@ editor has a column per field, a control per type — checkbox for a boolean,
 number field for a number — and add/remove per row. The value underneath stays a
 JSON array, and the raw JSON is one disclosure away.
 
-![the variables panel and the node list](assets/array-editor.png)
+![the variables panel and the element list](assets/array-editor.png)
 
 `examples/roster.svg` is a worked example: a table whose rows come from an
 array of objects. Its data lives in `roster.json` next to it, which the example

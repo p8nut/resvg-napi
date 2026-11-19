@@ -169,7 +169,7 @@ Copyright (c) 2014 The Rust Project Developers
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
 
-### pin-project-lite 0.2.17
+### pin-project-lite 0.2.18
 Offered as `Apache-2.0 OR MIT`; listed here under Apache-2.0.
 No copyright line in the published crate; Apache-2.0 per its manifest.
 
@@ -233,7 +233,7 @@ Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright 2019 Fontations Developers
 Copyright (c) 2019 Fontations Developers
 
-### smallvec 1.16.5
+### smallvec 1.16.6
 Offered as `MIT OR Apache-2.0`; listed here under Apache-2.0.
 Copyright (c) 2018 The Servo Project Developers
 

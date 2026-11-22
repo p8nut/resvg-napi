@@ -13,15 +13,16 @@ pub fn template() -> TokenStream {
         #[doc = " A number of spaces (0-255), `'tabs'` or `'none'` as a `usvg::Indent`:"]
         #[doc = " `config::GEN.converters`. `Indent` is xmlwriter's, a crate the"]
         #[doc = " generator does not read."]
-        fn indent_from_js(v: &Either<u32, String>, name: &str) -> Result<usvg::Indent> {
+        fn indent_from_js(
+            v: &Either<f64, String>,
+            name: &str,
+        ) -> std::result::Result<usvg::Indent, napi_support::Thrown> {
             match v {
-                Either::A(n) => u8::try_from(*n)
-                    .map(usvg::Indent::Spaces)
-                    .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+                Either::A(n) => napi_support::int(name, *n).map(usvg::Indent::Spaces),
                 Either::B(s) => match s.as_str() {
                     "tabs" => Ok(usvg::Indent::Tabs),
                     "none" => Ok(usvg::Indent::None),
-                    _ => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+                    _ => Err(napi_support::invalid(name, format!("{s:?}"))),
                 },
             }
         }

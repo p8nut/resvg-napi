@@ -137,7 +137,7 @@ pub const GEN: Config = Config {
     // `indent_from_js` reads a number of spaces, `'tabs'` or `'none'`.
     converters: &[Converter {
         ty: "Indent",
-        js: "Either<u32, String>",
+        js: "Either<f64, String>",
         ts: "number | 'tabs' | 'none'",
         convert: "indent_from_js",
     }],

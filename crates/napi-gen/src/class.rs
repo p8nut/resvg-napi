@@ -130,7 +130,17 @@ impl Prim {
         })
     }
 
-    /// The type napi converts the JS value into.
+    /// The type napi converts a JS argument into: an integer is read as
+    /// `f64` and checked by [`Prim::js_in`], since napi's own `u32` and `i32`
+    /// wrap, truncate and read `NaN` as 0 first.
+    pub(crate) fn js_arg(self) -> TokenStream {
+        match self {
+            Prim::U8 | Prim::U16 | Prim::U32 | Prim::I32 | Prim::Usize => quote!(f64),
+            p => p.js(),
+        }
+    }
+
+    /// The type a value goes to JS as.
     pub(crate) fn js(self) -> TokenStream {
         match self {
             Prim::F32 | Prim::F64 => quote!(f64),
@@ -152,16 +162,19 @@ impl Prim {
         }
     }
 
-    /// `e`, a JS value, as upstream: an expression that may `?` on a number
-    /// that does not fit. `name` is what the error calls it.
+    /// `e`, a JS value of type [`Prim::js_arg`], as upstream: an expression
+    /// that may `?` on a number that is not an integer of the type. `name` is
+    /// what the error calls it.
     pub(crate) fn js_in(self, e: &TokenStream, name: &str) -> TokenStream {
-        let narrow = |t: TokenStream| quote!(#t::try_from(#e).map_err(|_| napi_support::invalid(#name, #e))?);
+        let int = |t: TokenStream| quote!(napi_support::int::<#t>(#name, #e)?);
         match self {
             Prim::F32 => quote!(to_f32(#e)),
-            Prim::U8 => narrow(quote!(u8)),
-            Prim::U16 => narrow(quote!(u16)),
-            Prim::Usize => narrow(quote!(usize)),
-            Prim::F64 | Prim::U32 | Prim::I32 | Prim::Bool | Prim::Str => quote!(#e),
+            Prim::U8 => int(quote!(u8)),
+            Prim::U16 => int(quote!(u16)),
+            Prim::U32 => int(quote!(u32)),
+            Prim::I32 => int(quote!(i32)),
+            Prim::Usize => int(quote!(usize)),
+            Prim::F64 | Prim::Bool | Prim::Str => quote!(#e),
         }
     }
 }
@@ -689,7 +702,7 @@ impl<'a> Classes<'a> {
         if r.is_none()
             && let Some(p) = Prim::of(inner)
         {
-            let js = p.js();
+            let js = p.js_arg();
             let same = quote!(#pat);
             let conv = p.js_in(&same, &name);
             let pre = (conv.to_string() != same.to_string()).then(|| quote!(let #pat = #conv;));
@@ -1363,18 +1376,24 @@ impl<'a> Classes<'a> {
         if !class.plain.is_empty() {
             let obj = format_ident!("{name}Object");
             let fields: Vec<&Ident> = class.plain.iter().map(|(f, _)| f).collect();
-            let js: Vec<TokenStream> = class.plain.iter().map(|(_, p)| p.js()).collect();
+            // The object goes both ways: an integer field is an `f64`, checked
+            // on the way in like an argument.
+            let js: Vec<TokenStream> = class.plain.iter().map(|(_, p)| p.js_arg()).collect();
             let mut to_js = Vec::new();
             let mut from_js = Vec::new();
             for (f, p) in &class.plain {
                 let label = lower_camel(&f.to_string());
                 let (get, set) = (format_ident!("field_{f}"), format_ident!("set_field_{f}"));
-                let (jt, read_f) = (p.js(), p.js_out(&quote!(__v.#f)));
+                let (jt, jt_in, read_f) = (p.js(), p.js_arg(), p.js_out(&quote!(__v.#f)));
                 let write_f = match p.js_in(&quote!(value), &label) {
                     same if same.to_string() == "value" => None,
                     conv => Some(quote!(let value = #conv;)),
                 };
-                to_js.push(read_f.clone());
+                to_js.push(if jt.to_string() == jt_in.to_string() {
+                    read_f.clone()
+                } else {
+                    quote!(f64::from(#read_f))
+                });
                 from_js.push(p.js_in(&quote!(obj.#f), &label));
                 methods.extend(quote! {
                     #[napi(getter, js_name = #label)]
@@ -1383,7 +1402,7 @@ impl<'a> Classes<'a> {
                         Ok(#read_f)
                     }
                     #[napi(setter, js_name = #label)]
-                    pub fn #set(&mut self, value: #jt) -> Result<(), String> {
+                    pub fn #set(&mut self, value: #jt_in) -> Result<(), String> {
                         #write_f
                         #place_mut.#f = value;
                         Ok(())

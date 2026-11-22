@@ -236,8 +236,9 @@ const transform = tiny_skia.Transform.identity();
   await again;
 }
 
-// 6. A signal already aborted is refused before anything is leased: napi
-//    only listens for the event, so the whole call would otherwise run.
+// 6. A signal already aborted rejects with an AbortError, as one aborted
+//    while queued does, and never runs: napi only listens for the event, so
+//    the whole call would otherwise run. Whatever it leased is back at once.
 {
   const gone = new AbortController();
   gone.abort();
@@ -255,7 +256,11 @@ const transform = tiny_skia.Transform.identity();
     loadFontsDirAsync: (s) => db.loadFontsDirAsync(fileURLToPath(FONT_DIR), s),
   };
   for (const [name, call] of Object.entries(calls)) {
-    await assert.rejects(async () => call(gone.signal), /already aborted/, name);
+    // A rejected promise, never a synchronous throw.
+    const p = call(gone.signal);
+    assert.ok(p instanceof Promise, name);
+    assert.equal(pixmap.width(), 10, `${name}: nothing stays leased`);
+    await assert.rejects(p, (e) => e.name === 'AbortError' && /already aborted/.test(e.message), name);
     // A `signal` that is not an AbortSignal is refused before napi converts
     // it (GHSA-qr54-xrr9-7575): one of this module's instances most of all.
     for (const wrong of [pixmap, tree.root(), {}]) {

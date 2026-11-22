@@ -55,6 +55,22 @@ assert.match(bounded.at(-1), /^WARN napi_support::logs: log buffer full .*droppe
 assert.ok(!bounded.slice(0, -1).some((l) => /buffer full/.test(l)), 'one marker, last');
 takeLogs();
 
+// 6b. ...and each entry is bounded in bytes: usvg logs whole attribute
+//     values, so 500 entries of a 2 MB document were ~500 MB.
+{
+  const huge = 'é'.repeat(100_000);
+  render(`<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="${huge}"/></svg>`);
+  const [line, ...rest] = takeLogs();
+  assert.deepEqual(rest, []);
+  assert.match(line, /^WARN \S+: Failed to parse fill value: 'é+ \[truncated\]$/);
+  // 1024 bytes kept, cut on a char boundary (é is two bytes), then the marker.
+  assert.ok(Buffer.byteLength(line) <= 1024 + ' [truncated]'.length, `${Buffer.byteLength(line)} bytes`);
+  assert.ok(Buffer.byteLength(line) >= 1023 + ' [truncated]'.length, `${Buffer.byteLength(line)} bytes`);
+  // A short line is untouched.
+  render(messy);
+  assert.ok(takeLogs().every((l) => !l.endsWith('[truncated]')));
+}
+
 // 7. what a worker thread reports lands in the same buffer: a PNG cut after
 //    its header parses (usvg reads only the size) and fails to decode at
 //    render time, on the worker thread an async twin runs on.

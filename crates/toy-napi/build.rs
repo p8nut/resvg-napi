@@ -47,7 +47,7 @@ const GEN: Config = Config {
     // a number or `'auto'`.
     converters: &[Converter {
         ty: "Width",
-        js: "Either<u32, String>",
+        js: "Either<f64, String>",
         ts: "number | 'auto'",
         convert: "width_from_js",
     }],
@@ -111,13 +111,14 @@ fn main() {
 
     let template = quote! {
         #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
-        fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
+        fn width_from_js(
+            v: &Either<f64, String>,
+            name: &str,
+        ) -> std::result::Result<toy::Width, napi_support::Thrown> {
             match v {
-                Either::A(n) => u8::try_from(*n)
-                    .map(toy::Width::Fixed)
-                    .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+                Either::A(n) => napi_support::int(name, *n).map(toy::Width::Fixed),
                 Either::B(s) if s == "auto" => Ok(toy::Width::Auto),
-                Either::B(s) => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+                Either::B(s) => Err(napi_support::invalid(name, format!("{s:?}"))),
             }
         }
     };

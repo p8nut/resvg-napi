@@ -82,7 +82,7 @@ impl Classes<'_> {
         if r.is_none()
             && let Some(p) = Prim::of(inner)
         {
-            let js = p.js();
+            let js = p.js_arg();
             let same = quote!(#pat);
             let conv = p.js_in(&same, &name);
             let pre = (conv.to_string() != same.to_string()).then(|| quote!(let #pat = #conv;));

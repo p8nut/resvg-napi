@@ -111,6 +111,10 @@ test('an index-bounded field is clamped to its table', () => {
   assert.equal(toy.toy.report(t, { styleIndex: 2 }), 'tally[quiet]: ');
   assert.equal(toy.toy.report(t, { styleIndex: 200 }), 'tally[quiet]: ');
   assert.equal(toy.toy.report(t, { styleIndex: 1e6 }), 'tally[quiet]: ');
+  // Clamped, not reinterpreted: what is no index at all throws.
+  for (const bad of [-1, 1.5, NaN, 2 ** 32]) {
+    assert.throws(() => toy.toy.report(t, { styleIndex: bad }), { code: 'InvalidArg', message: `invalid styleIndex: ${bad}` });
+  }
 });
 
 test('a provider field takes a class instance, shared not copied', () => {
@@ -146,6 +150,10 @@ test('a converter field takes its JS form, and refuses anything else', () => {
   assert.equal(toy.toy.report(t, { width: 'auto' }), 'tally[plain]: x');
   assert.throws(() => toy.toy.report(t, { width: 'wide' }), /invalid width: "wide"/);
   assert.throws(() => toy.toy.report(t, { width: 256 }), /invalid width: 256/);
+  // Both refusals are InvalidArg, a fraction too.
+  for (const width of ['wide', 256, 1.5, -1]) {
+    assert.throws(() => toy.toy.report(t, { width }), { code: 'InvalidArg' });
+  }
 });
 
 // Classes with constructors and statics, free functions, `Result` errors,
@@ -212,6 +220,38 @@ test('a Result whose error is an upstream enum throws its variant name as `code`
 test('a number that does not fit the upstream integer throws, never wraps', () => {
   throwsCoded(() => toy.toy.Color.fromRgb(256, 0, 0), 'InvalidArg', 'invalid r: 256');
   throwsCoded(() => new toy.alt.Color(0, 0, 300), 'InvalidArg', 'invalid blue: 300');
+});
+
+// napi's own u32 reduces mod 2^32, truncates and reads NaN as 0: every
+// integer is an f64 checked by `napi_support::int` instead.
+test('every integer is integral and in range, or InvalidArg', () => {
+  const { Canvas, Color, Counter, Tally, spin } = toy.toy;
+  const big = 2 ** 32 + 10;
+  // u32 arguments: a constructor, a method, a free function.
+  throwsCoded(() => new Canvas(big, 1), 'InvalidArg', `invalid width: ${big}`);
+  throwsCoded(() => new Canvas(1.5, 1), 'InvalidArg', 'invalid width: 1.5');
+  throwsCoded(() => new Canvas(NaN, 1), 'InvalidArg', 'invalid width: NaN');
+  throwsCoded(() => new Canvas(-1, 1), 'InvalidArg', 'invalid width: -1');
+  throwsCoded(() => new Tally().key(big), 'InvalidArg', `invalid place: ${big}`);
+  throwsCoded(() => spin(-0.5), 'InvalidArg', 'invalid rounds: -0.5');
+  // u8 arguments, a setter, a plain-data field, fromObject.
+  throwsCoded(() => Color.fromRgb(0, 1.9, 0), 'InvalidArg', 'invalid g: 1.9');
+  throwsCoded(() => Color.fromRgb(0, 0, NaN), 'InvalidArg', 'invalid b: NaN');
+  throwsCoded(() => Color.fromRgb(2 ** 32, 0, 0), 'InvalidArg', 'invalid r: 4294967296');
+  throwsCoded(() => Color.fromRgb(0, 0, 0).setRed(-1), 'InvalidArg', 'invalid r: -1');
+  const c = toy.alt.Color.fromObject({ red: 1, green: 2, blue: 3 });
+  throwsCoded(() => { c.green = 0.5; }, 'InvalidArg', 'invalid green: 0.5');
+  throwsCoded(() => toy.alt.Color.fromObject({ red: big, green: 0, blue: 0 }), 'InvalidArg', `invalid red: ${big}`);
+  // Option fields: a u32, a u16 newtype.
+  throwsCoded(() => new Counter({ limit: -1 }), 'InvalidArg', 'invalid limit: -1');
+  throwsCoded(() => new Counter({ limit: big }), 'InvalidArg', `invalid limit: ${big}`);
+  throwsCoded(() => new Counter({ limit: 2.5 }), 'InvalidArg', 'invalid limit: 2.5');
+  throwsCoded(() => new Tally().find({ minLen: -1 }), 'InvalidArg', 'invalid minLen: -1');
+  throwsCoded(() => new Tally().find({ minLen: 0.5 }), 'InvalidArg', 'invalid minLen: 0.5');
+  // What fits is unchanged.
+  assert.equal(new Canvas(3, 2).width(), 3);
+  assert.equal(new Counter({ limit: 2 ** 32 - 1 }).limit(), 2 ** 32 - 1);
+  assert.deepEqual(c.toObject(), { red: 1, green: 2, blue: 3 });
 });
 
 test('a free function lands in its namespace, and takes classes as arguments', () => {
@@ -361,7 +401,7 @@ test('a callback whose result is returned: JS gets what the closure was handed, 
 });
 
 test('the log functions of the prelude: a level, and a drain', () => {
-  assert.throws(() => toy.setLogLevel('loud'), /unknown log level/);
+  assert.throws(() => toy.setLogLevel('loud'), { code: 'InvalidArg', message: 'unknown log level: "loud"' });
   toy.setLogLevel('warn');
   assert.ok(Array.isArray(toy.takeLogs()));
 });
@@ -641,11 +681,15 @@ test('an AbortSignal drops a queued twin, and its lease comes back', async () =>
   assert.equal(c.width(), 2);
   await Promise.all(blockers);
 
-  // A signal already aborted is refused before anything is leased.
+  // A signal already aborted rejects the same way, never a synchronous
+  // throw, and the call never runs: the canvas is back at once.
   const gone = new AbortController();
   gone.abort();
-  assert.throws(() => paintAsync(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1), gone.signal), /already aborted/);
+  const early = paintAsync(c, new Vec2(0, 0), Color.fromRgb(1, 1, 1), gone.signal);
+  assert.ok(early instanceof Promise);
   assert.equal(c.width(), 2);
+  await assert.rejects(early, (e) => e.name === 'AbortError' && /already aborted/.test(e.message));
+  assert.deepEqual([...c.data()], [0, 0, 0, 0]);
   // And a signal that is not an AbortSignal.
   assert.throws(() => spinAsync(1, {}), /signal must be an AbortSignal/);
   assert.throws(() => spinAsync(1, c), /signal must be an AbortSignal/);

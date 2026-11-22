@@ -27,13 +27,14 @@ pub fn take_logs() -> Vec<String> {
     napi_support::logs::take()
 }
 #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
-fn width_from_js(v: &Either<u32, String>, name: &str) -> Result<toy::Width> {
+fn width_from_js(
+    v: &Either<f64, String>,
+    name: &str,
+) -> std::result::Result<toy::Width, napi_support::Thrown> {
     match v {
-        Either::A(n) => u8::try_from(*n)
-            .map(toy::Width::Fixed)
-            .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+        Either::A(n) => napi_support::int(name, *n).map(toy::Width::Fixed),
         Either::B(s) if s == "auto" => Ok(toy::Width::Auto),
-        Either::B(s) => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+        Either::B(s) => Err(napi_support::invalid(name, format!("{s:?}"))),
     }
 }
 #[doc = " Which way a counter counts."]
@@ -62,7 +63,7 @@ pub struct ToyTag {
 #[derive(Default)]
 pub struct ToyFilter {
     pub tags: Option<Vec<ToyTag>>,
-    pub min_len: Option<u32>,
+    pub min_len: Option<f64>,
 }
 #[doc = " How to build a [`Counter`]."]
 #[doc = ""]
@@ -76,7 +77,7 @@ pub struct ToyOptions {
     pub step: Option<f64>,
     pub direction: Option<ToyDirection>,
     #[doc = " How many ticks it takes, at most: a plain `u32`."]
-    pub limit: Option<u32>,
+    pub limit: Option<f64>,
 }
 #[doc = " An opaque key: no public field, `Copy`, printed as a number."]
 #[doc = ""]
@@ -111,14 +112,14 @@ pub struct ToyReportOptions<'a> {
     #[doc = " Which of [`STYLES`] to use. Indexed without a bounds check."]
     #[doc = ""]
     #[doc = " Default: 0"]
-    pub style_index: Option<u32>,
+    pub style_index: Option<f64>,
     #[doc = " Names counted before the tally's own."]
     #[doc = ""]
     #[doc = " Default: none"]
     pub base: Option<ClassInstance<'a, ToyTally>>,
     #[doc = " Default: [`Width::Auto`]"]
     #[napi(ts_type = "number | 'auto'")]
-    pub width: Option<Either<u32, String>>,
+    pub width: Option<Either<f64, String>>,
     #[doc = " The first of the tally's own names written: an opaque key."]
     #[doc = ""]
     #[doc = " Default: the first"]
@@ -422,9 +423,9 @@ pub struct AltColor {
 #[napi(object, js_name = "ColorObject", namespace = "alt")]
 #[derive(Clone)]
 pub struct AltColorObject {
-    pub red: u32,
-    pub green: u32,
-    pub blue: u32,
+    pub red: f64,
+    pub green: f64,
+    pub blue: f64,
 }
 #[doc = " A grid of one-byte cells, row by row: a class of a crate read for its"]
 #[doc = " classes alone. What its members take and return, no config lists:"]
@@ -504,9 +505,7 @@ impl ToyFilter {
             o.tags = v.as_slice();
         }
         if let Some(v) = self.min_len {
-            o.min_len.0 = v
-                .try_into()
-                .map_err(|_| napi_support::invalid("minLen", v))?;
+            o.min_len.0 = napi_support::int("minLen", v)?;
         }
         Ok(o)
     }
@@ -525,7 +524,7 @@ impl ToyOptions {
             o.direction = v.into();
         }
         if let Some(v) = self.limit {
-            o.limit = v;
+            o.limit = napi_support::int::<u32>("limit", v)?;
         }
         Ok(o)
     }
@@ -538,14 +537,15 @@ impl ToyReportOptions<'_> {
             o.title = v.clone();
         }
         if let Some(v) = self.style_index {
-            o.style_index = u8::try_from(v.min(2u32)).unwrap_or(u8::MAX);
+            o.style_index = u8::try_from(napi_support::int::<u32>("styleIndex", v)?.min(2u32))
+                .unwrap_or(u8::MAX);
         }
         if let Some(v) = &self.base {
             let v = &**v;
             o.base = v.__ref()?.clone();
         }
         if let Some(v) = &self.width {
-            o.width = width_from_js(v, "width").map_err(napi_support::coded)?;
+            o.width = width_from_js(v, "width")?;
         }
         if let Some(v) = &self.from {
             let v = &**v;
@@ -873,7 +873,8 @@ impl ToyTally {
     #[doc = " [`Tally::named`]."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn key(&self, place: u32) -> Result<Option<ToyKey>, String> {
+    pub fn key(&self, place: f64) -> Result<Option<ToyKey>, String> {
+        let place = napi_support::int::<u32>("place", place)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("Tally::key", || __self.key(place))
             .map_err(napi_support::coded)?;
@@ -1192,10 +1193,10 @@ impl ToyColor {
 impl ToyColor {
     #[napi(factory)]
     #[allow(clippy::redundant_closure)]
-    pub fn from_rgb(r: u32, g: u32, b: u32) -> Result<Self, String> {
-        let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
-        let g = u8::try_from(g).map_err(|_| napi_support::invalid("g", g))?;
-        let b = u8::try_from(b).map_err(|_| napi_support::invalid("b", b))?;
+    pub fn from_rgb(r: f64, g: f64, b: f64) -> Result<Self, String> {
+        let r = napi_support::int::<u8>("r", r)?;
+        let g = napi_support::int::<u8>("g", g)?;
+        let b = napi_support::int::<u8>("b", b)?;
         let __v = napi_support::contained("Color::from_rgb", || <toy::Color>::from_rgb(r, g, b))
             .map_err(napi_support::coded)?;
         Ok(ToyColor::__from(__v))
@@ -1210,8 +1211,8 @@ impl ToyColor {
     }
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn set_red(&mut self, r: u32) -> Result<(), String> {
-        let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
+    pub fn set_red(&mut self, r: f64) -> Result<(), String> {
+        let r = napi_support::int::<u8>("r", r)?;
         let __self = self.__mut()?;
         napi_support::contained("Color::set_red", || __self.set_red(r))
             .map_err(napi_support::coded)?;
@@ -1286,7 +1287,9 @@ impl ToyCanvas {
     #[doc = " `None` when a side is zero."]
     #[napi(constructor)]
     #[allow(clippy::redundant_closure)]
-    pub fn new(width: u32, height: u32) -> Result<Self, String> {
+    pub fn new(width: f64, height: f64) -> Result<Self, String> {
+        let width = napi_support::int::<u32>("width", width)?;
+        let height = napi_support::int::<u32>("height", height)?;
         let __v = napi_support::contained("Canvas::new", || <toy::Canvas>::new(width, height))
             .map_err(napi_support::coded)?;
         let __v = __v.ok_or_else(|| {
@@ -1866,7 +1869,8 @@ pub fn toy_visit(#[napi(ts_arg_type = "toy.Item")] item: Object) -> Result<Optio
 #[doc = " while another waits behind it."]
 #[napi(js_name = "spin", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
-pub fn toy_spin(rounds: u32) -> Result<u32, String> {
+pub fn toy_spin(rounds: f64) -> Result<u32, String> {
+    let rounds = napi_support::int::<u32>("rounds", rounds)?;
     let __v = napi_support::contained("spin", || toy::spin(rounds)).map_err(napi_support::coded)?;
     Ok(__v)
 }
@@ -1876,10 +1880,11 @@ pub fn toy_spin(rounds: u32) -> Result<u32, String> {
 #[napi(js_name = "spinAsync", namespace = "toy")]
 #[allow(clippy::redundant_closure)]
 pub fn toy_spin_async(
-    rounds: u32,
+    rounds: f64,
     env: Env,
     #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
 ) -> Result<PromiseRaw<'static, u32>, String> {
+    let rounds = napi_support::int::<u32>("rounds", rounds)?;
     napi_support::spawn(
         env,
         vec![],
@@ -2189,10 +2194,10 @@ impl AltColor {
 impl AltColor {
     #[napi(constructor)]
     #[allow(clippy::redundant_closure)]
-    pub fn new(red: u32, green: u32, blue: u32) -> Result<Self, String> {
-        let red = u8::try_from(red).map_err(|_| napi_support::invalid("red", red))?;
-        let green = u8::try_from(green).map_err(|_| napi_support::invalid("green", green))?;
-        let blue = u8::try_from(blue).map_err(|_| napi_support::invalid("blue", blue))?;
+    pub fn new(red: f64, green: f64, blue: f64) -> Result<Self, String> {
+        let red = napi_support::int::<u8>("red", red)?;
+        let green = napi_support::int::<u8>("green", green)?;
+        let blue = napi_support::int::<u8>("blue", blue)?;
         let __v =
             napi_support::contained("Color::new", || <toy::alt::Color>::new(red, green, blue))
                 .map_err(napi_support::coded)?;
@@ -2233,8 +2238,8 @@ impl AltColor {
         Ok(u32::from(__v.red))
     }
     #[napi(setter, js_name = "red")]
-    pub fn set_field_red(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("red", value))?;
+    pub fn set_field_red(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("red", value)?;
         self.__mut()?.red = value;
         Ok(())
     }
@@ -2244,8 +2249,8 @@ impl AltColor {
         Ok(u32::from(__v.green))
     }
     #[napi(setter, js_name = "green")]
-    pub fn set_field_green(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("green", value))?;
+    pub fn set_field_green(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("green", value)?;
         self.__mut()?.green = value;
         Ok(())
     }
@@ -2255,8 +2260,8 @@ impl AltColor {
         Ok(u32::from(__v.blue))
     }
     #[napi(setter, js_name = "blue")]
-    pub fn set_field_blue(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("blue", value))?;
+    pub fn set_field_blue(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("blue", value)?;
         self.__mut()?.blue = value;
         Ok(())
     }
@@ -2264,10 +2269,9 @@ impl AltColor {
     #[napi(factory)]
     pub fn from_object(obj: AltColorObject) -> Result<Self, String> {
         Ok(Self::__from(toy::alt::Color {
-            red: u8::try_from(obj.red).map_err(|_| napi_support::invalid("red", obj.red))?,
-            green: u8::try_from(obj.green)
-                .map_err(|_| napi_support::invalid("green", obj.green))?,
-            blue: u8::try_from(obj.blue).map_err(|_| napi_support::invalid("blue", obj.blue))?,
+            red: napi_support::int::<u8>("red", obj.red)?,
+            green: napi_support::int::<u8>("green", obj.green)?,
+            blue: napi_support::int::<u8>("blue", obj.blue)?,
         }))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
@@ -2275,9 +2279,9 @@ impl AltColor {
     pub fn to_object(&self) -> Result<AltColorObject, String> {
         let __v = self.__ref()?;
         Ok(AltColorObject {
-            red: u32::from(__v.red),
-            green: u32::from(__v.green),
-            blue: u32::from(__v.blue),
+            red: f64::from(u32::from(__v.red)),
+            green: f64::from(u32::from(__v.green)),
+            blue: f64::from(u32::from(__v.blue)),
         })
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
@@ -2299,9 +2303,9 @@ impl AltColor {
 impl From<&toy::alt::Color> for AltColorObject {
     fn from(__v: &toy::alt::Color) -> Self {
         Self {
-            red: u32::from(__v.red),
-            green: u32::from(__v.green),
-            blue: u32::from(__v.blue),
+            red: f64::from(u32::from(__v.red)),
+            green: f64::from(u32::from(__v.green)),
+            blue: f64::from(u32::from(__v.blue)),
         }
     }
 }
@@ -2329,7 +2333,9 @@ impl DepGrid {
     #[doc = " A `width` x `height` grid of empty cells; none when either is zero."]
     #[napi(constructor)]
     #[allow(clippy::redundant_closure)]
-    pub fn new(width: u32, height: u32) -> Result<Self, String> {
+    pub fn new(width: f64, height: f64) -> Result<Self, String> {
+        let width = napi_support::int::<u32>("width", width)?;
+        let height = napi_support::int::<u32>("height", height)?;
         let __v = napi_support::contained("Grid::new", || <toy_dep::Grid>::new(width, height))
             .map_err(napi_support::coded)?;
         let __v = __v.ok_or_else(|| {
@@ -2368,7 +2374,9 @@ impl DepGrid {
     #[doc = " The cell at `(x, y)`; none outside the grid."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn cell(&self, x: u32, y: u32) -> Result<Option<DepCell>, String> {
+    pub fn cell(&self, x: f64, y: f64) -> Result<Option<DepCell>, String> {
+        let x = napi_support::int::<u32>("x", x)?;
+        let y = napi_support::int::<u32>("y", y)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("Grid::cell", || __self.cell(x, y))
             .map_err(napi_support::coded)?;
@@ -2377,7 +2385,9 @@ impl DepGrid {
     #[doc = " Writes the cell at `(x, y)`; false outside the grid."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn set(&mut self, x: u32, y: u32, cell: &DepCell) -> Result<bool, String> {
+    pub fn set(&mut self, x: f64, y: f64, cell: &DepCell) -> Result<bool, String> {
+        let x = napi_support::int::<u32>("x", x)?;
+        let y = napi_support::int::<u32>("y", y)?;
         let __cell = *cell.__ref()?;
         let __self = std::sync::Arc::make_mut(self.__mut()?);
         let __v = napi_support::contained("Grid::set", || __self.set(x, y, __cell))
@@ -2433,7 +2443,11 @@ impl DepArea {
     #[doc = " None when it is empty."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn from_xywh(x: u32, y: u32, width: u32, height: u32) -> Result<Option<DepArea>, String> {
+    pub fn from_xywh(x: f64, y: f64, width: f64, height: f64) -> Result<Option<DepArea>, String> {
+        let x = napi_support::int::<u32>("x", x)?;
+        let y = napi_support::int::<u32>("y", y)?;
+        let width = napi_support::int::<u32>("width", width)?;
+        let height = napi_support::int::<u32>("height", height)?;
         let __v = napi_support::contained("Area::from_xywh", || {
             <toy_dep::Area>::from_xywh(x, y, width, height)
         })
@@ -2515,8 +2529,8 @@ impl DepCell {
 impl DepCell {
     #[napi(constructor)]
     #[allow(clippy::redundant_closure)]
-    pub fn new(value: u32) -> Result<Self, String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("value", value))?;
+    pub fn new(value: f64) -> Result<Self, String> {
+        let value = napi_support::int::<u8>("value", value)?;
         let __v = napi_support::contained("Cell::new", || <toy_dep::Cell>::new(value))
             .map_err(napi_support::coded)?;
         Ok(DepCell::__from(__v))

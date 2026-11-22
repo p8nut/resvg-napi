@@ -295,6 +295,20 @@ test('a Copy class: by value, its methods take a copy, &mut writes its own', () 
   assert.equal(c.isGray(), false);
 });
 
+test('a slice of plain data is an array of its objects; a &mut one is returned', () => {
+  const { Vec2 } = toy.toy;
+  assert.deepEqual(Vec2.sum([{ x: 1, y: 2 }, { x: 3, y: -4 }]).toObject(), { x: 4, y: -2 });
+  assert.deepEqual(Vec2.sum([]).toObject(), { x: 0, y: 0 });
+  const input = [{ x: 1, y: 1 }, { x: 0, y: -1 }];
+  assert.deepEqual(new Vec2(1, 2).shiftAll(input), [{ x: 2, y: 3 }, { x: 1, y: 1 }]);
+  // JS passed a copy: its array is left as it was.
+  assert.deepEqual(input, [{ x: 1, y: 1 }, { x: 0, y: -1 }]);
+  assert.throws(() => Vec2.sum([{ x: 1 }]), /y/);
+  // A conversion to a type nothing maps has no JS form.
+  assert.equal(Vec2.fromArray, undefined);
+  assert.equal(new Vec2(0, 0).toArray, undefined);
+});
+
 test('plain data: field accessors, and fromObject/toObject in a pair', () => {
   const { Vec2 } = toy.toy;
   const v = Vec2.fromObject({ x: 1.5, y: -2 });

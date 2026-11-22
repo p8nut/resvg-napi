@@ -2363,12 +2363,7 @@ impl SvgtypesColor {
     #[doc = " A `Color` from a plain object of its fields."]
     #[napi(factory)]
     pub fn from_object(obj: SvgtypesColorObject) -> Result<Self, String> {
-        Ok(Self::__from(svgtypes::Color {
-            red: napi_support::int::<u8>("red", obj.red)?,
-            green: napi_support::int::<u8>("green", obj.green)?,
-            blue: napi_support::int::<u8>("blue", obj.blue)?,
-            alpha: napi_support::int::<u8>("alpha", obj.alpha)?,
-        }))
+        Ok(Self::__from(obj.__upstream()?))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
@@ -2405,6 +2400,17 @@ impl From<&svgtypes::Color> for SvgtypesColorObject {
             blue: f64::from(u32::from(__v.blue)),
             alpha: f64::from(u32::from(__v.alpha)),
         }
+    }
+}
+impl SvgtypesColorObject {
+    fn __upstream(self) -> Result<svgtypes::Color, String> {
+        let obj = self;
+        Ok(svgtypes::Color {
+            red: napi_support::int::<u8>("red", obj.red)?,
+            green: napi_support::int::<u8>("green", obj.green)?,
+            blue: napi_support::int::<u8>("blue", obj.blue)?,
+            alpha: napi_support::int::<u8>("alpha", obj.alpha)?,
+        })
     }
 }
 impl TinySkiaPixmap {
@@ -3348,6 +3354,25 @@ impl TinySkiaTransform {
             .map_err(napi_support::coded)?;
         Ok(())
     }
+    #[doc = " Transforms a slice of points using the current transform."]
+    #[doc = ""]
+    #[doc = " In JS, `points` is a copy the call cannot write through: it returns the"]
+    #[doc = " array as the call left it, and the one passed is unchanged."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn map_points(
+        &self,
+        points: Vec<TinySkiaPointObject>,
+    ) -> Result<Vec<TinySkiaPointObject>, String> {
+        let mut __points = points
+            .into_iter()
+            .map(TinySkiaPointObject::__upstream)
+            .collect::<Result<Vec<_>, String>>()?;
+        let __self = self.__ref()?;
+        napi_support::contained("Transform::map_points", || __self.map_points(&mut __points))
+            .map_err(napi_support::coded)?;
+        Ok(__points.iter().map(TinySkiaPointObject::from).collect())
+    }
     #[doc = " Returns an inverted transform."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -3426,14 +3451,7 @@ impl TinySkiaTransform {
     #[doc = " A `Transform` from a plain object of its fields."]
     #[napi]
     pub fn from_object(obj: TinySkiaTransformObject) -> Result<Self, String> {
-        Ok(Self::__from(tiny_skia::Transform {
-            sx: to_f32(obj.sx),
-            kx: to_f32(obj.kx),
-            ky: to_f32(obj.ky),
-            sy: to_f32(obj.sy),
-            tx: to_f32(obj.tx),
-            ty: to_f32(obj.ty),
-        }))
+        Ok(Self::__from(obj.__upstream()?))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
@@ -3474,6 +3492,19 @@ impl From<&tiny_skia::Transform> for TinySkiaTransformObject {
             tx: f64::from(__v.tx),
             ty: f64::from(__v.ty),
         }
+    }
+}
+impl TinySkiaTransformObject {
+    fn __upstream(self) -> Result<tiny_skia::Transform, String> {
+        let obj = self;
+        Ok(tiny_skia::Transform {
+            sx: to_f32(obj.sx),
+            kx: to_f32(obj.kx),
+            ky: to_f32(obj.ky),
+            sy: to_f32(obj.sy),
+            tx: to_f32(obj.tx),
+            ty: to_f32(obj.ty),
+        })
     }
 }
 impl TinySkiaRect {
@@ -3650,6 +3681,22 @@ impl TinySkiaRect {
         let __self = self.__ref()?;
         let __v = napi_support::contained("Rect::join", || __self.join(__other))
             .map_err(napi_support::coded)?;
+        Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
+    }
+    #[doc = " Creates a Rect from Point array."]
+    #[doc = ""]
+    #[doc = " Returns None if count is zero or if Point array contains an infinity or NaN."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn from_points(points: Vec<TinySkiaPointObject>) -> Result<Option<TinySkiaRect>, String> {
+        let __points = points
+            .into_iter()
+            .map(TinySkiaPointObject::__upstream)
+            .collect::<Result<Vec<_>, String>>()?;
+        let __v = napi_support::contained("Rect::from_points", || {
+            <tiny_skia::Rect>::from_points(&__points)
+        })
+        .map_err(napi_support::coded)?;
         Ok(__v.map(|__v| TinySkiaRect::__from(__v)))
     }
     #[doc = " Insets the rectangle by the specified offset."]
@@ -4272,10 +4319,7 @@ impl TinySkiaPoint {
     #[doc = " A `Point` from a plain object of its fields."]
     #[napi]
     pub fn from_object(obj: TinySkiaPointObject) -> Result<Self, String> {
-        Ok(Self::__from(tiny_skia::Point {
-            x: to_f32(obj.x),
-            y: to_f32(obj.y),
-        }))
+        Ok(Self::__from(obj.__upstream()?))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
@@ -4308,6 +4352,15 @@ impl From<&tiny_skia::Point> for TinySkiaPointObject {
             x: f64::from(__v.x),
             y: f64::from(__v.y),
         }
+    }
+}
+impl TinySkiaPointObject {
+    fn __upstream(self) -> Result<tiny_skia::Point, String> {
+        let obj = self;
+        Ok(tiny_skia::Point {
+            x: to_f32(obj.x),
+            y: to_f32(obj.y),
+        })
     }
 }
 impl TinySkiaPremultipliedColorU8 {

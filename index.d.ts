@@ -1426,6 +1426,12 @@ export declare namespace tiny_skia {
      * Returns `None` if the width or height would overflow.
      */
     join(other: tiny_skia.Rect): tiny_skia.Rect | null
+    /**
+     * Creates a Rect from Point array.
+     *
+     * Returns None if count is zero or if Point array contains an infinity or NaN.
+     */
+    static fromPoints(points: Array<tiny_skia.PointObject>): tiny_skia.Rect | null
     /** Insets the rectangle by the specified offset. */
     inset(dx: number, dy: number): tiny_skia.Rect | null
     /** Outsets the rectangle by the specified offset. */
@@ -1596,6 +1602,13 @@ export declare namespace tiny_skia {
     postConcat(other: tiny_skia.Transform): tiny_skia.Transform
     /** Transforms a points using the current transform. */
     mapPoint(point: tiny_skia.Point): void
+    /**
+     * Transforms a slice of points using the current transform.
+     *
+     * In JS, `points` is a copy the call cannot write through: it returns the
+     * array as the call left it, and the one passed is unchanged.
+     */
+    mapPoints(points: Array<tiny_skia.PointObject>): Array<tiny_skia.PointObject>
     /** Returns an inverted transform. */
     invert(): tiny_skia.Transform | null
     get sx(): number

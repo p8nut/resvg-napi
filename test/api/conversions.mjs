@@ -77,6 +77,20 @@ test('Rect, Size and IntSize: factories and methods, no fields to copy', () => {
   }
 });
 
+test('a slice of Points is an array of PointObjects: fromPoints, mapPoints', () => {
+  const pts = [{ x: 1, y: 2 }, { x: -3, y: 4 }, { x: 0, y: 0 }];
+  const r = Rect.fromPoints(pts);
+  assert.deepEqual([r.left(), r.top(), r.right(), r.bottom()], [-3, 0, 1, 4]);
+  assert.equal(Rect.fromPoints([]), null, 'None for no points');
+  // The transformed bounding box, in one crossing.
+  const mapped = Transform.fromScale(2, 3).postTranslate(1, 1).mapPoints(pts);
+  assert.deepEqual(mapped, [{ x: 3, y: 7 }, { x: -5, y: 13 }, { x: 1, y: 1 }]);
+  assert.deepEqual(pts[0], { x: 1, y: 2 }, 'the array passed is a copy, unchanged');
+  const b = Rect.fromPoints(mapped);
+  assert.deepEqual([b.left(), b.top(), b.right(), b.bottom()], [-5, 1, 3, 13]);
+  assert.throws(() => Rect.fromPoints([{ x: 1 }]), /y/);
+});
+
 test('tiny_skia.Color: accessors and setters as Rust has them', () => {
   const c = Color.fromRgba8(255, 0, 51, 255);
   assert.deepEqual([c.red(), c.green(), c.alpha()], [1, 0, 1]);

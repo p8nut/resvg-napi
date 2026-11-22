@@ -153,7 +153,15 @@ As built (0.11, #181): all five are back. `fontdb.Database` has `query`,
 - Every class whose fields are all public and convertible gets a static
   `fromObject(obj)` and an instance `toObject()`, for example `Transform`,
   `Rect`, `Size` and `svgtypes.Color`.
-- Arguments accept only the class, so a conversion is always explicit.
+- Arguments accept only the class, so a conversion is always explicit. The
+  one exception is a slice of a plain-data class (`&[Point]`): an array of
+  its `<Name>Object`s, since an array of instances would mean one crossing
+  per element to build them. A `&mut` slice is returned as the call left
+  it: JS passed a copy, which the call cannot write through
+  (`Rect.fromPoints`, `Transform.mapPoints`; #252).
+- A member that only converts a plain-data class to or from a type nothing
+  maps (`Point::to_f32x2`) is left out without being reported: `fromObject`
+  and `toObject` already carry the data.
 - Conversions the generator **invents** come in pairs: there is never
   `fromObject` without `toObject`.
 - Conversions that come from a Rust trait follow Rust, one direction at a

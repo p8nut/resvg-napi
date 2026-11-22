@@ -202,8 +202,8 @@ templated document can be previewed:
   and the error-correction level.
 
 The variable names come from LiquidJS's static analysis
-(`globalVariablesSync`). The filter chains do not: that API reports variables
-only, so they are read off the parsed template — an `Output` node carries
+(`globalVariableSegmentsSync`). The filter chains do not: that API reports
+variables only, so they are read off the parsed template — an `Output` node carries
 `value.initial` and `value.filters` (name plus args), which beats splitting the
 source on `|`. Which variables are image hrefs is an XML question, so that one
 goes through `DOMParser`, with a scan as fallback while the source is mid-edit.
@@ -268,7 +268,8 @@ target, `{% raw %}` to print the syntax itself, and a `<switch>` whose
 it against the `languages` option and picks nothing when the list is empty.
 
 A `<style>` block with classes is the cheapest theming there is, and its values
-can come from variables: both new examples paint from `ink`, `paper`, `accent`.
+can come from variables: `photo-card.svg` and `sheet.svg` paint from `ink`,
+`paper`, `accent`.
 
 `render.mjs` is the headless twin of the bench: the same filter vocabulary,
 partials read from the template's directory, variables from `<template>.json`,

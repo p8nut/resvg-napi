@@ -1,7 +1,7 @@
 # Render and inspect SVG
 
 [![npm](https://img.shields.io/npm/v/resvg-napi)](https://www.npmjs.com/package/resvg-napi)
-[![conformance](https://img.shields.io/badge/resvg%20conformance-1715%2F1715-brightgreen)](#conformance)
+[![conformance](https://img.shields.io/badge/resvg%20conformance-1772%2F1774-brightgreen)](#conformance)
 [![licence](https://img.shields.io/npm/l/resvg-napi)](#licence)
 
 Render an SVG to PNG, and read back what the renderer made of the document — the
@@ -21,13 +21,8 @@ Node.js 20.3 or later. The WASI build, used where no native binary exists, needs
 20.19+, 22.13+ or 23.5+: its emnapi runtime is ESM-only and the loader
 `require`s it.
 
-The WASI package declares `cpu: ["wasm32"]`, so npm skips it on every real
-host. Where no native binary matches — StackBlitz, WebContainer — ask for it:
-`npm install --cpu=wasm32` (yarn: `supportedArchitectures.cpu`). The same gate
-makes a plain `npm install resvg-napi-wasm32-wasi` on x64 or arm64 fail with
-`EBADPLATFORM`, and the browser entry (`browser.js`) needs that package: a
-bundler build on such a host adds `--force` to that command, or installs
-`resvg-napi` with `--cpu=wasm32` and gives up the native package.
+Where no native binary matches — StackBlitz, WebContainer — install the WASI
+build with `npm install --cpu=wasm32`: see [Platforms](#platforms).
 
 ```js
 import { renderPng, parse } from 'resvg-napi/helpers'
@@ -132,6 +127,7 @@ db.loadSystemFonts()                                   // usvg's default databas
 const tree = usvg.Tree.fromStr(svg, { fontdb: db, dpi: 192 })
 const size = tree.size().toIntSize()
 const pixmap = new tiny_skia.Pixmap(size.width() * 2, size.height() * 2)
+pixmap.fill(tiny_skia.Color.WHITE)                     // transparent otherwise
 resvg.render(tree, tiny_skia.Transform.fromScale(2, 2), pixmap)
 pixmap.encodePng()                                     // Buffer
 ```
@@ -140,7 +136,7 @@ pixmap.encodePng()                                     // Buffer
 |---|---|
 | `usvg` | `Tree` (`fromStr`, `fromData`, `toString`, `root()`, `nodeById`, the definition tables), the nodes (`Group`, `Path`, `Image`, `Text`, as a `{ kind, value }` union), `ClipPath`, `Mask`, `Pattern`, the paint servers and filters, `Options` and `WriteOptions` as plain objects |
 | `resvg` | `render(tree, transform, pixmap)`, `renderNode(node, transform, pixmap)` |
-| `tiny_skia` | `Pixmap` (`encodePng`, `decodePng`, `data`, `takeDemultiplied`, `pixel`, `cloneRect`...), `Transform`, `Rect`, `NonZeroRect`, `IntRect`, `Size`, `IntSize`, `Point`, `Color`, `ColorU8`, `PremultipliedColor`, `PremultipliedColorU8`; a path's segments |
+| `tiny_skia` | `Pixmap` (`encodePng`, `decodePng`, `data`, `takeDemultiplied`, `pixel`, `cloneRect`...), `Transform`, `Rect`, `NonZeroRect`, `IntRect`, `Size`, `IntSize`, `Point`, `Color`, `ColorU8`, `PremultipliedColor`, `PremultipliedColorU8`; a path's segments (`PathSegment`) |
 | `fontdb` | `Database` (`loadSystemFonts`, `loadFontData`, `loadFontFile`, `loadFontsDir`, `faces()`, the generic-family setters), `FaceInfo` |
 | `svgtypes` | `Color.fromStr`, CSS colours as an SVG attribute reads them |
 | `guard` | `ImageHrefResolver`, `FontResolver`: the [untrusted SVG](#untrusted-svg) opt-in, resvg-napi's own |
@@ -156,6 +152,12 @@ pixmap.encodePng()                                     // Buffer
   `svgtypes.Color`) have `fromObject` / `toObject`; `FromStr` is `fromStr`,
   `Display` is `toString`. A Rust tuple is an array (`dimensions()` is
   `[w, h]`, a face's `families` `[name, language]` pairs).
+- **Constants** keep their Rust name. A crate's own are values of its
+  namespace (`usvg.DEFAULT_MAX_DEPTH`); a type's associated constants are
+  static read-only properties: `tiny_skia.Color.BLACK` / `WHITE` /
+  `TRANSPARENT` and `tiny_skia.PremultipliedColorU8.TRANSPARENT` (a fresh
+  instance on each read), and `fontdb.Weight.BOLD` (`700`) and its siblings,
+  plain numbers on an object, since `fontdb.Weight` is a number in JS.
 - **Errors.** A `Result` throws an `Error` whose `code` is the Rust variant's
   name and whose `message` is its `Display`, typed per enum (`usvg.ErrorCode`:
   `NotAnUtf8Str`, `SvgzFeatureNotEnabled`, `MalformedGZip`,
@@ -227,8 +229,11 @@ span.decoration.underline?.fill?.paint  // …and .overline, .lineThrough
 
 Definitions hold nodes too: `tree.patterns()`, `tree.masks()` and
 `tree.clipPaths()` (or `group.clipPath()`, `group.mask()`) each have `root()`,
-the group of their content. What an `feImage` primitive draws, and the
-document an `<image>` embeds, are not reachable yet.
+the group of their content, and so does what an `feImage` primitive draws: a
+filter's `primitives()`, where `kind.type === 'image'`, carry a
+`usvg.FilterImage`, whose `root` is that group. An `<image>` that embeds an
+SVG has the document as a `usvg.Tree`: `image.kind()` is
+`{ type: 'svg', value: tree }`.
 
 `resvg.renderNode(node, transform, pixmap)` draws one node on a
 `tiny_skia.Pixmap`, as Rust's `resvg::render_node` does: in the node's own
@@ -236,8 +241,9 @@ coordinates, offset by its layer box. The helpers' `renderNodePng` sizes and
 places it for you.
 
 A path's geometry is what Rust's `path.data().segments()` iterates:
-`tiny_skia_path::PathSegment` as a union, one point or an array of them per
-segment, each point a plain `{ x, y }` (`tiny_skia.PointObject`):
+`tiny_skia_path::PathSegment` as a union (`tiny_skia.PathSegment`), one point
+or an array of them per segment, each point a plain `{ x, y }`
+(`tiny_skia.PointObject`):
 
 ```js
 path.data()
@@ -256,6 +262,10 @@ const paint = n.value.fill()?.paint
 if (paint?.type === 'color') paint.value   // { red, green, blue }
 else paint?.id                             // the gradient or pattern it names
 ```
+
+Every union has a named type in its namespace, as `usvg.Node` does:
+`usvg.Paint`, `usvg.ImageKind`, `tiny_skia.PathSegment`, the filter
+primitives' `usvg.Kind`; `index.d.ts` lists the rest.
 
 ## Untrusted SVG
 
@@ -287,7 +297,7 @@ pixels, and logs the refusal. The async twins (`fromDataAsync`,
 what they recorded once the promise settled. Use one instance per parse: one
 shared between parses lists the misses of them all.
 
-The parse option `maxDepth` (default 1024) is the only bound on how deep
+The parse option `maxDepth` (default 1024, `usvg.DEFAULT_MAX_DEPTH`) is the only bound on how deep
 usvg recurses into nested elements. Leave it alone on untrusted SVG: a much
 larger value lets a deeply nested document overflow the stack, which aborts
 the process, sooner on a worker thread (`*Async`) or in the browser.
@@ -326,7 +336,7 @@ and did not get; `pendingImages` does the same for hrefs.
 
 A face is named by its `fontdb.ID` (`face.id`): `db.face(id)`,
 `removeFace(id)`, `withFaceData(id)` (`[bytes, index]`), `faceSource(id)`.
-`db.query({ families: [{ type: 'name', value: 'IBM Plex Sans' }], weight: 700 })`
+`db.query({ families: [{ type: 'name', value: 'IBM Plex Sans' }], weight: fontdb.Weight.BOLD })`
 returns the best match's `ID`, `familyName(family)` resolves a generic family,
 and `loadFontSource({ type: 'binary', bytes })` loads and returns the new
 `ID`s. A rendered glyph's `font` is the `ID` of the face that drew it.
@@ -334,7 +344,15 @@ and `loadFontSource({ type: 'binary', bytes })` loads and returns the new
 ## Paint servers
 
 `tree.linearGradients()`, `radialGradients()`, `patterns()`, `clipPaths()`,
-`masks()`, `filters()` — the paint servers an element's `id` refers to.
+`masks()`, `filters()` — the paint servers an element's `id` refers to. A
+paint that is not a colour names one by its `id`:
+
+```js
+const paint = n.value.fill()?.paint
+if (paint?.type === 'linearGradient')
+  tree.linearGradients().find((g) => g.id() === paint.id)?.stops()
+// [{ offset: 0, color: { red: 255, green: 0, blue: 0 }, opacity: 1 }, …]
+```
 
 ## Examples
 
@@ -372,10 +390,14 @@ without a language.
 
 ## Conformance
 
-resvg's own test corpus, rendered through these bindings: **1715 of 1715 match**
+resvg's own test corpus, rendered through these bindings: **1772 of 1774 match**
 the reference PNGs upstream asserts on, within 1/255 per channel — a tolerance
 measured rather than chosen, with the reason recorded in
-[`scripts/conformance.mts`](scripts/conformance.mts).
+[`scripts/conformance.mts`](scripts/conformance.mts). The two that differ,
+`structure/image/embedded-svgz.svg` and `external-svgz.svg`, embed an SVGZ
+image, which this build refuses on purpose ([Troubleshooting](#troubleshooting));
+[`conformance/baseline.txt`](conformance/baseline.txt) lists them, and `npm run
+conformance -- -w` rewrites it and the count here.
 
 ```bash
 npm run conformance:fetch   # the corpus, at the tag Cargo.lock builds
@@ -410,6 +432,14 @@ the sandbox, so fonts must be supplied with `loadFontFile(path)`,
 `loadFontsDir(dir)` or `loadFontData(buffer)` — the demo fetches them from
 google/fonts by name rather than making you find a file; and WASI has no mmap,
 so font files are read into memory.
+
+The WASI package declares `cpu: ["wasm32"]`, so npm skips it on every real
+host. Where no native binary matches — StackBlitz, WebContainer — ask for it:
+`npm install --cpu=wasm32` (yarn: `supportedArchitectures.cpu`). The same gate
+makes a plain `npm install resvg-napi-wasm32-wasi` on x64 or arm64 fail with
+`EBADPLATFORM`, and the browser entry (`browser.js`) needs that package: a
+bundler build on such a host adds `--force` to that command, or installs
+`resvg-napi` with `--cpu=wasm32` and gives up the native package.
 
 Adding a target is the triple in `package.json` under `napi.targets`; then
 `npm run create-npm-dirs`. CI builds that list, and `scripts/ci-targets.mts`
@@ -530,8 +560,9 @@ crate and nothing consumes that by default — see [Warnings and
 logs](#warnings-and-logs).
 
 **A member is missing from the TypeScript surface.** The generator keeps a report
-of every upstream member it left alone, with the reason.
-`RESVG_NAPI_CODEGEN_LOG=1 cargo build` prints it, and
+of every upstream member it left alone, with the reason, committed as
+[`codegen-report.txt`](codegen-report.txt). `RESVG_NAPI_CODEGEN_LOG=1 cargo
+build` prints it, and
 [CONTRIBUTING.md](CONTRIBUTING.md) explains what the reasons mean.
 
 **Not sure which binding loaded.** `__napiBindingTarget` names it: `'native'`
@@ -540,6 +571,25 @@ fell back to `wasm32-wasi` — where `loadSystemFonts()` finds nothing — from
 one running the native addon, and reports what `NAPI_RS_NATIVE_LIBRARY_PATH`
 resolved to when it is set, since the loader adopts the override's own target
 rather than claiming `'native'`.
+
+## Upgrading from 0.12
+
+0.13 names every union in its namespace (`usvg.Node`, `usvg.Paint`,
+`usvg.ImageKind`, `tiny_skia.PathSegment`...), and the signatures use those
+names where they spelled the union out. The members and the values are the
+same; only TypeScript sees the change. It also adds the constants
+(`fontdb.Weight.BOLD`, `tiny_skia.Color.WHITE`, `usvg.DEFAULT_MAX_DEPTH`...),
+and classes for the values listed classes reach (`tiny_skia.IntRect`,
+`ColorU8`, `PremultipliedColorU8`...), so `pixmap.pixel(x, y)` and
+`cloneRect(rect)` are there.
+
+## Upgrading from 0.11
+
+0.12 is resvg 0.50. A group's or a path's `boundingBox()`,
+`absBoundingBox()`, `strokeBoundingBox()` and `absStrokeBoundingBox()`, and a
+group's `layerBoundingBox()` and `absLayerBoundingBox()`, return `T | null`:
+`null` for a node with no box, such as an empty group. The parse option
+`maxDepth` is new ([Untrusted SVG](#untrusted-svg)).
 
 ## Upgrading from 0.10
 
@@ -569,7 +619,7 @@ way, but no `instanceof`, `dispose()` or `disposed`.
 | `RenderOptions` · `WriteOptions` | `usvg.Options` · `usvg.WriteOptions`; `defaultSizeWidth`/`Height` is `defaultSize: tiny_skia.Size.fromWh(w, h)` |
 | `RenderParams` · `RawImage` | the helpers' `RenderParams` · `RawImage` |
 | `BBox` · `Dimensions` · `Matrix` | `tiny_skia.NonZeroRect` or `Rect` · `tiny_skia.Size` · `tiny_skia.Transform` |
-| `PathSegment` (`{ type, points }`) | the `tiny_skia.PathSegment*` union (`{ type, value }`, points as `{ x, y }`) |
+| `PathSegment` (`{ type, points }`) | the `tiny_skia.PathSegment` union (`{ type, value }`, points as `{ x, y }`) |
 | `ParseErrorCode` | `usvg.ErrorCode` |
 | `resvg-napi/fit.mjs` | `resvg-napi/helpers` |
 

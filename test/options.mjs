@@ -11,12 +11,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fontsOrSkip } from './support.mjs';
+import { testFonts } from './support.mjs';
 import binding from '../index.js';
 import { parse, renderPng, renderRaw } from '../helpers.mjs';
 
 const { tiny_skia } = binding;
-const { db, family } = fontsOrSkip(binding, 'render options');
+const { db, family } = testFonts(binding);
 
 const png = (svg, opts) => renderPng(svg, { fonts: db, ...opts });
 const raw = (svg, opts) => renderRaw(svg, { fonts: db, ...opts });

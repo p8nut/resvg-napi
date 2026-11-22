@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { testList, compare, diffPixels, formatBaseline, parseBaseline, THREW } from './conformance.mts';
+import { testList, compare, diffPixels, formatBaseline, parseBaseline, stampReadme, THREW } from './conformance.mts';
 
 const B = (o: Record<string, number>) => new Map(Object.entries(o));
 
@@ -47,4 +47,13 @@ test('diffPixels: 1 is the same pixel, 2 is not', () => {
   assert.equal(diffPixels(px([10, 10, 10, 255]), px([12, 10, 10, 255])), 1);
   assert.equal(diffPixels(px([0, 0, 0, 0]), px([0, 0, 0, 0])), 0);
   assert.equal(diffPixels(px([10, 10, 10, 255]), px([10, 10, 10, 250]), 8), 0, 'alpha counts too');
+});
+
+test('stampReadme: the badge and the sentence take the count; a README without them throws', () => {
+  const readme = '[![c](https://img.shields.io/badge/resvg%20conformance-1%2F2-brightgreen)]\n**1 of 2 match** the PNGs\n';
+  assert.equal(
+    stampReadme(readme, 1772, 1774),
+    '[![c](https://img.shields.io/badge/resvg%20conformance-1772%2F1774-brightgreen)]\n**1772 of 1774 match** the PNGs\n',
+  );
+  assert.throws(() => stampReadme('**1 of 2 match**', 3, 4), /no conformance count/);
 });

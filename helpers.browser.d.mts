@@ -148,7 +148,11 @@ export interface Helpers {
     renderNodePngAsync(node: usvg.Node, params?: NodeRenderParams & {
         signal?: AbortSignal;
     }): Promise<Buffer>;
-    /** The width `text` draws at, in user units: its stroke box. 0 when nothing draws. */
+    /**
+     * The width `text` draws at, in user units: its stroke box. 0 when nothing
+     * draws. Whitespace is kept as written, so `a  b` is wider than `a b`;
+     * spaces at either end draw no ink and do not count.
+     */
     measureText(text: string, options?: MeasureOptions): number;
     /**
      * `fitTextWidths`, parsing each pass with `parse(svg, options)`, or with a
@@ -214,7 +218,10 @@ export declare const MAX_PIXELS: number;
  * takes back.
  */
 export declare function nodeExtent(node: usvg.Node): Box | null;
-/** Elements carrying a width constraint, with the tag text needed to rewrite it. */
+/**
+ * Elements carrying a width constraint, with the tag text needed to rewrite it.
+ * Tags inside comments and CDATA sections are not elements, so they are skipped.
+ */
 export declare function findWidthConstraints(svg: string): WidthConstraint[];
 /**
  * A `render` for `fitTextWidths` that is safe on untrusted SVG: each parse

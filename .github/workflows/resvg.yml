@@ -82,21 +82,47 @@ jobs:
             && echo "open=true" >> "$GITHUB_OUTPUT" \
             || echo "open=false" >> "$GITHUB_OUTPUT"
 
-      # The toolchain rust-toolchain.toml pins, as in CI.yml.
-      - run: rustup toolchain install
+      # The toolchain rust-toolchain.toml pins, as in CI.yml, and the wasm
+      # target: the WASI typings are only written by a wasm build (below).
+      - run: rustup toolchain install && rustup target add wasm32-wasip1-threads
         if: steps.seen.outputs.open == 'false'
-      - uses: Swatinem/rust-cache@v2
+      # Pinned and saved from main only, as in CI.yml's build job: this job
+      # holds contents write.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: steps.seen.outputs.open == 'false'
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # The bindings are generated from the upstream sources, so a resvg bump
       # rewrites src/lib.rs and index.d.ts. That regeneration is the commit.
+      #
+      # Everything else CI drift-checks against the bump is regenerated here
+      # too, or the PR is red by construction (#219 needed all three by hand):
+      # the WASI typings, which only a wasm build writes; the third-party
+      # notices, which name the resvg and usvg versions; and the README's
+      # version line. The wasm build costs minutes, but only on the day a bump
+      # is proposed -- every other day this job stops at the probe.
       - name: Bump and regenerate
         if: steps.seen.outputs.open == 'false'
+        env:
+          TO: ${{ steps.probe.outputs.latest }}
         run: |
           set -euo pipefail
           # Every `resvg = ...` line, string or table form (there are two).
-          sed -i -E 's/^(resvg = (\{ version = )?")[^"]*"/\1${{ steps.probe.outputs.latest }}"/' Cargo.toml
+          sed -i -E 's/^(resvg = (\{ version = )?")[^"]*"/\1'"$TO"'"/' Cargo.toml
           npm run build
+          npx napi build --platform --release --target wasm32-wasip1-threads
+          # As CI's notices step: `--offline` metadata wants the whole graph on
+          # disk, Windows-only crates included, and the builds fetched only
+          # what they compiled.
+          cargo fetch --locked
+          npm run licenses
+          # The README names major.minor ("resvg 0.50"). Failing when the line
+          # is gone beats a README that silently names the old version.
+          mm=$(echo "$TO" | cut -d. -f1,2)
+          sed -i -E "s#^(\[resvg\]\(https://github\.com/linebender/resvg\)) [0-9]+\.[0-9]+#\1 $mm#" README.md
+          grep -q "^\[resvg\](https://github.com/linebender/resvg) ${mm}[ ,]" README.md \
+            || { echo "::error::README.md no longer has the resvg version line this step rewrites"; exit 1; }
           # The report diff is what tells a reviewer whether a red PR means the
           # surface moved benignly or something broke. Captured before the
           # snapshot is rewritten, because afterwards there is nothing to diff.
@@ -176,8 +202,9 @@ jobs:
             echo "CI is queued behind \"Approve and run\": this PR was opened by"
             echo "GITHUB_TOKEN, and GitHub holds those checks for a human."
             echo
-            echo "\`src/lib.rs\` and \`index.d.ts\` are regenerated too. CI on this"
-            echo "PR goes red whenever the surface moves -- a test pins the exact"
+            echo "\`src/lib.rs\`, \`index.d.ts\`, the WASI typings, the notices and"
+            echo "the README version line are regenerated too. CI on this PR still"
+            echo "goes red whenever the surface moves -- a test pins the exact"
             echo "member set of \`FontFace\` on purpose -- so read the report diff"
             echo "above before assuming something broke."
           } > /tmp/body.md

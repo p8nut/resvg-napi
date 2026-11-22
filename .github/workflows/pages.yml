@@ -34,9 +34,13 @@ jobs:
           cache: npm
       # The toolchain rust-toolchain.toml pins, as in CI.yml.
       - run: rustup toolchain install && rustup target add wasm32-wasip1-threads
-      - uses: Swatinem/rust-cache@v2
+      # Pinned and saved from main only, as in CI.yml's build job: this job
+      # holds pages and id-token write, and a dispatch from another branch would
+      # only write a cache nothing else can read.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: wasm32-wasip1-threads
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: npm install  # not `npm ci` -- see the build job in CI.yml
       # The wasm, the three bundles, and the example list the picker reads.
       - run: npm run demo:build

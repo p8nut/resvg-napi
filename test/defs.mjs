@@ -1,12 +1,12 @@
 // Generated classes over usvg's Arc-held definitions, reached from the
 // tree's tables (`usvg.Tree`), and fontdb's faces.
 import assert from 'node:assert/strict';
-import { fontsOrSkip } from './support.mjs';
+import { testFonts } from './support.mjs';
 import binding from '../index.js';
 const { usvg, tiny_skia } = binding;
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
-const { db, family } = fontsOrSkip(binding, 'definition classes');
+const { db, family } = testFonts(binding);
 
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">

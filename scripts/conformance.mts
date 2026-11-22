@@ -1,7 +1,7 @@
 // resvg's own test corpus, rendered through this binding.
 //
-// 1739 SVGs with reference PNGs, and the 20 fonts they need -- upstream ships
-// all of it, which is what makes the comparison deterministic. The crate does
+// The SVGs upstream asserts on, their reference PNGs, and the fonts they need
+// -- upstream ships all of it, which is what makes the comparison deterministic. The crate does
 // not: `exclude = ["tests"]`, so it is fetched from the tag matching our resvg
 // version, or the references mean nothing.
 //
@@ -15,7 +15,7 @@
 // helpers: they add the guard, which upstream does not have.
 //
 //   npm run conformance             compare against the baseline
-//   npm run conformance -- -w       rewrite the baseline
+//   npm run conformance -- -w       rewrite the baseline, and the README's count
 
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -26,6 +26,7 @@ const TESTLIST = join(ROOT, 'integration', 'render.rs');
 const CORPUS = join(ROOT, 'tests');
 const FONTS = join(ROOT, 'fonts');
 const BASELINE = 'conformance/baseline.txt';
+const README = 'README.md';
 const WIDTH = 300; // IMAGE_SIZE in the upstream harness
 
 /** One file's move against the baseline: differing pixels, or a state. */
@@ -149,6 +150,23 @@ export function formatBaseline(got: Map<string, number>): string {
   return head.concat(failing.map(([p, d]) => `${p} ${d}`)).join('\n') + '\n';
 }
 
+/**
+ * The README with its conformance count set: the badge and the sentence under
+ * "Conformance". Written with the baseline, so the two cannot disagree.
+ */
+export function stampReadme(text: string, matching: number, total: number): string {
+  let out = text;
+  for (const [pattern, count] of [
+    [/resvg%20conformance-\d+%2F\d+/, `resvg%20conformance-${matching}%2F${total}`],
+    [/\*\*\d+ of \d+ match\*\*/, `**${matching} of ${total} match**`],
+  ] as const) {
+    // A reworded README would otherwise keep its old count without a word.
+    if (!pattern.test(out)) throw new Error(`${README}: no conformance count matching ${pattern}`);
+    out = out.replace(pattern, count);
+  }
+  return out;
+}
+
 /** Every case rendered: path -> differing pixels (or `THREW`), and why each threw. */
 function run(): { got: Map<string, number>; errors: Map<string, string> } {
   const require = createRequire(import.meta.url);
@@ -239,7 +257,8 @@ async function main() {
 
   if (write || !existsSync(BASELINE)) {
     writeFileSync(BASELINE, formatBaseline(got));
-    console.log(`${BASELINE} written, ${failing} differing`);
+    writeFileSync(README, stampReadme(readFileSync(README, 'utf8'), got.size - failing, got.size));
+    console.log(`${BASELINE} and ${README} written, ${failing} differing`);
     return;
   }
 

@@ -1,14 +1,14 @@
 // Bounding boxes (`usvg.Group`'s, the root's included), crop, and per-element
 // render. 0.9 had these on the flat `Resvg`; the root group has them now.
 import assert from 'node:assert/strict';
-import { fontsOrSkip, extent, renderNodePng } from './support.mjs';
+import { testFonts, extent, renderNodePng } from './support.mjs';
 import binding from '../index.js';
 import { parse, renderPng, renderRaw } from '../helpers.mjs';
 
 const { usvg, tiny_skia } = binding;
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
-const { db, family } = fontsOrSkip(binding, 'bbox + crop');
+const { db, family } = testFonts(binding);
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200">
   <g transform="translate(50 20)">

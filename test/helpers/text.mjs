@@ -8,10 +8,10 @@ import { join } from 'node:path';
 import binding from '../../index.js';
 import * as node from '../../helpers.mjs';
 import * as browser from '../../helpers.browser.mjs';
-import { fontsOrSkip } from '../support.mjs';
+import { testFonts } from '../support.mjs';
 
 const { usvg, tiny_skia } = binding;
-const { db, family } = fontsOrSkip(binding, 'helpers: measureText and fitTextWidths');
+const { db, family } = testFonts(binding);
 
 test('measureText: the width the text draws at, guarded', () => {
   const width = node.measureText('Hello, world', { fonts: db, family, fontSize: 20 });
@@ -27,6 +27,16 @@ test('measureText: the width the text draws at, guarded', () => {
   // fontFamily stands in for family; markup is text, not markup.
   assert.equal(node.measureText('a<b>&c', { fonts: db, fontFamily: family }),
     node.measureText('a<b>&c', { fonts: db, family }));
+});
+
+test('measureText: whitespace is kept as written (#248)', () => {
+  const m = (s) => node.measureText(s, { fonts: db, family, fontSize: 20 });
+  // Two spaces draw wider than one: XML's default would collapse them.
+  assert.ok(m('a  b') > m('a b'), `${m('a  b')} > ${m('a b')}`);
+  assert.ok(m('a \n\t b') > m('a b'), 'newlines and tabs are not folded into one space');
+  // The stroke box is the ink: spaces at either end, or alone, draw none.
+  assert.equal(m(' a '), m('a'));
+  assert.equal(m(' '), 0);
 });
 
 test('fitTextWidths: parse options or a render, one answer', () => {

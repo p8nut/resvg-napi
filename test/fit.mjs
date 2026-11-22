@@ -1,7 +1,7 @@
 // Horizontal fitting driven by the template's own `data-maxwidth`.
 import assert from 'node:assert/strict';
 import binding from '../index.js';
-import { fontsOrSkip, extent } from './support.mjs';
+import { testFonts, extent } from './support.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { fitTextWidths, findWidthConstraints, guardedParse } from '../helpers.br
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds. testFonts also points the
 // generic families at it, so `font-size` on a bare <text> resolves.
-const { db: fonts, family } = fontsOrSkip(binding, 'horizontal fitting');
+const { db: fonts, family } = testFonts(binding);
 // The safe default: a fresh guard.ImageHrefResolver per parse.
 const render = guardedParse(binding, { fontdb: fonts, fontFamily: family });
 const measured = (tree, id) => extent(tree.nodeById(id));
@@ -186,4 +186,58 @@ const inMm = (text, max) => `<svg xmlns="http://www.w3.org/2000/svg" width="85.6
   const supplied = guardedParse(binding, { fontdb: fonts, fontFamily: family, images: { logo: png } });
   assert.notEqual(supplied(doc('logo')).nodeById('i'), null, 'a supplied image resolves');
   assert.equal(fitTextWidths(doc(file), render).adjustments.length, 1, 'and fitting works through it');
+}
+
+// #248: the document-unit ratio follows the root's viewBox mapping. usvg fits
+// the viewBox into width x height with `meet` by default, so a 200x50 canvas
+// over a 100x100 viewBox scales by min(2, 0.5) = 0.5, not by the width ratio.
+{
+  const doc = (root, max) => `<svg xmlns="http://www.w3.org/2000/svg" ${root}>
+  <text id="t" x="0" y="50" font-size="20" data-maxwidth="${max}">Hello wide world text</text></svg>`;
+  const square = measured(render(doc('viewBox="0 0 100 100"', 1000)), 't').width;
+  assert.ok(square > 50, `the text overflows 50 document units: ${square}`);
+
+  // meet: the vertical ratio wins, the text is still `square` units wide
+  const meet = fitTextWidths(doc('width="200" height="50" viewBox="0 0 100 100"', 50), render);
+  assert.deepEqual(meet.problems, []);
+  assert.equal(meet.adjustments.length, 1, 'meet: overflowing in document units');
+  assert.ok(Math.abs(meet.adjustments[0].from - square) < 0.5, `meet: ${meet.adjustments[0].from} vs ${square}`);
+  assert.ok(Math.abs(meet.adjustments[0].measured - 50) < 0.5, `meet: landed at ${meet.adjustments[0].measured}`);
+
+  // none: each axis scales on its own, the width ratio is the one
+  const none = fitTextWidths(doc('width="200" height="50" viewBox="0 0 100 100" preserveAspectRatio="none"', 50), render);
+  assert.equal(none.adjustments.length, 1, 'none: overflowing in document units');
+  assert.ok(Math.abs(none.adjustments[0].from - square) < 0.5, `none: ${none.adjustments[0].from} vs ${square}`);
+
+  // a viewBox written with commas and an exponent is still read whole
+  const exp = fitTextWidths(doc("width='200' height='200' viewBox='0,0,1e2,100'", 50), render);
+  assert.equal(exp.adjustments.length, 1, 'comma and exponent viewBox');
+  assert.ok(Math.abs(exp.adjustments[0].from - square) < 0.5, `exponent: ${exp.adjustments[0].from} vs ${square}`);
+  assert.ok(Math.abs(exp.adjustments[0].measured - 50) < 0.5, `exponent: landed at ${exp.adjustments[0].measured}`);
+}
+
+// #248: a generated id must not collide with an id written in single quotes,
+// or nodeById measures the other element.
+{
+  const src = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <rect id='fit-1' width="1" height="1"/>
+  <text x="0" y="50" font-size="20" data-maxwidth="50">Hello wide world text</text></svg>`;
+  const { svg: out, adjustments, problems } = fitTextWidths(src, render);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(adjustments.map((a) => a.id), ['fit-2'], 'fit-1 is taken');
+  assert.equal(out.match(/\sid\s*=\s*["']fit-1["']/g).length, 1, 'no duplicate id');
+  assert.ok(Math.abs(adjustments[0].measured - 50) < 0.5, `the text was fitted: ${adjustments[0].measured}`);
+}
+
+// #248: markup inside a comment or a CDATA section is not an element.
+{
+  const src = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+  <!-- <text data-maxwidth="5">x</text> -->
+  <style><![CDATA[ /* <text data-maxwidth="5"> */ ]]></style>
+  <text id="ok" y="50" font-size="10">ok</text></svg>`;
+  assert.deepEqual(findWidthConstraints(src), [], 'nothing constrained');
+  const { svg: out, adjustments, problems } = fitTextWidths(src, render);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(adjustments, []);
+  assert.equal(out, src, 'the comment is left as written');
 }

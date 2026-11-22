@@ -130,6 +130,61 @@ test('fonts: a database, files and buffers, or the system fonts', () => {
 });
 
 /**
+ * The binding, with every `fontdb.Database` and guard resolver it makes
+ * recorded, so a test can see which ones were disposed.
+ */
+function tracked() {
+  const made = [];
+  const record = (Real) => {
+    function Made(...args) {
+      const v = new Real(...args);
+      made.push(v);
+      return v;
+    }
+    Object.defineProperty(Made, Symbol.hasInstance, { value: (v) => v instanceof Real });
+    return Made;
+  };
+  const { fontdb: f, guard: g } = binding;
+  const b = {
+    ...binding,
+    fontdb: { ...f, Database: record(f.Database) },
+    guard: { ...g, ImageHrefResolver: record(g.ImageHrefResolver), FontResolver: record(g.FontResolver) },
+  };
+  return { made, helpers: createHelpers(b) };
+}
+
+test('what parse makes for itself it disposes, on success and on failure (#248)', async () => {
+  const text = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><text x="2" y="15" font-family="IBM Plex Sans">hi</text></svg>';
+  for (const run of [(h, svg, o) => h.parse(svg, o), (h, svg, o) => h.parseAsync(svg, o)]) {
+    // A parse that throws: the resolvers and the database from `fonts: [...]`.
+    {
+      const { made, helpers: h } = tracked();
+      await assert.rejects(async () => run(h, '<svg', { fonts: [FONT] }), { code: 'ParsingFailed' });
+      assert.equal(made.length, 3, 'a database and two resolvers');
+      assert.deepEqual(made.map((v) => v.disposed), [true, true, true]);
+    }
+    // A parse that succeeds: the same, and the tree keeps the faces it needs.
+    {
+      const { made, helpers: h } = tracked();
+      const { tree, pendingFonts } = await run(h, text, { fonts: [FONT] });
+      assert.deepEqual(pendingFonts, []);
+      assert.deepEqual(made.map((v) => v.disposed), [true, true, true]);
+      assert.ok(h.renderPng(tree).equals(renderPng(text, { fonts: [FONT] })), 'the text still draws');
+    }
+    // A database of the caller's own is the caller's to dispose.
+    {
+      const { made, helpers: h } = tracked();
+      const db = new fontdb.Database();
+      db.loadFontData(FONT);
+      await assert.rejects(async () => run(h, '<svg', { fonts: db }));
+      await run(h, text, { fonts: db });
+      assert.equal(db.disposed, false);
+      assert.equal(made.length, 4, 'two resolvers per parse');
+    }
+  }
+});
+
+/**
  * The binding, with `fontdb.Database` counted: how many are made and how many
  * system scans run. The constructor returns the real instance, so the binding
  * still recognises it.

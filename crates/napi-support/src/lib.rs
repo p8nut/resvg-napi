@@ -23,7 +23,9 @@ use napi::bindgen_prelude::*;
 /// Runs a call into the wrapped library, turning a panic into a JS error. An
 /// unwind reaching napi's `extern "C"` frame aborts the whole process, and
 /// these are the paths an untrusted input drives. `what` names the caller in
-/// the message: `"<what> panicked: <payload>"`.
+/// the message: `"<what> panicked: <payload>"`. Native targets only: the
+/// `wasm32-wasip1-threads` standard library is built `panic=abort`, so there
+/// a panic traps the instance before anything here can catch it.
 pub fn contained<T>(what: &str, f: impl FnOnce() -> T) -> Result<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|p| {
         // The payload is what a bug report needs; panic!() makes it a &str or

@@ -292,6 +292,14 @@ usvg recurses into nested elements. Leave it alone on untrusted SVG: a much
 larger value lets a deeply nested document overflow the stack, which aborts
 the process, sooner on a worker thread (`*Async`) or in the browser.
 
+A panic in resvg or usvg (a bug an input reaches) is a JS `Error`,
+`"<call> panicked: <message>"`, in the native binding; an instance the call
+was using stays usable. The WASI build cannot do that: Rust's
+`wasm32-wasip1-threads` target is built with `panic=abort`, so a panic traps
+the wasm instance and every call after it fails. On untrusted SVG in the
+browser or under WASI, run the binding where losing the instance is
+recoverable (a worker you can restart).
+
 ## Measure text and geometry
 
 Every node reports `boundingBox()`, `absBoundingBox()`, `strokeBoundingBox()`

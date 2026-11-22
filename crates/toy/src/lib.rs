@@ -627,6 +627,15 @@ impl Canvas {
         self.data.fill(color.r);
     }
 
+    /// Panics with `why` after writing the first byte: a bug the binding must
+    /// turn into a JS error, its `&mut` receiver usable afterwards.
+    pub fn smash(&mut self, why: &str) {
+        if let Some(b) = self.data.first_mut() {
+            *b = b.wrapping_add(1);
+        }
+        panic!("{why}");
+    }
+
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -1048,4 +1057,9 @@ pub fn spin(rounds: u32) -> u32 {
         x = std::hint::black_box(x.rotate_left(5) ^ i).wrapping_mul(0x0100_0193);
     }
     x
+}
+
+/// Panics with `why`: a bug the binding must turn into a JS error.
+pub fn boom(why: &str) -> u32 {
+    panic!("{why}");
 }

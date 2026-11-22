@@ -51,7 +51,12 @@ generator could one day bind another crate.
 
 ### Safety
 
-- Panics are contained everywhere (generic).
+- Panics are contained everywhere (generic), on the native targets. The
+  `wasm32-wasip1-threads` standard library is built with `panic=abort`: there
+  a panic traps the wasm instance, and `catch_unwind` catches nothing.
+  Unwinding there needs a nightly `-Zbuild-std` and wasm exception handling;
+  the pinned stable toolchain has neither, so the caveat is documented
+  instead.
 - The resvg-specific guards become an opt-in resolver and options, and the
   helpers turn them on by default. The guards are:
   - file reads fenced to `resourcesDir`, with `O_NOFOLLOW` and a 256 MiB cap;

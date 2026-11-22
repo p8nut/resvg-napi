@@ -1400,6 +1400,42 @@ impl ToyCanvas {
             signal,
         )
     }
+    #[doc = " Panics with `why` after writing the first byte: a bug the binding must"]
+    #[doc = " turn into a JS error, its `&mut` receiver usable afterwards."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn smash(&mut self, why: String) -> Result<(), String> {
+        let __self = self.__mut()?;
+        napi_support::contained("Canvas::smash", || __self.smash(&why))
+            .map_err(napi_support::coded)?;
+        Ok(())
+    }
+    #[doc = " `smash` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `smash` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi(ts_return_type = "Promise<void>")]
+    #[allow(clippy::redundant_closure)]
+    pub fn smash_async(
+        &mut self,
+        why: String,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, ()>, String> {
+        let mut __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Canvas::smash", || __self.smash(&why))
+                    .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
+    }
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn data(&self) -> Result<Buffer, String> {
@@ -1899,6 +1935,31 @@ pub fn toy_spin_async(
 pub fn toy_copies() -> Result<u32, String> {
     let __v = napi_support::contained("copies", toy::copies).map_err(napi_support::coded)?;
     Ok(__v)
+}
+#[doc = " Panics with `why`: a bug the binding must turn into a JS error."]
+#[napi(js_name = "boom", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_boom(why: String) -> Result<u32, String> {
+    let __v = napi_support::contained("boom", || toy::boom(&why)).map_err(napi_support::coded)?;
+    Ok(__v)
+}
+#[doc = " `boom` on a worker thread. The arguments are read now, the call runs"]
+#[doc = " off the main thread, and the promise resolves with its result or rejects"]
+#[doc = " as `boom` throws. `signal` drops the call while it is still queued."]
+#[napi(js_name = "boomAsync", namespace = "toy")]
+#[allow(clippy::redundant_closure)]
+pub fn toy_boom_async(
+    why: String,
+    env: Env,
+    #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<napi_support::Signal>,
+) -> Result<PromiseRaw<'static, u32>, String> {
+    napi_support::spawn(
+        env,
+        vec![],
+        move || napi_support::contained("boom", || toy::boom(&why)).map_err(napi_support::coded),
+        |__v| Ok(__v),
+        signal,
+    )
 }
 fn toy_item_to_js(p: napi_support::Projection<toy::Item>) -> ToyItemUnion {
     match p.get() {

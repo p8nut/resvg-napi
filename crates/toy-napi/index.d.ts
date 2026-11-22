@@ -338,6 +338,18 @@ export declare namespace toy {
      * Until it settles, this instance is in use: any other use throws `Leased`.
      */
     fillAsync(color: toy.Color, signal?: AbortSignal | undefined | null): Promise<void>
+    /**
+     * Panics with `why` after writing the first byte: a bug the binding must
+     * turn into a JS error, its `&mut` receiver usable afterwards.
+     */
+    smash(why: string): void
+    /**
+     * `smash` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `smash` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    smashAsync(why: string, signal?: AbortSignal | undefined | null): Promise<void>
     data(): Buffer
     /**
      * A copy of the canvas in a frame of its own: a union made, not
@@ -706,6 +718,14 @@ export declare namespace toy {
     get [globalThis.Symbol.toStringTag](): string
   }
   export type ToyVec2 = Vec2
+  /** Panics with `why`: a bug the binding must turn into a JS error. */
+  export function boom(why: string): number
+  /**
+   * `boom` on a worker thread. The arguments are read now, the call runs
+   * off the main thread, and the promise resolves with its result or rejects
+   * as `boom` throws. `signal` drops the call while it is still queued.
+   */
+  export function boomAsync(why: string, signal?: AbortSignal | undefined | null): Promise<number>
   /** Any variant of `Content`. */
   export type Content = toy.ContentPlain | toy.ContentCanvas | toy.ContentFrame | toy.ContentLayer
   /** `Content::Canvas`. */

@@ -45,7 +45,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
     'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
-    'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Tally', 'Vec2', 'copies', 'count', 'countAsync', 'paint',
+    'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Tally', 'Vec2', 'boom', 'boomAsync', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
@@ -627,6 +627,33 @@ test('an async twin rejects with the code and message the sync call throws', asy
   await rejectsCoded(paintAsync(c, new Vec2(5, 0), Color.fromRgb(1, 1, 1)), 'OutOfBounds', '5,0 is off the canvas');
   // A failed call gives its lease back too.
   assert.equal(c.width(), 2);
+});
+
+// A panic in the wrapped crate is a JS error, not an abort: `contained`. Native
+// only: the WASI build is panic=abort, where it traps the instance instead.
+test('a panic throws "<what> panicked: <payload>", sync or async', async () => {
+  const { boom, boomAsync } = toy.toy;
+  throwsCoded(() => boom('kaboom'), 'GenericFailure', 'boom panicked: kaboom');
+  await rejectsCoded(boomAsync('later'), 'GenericFailure', 'boom panicked: later');
+  // The process survived both: the binding still answers.
+  assert.equal(toy.toy.spin(3), toy.toy.spin(3));
+});
+
+test('a panicking &mut call leaves its receiver usable, its lease given back', async () => {
+  const { Canvas, Color } = toy.toy;
+  const c = new Canvas(2, 1);
+  throwsCoded(() => c.smash('sync'), 'GenericFailure', 'Canvas::smash panicked: sync');
+  // What it wrote before panicking stays written.
+  assert.deepEqual([...c.data()], [1, 0]);
+  const pending = c.smashAsync('async');
+  throwsCoded(() => c.width(), 'Leased', 'this Canvas is in use by an async call');
+  await rejectsCoded(pending, 'GenericFailure', 'Canvas::smash panicked: async');
+  assert.equal(c.width(), 2);
+  assert.deepEqual([...c.data()], [2, 0]);
+  await c.fillAsync(Color.fromRgb(7, 0, 0));
+  assert.deepEqual([...c.data()], [7, 7]);
+  c.dispose();
+  assert.equal(c.disposed, true);
 });
 
 test('what an async twin borrows by value is leased: in use until it settles', async () => {

@@ -1,11 +1,11 @@
 // The helpers' `background`, and `usvg.Tree.toString` with `usvg.WriteOptions`.
 import assert from 'node:assert/strict';
-import { fontsOrSkip } from './support.mjs';
+import { testFonts } from './support.mjs';
 import binding from '../index.js';
 import { parse, renderPngAsync, renderRaw } from '../helpers.mjs';
 // Fonts are not a given: WASI has none, so the database is explicit and the
 // family is whatever this environment actually holds.
-const { db, family } = fontsOrSkip(binding, 'output shapes');
+const { db, family } = testFonts(binding);
 const opts = { fonts: db, fontFamily: family };
 
 /** A parsed document: the tree the helpers render and `toString` writes. */

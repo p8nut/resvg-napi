@@ -6,7 +6,12 @@
 //
 // Nothing here hardcodes a family name. `family` is whatever the database
 // actually holds, which is the only name `fontFamily` will resolve.
+//
+// There is always a file to read: the repo ships IBM Plex Sans (Latin) for the
+// demo, the last candidate. Every fixture's text is ASCII, which it covers, and
+// the whole suite passes with it as the only face. So nothing skips.
 import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { nodeExtent } from '../helpers.browser.mjs';
 
 const CANDIDATES = [
@@ -17,21 +22,18 @@ const CANDIDATES = [
   '/usr/share/fonts/TTF/DejaVuSans.ttf',
   '/System/Library/Fonts/Supplemental/Arial.ttf',
   'C:/Windows/Fonts/arial.ttf',
+  // Absolute, so it resolves whatever the working directory.
+  fileURLToPath(new URL('../demo/fonts/IBMPlexSans-Latin.ttf', import.meta.url)),
 ].filter(Boolean);
 
 /**
  * A `fontdb.Database` with at least one face, and the family name to ask
- * for. Returns `null` when the environment has no font at all, so a test can
- * say what it skipped instead of failing on the environment.
+ * for: the system's fonts, else a font file.
  */
 export function testFonts({ fontdb }) {
   const db = new fontdb.Database();
   db.loadSystemFonts();
-  if (!db.len()) {
-    const file = testFontFile();
-    if (!file) return null;
-    db.loadFontData(readFileSync(file));
-  }
+  if (!db.len()) db.loadFontData(readFileSync(testFontFile()));
   // The first system face is whatever fontdb happened to enumerate first
   // (Comfortaa, on this machine): fine as a name, risky for glyph coverage.
   // Prefer a workhorse when one is installed. `families` is `[name,
@@ -47,22 +49,9 @@ export function testFonts({ fontdb }) {
   return { db, family };
 }
 
-/** The font file the tests can load themselves, or null if there is none. */
+/** The font file the tests can load themselves: the repo's own as a last resort. */
 export function testFontFile() {
-  return CANDIDATES.find((f) => existsSync(f)) ?? null;
-}
-
-/**
- * `testFonts`, or the end of the test file: when the environment has no font,
- * says what was skipped (see `skip`) and exits 0.
- */
-export function fontsOrSkip(binding, what) {
-  const fonts = testFonts(binding);
-  if (!fonts) {
-    skip(what, 'no font in this environment');
-    process.exit(0);
-  }
-  return fonts;
+  return CANDIDATES.find((f) => existsSync(f));
 }
 
 /** Where a `usvg.Node` will draw (the helpers' `nodeExtent`). */
@@ -89,24 +78,4 @@ export function renderNodePng({ resvg, tiny_skia }, node, { scale = 1 } = {}) {
     .preTranslate(inner.x, inner.y);
   if (!resvg.renderNode(node, transform, pixmap)) throw new Error('element is empty');
   return pixmap.encodePng();
-}
-
-/**
- * Prints what was not checked, and why.
- *
- * Several test files skip themselves when no font is present, and a skip
- * leaves the exit code at 0 -- so half the suite could go quiet and the runner
- * would still report every file passed. That is right for WASI, which has no
- * font directories by design, and wrong everywhere else.
- *
- * `RESVG_REQUIRE_FONTS=1` turns a skip into a failure. CI sets it on the native
- * jobs, where a missing font means the environment broke rather than that it is
- * a sandbox.
- */
-export function skip(what, why) {
-  if (process.env.RESVG_REQUIRE_FONTS === '1') {
-    console.error(`FAIL — ${what}: ${why} (RESVG_REQUIRE_FONTS=1)`);
-    process.exit(1);
-  }
-  console.log(`skip — ${what}: ${why}`);
 }

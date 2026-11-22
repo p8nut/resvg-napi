@@ -10,11 +10,11 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import binding from '../../index.js';
 import helpers, { MAX_PIXELS, renderPng, renderPngAsync, renderRaw, renderRawAsync, parse } from '../../helpers.mjs';
-import { fontsOrSkip } from '../support.mjs';
+import { testFonts } from '../support.mjs';
 
 const { usvg, resvg, tiny_skia } = binding;
 
-const { db, family } = fontsOrSkip(binding, 'helpers: renderPng');
+const { db, family } = testFonts(binding);
 
 const DOCS = {
   shapes: `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">

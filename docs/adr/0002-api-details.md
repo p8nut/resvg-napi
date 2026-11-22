@@ -97,6 +97,12 @@ refuse anything over `maxPixels` (2^26) before allocating.
   does not render. The docs say so, with an example.
 - The helpers load the system fonts once, cached and asynchronously.
 
+As built: no trailing argument was needed. `usvg.Options.fontdb` takes the
+`fontdb.Database` instance inside the plain options object, and a parse
+shares it rather than copying it. The helpers scan the system fonts once and
+share them: on a worker thread for the async helpers, in place for the sync
+ones.
+
 ## Mutable arguments in async calls (Q28)
 
 A value taken as `&mut` by an async twin, such as `Pixmap` in
@@ -124,6 +130,11 @@ only if a measurement justifies it (ADR 0001's Rust-helper rule).
 They need two generator rules: owned mirrors of borrowed argument types, and
 callback arguments whose result is returned. **They must come back**:
 tracked in #181, and named in the 0.10 release notes.
+
+As built (0.11, #181): all five are back. `fontdb.Database` has `query`,
+`withFaceData` (Rust's `with_face_data`: `[bytes, index]`), `familyName` and
+`faceSource`, and `usvg.Font.families` is mapped, which makes `usvg.Font`,
+`usvg.TextSpan` and `usvg.TextChunk` plain objects.
 
 ## Plain-data classes and conversions (Q31, Q34)
 

@@ -9,6 +9,11 @@ on:
     # would be an escape hatch that never fires: applying it produces an event
     # this workflow does not listen for, and a re-run replays the old payload
     # with no label on it.
+    #
+    # The catch is that `labeled` fires for every label, and with
+    # cancel-in-progress below any label a human adds cancelled the running CI
+    # and started it again. So a label other than `full-matrix` gets a group of
+    # its own (cancelling nothing) and `plan` skips, which skips every job.
     types: [opened, synchronize, reopened, labeled]
     # Markdown and the licence cannot break a build. This skips the whole
     # workflow rather than gating a job, so there is nothing to pay for -- but
@@ -40,7 +45,7 @@ on:
 # and tests the same thing and is the one that publishes, so the commit keeps
 # a full CI either way. Nothing ever cancels a tag run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'full-matrix' && format('-label-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/') }}
 
 # Read-only unless a job says otherwise (publish does). Written here rather
@@ -67,8 +72,9 @@ jobs:
     name: plan
     # The daily cron is for `lock` alone. Without this it also
     # rebuilt and retested all thirteen targets on an unchanged main; every job
-    # below `needs` plan, so skipping it skips them.
-    if: github.event_name != 'schedule'
+    # below `needs` plan, so skipping it skips them. A label other than
+    # `full-matrix` changes nothing to build either (see `on:` above).
+    if: github.event_name != 'schedule' && !(github.event.action == 'labeled' && github.event.label.name != 'full-matrix')
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.p.outputs.targets }}
@@ -126,16 +132,34 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.targets) }}
     steps:
       - uses: actions/checkout@v7
+      # A tag builds the binaries the publish job ships, so it builds them from
+      # a clean state, as publish installs: no restored node_modules cache and
+      # no restored target/ (rust-cache below). Whatever an earlier main run
+      # left in either would otherwise be linked into a release, and a cache
+      # entry is never checked against anything. Empty `cache` is setup-node's
+      # "off"; package.json has no packageManager field to turn its automatic
+      # cache back on.
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ !startsWith(github.ref, 'refs/tags/v') && 'npm' || '' }}
       # rustup is on every hosted runner; with no argument it installs the
       # toolchain rust-toolchain.toml pins, and the target is added to that one.
       - run: rustup toolchain install && rustup target add ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      # Pinned to a commit, not the v2 tag: a tag run's later jobs hold
+      # contents and id-token write, and pages.yml runs it beside pages write,
+      # so whoever can move the tag could run code there. Dependabot bumps the
+      # SHA and the comment.
+      #
+      # Saved from main only. A pull request's cache is scoped to its ref, so
+      # no other run can ever restore it, yet it counts against the repository's
+      # 10 GB like any other: PR caches took 3.4 GB of it and evicted main's,
+      # the ones every pull request restores from. They still restore main's.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # A release is a `v*` tag alone: the repository stays at 0.0.0 and the
       # version comes from the tag's name (CONTRIBUTING.md, Releasing). Staged,
       # so the build job's drift check compares against the versioned tree.
@@ -424,8 +448,8 @@ jobs:
             console.log(\`both at \${npm}\`);
           "
 
-  # resvg's own corpus, rendered through this binding: 1715 SVGs against the
-  # reference PNGs upstream asserts on, with the 20 fonts it ships, at the
+  # resvg's own corpus, rendered through this binding: the SVGs upstream asserts
+  # on against their reference PNGs, with the fonts it ships, at the
   # settings its harness uses. Fifteen seconds including the fetch.
   #
   # This is the half a diff cannot show. `src/lib.rs` moving five doc-comment
@@ -621,7 +645,10 @@ jobs:
       # build: each direct dependency at its declared floor, the rest at their
       # newest. Floors left at "1.0" went unnoticed until one sat below what
       # syn 3 requires. Nightly only resolves; the pinned toolchain builds.
+      # Independent of the lock check too: that one exits 1 whenever any update
+      # is out, most days, and without this the step was skipped with it.
       - name: Declared minimum versions build
+        if: ${{ !cancelled() }}
         run: |
           rustup toolchain install nightly --profile minimal
           cargo +nightly update -Z direct-minimal-versions

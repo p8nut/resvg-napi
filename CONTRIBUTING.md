@@ -32,10 +32,12 @@ run before either exists) and writes the files.
 |---|---|
 | `crates/napi-gen/src/generate.rs` | the pipeline: the passes, their order, the fixpoints, the generic assertions, and writing `src/lib.rs` and `dts-header.d.ts`. Returns the report for a build script to assert on |
 | `crates/napi-gen/src/sources.rs` | finding and parsing upstream: env override, then a workspace member (a path dependency), then the cargo registry at the version the workspace's `Cargo.lock` names |
+| `crates/napi-gen/src/shape.rs` | `Shape`: a type's outermost constructor (reference, `Option`, list, `Arc`, `Result`, path...) read once from `syn`, which every phase asks instead of peeling type strings |
 | `crates/napi-gen/src/vocab.rs` | what a Rust type means on the JS side — newtypes, aliases, `Deref` chains, payload enums, naming. Answers questions, emits nothing |
 | `crates/napi-gen/src/emit.rs` | turning those answers into tokens napi can expand: data types, unions, option objects, the namespaces, the prelude every generated file starts with |
 | `crates/napi-gen/src/class.rs` | the classes and free functions of the namespaced surface: constructors, statics, `Result` errors, owned and shared values, conversions |
 | `crates/napi-gen/src/project.rs` | the projections: classes over values borrowed from an owner, and `{ kind, value }` unions of them |
+| `crates/napi-gen/src/statics.rs` | associated constants (`impl T { pub const X }`) as static read-only properties `T.X`, and the `.d.ts` header declaring them |
 | `crates/napi-gen/src/dispose.rs` | `dispose()` for the classes `class.rs` does not make, `[Symbol.dispose]` set at load, and the `.d.ts` header declaring it |
 | `crates/napi-gen/src/twin.rs` | the `*Async` twins `Config::asynchronous` lists: arguments made owned on the main thread, the call on a worker thread, leases |
 | `crates/napi-gen/src/cfg.rs` | which upstream methods exist on which target: their `#[cfg(feature = ..)]`, translated through `Config::features` |
@@ -365,7 +367,7 @@ Two consumers keep both surfaces honest, one each:
 - **The demo uses the helpers** (`demo/README.md`): `createHelpers(binding)`
   on the wasm module in the pages, `resvg-napi/helpers` by its package name
   in `demo/render.mjs`, and the namespaced API only where the helpers stop
-  (the `fontdb.Database`, the Nodes panel's tree walk, `takeLogs()`). It is
+  (the `fontdb.Database`, the Elements panel's tree walk, `takeLogs()`). It is
   their real-world test: something the demo needs and the helpers lack is a
   finding, not a reason to reach for the raw API around them. `npm run
   test:examples` renders the four examples with `--strict`.
@@ -378,8 +380,8 @@ Two consumers keep both surfaces honest, one each:
   upstream has none, and the corpus reaches only `tests/resources` through
   its `../../../resources` hrefs. `npm run conformance:fetch` gets the corpus
   at the tag `Cargo.lock` builds, and `npm run conformance` compares with
-  `conformance/baseline.txt` (`-- -w` rewrites it). A moved baseline is
-  investigated before it is rewritten.
+  `conformance/baseline.txt` (`-- -w` rewrites it, and the README's count).
+  A moved baseline is investigated before it is rewritten.
 
 ### Classes and free functions
 
@@ -455,6 +457,31 @@ cannot apply: each namespace's constants sit in a module of their own
 (`usvg_consts`). The toy has one of each (`toy.NAME` and `alt.NAME`,
 `MAX_LAYERS` re-exported from a private module, a `u64` and a struct left
 out).
+
+**Associated constants** (`impl T { pub const X }`) are static read-only
+properties `T.X`, under their Rust name (ADR 0002, Q21;
+`napi_gen::statics`). On a class, a number, boolean or string constant is
+that value, and a constant of type `Self` on a class held by value is a
+fresh instance on each read (`tiny_skia.Color.BLACK`). A type JS reads as a
+number, boolean or string has no class: its constants are a frozen object of
+the type's name in its namespace (`fontdb.Weight.BOLD === 700`). napi
+declares no static property, so a class's constants are hidden static
+methods that a `#[napi(module_exports)]` hook turns into getters at load,
+and the same hook builds the objects; both are declared in the `.d.ts`
+header (`dts-header.d.ts`). Anything else is left out and reported, as is
+every constant of a `Role::Classes` crate that is not on one of its listed
+classes (tiny-skia's `BYTES_PER_PIXEL`). The report has a line per static
+(`... is a static: fontdb.Weight.BOLD`); the toy has one of each kind
+(`toy.Color.BLACK`, `toy.Key.LAST`, the object `toy.MinLen`).
+
+**Each union has a named type**: an enum mirrored as a union (payload enums,
+`{ kind, value }` projections) gets `export type <Enum> = ...` in its
+namespace, and every signature names it: `usvg.Node`, `usvg.Paint`,
+`usvg.ImageKind`, `tiny_skia.PathSegment` (`emit::union_alias`). A type
+cannot share its name with an interface, class or other type, so where the
+namespace already has one of that name (`fontdb.Source`, whose input form is
+an interface; the toy's `Origin`), the union stays spelled out
+(`EitherN<..>`) and the report says `not aliased: <ns>.<Name>: ...`.
 
 Two namespaces may each have a class of one name (`toy.Color` and
 `alt.Color`, `tiny_skia.Color` and `svgtypes.Color`). napi builds an instance
@@ -607,9 +634,8 @@ render-then-encode chain (Q29): two round trips, which the helpers chain.
   returned (`napi_support::spawn`). Aborting drops a call still queued,
   which rejects the same way; a call already running finishes, as
   `Task::compute` cannot be interrupted.
-  `test/api/async.mjs`, like `test/async.mjs`, runs with
-  `UV_THREADPOOL_SIZE=1` (the WASI loader reads it too) and a slow render in
-  front, so the call it aborts is queued.
+  `test/api/async.mjs` runs with `UV_THREADPOOL_SIZE=1` (the WASI loader
+  reads it too) and a slow render in front, so the call it aborts is queued.
 - A listed member that cannot have a twin fails the build, with the reason:
   a constructor (list a factory), a return that borrows from the receiver,
   an argument with no owned form, a class with a shared name returned

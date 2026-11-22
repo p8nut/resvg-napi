@@ -45,7 +45,7 @@ export function normalise(stderr: string): string {
     .concat('\n');
 }
 
-/** cargo's stderr from a build that reran build.rs. */
+/** cargo's stderr from a check that reran build.rs. */
 function generate(): string {
   // The report only prints when build.rs reruns, and it only reruns when it
   // looks newer than its output.
@@ -53,7 +53,11 @@ function generate(): string {
   utimesSync('build.rs', now, now);
   // spawnSync, not execFileSync: the report rides on stderr, and execFileSync
   // only hands stderr back when the command *fails*.
-  const r = spawnSync('cargo', ['build', '--release'], {
+  //
+  // `check`, not `build`: the report comes from build.rs, which `check` runs
+  // just the same, and skipping codegen and the release LTO link cut CI's
+  // step from 67s to 12s with a byte-identical snapshot.
+  const r = spawnSync('cargo', ['check', '--release'], {
     // CARGO_TERM_COLOR=always is set in CI, and cargo then prefixes every line
     // with escape codes -- which is why the shell version of this step matched
     // nothing there and printed nothing, silently, for as long as it existed.
@@ -64,7 +68,7 @@ function generate(): string {
   if (r.error) throw r.error;
   if (r.status !== 0) {
     process.stderr.write(r.stderr ?? '');
-    console.error('cargo build failed; nothing to snapshot');
+    console.error('cargo check failed; nothing to snapshot');
     process.exit(r.status ?? 1);
   }
   return r.stderr ?? '';

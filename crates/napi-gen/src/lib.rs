@@ -273,7 +273,8 @@ impl Provider {
 }
 
 /// "An option field of type `ty` takes the JS type `js`, converted by the
-/// template function `convert`": `fn(&js, field_js_name: &str) -> Result<ty>`.
+/// template function `convert`": `fn(&js, field_js_name: &str) -> Result<ty, napi_support::Thrown>`,
+/// a bad value an `InvalidArg` (`napi_support::invalid`, `napi_support::int`).
 pub struct Converter {
     /// The field's upstream type, as the generator spells it.
     pub ty: &'static str,

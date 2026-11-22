@@ -87,6 +87,49 @@ test('a number that does not fit the upstream integer throws, never wraps', () =
   assert.throws(() => new tiny_skia.Pixmap(-1, 1));
 });
 
+// napi's own u32/i32 reduce mod 2^32, truncate a fraction and read NaN as 0
+// before any check: every integer is read as a number and checked instead.
+test('an integer argument is integral and in range, or InvalidArg', () => {
+  throwsCoded(() => new tiny_skia.Pixmap(2 ** 32 + 10, 10), 'InvalidArg', 'invalid width: 4294967306');
+  throwsCoded(() => tiny_skia.ColorU8.fromRgba(2 ** 32, 1, 0, 0), 'InvalidArg', 'invalid r: 4294967296');
+  throwsCoded(() => tiny_skia.ColorU8.fromRgba(0, 1.9, 0, 0), 'InvalidArg', 'invalid g: 1.9');
+  throwsCoded(() => tiny_skia.ColorU8.fromRgba(0, 0, NaN, 0), 'InvalidArg', 'invalid b: NaN');
+  throwsCoded(() => tiny_skia.ColorU8.fromRgba(0, 0, 0, -0.5), 'InvalidArg', 'invalid a: -0.5');
+  throwsCoded(() => tiny_skia.ColorU8.fromRgba(0, 0, 0, Infinity), 'InvalidArg', 'invalid a: inf');
+  throwsCoded(() => new tiny_skia.Pixmap(1, 1).pixel(2 ** 32, 0), 'InvalidArg', 'invalid x: 4294967296');
+  // i32: the same, and negative is fine.
+  throwsCoded(() => tiny_skia.IntRect.fromXywh(2 ** 32 + 1, 0, 5, 5), 'InvalidArg', 'invalid x: 4294967297');
+  throwsCoded(() => tiny_skia.IntRect.fromXywh(2 ** 31, 0, 5, 5), 'InvalidArg', 'invalid x: 2147483648');
+  throwsCoded(() => tiny_skia.IntRect.fromXywh(0.5, 0, 5, 5), 'InvalidArg', 'invalid x: 0.5');
+  assert.equal(tiny_skia.IntRect.fromXywh(-(2 ** 31), 0, 5, 5).x(), -(2 ** 31));
+  // In range and integral: unchanged, -0 included.
+  assert.equal(new tiny_skia.Pixmap(2, 1).width(), 2);
+  assert.equal(tiny_skia.IntRect.fromXywh(-0, 0, 5, 5).x(), 0);
+  assert.equal(tiny_skia.ColorU8.fromRgba(255, 0, 1, 2).red(), 255);
+});
+
+test('an integer option field is checked like an argument', () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
+  // u32::MAX as a depth would let a deep document overflow the stack.
+  throwsCoded(() => usvg.Tree.fromStr(svg, { maxDepth: -1 }), 'InvalidArg', 'invalid maxDepth: -1');
+  throwsCoded(() => usvg.Tree.fromStr(svg, { maxDepth: 2 ** 32 }), 'InvalidArg', 'invalid maxDepth: 4294967296');
+  throwsCoded(() => usvg.Tree.fromStr(svg, { maxDepth: 1.5 }), 'InvalidArg', 'invalid maxDepth: 1.5');
+  const tree = usvg.Tree.fromStr(svg);
+  // An index-bounded u8 clamps any u32 to its table, but not a negative or a fraction.
+  throwsCoded(() => tree.toString({ coordinatesPrecision: -1 }), 'InvalidArg', 'invalid coordinatesPrecision: -1');
+  throwsCoded(() => tree.toString({ transformsPrecision: 2.5 }), 'InvalidArg', 'invalid transformsPrecision: 2.5');
+  throwsCoded(() => tree.toString({ transformsPrecision: NaN }), 'InvalidArg', 'invalid transformsPrecision: NaN');
+  // The converter: spaces are a u8, the strings a fixed set; both InvalidArg.
+  throwsCoded(() => tree.toString({ indent: 300 }), 'InvalidArg', 'invalid indent: 300');
+  throwsCoded(() => tree.toString({ indent: 1.5 }), 'InvalidArg', 'invalid indent: 1.5');
+  throwsCoded(() => tree.toString({ attributesIndent: 'x' }), 'InvalidArg', 'invalid attributesIndent: "x"');
+  assert.match(tree.toString({ indent: 2 }), /^<svg/);
+});
+
+test('setLogLevel refuses an unknown level as InvalidArg', () => {
+  throwsCoded(() => binding.setLogLevel('x'), 'InvalidArg', 'unknown log level: "x"');
+});
+
 test('arguments are checked: the class, never a look-alike', () => {
   const pixmap = new tiny_skia.Pixmap(1, 1);
   assert.throws(() => pixmap.fill({ r: 0, g: 0, b: 0, a: 1 }));

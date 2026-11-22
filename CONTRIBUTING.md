@@ -602,9 +602,11 @@ render-then-encode chain (Q29): two round trips, which the helpers chain.
   loading fonts) is leased the same way: its `Arc` goes with the call, and
   other handles on the same value keep reading theirs.
 - **`signal`** is checked before anything is read (`napi_support::Signal`):
-  not an `AbortSignal`, or already aborted, it throws. Aborting drops a call
-  still queued, which rejects with an `AbortError` and never runs; a call
-  already running finishes, as `Task::compute` cannot be interrupted.
+  not an `AbortSignal`, it throws. Already aborted, the call rejects with an
+  `AbortError` and never runs, its leases back before the promise is
+  returned (`napi_support::spawn`). Aborting drops a call still queued,
+  which rejects the same way; a call already running finishes, as
+  `Task::compute` cannot be interrupted.
   `test/api/async.mjs`, like `test/async.mjs`, runs with
   `UV_THREADPOOL_SIZE=1` (the WASI loader reads it too) and a slow render in
   front, so the call it aborts is queued.

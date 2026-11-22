@@ -61,6 +61,21 @@ pub fn invalid(name: &str, value: impl std::fmt::Display) -> Thrown {
     thrown("InvalidArg", format!("invalid {name}: {value}"))
 }
 
+/// A JS number as the integer `T` the upstream parameter or field takes:
+/// integral and in range, else [`invalid`]. Generated code takes every
+/// integer as `f64` and converts it here, because napi's own `u32` and `i32`
+/// reduce modulo 2^32, truncate a fraction and read `NaN` as 0 before any
+/// check could see the value.
+pub fn int<T: TryFrom<i64>>(name: &str, v: f64) -> std::result::Result<T, Thrown> {
+    // `as` saturates and reads NaN as 0: the round trip back to `f64` holds
+    // only for an integer an `i64` holds exactly.
+    let i = v as i64;
+    (i as f64 == v)
+        .then(|| T::try_from(i).ok())
+        .flatten()
+        .ok_or_else(|| invalid(name, v))
+}
+
 /// What a projection resolves from: its owner, type-erased.
 type Owner = std::sync::Arc<dyn std::any::Any + Send + Sync>;
 
@@ -377,7 +392,9 @@ impl<J: ToNapiValue> ToNapiValue for Settled<J> {
 /// thread. A [`Thrown`] from either rejects with its `code` and `message`,
 /// as the sync call throws. `signal` drops the call while it is queued: it
 /// rejects with an `AbortError`, and `run` is dropped unrun, its leases
-/// with it. A call already running is not interrupted.
+/// with it. A call already running is not interrupted. A signal aborted
+/// before the call rejects the same way, `run` dropped here: napi only
+/// listens for the `abort` event, so it would let the whole task run.
 ///
 /// `held` are the [`Lease::hold`]s of the leases `run` captured: their
 /// slots stay in use until the promise settled, even if `run` ended (and
@@ -389,12 +406,26 @@ pub fn spawn<R: Send + 'static, J: ToNapiValue + TypeName>(
     js: fn(R) -> std::result::Result<J, Thrown>,
     signal: Option<Signal>,
 ) -> std::result::Result<PromiseRaw<'static, J>, Thrown> {
+    if signal.as_ref().is_some_and(|s| s.aborted) {
+        // The leases go back before JS sees the promise, as in `finally`.
+        drop(run);
+        drop(held);
+        // What napi rejects a call aborted while queued with.
+        let mut e = env
+            .create_error(Error::new(
+                Status::Cancelled,
+                "the signal was already aborted",
+            ))
+            .map_err(coded)?;
+        e.set_named_property("name", "AbortError").map_err(coded)?;
+        return PromiseRaw::reject(&env, e).map_err(coded);
+    }
     let work = Work {
         run: Some(Box::new(run)),
         js,
         held,
     };
-    let task = AsyncTask::with_optional_signal(work, signal.map(|s| s.0));
+    let task = AsyncTask::with_optional_signal(work, signal.map(|s| s.signal));
     // SAFETY: `env` is the calling function's, on the main thread.
     let p = unsafe { AsyncTask::to_napi_value(env.raw(), task) }.map_err(coded)?;
     Ok(PromiseRaw::new(env.raw(), p))
@@ -405,11 +436,52 @@ pub mod logs {
     //! consumes it by default, so those messages are lost; this buffers them
     //! for the whole process ([`take`]).
 
-    use napi::{Error, Result};
+    use napi::{Error, Result, Status};
     use std::sync::Mutex;
 
     /// Entries kept, the truncation marker included.
     pub const CAP: usize = 500;
+
+    /// Bytes kept of one entry, the truncation marker aside: upstream logs
+    /// whole attribute values, so a line can be as long as the document.
+    pub const LINE_CAP: usize = 1024;
+
+    /// A `fmt::Write` keeping the first [`LINE_CAP`] bytes, cut on a `char`
+    /// boundary, and whether anything was dropped.
+    #[derive(Default)]
+    struct Capped {
+        line: String,
+        cut: bool,
+    }
+
+    impl std::fmt::Write for Capped {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            let room = LINE_CAP - self.line.len();
+            if s.len() <= room {
+                self.line.push_str(s);
+                return Ok(());
+            }
+            let mut end = room;
+            while !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            self.line.push_str(&s[..end]);
+            self.cut = true;
+            // Stops the formatting: nothing more would be kept.
+            Err(std::fmt::Error)
+        }
+    }
+
+    /// `args` formatted, at most [`LINE_CAP`] bytes of it, marked when cut.
+    fn capped(args: std::fmt::Arguments) -> String {
+        let mut w = Capped::default();
+        // The only error is the one `Capped` returns to stop early.
+        let _ = std::fmt::write(&mut w, args);
+        if w.cut {
+            w.line.push_str(" [truncated]");
+        }
+        w.line
+    }
 
     static LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -436,7 +508,12 @@ pub mod logs {
         }
 
         fn log(&self, record: &log::Record) {
-            let line = format!("{} {}: {}", record.level(), record.target(), record.args());
+            let line = capped(format_args!(
+                "{} {}: {}",
+                record.level(),
+                record.target(),
+                record.args()
+            ));
             // Bounded: a pathological input must not grow this forever.
             // Poison-tolerant like every other diagnostics lock: a panic
             // elsewhere must not switch logging off for the process.
@@ -452,7 +529,7 @@ pub mod logs {
     pub fn set_level(level: &str) -> Result<()> {
         let filter: log::LevelFilter = level
             .parse()
-            .map_err(|_| Error::from_reason(format!("unknown log level: {level:?}")))?;
+            .map_err(|_| Error::new(Status::InvalidArg, format!("unknown log level: {level:?}")))?;
         // Fails harmlessly after the first call: the logger installs once.
         let _ = log::set_logger(&COLLECTOR);
         log::set_max_level(filter);
@@ -513,11 +590,14 @@ pub mod fs {
 }
 
 /// An `AbortSignal` argument, checked before napi converts it: it must be an
-/// instance of the global `AbortSignal`, and not already aborted -- napi only
-/// listens for the `abort` event, so a signal aborted before the call would
-/// let the whole task run. Take `Option<Signal>` and hand `.0` to
-/// `AsyncTask::with_optional_signal`.
-pub struct Signal(pub AbortSignal);
+/// instance of the global `AbortSignal`. Whether it was already aborted is
+/// read here too: napi only listens for the `abort` event, so [`spawn`]
+/// rejects such a call itself. Take `Option<Signal>` and hand it to
+/// [`spawn`].
+pub struct Signal {
+    signal: AbortSignal,
+    aborted: bool,
+}
 
 impl FromNapiValue for Signal {
     unsafe fn from_napi_value(
@@ -535,14 +615,9 @@ impl FromNapiValue for Signal {
             ));
         }
         // An instance, so an object: reading it as one is sound.
-        let already: bool = Object::from_raw(env, value).get_named_property("aborted")?;
-        if already {
-            return Err(Error::new(
-                Status::Cancelled,
-                "AbortError: the signal was already aborted",
-            ));
-        }
-        unsafe { AbortSignal::from_napi_value(env, value) }.map(Signal)
+        let aborted: bool = Object::from_raw(env, value).get_named_property("aborted")?;
+        let signal = unsafe { AbortSignal::from_napi_value(env, value) }?;
+        Ok(Signal { signal, aborted })
     }
 }
 

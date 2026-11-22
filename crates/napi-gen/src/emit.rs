@@ -882,7 +882,7 @@ pub fn option_object(
             let (ts, label) = (c.ts, lower_camel(&name));
             decls.push(quote! { #(#doc)* #[napi(ts_type = #ts)] pub #ident: Option<#js>, });
             assigns.push(
-                quote! { if let Some(v) = &self.#ident { o.#ident = #convert(v, #label).map_err(napi_support::coded)?; } },
+                quote! { if let Some(v) = &self.#ident { o.#ident = #convert(v, #label)?; } },
             );
             continue;
         }
@@ -989,37 +989,42 @@ fn map_field(
                 quote! { if let Some(v) = self.#ident { o.#ident = v; } },
             )),
             Some(Js::U8) => {
-                // A `Config::index_bounded` field indexes an upstream table
-                // without a bounds check, so clamp it to that table's last
-                // index. Any other u8 just saturates instead of wrapping.
+                // A number that is not a u8 throws, as a u8 argument does. A
+                // `Config::index_bounded` field indexes an upstream table
+                // without a bounds check, so it takes any u32 and clamps it
+                // to that table's last index rather than panicking upstream;
+                // a negative or fractional one still throws.
                 //
                 // The suffix is how the field is recognised, and a rename
-                // upstream would silently fall through to u8::MAX -- which is an
-                // index 242 places past the end of a 13-entry table, reached from
-                // `write_num` for every coordinate. That is an out-of-bounds
-                // panic unwinding out of an `extern "C"` callback, so a process
-                // abort rather than a JS exception. The caller collects what
-                // this matched and fails the build when a suffix matches nothing.
-                let max = match bounds.iter().find(|(suffix, _)| name.ends_with(suffix)) {
+                // upstream would silently drop the clamp. The caller collects
+                // what this matched and fails the build when a suffix matches
+                // nothing.
+                let label = lower_camel(&name);
+                let set = match bounds.iter().find(|(suffix, _)| name.ends_with(suffix)) {
                     Some((suffix, max)) => {
                         clamped.push(*suffix);
-                        *max
+                        quote! {
+                            u8::try_from(napi_support::int::<u32>(#label, v)?.min(#max)).unwrap_or(u8::MAX)
+                        }
                     }
-                    None => u32::from(u8::MAX),
+                    None => quote!(napi_support::int::<u8>(#label, v)?),
                 };
                 Some(field(
                     &ident,
                     &doc,
-                    quote!(u32),
-                    quote! { if let Some(v) = self.#ident { o.#ident = u8::try_from(v.min(#max)).unwrap_or(u8::MAX); } },
+                    quote!(f64),
+                    quote! { if let Some(v) = self.#ident { o.#ident = #set; } },
                 ))
             }
-            Some(Js::U32) => Some(field(
-                &ident,
-                &doc,
-                quote!(u32),
-                quote! { if let Some(v) = self.#ident { o.#ident = v; } },
-            )),
+            Some(Js::U32) => {
+                let label = lower_camel(&name);
+                Some(field(
+                    &ident,
+                    &doc,
+                    quote!(f64),
+                    quote! { if let Some(v) = self.#ident { o.#ident = napi_support::int::<u32>(#label, v)?; } },
+                ))
+            }
             Some(Js::Bool) => Some(field(
                 &ident,
                 &doc,
@@ -1066,10 +1071,8 @@ fn map_field(
                 Some(field(
                     &ident,
                     &doc,
-                    quote!(u32),
-                    quote! { if let Some(v) = self.#ident {
-                        o.#ident.0 = v.try_into().map_err(|_| napi_support::invalid(#label, v))?;
-                    } },
+                    quote!(f64),
+                    quote! { if let Some(v) = self.#ident { o.#ident.0 = napi_support::int(#label, v)?; } },
                 ))
             }
             // A class instance is a `Config::providers` entry, checked before

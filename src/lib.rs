@@ -33,15 +33,16 @@ use guard::{GuardFontResolver, GuardImageHrefResolver};
 #[doc = " A number of spaces (0-255), `'tabs'` or `'none'` as a `usvg::Indent`:"]
 #[doc = " `config::GEN.converters`. `Indent` is xmlwriter's, a crate the"]
 #[doc = " generator does not read."]
-fn indent_from_js(v: &Either<u32, String>, name: &str) -> Result<usvg::Indent> {
+fn indent_from_js(
+    v: &Either<f64, String>,
+    name: &str,
+) -> std::result::Result<usvg::Indent, napi_support::Thrown> {
     match v {
-        Either::A(n) => u8::try_from(*n)
-            .map(usvg::Indent::Spaces)
-            .map_err(|_| Error::from_reason(format!("invalid {name}: {n}"))),
+        Either::A(n) => napi_support::int(name, *n).map(usvg::Indent::Spaces),
         Either::B(s) => match s.as_str() {
             "tabs" => Ok(usvg::Indent::Tabs),
             "none" => Ok(usvg::Indent::None),
-            _ => Err(Error::from_reason(format!("invalid {name}: {s:?}"))),
+            _ => Err(napi_support::invalid(name, format!("{s:?}"))),
         },
     }
 }
@@ -58,10 +59,10 @@ pub struct SvgtypesColor {
 #[napi(object, js_name = "ColorObject", namespace = "svgtypes")]
 #[derive(Clone)]
 pub struct SvgtypesColorObject {
-    pub red: u32,
-    pub green: u32,
-    pub blue: u32,
-    pub alpha: u32,
+    pub red: f64,
+    pub green: f64,
+    pub blue: f64,
+    pub alpha: f64,
 }
 #[doc = " The `code` a thrown `svgtypes::Error` carries: the variant's name. The message is its `Display`."]
 #[napi(string_enum, js_name = "ErrorCode", namespace = "svgtypes")]
@@ -706,7 +707,7 @@ pub struct UsvgOptions<'a> {
     pub style_sheet: Option<String>,
     #[doc = " The maximum nesting allowed while parsing. If this limit is exceeded,"]
     #[doc = " the parser will return an error."]
-    pub max_depth: Option<u32>,
+    pub max_depth: Option<f64>,
 }
 #[doc = " XML writing options."]
 #[doc = ""]
@@ -730,13 +731,13 @@ pub struct UsvgWriteOptions {
     #[doc = " Smaller precision can lead to a malformed output in some cases."]
     #[doc = ""]
     #[doc = " Default: 8"]
-    pub coordinates_precision: Option<u32>,
+    pub coordinates_precision: Option<f64>,
     #[doc = " Set the transform values numeric precision."]
     #[doc = ""]
     #[doc = " Smaller precision can lead to a malformed output in some cases."]
     #[doc = ""]
     #[doc = " Default: 8"]
-    pub transforms_precision: Option<u32>,
+    pub transforms_precision: Option<f64>,
     #[doc = " Use single quote marks instead of double quote."]
     #[doc = ""]
     #[doc = " # Examples"]
@@ -776,7 +777,7 @@ pub struct UsvgWriteOptions {
     #[doc = ""]
     #[doc = " Default: 4 spaces"]
     #[napi(ts_type = "number | 'tabs' | 'none'")]
-    pub indent: Option<Either<u32, String>>,
+    pub indent: Option<Either<f64, String>>,
     #[doc = " Set XML attributes indention."]
     #[doc = ""]
     #[doc = " # Examples"]
@@ -803,7 +804,7 @@ pub struct UsvgWriteOptions {
     #[doc = ""]
     #[doc = " Default: `None`"]
     #[napi(ts_type = "number | 'tabs' | 'none'")]
-    pub attributes_indent: Option<Either<u32, String>>,
+    pub attributes_indent: Option<Either<f64, String>>,
 }
 #[doc = " Read-only handle on a `usvg::filter::Filter`."]
 #[napi(js_name = "Filter", namespace = "usvg")]
@@ -2032,7 +2033,7 @@ pub struct FontdbQuery {
     #[doc = " Specifies the weight of glyphs in the font, their degree of blackness or stroke thickness."]
     #[doc = ""]
     #[doc = " [font-weight](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-weight-prop) in CSS."]
-    pub weight: Option<u32>,
+    pub weight: Option<f64>,
     #[doc = " Selects a normal, condensed, or expanded face from a font family."]
     #[doc = ""]
     #[doc = " [font-stretch](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#font-stretch-prop) in CSS."]
@@ -2241,10 +2242,10 @@ impl SvgtypesColor {
     #[doc = " Constructs a new `Color` from RGB values."]
     #[napi(factory)]
     #[allow(clippy::redundant_closure)]
-    pub fn new_rgb(red: u32, green: u32, blue: u32) -> Result<Self, String> {
-        let red = u8::try_from(red).map_err(|_| napi_support::invalid("red", red))?;
-        let green = u8::try_from(green).map_err(|_| napi_support::invalid("green", green))?;
-        let blue = u8::try_from(blue).map_err(|_| napi_support::invalid("blue", blue))?;
+    pub fn new_rgb(red: f64, green: f64, blue: f64) -> Result<Self, String> {
+        let red = napi_support::int::<u8>("red", red)?;
+        let green = napi_support::int::<u8>("green", green)?;
+        let blue = napi_support::int::<u8>("blue", blue)?;
         let __v = napi_support::contained("Color::new_rgb", || {
             <svgtypes::Color>::new_rgb(red, green, blue)
         })
@@ -2254,11 +2255,11 @@ impl SvgtypesColor {
     #[doc = " Constructs a new `Color` from RGBA values."]
     #[napi(factory)]
     #[allow(clippy::redundant_closure)]
-    pub fn new_rgba(red: u32, green: u32, blue: u32, alpha: u32) -> Result<Self, String> {
-        let red = u8::try_from(red).map_err(|_| napi_support::invalid("red", red))?;
-        let green = u8::try_from(green).map_err(|_| napi_support::invalid("green", green))?;
-        let blue = u8::try_from(blue).map_err(|_| napi_support::invalid("blue", blue))?;
-        let alpha = u8::try_from(alpha).map_err(|_| napi_support::invalid("alpha", alpha))?;
+    pub fn new_rgba(red: f64, green: f64, blue: f64, alpha: f64) -> Result<Self, String> {
+        let red = napi_support::int::<u8>("red", red)?;
+        let green = napi_support::int::<u8>("green", green)?;
+        let blue = napi_support::int::<u8>("blue", blue)?;
+        let alpha = napi_support::int::<u8>("alpha", alpha)?;
         let __v = napi_support::contained("Color::new_rgba", || {
             <svgtypes::Color>::new_rgba(red, green, blue, alpha)
         })
@@ -2337,8 +2338,8 @@ impl SvgtypesColor {
         Ok(u32::from(__v.red))
     }
     #[napi(setter, js_name = "red")]
-    pub fn set_field_red(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("red", value))?;
+    pub fn set_field_red(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("red", value)?;
         self.__mut()?.red = value;
         Ok(())
     }
@@ -2348,8 +2349,8 @@ impl SvgtypesColor {
         Ok(u32::from(__v.green))
     }
     #[napi(setter, js_name = "green")]
-    pub fn set_field_green(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("green", value))?;
+    pub fn set_field_green(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("green", value)?;
         self.__mut()?.green = value;
         Ok(())
     }
@@ -2359,8 +2360,8 @@ impl SvgtypesColor {
         Ok(u32::from(__v.blue))
     }
     #[napi(setter, js_name = "blue")]
-    pub fn set_field_blue(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("blue", value))?;
+    pub fn set_field_blue(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("blue", value)?;
         self.__mut()?.blue = value;
         Ok(())
     }
@@ -2370,8 +2371,8 @@ impl SvgtypesColor {
         Ok(u32::from(__v.alpha))
     }
     #[napi(setter, js_name = "alpha")]
-    pub fn set_field_alpha(&mut self, value: u32) -> Result<(), String> {
-        let value = u8::try_from(value).map_err(|_| napi_support::invalid("alpha", value))?;
+    pub fn set_field_alpha(&mut self, value: f64) -> Result<(), String> {
+        let value = napi_support::int::<u8>("alpha", value)?;
         self.__mut()?.alpha = value;
         Ok(())
     }
@@ -2379,12 +2380,10 @@ impl SvgtypesColor {
     #[napi(factory)]
     pub fn from_object(obj: SvgtypesColorObject) -> Result<Self, String> {
         Ok(Self::__from(svgtypes::Color {
-            red: u8::try_from(obj.red).map_err(|_| napi_support::invalid("red", obj.red))?,
-            green: u8::try_from(obj.green)
-                .map_err(|_| napi_support::invalid("green", obj.green))?,
-            blue: u8::try_from(obj.blue).map_err(|_| napi_support::invalid("blue", obj.blue))?,
-            alpha: u8::try_from(obj.alpha)
-                .map_err(|_| napi_support::invalid("alpha", obj.alpha))?,
+            red: napi_support::int::<u8>("red", obj.red)?,
+            green: napi_support::int::<u8>("green", obj.green)?,
+            blue: napi_support::int::<u8>("blue", obj.blue)?,
+            alpha: napi_support::int::<u8>("alpha", obj.alpha)?,
         }))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
@@ -2392,10 +2391,10 @@ impl SvgtypesColor {
     pub fn to_object(&self) -> Result<SvgtypesColorObject, String> {
         let __v = self.__ref()?;
         Ok(SvgtypesColorObject {
-            red: u32::from(__v.red),
-            green: u32::from(__v.green),
-            blue: u32::from(__v.blue),
-            alpha: u32::from(__v.alpha),
+            red: f64::from(u32::from(__v.red)),
+            green: f64::from(u32::from(__v.green)),
+            blue: f64::from(u32::from(__v.blue)),
+            alpha: f64::from(u32::from(__v.alpha)),
         })
     }
     #[doc = " Ends this instance: every later call throws `Disposed`. It holds a copy,"]
@@ -2417,10 +2416,10 @@ impl SvgtypesColor {
 impl From<&svgtypes::Color> for SvgtypesColorObject {
     fn from(__v: &svgtypes::Color) -> Self {
         Self {
-            red: u32::from(__v.red),
-            green: u32::from(__v.green),
-            blue: u32::from(__v.blue),
-            alpha: u32::from(__v.alpha),
+            red: f64::from(u32::from(__v.red)),
+            green: f64::from(u32::from(__v.green)),
+            blue: f64::from(u32::from(__v.blue)),
+            alpha: f64::from(u32::from(__v.alpha)),
         }
     }
 }
@@ -2454,7 +2453,9 @@ impl TinySkiaPixmap {
     #[doc = " Pixmap's width is limited by i32::MAX/4."]
     #[napi(constructor)]
     #[allow(clippy::redundant_closure)]
-    pub fn new(width: u32, height: u32) -> Result<Self, String> {
+    pub fn new(width: f64, height: f64) -> Result<Self, String> {
+        let width = napi_support::int::<u32>("width", width)?;
+        let height = napi_support::int::<u32>("height", height)?;
         let __v =
             napi_support::contained("Pixmap::new", || <tiny_skia::Pixmap>::new(width, height))
                 .map_err(napi_support::coded)?;
@@ -2602,7 +2603,9 @@ impl TinySkiaPixmap {
     #[doc = " Returns `None` when position is out of bounds."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn pixel(&self, x: u32, y: u32) -> Result<Option<TinySkiaPremultipliedColorU8>, String> {
+    pub fn pixel(&self, x: f64, y: f64) -> Result<Option<TinySkiaPremultipliedColorU8>, String> {
+        let x = napi_support::int::<u32>("x", x)?;
+        let y = napi_support::int::<u32>("y", y)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("Pixmap::pixel", || __self.pixel(x, y))
             .map_err(napi_support::coded)?;
@@ -2682,11 +2685,11 @@ impl TinySkiaColor {
     #[doc = " u8 will be divided by 255 to get the float component."]
     #[napi(factory)]
     #[allow(clippy::redundant_closure)]
-    pub fn from_rgba8(r: u32, g: u32, b: u32, a: u32) -> Result<Self, String> {
-        let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
-        let g = u8::try_from(g).map_err(|_| napi_support::invalid("g", g))?;
-        let b = u8::try_from(b).map_err(|_| napi_support::invalid("b", b))?;
-        let a = u8::try_from(a).map_err(|_| napi_support::invalid("a", a))?;
+    pub fn from_rgba8(r: f64, g: f64, b: f64, a: f64) -> Result<Self, String> {
+        let r = napi_support::int::<u8>("r", r)?;
+        let g = napi_support::int::<u8>("g", g)?;
+        let b = napi_support::int::<u8>("b", b)?;
+        let a = napi_support::int::<u8>("a", a)?;
         let __v = napi_support::contained("Color::from_rgba8", || {
             <tiny_skia::Color>::from_rgba8(r, g, b, a)
         })
@@ -2887,7 +2890,9 @@ impl TinySkiaIntSize {
     #[doc = " Creates a new `IntSize` from width and height."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn from_wh(width: u32, height: u32) -> Result<Option<TinySkiaIntSize>, String> {
+    pub fn from_wh(width: f64, height: f64) -> Result<Option<TinySkiaIntSize>, String> {
+        let width = napi_support::int::<u32>("width", width)?;
+        let height = napi_support::int::<u32>("height", height)?;
         let __v = napi_support::contained("IntSize::from_wh", || {
             <tiny_skia::IntSize>::from_wh(width, height)
         })
@@ -2944,7 +2949,8 @@ impl TinySkiaIntSize {
     #[doc = " Scales current size to the specified width."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn scale_to_width(&self, new_width: u32) -> Result<Option<TinySkiaIntSize>, String> {
+    pub fn scale_to_width(&self, new_width: f64) -> Result<Option<TinySkiaIntSize>, String> {
+        let new_width = napi_support::int::<u32>("newWidth", new_width)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::scale_to_width", || {
             __self.scale_to_width(new_width)
@@ -2955,7 +2961,8 @@ impl TinySkiaIntSize {
     #[doc = " Scales current size to the specified height."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn scale_to_height(&self, new_height: u32) -> Result<Option<TinySkiaIntSize>, String> {
+    pub fn scale_to_height(&self, new_height: f64) -> Result<Option<TinySkiaIntSize>, String> {
+        let new_height = napi_support::int::<u32>("newHeight", new_height)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::scale_to_height", || {
             __self.scale_to_height(new_height)
@@ -2975,7 +2982,9 @@ impl TinySkiaIntSize {
     #[doc = " Converts into [`IntRect`] at the provided position."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn to_int_rect(&self, x: i32, y: i32) -> Result<TinySkiaIntRect, String> {
+    pub fn to_int_rect(&self, x: f64, y: f64) -> Result<TinySkiaIntRect, String> {
+        let x = napi_support::int::<i32>("x", x)?;
+        let y = napi_support::int::<i32>("y", y)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntSize::to_int_rect", || __self.to_int_rect(x, y))
             .map_err(napi_support::coded)?;
@@ -4341,15 +4350,15 @@ impl TinySkiaPremultipliedColorU8 {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn from_rgba(
-        r: u32,
-        g: u32,
-        b: u32,
-        a: u32,
+        r: f64,
+        g: f64,
+        b: f64,
+        a: f64,
     ) -> Result<Option<TinySkiaPremultipliedColorU8>, String> {
-        let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
-        let g = u8::try_from(g).map_err(|_| napi_support::invalid("g", g))?;
-        let b = u8::try_from(b).map_err(|_| napi_support::invalid("b", b))?;
-        let a = u8::try_from(a).map_err(|_| napi_support::invalid("a", a))?;
+        let r = napi_support::int::<u8>("r", r)?;
+        let g = napi_support::int::<u8>("g", g)?;
+        let b = napi_support::int::<u8>("b", b)?;
+        let a = napi_support::int::<u8>("a", a)?;
         let __v = napi_support::contained("PremultipliedColorU8::from_rgba", || {
             <tiny_skia::PremultipliedColorU8>::from_rgba(r, g, b, a)
         })
@@ -4466,11 +4475,15 @@ impl TinySkiaIntRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn from_xywh(
-        x: i32,
-        y: i32,
-        width: u32,
-        height: u32,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
     ) -> Result<Option<TinySkiaIntRect>, String> {
+        let x = napi_support::int::<i32>("x", x)?;
+        let y = napi_support::int::<i32>("y", y)?;
+        let width = napi_support::int::<u32>("width", width)?;
+        let height = napi_support::int::<u32>("height", height)?;
         let __v = napi_support::contained("IntRect::from_xywh", || {
             <tiny_skia::IntRect>::from_xywh(x, y, width, height)
         })
@@ -4481,11 +4494,15 @@ impl TinySkiaIntRect {
     #[napi]
     #[allow(clippy::redundant_closure)]
     pub fn from_ltrb(
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
+        left: f64,
+        top: f64,
+        right: f64,
+        bottom: f64,
     ) -> Result<Option<TinySkiaIntRect>, String> {
+        let left = napi_support::int::<i32>("left", left)?;
+        let top = napi_support::int::<i32>("top", top)?;
+        let right = napi_support::int::<i32>("right", right)?;
+        let bottom = napi_support::int::<i32>("bottom", bottom)?;
         let __v = napi_support::contained("IntRect::from_ltrb", || {
             <tiny_skia::IntRect>::from_ltrb(left, top, right, bottom)
         })
@@ -4598,7 +4615,9 @@ impl TinySkiaIntRect {
     #[doc = " Insets the rectangle."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn inset(&self, dx: i32, dy: i32) -> Result<Option<TinySkiaIntRect>, String> {
+    pub fn inset(&self, dx: f64, dy: f64) -> Result<Option<TinySkiaIntRect>, String> {
+        let dx = napi_support::int::<i32>("dx", dx)?;
+        let dy = napi_support::int::<i32>("dy", dy)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntRect::inset", || __self.inset(dx, dy))
             .map_err(napi_support::coded)?;
@@ -4607,7 +4626,9 @@ impl TinySkiaIntRect {
     #[doc = " Outsets the rectangle."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn make_outset(&self, dx: i32, dy: i32) -> Result<Option<TinySkiaIntRect>, String> {
+    pub fn make_outset(&self, dx: f64, dy: f64) -> Result<Option<TinySkiaIntRect>, String> {
+        let dx = napi_support::int::<i32>("dx", dx)?;
+        let dy = napi_support::int::<i32>("dy", dy)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntRect::make_outset", || __self.make_outset(dx, dy))
             .map_err(napi_support::coded)?;
@@ -4616,7 +4637,9 @@ impl TinySkiaIntRect {
     #[doc = " Translates the rect by the specified offset."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn translate(&self, tx: i32, ty: i32) -> Result<Option<TinySkiaIntRect>, String> {
+    pub fn translate(&self, tx: f64, ty: f64) -> Result<Option<TinySkiaIntRect>, String> {
+        let tx = napi_support::int::<i32>("tx", tx)?;
+        let ty = napi_support::int::<i32>("ty", ty)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntRect::translate", || __self.translate(tx, ty))
             .map_err(napi_support::coded)?;
@@ -4625,7 +4648,9 @@ impl TinySkiaIntRect {
     #[doc = " Translates the rect to the specified position."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn translate_to(&self, x: i32, y: i32) -> Result<Option<TinySkiaIntRect>, String> {
+    pub fn translate_to(&self, x: f64, y: f64) -> Result<Option<TinySkiaIntRect>, String> {
+        let x = napi_support::int::<i32>("x", x)?;
+        let y = napi_support::int::<i32>("y", y)?;
         let __self = self.__ref()?;
         let __v = napi_support::contained("IntRect::translate_to", || __self.translate_to(x, y))
             .map_err(napi_support::coded)?;
@@ -4768,11 +4793,11 @@ impl TinySkiaColorU8 {
     #[doc = " Creates a new color."]
     #[napi]
     #[allow(clippy::redundant_closure)]
-    pub fn from_rgba(r: u32, g: u32, b: u32, a: u32) -> Result<Self, String> {
-        let r = u8::try_from(r).map_err(|_| napi_support::invalid("r", r))?;
-        let g = u8::try_from(g).map_err(|_| napi_support::invalid("g", g))?;
-        let b = u8::try_from(b).map_err(|_| napi_support::invalid("b", b))?;
-        let a = u8::try_from(a).map_err(|_| napi_support::invalid("a", a))?;
+    pub fn from_rgba(r: f64, g: f64, b: f64, a: f64) -> Result<Self, String> {
+        let r = napi_support::int::<u8>("r", r)?;
+        let g = napi_support::int::<u8>("g", g)?;
+        let b = napi_support::int::<u8>("b", b)?;
+        let a = napi_support::int::<u8>("a", a)?;
         let __v = napi_support::contained("ColorU8::from_rgba", || {
             <tiny_skia::ColorU8>::from_rgba(r, g, b, a)
         })
@@ -5408,7 +5433,7 @@ impl UsvgOptions<'_> {
             o.style_sheet = Some(v.clone());
         }
         if let Some(v) = self.max_depth {
-            o.max_depth = v;
+            o.max_depth = napi_support::int::<u32>("maxDepth", v)?;
         }
         Ok(o)
     }
@@ -5424,20 +5449,23 @@ impl UsvgWriteOptions {
             o.preserve_text = v;
         }
         if let Some(v) = self.coordinates_precision {
-            o.coordinates_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
+            o.coordinates_precision =
+                u8::try_from(napi_support::int::<u32>("coordinatesPrecision", v)?.min(12u32))
+                    .unwrap_or(u8::MAX);
         }
         if let Some(v) = self.transforms_precision {
-            o.transforms_precision = u8::try_from(v.min(12u32)).unwrap_or(u8::MAX);
+            o.transforms_precision =
+                u8::try_from(napi_support::int::<u32>("transformsPrecision", v)?.min(12u32))
+                    .unwrap_or(u8::MAX);
         }
         if let Some(v) = self.use_single_quote {
             o.use_single_quote = v;
         }
         if let Some(v) = &self.indent {
-            o.indent = indent_from_js(v, "indent").map_err(napi_support::coded)?;
+            o.indent = indent_from_js(v, "indent")?;
         }
         if let Some(v) = &self.attributes_indent {
-            o.attributes_indent =
-                indent_from_js(v, "attributesIndent").map_err(napi_support::coded)?;
+            o.attributes_indent = indent_from_js(v, "attributesIndent")?;
         }
         Ok(o)
     }
@@ -8784,9 +8812,7 @@ impl FontdbQuery {
             o.families = v.as_slice();
         }
         if let Some(v) = self.weight {
-            o.weight.0 = v
-                .try_into()
-                .map_err(|_| napi_support::invalid("weight", v))?;
+            o.weight.0 = napi_support::int("weight", v)?;
         }
         if let Some(v) = self.stretch {
             o.stretch = v.into();

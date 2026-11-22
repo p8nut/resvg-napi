@@ -39,7 +39,9 @@ numbered item matches the decision log (Q21–Q35).
     and `ALPHA_*`. Its surface is what its listed classes reach.
 - napi keys classes by Rust identifier, so the binding prefixes identifiers
   with the crate (`UsvgColor`) and sets `js_name` and `namespace`. The prefix
-  is invisible from JS.
+  is invisible from JS: the `export type UsvgColor = Color` alias napi writes
+  for every class is dropped from the `.d.ts` after each build
+  (`scripts/dts-aliases.mts`, #251).
 - Each enum mirrored as a union gets a named TypeScript type under the
   enum's name: `export type Node = NodeGroup | NodePath | NodeImage |
   NodeText` in `usvg`, and every signature says `usvg.Node`. Where that name
@@ -53,6 +55,14 @@ numbered item matches the decision log (Q21–Q35).
 'text', value }`, which is the direct translation of the Rust enum. Each
 value is a projection handle: it keeps the tree alive and re-resolves the
 node on each call.
+
+A definition a union variant holds behind an `Arc` is that definition's
+class, as in Rust: `usvg.Paint`'s `{ type: 'linearGradient', value }` holds a
+`usvg.LinearGradient` (the same class `tree.linearGradients()` hands out), and
+`usvg.TextFlow`'s `path` variant a `usvg.TextPath`. Until #251 it was reduced
+to its `id`, to look up in the tree's tables, and `TextPath`, in none, was
+unreachable. A union holding a class makes its holder a class too:
+`usvg.Fill` and `usvg.Stroke` are read-only classes, not plain objects.
 
 ## Errors (Q23)
 

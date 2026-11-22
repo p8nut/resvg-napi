@@ -206,7 +206,11 @@ jobs:
           cargo clippy --workspace --release --all-targets -- -D warnings
 
       - name: Build
-        run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
+        # napi aliases every class to its prefixed Rust name in the .d.ts it
+        # writes; scripts/dts-aliases.mts drops those lines (ADR 0002, Names).
+        run: |
+          npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.build_args }}
+          node scripts/dts-aliases.mts
 
       # A glibc binary runs on systems at least as new as the newest symbol
       # version it links. Built on the runner instead of napi-cross, x64 asked
@@ -230,6 +234,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           npx napi build --cwd crates/toy-napi --platform --no-js
+          node scripts/dts-aliases.mts crates/toy-napi/index.d.ts
           node --test crates/toy-napi/toy.spec.mjs
 
       # The helpers are TypeScript: tsc emits the helpers*.mjs and

@@ -81,6 +81,9 @@ export declare namespace usvg {
   export interface ClipPath {
     [Symbol.dispose](): void
   }
+  export interface Fill {
+    [Symbol.dispose](): void
+  }
   export interface Filter {
     [Symbol.dispose](): void
   }
@@ -129,7 +132,25 @@ export declare namespace usvg {
   export interface Span {
     [Symbol.dispose](): void
   }
+  export interface Stroke {
+    [Symbol.dispose](): void
+  }
   export interface Text {
+    [Symbol.dispose](): void
+  }
+  export interface TextChunk {
+    [Symbol.dispose](): void
+  }
+  export interface TextDecoration {
+    [Symbol.dispose](): void
+  }
+  export interface TextDecorationStyle {
+    [Symbol.dispose](): void
+  }
+  export interface TextPath {
+    [Symbol.dispose](): void
+  }
+  export interface TextSpan {
     [Symbol.dispose](): void
   }
   export interface Tree {
@@ -371,7 +392,6 @@ export declare namespace fontdb {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type FontdbDatabase = Database
   /** Read-only view of a `FaceInfo`. */
   export class FaceInfo {
     get id(): fontdb.ID
@@ -394,7 +414,6 @@ export declare namespace fontdb {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type FontdbFaceInfo = FaceInfo
   /**
    * A unique per database face ID.
    *
@@ -435,7 +454,6 @@ export declare namespace fontdb {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type FontdbID = ID
   /** `Source::Binary`. */
   export class SourceBinary {
     /** Discriminant. Narrow on this. */
@@ -453,7 +471,6 @@ export declare namespace fontdb {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type FontdbSourceBinary = SourceBinary
   /** `Source::SharedFile`. */
   export class SourceSharedFile {
     /** Discriminant. Narrow on this. */
@@ -471,11 +488,10 @@ export declare namespace fontdb {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type FontdbSourceSharedFile = SourceSharedFile
   /**
    * A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family).
    *
-   * Passed in as `{ type, value }` or `{ type, bytes }`.
+   * Passed in as `{ type, value }`.
    */
   export interface Family {
     /** The variant. */
@@ -580,7 +596,6 @@ export declare namespace guard {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type GuardFontResolver = FontResolver
   /**
    * usvg's image href resolution, fenced: the provider for
    * `usvg.Options.imageHrefResolver`.
@@ -618,7 +633,6 @@ export declare namespace guard {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type GuardImageHrefResolver = ImageHrefResolver
   /** What `new guard.ImageHrefResolver(options)` reads from. */
   export interface ImageHrefResolverOptions {
     /**
@@ -671,14 +685,14 @@ export declare namespace resvg {
    *
    * The produced content is in the sRGB color space.
    */
-  export function renderNode(node: usvg.Node, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): boolean | null
+  export function renderNode(node: usvg.Node, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap): true | null
   /**
    * `renderNode` on a worker thread. The arguments are read now, the call runs
    * off the main thread, and the promise resolves with its result or rejects
    * as `renderNode` throws. `signal` drops the call while it is still queued.
    * Until it settles, `pixmap` is in use: any other use throws `Leased`.
    */
-  export function renderNodeAsync(node: usvg.Node, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap, signal?: AbortSignal | undefined | null): Promise<boolean | null>
+  export function renderNodeAsync(node: usvg.Node, transform: tiny_skia.Transform, pixmap: tiny_skia.Pixmap, signal?: AbortSignal | undefined | null): Promise<true | null>
 }
 
 export declare namespace svgtypes {
@@ -733,7 +747,6 @@ export declare namespace svgtypes {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type SvgtypesColor = Color
   /** A `Color`'s public fields, as a plain object. */
   export interface ColorObject {
     red: number
@@ -843,7 +856,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaColor = Color
   /**
    * A 32-bit RGBA color value.
    *
@@ -883,7 +895,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaColorU8 = ColorU8
   /**
    * An integer rectangle.
    *
@@ -948,7 +959,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaIntRect = IntRect
   /**
    * An integer size.
    *
@@ -992,7 +1002,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaIntSize = IntSize
   /**
    * A rectangle defined by left, top, right and bottom edges.
    *
@@ -1058,7 +1067,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaNonZeroRect = NonZeroRect
   /**
    * A container that owns premultiplied RGBA pixels.
    *
@@ -1161,7 +1169,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaPixmap = Pixmap
   /**
    * A point.
    *
@@ -1249,7 +1256,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaPoint = Point
   /**
    * A premultiplied RGBA color value, holding four floating point components.
    *
@@ -1303,7 +1309,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaPremultipliedColor = PremultipliedColor
   /**
    * A 32-bit premultiplied RGBA color value.
    *
@@ -1360,7 +1365,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaPremultipliedColorU8 = PremultipliedColorU8
   /**
    * A rectangle defined by left, top, right and bottom edges.
    *
@@ -1449,7 +1453,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaRect = Rect
   /**
    * A size.
    *
@@ -1495,7 +1498,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaSize = Size
   /**
    * An affine transformation matrix.
    *
@@ -1625,7 +1627,6 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type TinySkiaTransform = Transform
   /** Any variant of `PathSegment`. */
   export type PathSegment = tiny_skia.PathSegmentPlain | tiny_skia.PathSegmentMoveTo | tiny_skia.PathSegmentLineTo | tiny_skia.PathSegmentQuadTo | tiny_skia.PathSegmentCubicTo
   /** `PathSegment::CubicTo`. */
@@ -1717,7 +1718,22 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgClipPath = ClipPath
+  /** Read-only view of a `Fill`. */
+  export class Fill {
+    get paint(): usvg.Paint
+    get opacity(): number
+    get rule(): usvg.FillRule
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
   /** Read-only handle on a `usvg::filter::Filter`. */
   export class Filter {
     /**
@@ -1746,7 +1762,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgFilter = Filter
   /** Read-only view of a `filter::Image`. */
   export class FilterImage {
     get root(): usvg.Group
@@ -1761,7 +1776,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgFilterImage = FilterImage
   /**
    * A group container.
    *
@@ -1897,7 +1911,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgGroup = Group
   /**
    * A raster image element.
    *
@@ -1966,7 +1979,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgImage = Image
   /** `ImageKind::GIF`. */
   export class ImageKindGif {
     /** Discriminant. Narrow on this. */
@@ -1984,7 +1996,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgImageKindGif = ImageKindGif
   /** `ImageKind::JPEG`. */
   export class ImageKindJpeg {
     /** Discriminant. Narrow on this. */
@@ -2002,7 +2013,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgImageKindJpeg = ImageKindJpeg
   /** `ImageKind::PNG`. */
   export class ImageKindPng {
     /** Discriminant. Narrow on this. */
@@ -2020,7 +2030,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgImageKindPng = ImageKindPng
   /** `ImageKind::WEBP`. */
   export class ImageKindWebp {
     /** Discriminant. Narrow on this. */
@@ -2038,7 +2047,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgImageKindWebp = ImageKindWebp
   /** Read-only handle on a `usvg::LinearGradient`. */
   export class LinearGradient {
     /** `x1` coordinate. */
@@ -2081,7 +2089,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgLinearGradient = LinearGradient
   /**
    * A mask element.
    *
@@ -2135,7 +2142,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgMask = Mask
   /**
    * A path element.
    *
@@ -2224,7 +2230,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgPath = Path
   /**
    * A pattern element.
    *
@@ -2268,7 +2273,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgPattern = Pattern
   /** Read-only view of a `PositionedGlyph`. */
   export class PositionedGlyph {
     get fontSize(): number
@@ -2290,7 +2294,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgPositionedGlyph = PositionedGlyph
   /** Read-only view of a `Primitive`. */
   export class Primitive {
     get rect(): tiny_skia.NonZeroRect
@@ -2308,7 +2311,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgPrimitive = Primitive
   /** Read-only handle on a `usvg::RadialGradient`. */
   export class RadialGradient {
     /** `cx` coordinate. */
@@ -2355,7 +2357,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgRadialGradient = RadialGradient
   /** Read-only view of a `Span`. */
   export class Span {
     get fill(): usvg.Fill | null
@@ -2380,7 +2381,27 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgSpan = Span
+  /** Read-only view of a `Stroke`. */
+  export class Stroke {
+    get paint(): usvg.Paint
+    get dasharray(): Array<number> | null
+    get dashoffset(): number
+    get miterlimit(): number
+    get opacity(): number
+    get width(): number
+    get linecap(): usvg.LineCap
+    get linejoin(): usvg.LineJoin
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
   /**
    * A text element.
    *
@@ -2505,7 +2526,116 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgText = Text
+  /** Read-only view of a `TextChunk`. */
+  export class TextChunk {
+    get x(): number | null
+    get y(): number | null
+    get anchor(): usvg.TextAnchor
+    get spans(): Array<usvg.TextSpan>
+    get textFlow(): usvg.TextFlow
+    get text(): string
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  /** Read-only view of a `TextDecoration`. */
+  export class TextDecoration {
+    get underline(): usvg.TextDecorationStyle | null
+    get overline(): usvg.TextDecorationStyle | null
+    get lineThrough(): usvg.TextDecorationStyle | null
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  /** Read-only view of a `TextDecorationStyle`. */
+  export class TextDecorationStyle {
+    get fill(): usvg.Fill | null
+    get stroke(): usvg.Stroke | null
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  /** Read-only handle on a `usvg::TextPath`. */
+  export class TextPath {
+    /**
+     * Element's ID.
+     *
+     * Taken from the SVG itself or generated internally in case the path
+     * has no ID.
+     */
+    id(): string
+    /**
+     * A text offset in SVG coordinates.
+     *
+     * Percentage values already resolved.
+     */
+    startOffset(): number
+    /** A path. */
+    path(): Array<tiny_skia.PathSegment>
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  /** Read-only view of a `TextSpan`. */
+  export class TextSpan {
+    get start(): number
+    get end(): number
+    get fill(): usvg.Fill | null
+    get stroke(): usvg.Stroke | null
+    get paintOrder(): usvg.PaintOrder
+    get font(): usvg.Font
+    get fontSize(): number
+    get smallCaps(): boolean
+    get applyKerning(): boolean
+    get fontOpticalSizing(): usvg.FontOpticalSizing
+    get decoration(): usvg.TextDecoration
+    get dominantBaseline(): usvg.DominantBaseline
+    get alignmentBaseline(): usvg.AlignmentBaseline
+    get baselineShift(): Array<usvg.BaselineShift>
+    get isVisible(): boolean
+    get letterSpacing(): number
+    get wordSpacing(): number
+    get textLength(): number | null
+    get lengthAdjust(): usvg.LengthAdjust
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
   /**
    * A nodes tree container.
    *
@@ -2599,7 +2729,6 @@ export declare namespace usvg {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type UsvgTree = Tree
   /** An alignment baseline property. */
   export type AlignmentBaseline = 'auto' | 'baseline' | 'beforeEdge' | 'textBeforeEdge' | 'middle' | 'central' | 'afterEdge' | 'textAfterEdge' | 'ideographic' | 'alphabetic' | 'hanging' | 'mathematical'
   /** Any variant of `BaselineShift`. */
@@ -2757,12 +2886,6 @@ export declare namespace usvg {
   export type EdgeMode = 'none' | 'duplicate' | 'wrap'
   /** The `code` a thrown `usvg::Error` carries: the variant's name. The message is its `Display`. */
   export type ErrorCode = 'NotAnUtf8Str' | 'SvgzFeatureNotEnabled' | 'MalformedGZip' | 'ElementsLimitReached' | 'InvalidSize' | 'ParsingFailed'
-  /** Plain view of a `Fill`. */
-  export interface Fill {
-    paint: usvg.Paint
-    opacity: number
-    rule: usvg.FillRule
-  }
   /**
    * A fill rule.
    *
@@ -3168,7 +3291,7 @@ export declare namespace usvg {
   export interface PaintLinearGradient {
     /** Discriminant. Narrow on this. */
     type: 'linearGradient'
-    id: string
+    value: usvg.LinearGradient
   }
   /**
    * Representation of the [`paint-order`] property.
@@ -3183,13 +3306,13 @@ export declare namespace usvg {
   export interface PaintPattern {
     /** Discriminant. Narrow on this. */
     type: 'pattern'
-    id: string
+    value: usvg.Pattern
   }
   /** `Paint::RadialGradient`. */
   export interface PaintRadialGradient {
     /** Discriminant. Narrow on this. */
     type: 'radialGradient'
-    id: string
+    value: usvg.RadialGradient
   }
   /** Plain view of a `PointLight`. */
   export interface PointLight {
@@ -3235,46 +3358,15 @@ export declare namespace usvg {
     color: usvg.Color
     opacity: number
   }
-  /** Plain view of a `Stroke`. */
-  export interface Stroke {
-    paint: usvg.Paint
-    dasharray?: Array<number>
-    dashoffset: number
-    miterlimit: number
-    opacity: number
-    width: number
-    linecap: usvg.LineCap
-    linejoin: usvg.LineJoin
-  }
   /** A text chunk anchor property. */
   export type TextAnchor = 'start' | 'middle' | 'end'
-  /** Plain view of a `TextChunk`. */
-  export interface TextChunk {
-    x?: number
-    y?: number
-    anchor: usvg.TextAnchor
-    spans: Array<usvg.TextSpan>
-    textFlow: usvg.TextFlow
-    text: string
-  }
-  /** Plain view of a `TextDecoration`. */
-  export interface TextDecoration {
-    underline?: usvg.TextDecorationStyle
-    overline?: usvg.TextDecorationStyle
-    lineThrough?: usvg.TextDecorationStyle
-  }
-  /** Plain view of a `TextDecorationStyle`. */
-  export interface TextDecorationStyle {
-    fill?: usvg.Fill
-    stroke?: usvg.Stroke
-  }
   /** Any variant of `TextFlow`. */
   export type TextFlow = usvg.TextFlowPlain | usvg.TextFlowPath
   /** `TextFlow::Path`. */
   export interface TextFlowPath {
     /** Discriminant. Narrow on this. */
     type: 'path'
-    id: string
+    value: usvg.TextPath
   }
   /** The payload-free variants of `TextFlow`. */
   export interface TextFlowPlain {
@@ -3287,28 +3379,6 @@ export declare namespace usvg {
    * `text-rendering` attribute in the SVG.
    */
   export type TextRendering = 'optimizeSpeed' | 'optimizeLegibility' | 'geometricPrecision'
-  /** Plain view of a `TextSpan`. */
-  export interface TextSpan {
-    start: number
-    end: number
-    fill?: usvg.Fill
-    stroke?: usvg.Stroke
-    paintOrder: usvg.PaintOrder
-    font: usvg.Font
-    fontSize: number
-    smallCaps: boolean
-    applyKerning: boolean
-    fontOpticalSizing: usvg.FontOpticalSizing
-    decoration: usvg.TextDecoration
-    dominantBaseline: usvg.DominantBaseline
-    alignmentBaseline: usvg.AlignmentBaseline
-    baselineShift: Array<usvg.BaselineShift>
-    isVisible: boolean
-    letterSpacing: number
-    wordSpacing: number
-    textLength?: number
-    lengthAdjust: usvg.LengthAdjust
-  }
   /** Plain view of a `Tile`. */
   export interface Tile {
     input: usvg.Input

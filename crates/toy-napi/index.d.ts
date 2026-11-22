@@ -60,6 +60,9 @@ export declare namespace toy {
   export interface Scene {
     [Symbol.dispose](): void
   }
+  export interface Stamp {
+    [Symbol.dispose](): void
+  }
   export interface Tally {
     [Symbol.dispose](): void
   }
@@ -151,7 +154,6 @@ export declare namespace alt {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type AltColor = Color
   /** A `Color`'s public fields, as a plain object. */
   export interface ColorObject {
     red: number
@@ -190,7 +192,6 @@ export declare namespace dep {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type DepArea = Area
   /**
    * One cell's byte, reached by `Grid::cell` and `Grid::set`.
    *
@@ -214,7 +215,6 @@ export declare namespace dep {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type DepCell = Cell
   /**
    * A grid of one-byte cells, row by row: a class of a crate read for its
    * classes alone. What its members take and return, no config lists:
@@ -253,7 +253,6 @@ export declare namespace dep {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type DepGrid = Grid
   /**
    * A cell's on/off state: plain data, reached only through `Cell::mark`.
    *
@@ -280,7 +279,6 @@ export declare namespace dep {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type DepMark = Mark
   /** A `Mark`'s public fields, as a plain object. */
   export interface MarkObject {
     on: boolean
@@ -309,7 +307,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyAlbum = Album
   /**
    * A grid of bytes, owned and written in place.
    *
@@ -352,6 +349,20 @@ export declare namespace toy {
     smashAsync(why: string, signal?: AbortSignal | undefined | null): Promise<void>
     data(): Buffer
     /**
+     * The byte count. Named like the free [`boom`], and a method all the
+     * same: it keeps its own name in JS, async twin included.
+     */
+    boom(): number
+    /**
+     * `boom` on a worker thread. The arguments are read now, the call runs
+     * off the main thread, and the promise resolves with its result or rejects
+     * as `boom` throws. `signal` drops the call while it is still queued.
+     * Until it settles, this instance is in use: any other use throws `Leased`.
+     */
+    boomAsync(signal?: AbortSignal | undefined | null): Promise<number>
+    /** An ink stamped with a fresh `Stamp` named `id`, as wide as the canvas. */
+    inked(id: string): toy.Ink
+    /**
      * A copy of the canvas in a frame of its own: a union made, not
      * borrowed from anything.
      */
@@ -371,7 +382,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyCanvas = Canvas
   /**
    * A colour whose channels are private: a class with accessors, not plain
    * data. [`alt::Color`] has its name.
@@ -397,7 +407,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyColor = Color
   /**
    * An immutable counter, shared behind an `Arc`.
    *
@@ -423,7 +432,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyCounter = Counter
   /**
    * A named point.
    *
@@ -446,7 +454,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyDot = Dot
   /** Read-only view of a `Frame`. */
   export class Frame {
     get layer(): toy.Layer
@@ -467,7 +474,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyFrame = Frame
   /**
    * An opaque key: no public field, `Copy`, printed as a number.
    *
@@ -491,7 +497,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyKey = Key
   /**
    * A named list of items.
    *
@@ -516,7 +521,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyLayer = Layer
   /** `Origin::Inline`. */
   export class OriginInline {
     /** Discriminant. Narrow on this. */
@@ -534,7 +538,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyOriginInline = OriginInline
   /** `Origin::Pinned`. */
   export class OriginPinned {
     /** Discriminant. Narrow on this. */
@@ -552,7 +555,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyOriginPinned = OriginPinned
   /**
    * A tree of layers and dots, shared behind an `Arc`: its nodes are only
    * ever borrowed from it, the shape a binding projects.
@@ -594,7 +596,22 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyScene = Scene
+  /** Read-only handle on a `toy::Stamp`. */
+  export class Stamp {
+    /** The name a use refers to it by. */
+    id(): string
+    size(): number
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
   /**
    * Names counted so far. Unlike [`Counter`] it is `Clone` and changes in
    * place, which is the shape a binding copies on write.
@@ -674,7 +691,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyTally = Tally
   /**
    * A vector in the plane: plain data, `Copy`, parsed from `"x,y"` and
    * printed back the same way.
@@ -717,7 +733,6 @@ export declare namespace toy {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
-  export type ToyVec2 = Vec2
   /** Panics with `why`: a bug the binding must turn into a JS error. */
   export function boom(why: string): number
   /**
@@ -774,6 +789,19 @@ export declare namespace toy {
   export interface Filter {
     tags?: Array<toy.Tag>
     minLen?: number
+  }
+  /** Any variant of `Ink`. */
+  export type Ink = toy.InkPlain | toy.InkStamped
+  /** The payload-free variants of `Ink`. */
+  export interface InkPlain {
+    /** Discriminant. Narrow on this. */
+    type: 'plain'
+  }
+  /** `Ink::Stamped`. */
+  export interface InkStamped {
+    /** Discriminant. Narrow on this. */
+    type: 'stamped'
+    value: toy.Stamp
   }
   /** Any variant of `Item`. */
   export type Item = toy.ItemLayer | toy.ItemDot
@@ -969,7 +997,7 @@ export declare namespace toy {
   /**
    * A tag a filter matches on: a name it borrows, or any.
    *
-   * Passed in as `{ type, value }` or `{ type, bytes }`.
+   * Passed in as `{ type, value }`.
    */
   export interface Tag {
     /** The variant. */
@@ -983,5 +1011,5 @@ export declare namespace toy {
     y: number
   }
   /** `None` for an empty layer: nothing to visit. */
-  export function visit(item: toy.Item): boolean | null
+  export function visit(item: toy.Item): true | null
 }

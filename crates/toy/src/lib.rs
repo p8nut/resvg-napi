@@ -640,6 +640,20 @@ impl Canvas {
         &self.data
     }
 
+    /// The byte count. Named like the free [`boom`], and a method all the
+    /// same: it keeps its own name in JS, async twin included.
+    pub fn boom(&self) -> u32 {
+        u32::try_from(self.data.len()).unwrap_or(u32::MAX)
+    }
+
+    /// An ink stamped with a fresh `Stamp` named `id`, as wide as the canvas.
+    pub fn inked(&self, id: &str) -> Ink {
+        Ink::Stamped(Arc::new(Stamp {
+            id: id.to_string(),
+            size: self.width as f32,
+        }))
+    }
+
     /// A copy of the canvas in a frame of its own: a union made, not
     /// borrowed from anything.
     pub fn framed(&self) -> Content {
@@ -1062,4 +1076,30 @@ pub fn spin(rounds: u32) -> u32 {
 /// Panics with `why`: a bug the binding must turn into a JS error.
 pub fn boom(why: &str) -> u32 {
     panic!("{why}");
+}
+
+/// A definition named by its id and shared by whatever uses it, which no
+/// method returns: a union carries it, and that is the only way to it.
+#[derive(Debug)]
+pub struct Stamp {
+    id: String,
+    size: f32,
+}
+
+impl Stamp {
+    /// The name a use refers to it by.
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn size(&self) -> f32 {
+        self.size
+    }
+}
+
+/// What a mark is inked with: plain, or a stamp it shares.
+#[derive(Debug)]
+pub enum Ink {
+    Plain,
+    Stamped(Arc<Stamp>),
 }

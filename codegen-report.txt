@@ -1,10 +1,16 @@
 FaceInfo: partial mapping, emitted as read-only class FaceInfo
+Fill: partial mapping, emitted as read-only class Fill
 Image: partial mapping, emitted as read-only class Image
 Path: partial mapping, emitted as read-only class Path
 PositionedGlyph: partial mapping, emitted as read-only class PositionedGlyph
 Primitive: partial mapping, emitted as read-only class Primitive
 Span: partial mapping, emitted as read-only class Span
+Stroke: partial mapping, emitted as read-only class Stroke
 Text: partial mapping, emitted as read-only class Text
+TextChunk: partial mapping, emitted as read-only class TextChunk
+TextDecoration: partial mapping, emitted as read-only class TextDecoration
+TextDecorationStyle: partial mapping, emitted as read-only class TextDecorationStyle
+TextSpan: partial mapping, emitted as read-only class TextSpan
 classes a borrowing member borrows from a projection, copies otherwise: Group, Image, Path, Text, Tree
 classes a borrowing member copies: Database, Pixmap
 data types emitted: Blend, Color, ColorMatrix, ComponentTransfer, Composite, ConvolveMatrix, ConvolveMatrixData, DiffuseLighting, DisplacementMap, DistantLight, DropShadow, FaceInfo, Fill, Flood, Font, FontVariation, GaussianBlur, Image, Merge, Morphology, Offset, Path, PointLight, PositionedGlyph, Primitive, Span, SpecularLighting, SpotLight, Stop, Stroke, Text, TextChunk, TextDecoration, TextDecorationStyle, TextSpan, Tile, Turbulence, filter::Image
@@ -86,4 +92,4 @@ usvg::fontdb::Weight::NORMAL is a static: fontdb.Weight.NORMAL
 usvg::fontdb::Weight::SEMIBOLD is a static: fontdb.Weight.SEMIBOLD
 usvg::fontdb::Weight::THIN is a static: fontdb.Weight.THIN
 vocabulary derived: 7 f32 newtypes, 7 type aliases
-wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, filter::Filter, fontdb::Database
+wrapper classes generated: ClipPath, LinearGradient, Mask, Pattern, RadialGradient, TextPath, filter::Filter, fontdb::Database

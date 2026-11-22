@@ -355,10 +355,10 @@ impl Classes<'_> {
         }
         let doc = doc.iter().map(|l| quote!(#[doc = #l]));
         // `Promise<void>`, where napi would say `Promise<undefined>`, and the
-        // sync call's `boolean | null` for `Option<()>`.
+        // sync call's `true | null` for `Option<()>`.
         let ts = match (Shape::of(&out).is_unit(), optional) {
             (true, false) => Some(quote!(ts_return_type = "Promise<void>")),
-            (true, true) => Some(quote!(ts_return_type = "Promise<boolean | null>")),
+            (true, true) => Some(quote!(ts_return_type = "Promise<true | null>")),
             _ => None,
         };
         let napi = match free {

@@ -345,12 +345,12 @@ and `loadFontSource({ type: 'binary', bytes })` loads and returns the new
 
 `tree.linearGradients()`, `radialGradients()`, `patterns()`, `clipPaths()`,
 `masks()`, `filters()` — the paint servers an element's `id` refers to. A
-paint that is not a colour names one by its `id`:
+paint that is not a colour carries its server, as `Paint` does in Rust:
 
 ```js
 const paint = n.value.fill()?.paint
 if (paint?.type === 'linearGradient')
-  tree.linearGradients().find((g) => g.id() === paint.id)?.stops()
+  paint.value.stops()   // paint.value is a usvg.LinearGradient; .id() names it
 // [{ offset: 0, color: { red: 255, green: 0, blue: 0 }, opacity: 1 }, …]
 ```
 

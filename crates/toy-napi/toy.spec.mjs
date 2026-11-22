@@ -45,7 +45,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
     'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
-    'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Tally', 'Vec2', 'boom', 'boomAsync', 'copies', 'count', 'countAsync', 'paint',
+    'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Stamp', 'Tally', 'Vec2', 'boom', 'boomAsync', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
     'spin', 'spinAsync', 'visit',
@@ -637,6 +637,27 @@ test('a panic throws "<what> panicked: <payload>", sync or async', async () => {
   await rejectsCoded(boomAsync('later'), 'GenericFailure', 'boom panicked: later');
   // The process survived both: the binding still answers.
   assert.equal(toy.toy.spin(3), toy.toy.spin(3));
+});
+
+// #260: the free function's rename (its Rust ident prefixed) left a method of
+// the same name alone.
+test('a method named like a free function keeps its name', async () => {
+  const { Canvas } = toy.toy;
+  const c = new Canvas(3, 2);
+  assert.equal(c.boom(), 6);
+  assert.equal(await c.boomAsync(), 6);
+  assert.equal('toyBoom' in c, false);
+});
+
+// #251: an `Arc`-held definition a union carries is its handle class, the
+// mirror of `Ink::Stamped(Arc<Stamp>)`, even when no method returns one.
+test('a union carries an Arc-held definition as its handle class', () => {
+  const { Canvas, Stamp } = toy.toy;
+  const ink = new Canvas(3, 2).inked('dot');
+  assert.equal(ink.type, 'stamped');
+  assert.ok(ink.value instanceof Stamp);
+  assert.equal(ink.value.id(), 'dot');
+  assert.equal(ink.value.size(), 3);
 });
 
 test('a panicking &mut call leaves its receiver usable, its lease given back', async () => {

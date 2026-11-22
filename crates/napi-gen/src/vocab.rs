@@ -165,14 +165,15 @@ impl PayloadEnum {
         })
     }
 
-    /// Whether a variant is emitted as a class (bytes, see `payload_enum_code`).
-    /// A class is not `Clone`, so no `#[napi(object)]` field can hold the
-    /// union: its holder has to stay a read-only class.
+    /// Whether a variant is emitted as a class (bytes, see `payload_enum_code`)
+    /// or holds one (a class or handle carried alone). A class is not `Clone`,
+    /// so no `#[napi(object)]` field can hold the union: its holder has to stay
+    /// a read-only class.
     pub fn holds_class(&self, vocab: &Vocab) -> bool {
         self.variants.iter().any(|(_, p)| match p {
             Payload::Value(ty) => matches!(
                 vocab.classify(ty),
-                Some(Js::Bytes | Js::Owned(_) | Js::Value(_))
+                Some(Js::Bytes | Js::Owned(_) | Js::Value(_) | Js::Handle(_))
             ),
             Payload::Tuple(_) => p.carries_bytes(vocab),
             _ => false,
@@ -267,11 +268,23 @@ impl PayloadEnum {
         /// field beside others has to be an object field, and bytes cannot be
         /// one.
         fn field_of(vocab: &Vocab, p: &Type, sole: bool) -> Result<(), String> {
+            // An `Arc`-held definition carried alone: the variant is an
+            // output-only object holding its handle class, as the toy's `Ink`
+            // holds `Arc<Stamp>` (`payload_enum_code`). Only one with an
+            // `id()`: that is a method its class surely has, so the class is
+            // there to hold, and it is the kind of definition the document
+            // names (`url(#id)`), shared by every element using it.
             if let Some(Js::Handle(t)) = vocab.classify(p) {
-                return if vocab.with_id.contains(&t) {
-                    Ok(())
+                return if !vocab.with_id.contains(&t) {
+                    Err(format!(
+                        "{t} has no id(), so no handle class is sure to exist"
+                    ))
+                } else if !sole {
+                    Err(format!(
+                        "{t} is a handle class, which can only be carried alone"
+                    ))
                 } else {
-                    Err(format!("{t} has no id() to name it by"))
+                    Ok(())
                 };
             }
             // A payload that is itself a payload enum would recurse through
@@ -384,9 +397,10 @@ impl PayloadEnum {
 }
 
 /// Types with an `id(&self) -> &str`, directly or through a Deref the sources
-/// declare. An `Arc<T>` payload cannot be an object field, but if T has an id
-/// it can be named by one -- the way the document itself refers to a paint
-/// server with `url(#id)`.
+/// declare. An `Arc<T>` payload of one is a definition the document names --
+/// the way it refers to a paint server with `url(#id)` -- shared by every
+/// element using it, so it is carried as its handle class, never copied; and
+/// the `id()` it has is a method that class is sure to wrap.
 pub fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
     let mut direct = BTreeSet::new();
     let mut derefs: BTreeMap<String, String> = BTreeMap::new();
@@ -650,7 +664,8 @@ pub struct Vocab {
     /// Every public struct name upstream, so a payload that names one the
     /// registry dropped can be told from a payload that is not a struct at all.
     pub structs: BTreeSet<String>,
-    /// Types that can be named by an id, for an `Arc<T>` payload.
+    /// Types with an `id()`: an `Arc<T>` payload of one is carried as its
+    /// handle class, which that method guarantees has something on it.
     pub with_id: BTreeSet<String>,
     /// Upstream enums carrying payloads, by name. Syntactic, so populated with
     /// the rest of the vocabulary rather than after the object registry.

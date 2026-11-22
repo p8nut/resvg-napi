@@ -81,6 +81,9 @@ export declare namespace usvg {
   export interface ClipPath {
     [Symbol.dispose](): void
   }
+  export interface Fill {
+    [Symbol.dispose](): void
+  }
   export interface Filter {
     [Symbol.dispose](): void
   }
@@ -129,7 +132,25 @@ export declare namespace usvg {
   export interface Span {
     [Symbol.dispose](): void
   }
+  export interface Stroke {
+    [Symbol.dispose](): void
+  }
   export interface Text {
+    [Symbol.dispose](): void
+  }
+  export interface TextChunk {
+    [Symbol.dispose](): void
+  }
+  export interface TextDecoration {
+    [Symbol.dispose](): void
+  }
+  export interface TextDecorationStyle {
+    [Symbol.dispose](): void
+  }
+  export interface TextPath {
+    [Symbol.dispose](): void
+  }
+  export interface TextSpan {
     [Symbol.dispose](): void
   }
   export interface Tree {

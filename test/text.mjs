@@ -66,20 +66,20 @@ assert.equal(tree.nodeById('one').kind, 'text');
 // 6. the fill reaches through to the paint union, same shape as a path's
 assert.equal(text('one').chunks()[0].spans[0].fill.paint.type, 'color');
 
-// 7. text-decoration reaches through as its own object, one entry per line the
+// 7. text-decoration reaches through as its own class, one entry per line the
 //    document asked for, each carrying the paint it is drawn with. usvg keeps
 //    these behind accessors on a struct whose fields are pub(crate), so nothing
 //    here is a field read -- it is the generator following methods.
 {
   const plain = text('one').chunks()[0].spans[0].decoration;
-  assert.equal(plain.underline, undefined, 'undecorated text carries no lines');
-  assert.equal(plain.overline, undefined);
-  assert.equal(plain.lineThrough, undefined);
+  assert.equal(plain.underline, null, 'undecorated text carries no lines');
+  assert.equal(plain.overline, null);
+  assert.equal(plain.lineThrough, null);
 
   const marked = text('deco').chunks()[0].spans[0].decoration;
   assert.ok(marked.underline, 'underline was asked for');
   assert.ok(marked.lineThrough, 'line-through was asked for');
-  assert.equal(marked.overline, undefined, 'overline was not');
+  assert.equal(marked.overline, null, 'overline was not');
   // the line inherits the text's own paint, and it is a full Fill
   assert.equal(marked.underline.fill.paint.type, 'color');
   assert.deepEqual(

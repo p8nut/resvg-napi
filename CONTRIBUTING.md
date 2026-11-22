@@ -443,7 +443,12 @@ Q34):
   `PathSegment` union, so `usvg.Path.data()` is
   `Array<{ type: 'moveTo', value: PointObject } | ...>`.
 - Panics are contained (`napi_support::contained`), and `unsafe fn`s are left
-  out.
+  out. A panic throws `"<what> panicked: <payload>"`, and a leased receiver
+  comes back usable (`toy.boom`, `Canvas.smash` in `toy.spec.mjs`). Native
+  only: `wasm32-wasip1-threads` is `panic=abort`
+  (`rustc --print cfg --target wasm32-wasip1-threads`), so under WASI a panic
+  traps the instance. No resvg test panics, so `npm run test:wasi` needs no
+  skip; a test that makes one must not run there.
 
 **Constants** need no allowlist: every public `const` a wrapped crate
 exports (a `Role::Discover` crate of `GEN.crates`) is a value

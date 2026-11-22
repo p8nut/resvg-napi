@@ -79,6 +79,7 @@ const GEN: Config = Config {
         ("toy", "visit"),
         ("toy", "spin"),
         ("toy", "copies"),
+        ("toy", "boom"),
     ],
     // Async twins, one of each shape: a static that throws
     // (`Canvas.fromTextAsync`), free functions taking a view of an owned
@@ -86,10 +87,14 @@ const GEN: Config = Config {
     // (`countAsync`) and numbers (`spinAsync`, slow enough to queue
     // behind), and methods on each holding that crosses differently: an
     // owned receiver leased for `&mut` (`fillAsync`), a copy-on-write one
-    // leased (`pushAsync`) and an `Arc` cloned (`joinedAsync`).
+    // leased (`pushAsync`) and an `Arc` cloned (`joinedAsync`). `boomAsync`
+    // and `Canvas.smashAsync` panic on the worker thread, the second holding
+    // the lease.
     asynchronous: &[
         ("toy", "Canvas::from_text"),
         ("toy", "Canvas::fill"),
+        ("toy", "Canvas::smash"),
+        ("toy", "boom"),
         ("toy", "Tally::push"),
         ("toy", "Tally::joined"),
         ("toy", "paint"),

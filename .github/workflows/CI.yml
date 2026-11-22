@@ -448,8 +448,8 @@ jobs:
             console.log(\`both at \${npm}\`);
           "
 
-  # resvg's own corpus, rendered through this binding: 1715 SVGs against the
-  # reference PNGs upstream asserts on, with the 20 fonts it ships, at the
+  # resvg's own corpus, rendered through this binding: the SVGs upstream asserts
+  # on against their reference PNGs, with the fonts it ships, at the
   # settings its harness uses. Fifteen seconds including the fetch.
   #
   # This is the half a diff cannot show. `src/lib.rs` moving five doc-comment

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import binding from '../index.js';
 import { parse, renderRaw } from '../helpers.mjs';
-import { fontsOrSkip, testFontFile, skip } from './support.mjs';
+import { testFonts, testFontFile } from './support.mjs';
 
 const { fontdb } = binding;
 
@@ -15,7 +15,7 @@ const text = (family) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" he
 
 // Whatever this environment has, by name: WASI has no system fonts at all, so
 // nothing here can assume a family is installed.
-const { db, family } = fontsOrSkip(binding, 'font resolution');
+const { db, family } = testFonts(binding);
 const opts = { fonts: db, fontFamily: family };
 
 // 1. a family nobody has is reported, and the text still renders with a fallback
@@ -55,17 +55,17 @@ assert.deepEqual(g.pendingFonts, ['Ghost']);
 // first of `families`, `[name, language]` pairs (Q38). The path is
 // discovered, not hardcoded: this ran on Fedora only, and every other CI
 // host would have failed on it.
-const file = testFontFile();
-if (file) {
+{
   const loaded = new fontdb.Database();
-  loaded.loadFontData(readFileSync(file));
+  loaded.loadFontData(readFileSync(testFontFile()));
   const [only] = loaded.faces();
   const [[name, language]] = only.families;
   assert.equal(typeof name, 'string');
   assert.equal(language, 'englishUnitedStates', 'English (US) first');
   assert.equal(typeof only.postScriptName, 'string');
   // fontdb resolves by family, and the PostScript name is a different string:
-  // true of DejaVu (`DejaVuSans`) and of Arial (`ArialMT`).
+  // true of DejaVu (`DejaVuSans`), Arial (`ArialMT`) and IBM Plex Sans
+  // (`IBMPlexSans`).
   assert.notEqual(only.postScriptName, name);
   const doc = parse(text(name), { fonts: loaded, fontFamily: name });
   assert.deepEqual(doc.pendingFonts, []);
@@ -73,8 +73,6 @@ if (file) {
   const px = renderRaw(doc.tree).data;
   for (let i = 3; i < px.length; i += 4) if (px[i] > 128) opaque++;
   assert.ok(opaque > 100, `text actually rendered (${opaque} opaque pixels)`);
-} else {
-  skip('loading a font from a file', 'no font file found on this host');
 }
 
 // Which face drew a glyph (`glyph.font`), which families a span asked for
@@ -83,11 +81,11 @@ if (file) {
 
 // The database is shared with the parses that used it and copied on the
 // first write, so changing it afterwards leaves a parsed document alone.
-if (file) {
+{
   const before = db.len();
   const { tree } = parse(text(family), opts);
   const copy = tree.fontdb();
-  copy.loadFontData(readFileSync(file));
+  copy.loadFontData(readFileSync(testFontFile()));
   assert.equal(copy.len(), before + 1, 'the copy changed');
   assert.equal(db.len(), before, 'the original did not');
   assert.equal(tree.fontdb().len(), before, 'nor the document');

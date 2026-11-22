@@ -678,8 +678,9 @@ npm run demo          # builds the wasm bundle and serves demo/ on :8787
 build. That run is why nothing in the suite assumes an installed font: WASI has
 no font directories, and `loadSystemFonts()` finds nothing there. Tests take
 the database and the family name from `test/support.mjs`, which falls back to a
-font file (`RESVG_TEST_FONT`, or a few well-known paths) and skips loudly when
-there is none. The env-var prefix is POSIX-shell syntax; on Windows use
+font file (`RESVG_TEST_FONT`, a few well-known paths, and last the repo's own
+`demo/fonts/IBMPlexSans-Latin.ttf`), so no test skips for want of a font. The
+fixtures' text is ASCII, which that face covers. The env-var prefix is POSIX-shell syntax; on Windows use
 `npm test`, which CI does too.
 
 

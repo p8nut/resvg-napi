@@ -178,13 +178,31 @@ function layerBox({ kind, value }) {
  * than the numbers written in the file. A limit expressed in the document's own
  * units has to be compared in those units, or everything wider than
  * `limit / ratio` gets compressed while it actually fits.
+ *
+ * The viewBox is fitted into the canvas the way `preserveAspectRatio` says:
+ * `meet` (the default) by the smaller of the two axis ratios, `slice` by the
+ * larger, `none` by each axis on its own, the horizontal one here.
  */
-function unitScale(svg, canvasWidth) {
-    const viewBox = svg.match(/\sviewBox\s*=\s*["']\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)/);
-    const width = viewBox ? Number(viewBox[1]) : NaN;
-    if (!Number.isFinite(width) || width <= 0)
+function unitScale(svg, canvas) {
+    const root = masked(svg).match(/<svg\b([^>]*)>/);
+    const attrs = root ? root[1] : '';
+    const viewBox = (attr(attrs, 'viewBox') ?? '').trim().split(/\s*,\s*|\s+/).map(Number);
+    const [, , width, height] = viewBox;
+    if (viewBox.length !== 4 || !(width > 0) || !(height > 0))
         return 1;
-    return canvasWidth / width;
+    const sx = canvas.width() / width;
+    const sy = canvas.height() / height;
+    const aspect = (attr(attrs, 'preserveAspectRatio') ?? '').trim().split(/\s+/);
+    if (aspect.includes('none'))
+        return sx;
+    return aspect.includes('slice') ? Math.max(sx, sy) : Math.min(sx, sy);
+}
+/**
+ * `svg` with its comments and CDATA sections blanked to spaces: markup inside
+ * them is not an element, and the offsets of everything else stay put.
+ */
+function masked(svg) {
+    return svg.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, (m) => ' '.repeat(m.length));
 }
 /**
  * An attribute's value from a tag's attribute text, either quote style. The
@@ -194,10 +212,14 @@ function unitScale(svg, canvasWidth) {
 function attr(attrs, name) {
     return attrs.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(["'])(.*?)\\1`))?.[2];
 }
-/** Elements carrying a width constraint, with the tag text needed to rewrite it. */
+/**
+ * Elements carrying a width constraint, with the tag text needed to rewrite it.
+ * Tags inside comments and CDATA sections are not elements, so they are skipped.
+ */
 export function findWidthConstraints(svg) {
     const found = [];
-    for (const match of svg.matchAll(/<([a-zA-Z][\w:.-]*)\b([^>]*?)(\/?)>/g)) {
+    // Masking keeps every offset, and a tag outside a comment reads the same.
+    for (const match of masked(svg).matchAll(/<([a-zA-Z][\w:.-]*)\b([^>]*?)(\/?)>/g)) {
         const [tag, name, attrs] = match;
         const max = attr(attrs, ATTR);
         if (max === undefined)
@@ -253,9 +275,11 @@ function ensureIds(svg) {
     let n = 0;
     const named = missing.map((c) => {
         let id;
+        // Taken in either quote style. `\b` also takes `data-id` and `xml:id`: a
+        // name skipped for nothing costs less than a duplicate id.
         do {
             id = `fit-${++n}`;
-        } while (svg.includes(`"${id}"`));
+        } while (new RegExp(`\\bid\\s*=\\s*(["'])${id}\\1`).test(svg));
         return { ...c, id };
     });
     let out = svg;
@@ -311,7 +335,7 @@ export function fitTextWidths(svg, render) {
         return { svg, adjustments: [], problems: [`could not measure: ${messageOf(e)}`] };
     }
     // Every width below is in the document's own units, like the attribute.
-    const scale = unitScale(svg, tree.size().width());
+    const scale = unitScale(svg, tree.size());
     let out = svg;
     const adjustments = [];
     const splices = [];
@@ -345,7 +369,7 @@ export function fitTextWidths(svg, render) {
     // Verify rather than trust: report what the widths actually became.
     try {
         const after = render(out);
-        const afterScale = unitScale(out, after.size().width());
+        const afterScale = unitScale(out, after.size());
         for (const a of adjustments) {
             const node = after.nodeById(a.id);
             const got = node ? nodeExtent(node)?.width : undefined;
@@ -431,11 +455,17 @@ function build(binding) {
             throw new TypeError('fonts: a fontdb.Database, or an array of font paths and buffers');
         }
         const db = new fontdb.Database();
-        for (const f of fonts) {
-            if (typeof f === 'string')
-                db.loadFontFile(f);
-            else
-                db.loadFontData(f);
+        try {
+            for (const f of fonts) {
+                if (typeof f === 'string')
+                    db.loadFontFile(f);
+                else
+                    db.loadFontData(f);
+            }
+        }
+        catch (e) {
+            db.dispose();
+            throw e;
         }
         return db;
     }
@@ -446,54 +476,73 @@ function build(binding) {
         if (gzipped(svg))
             throw coded(SVGZ, 'SvgzFeatureNotEnabled');
     }
-    /** The parse's options and the providers it reads its misses from. */
-    function prepare(options, fonts) {
-        const images = options.imageHrefResolver
-            ?? new guard.ImageHrefResolver({ images: options.images, resourcesRoot: options.resourcesRoot });
-        const families = options.fontResolver ?? new guard.FontResolver();
-        const opts = { ...usvgOptions(options), fontdb: fonts, imageHrefResolver: images, fontResolver: families };
-        const owned = [options.imageHrefResolver ? null : images, options.fontResolver ? null : families];
-        return { opts, images, families, owned };
+    /**
+     * The parse's options and the providers it reads its misses from. `fonts`
+     * is owned when the parse built it from a list: the tree holds its own
+     * reference to the faces, so the database goes with the resolvers.
+     */
+    function prepare(options, fonts, ownsFonts) {
+        const owned = ownsFonts ? [fonts] : [];
+        try {
+            const images = options.imageHrefResolver
+                ?? new guard.ImageHrefResolver({ images: options.images, resourcesRoot: options.resourcesRoot });
+            if (!options.imageHrefResolver)
+                owned.push(images);
+            const families = options.fontResolver ?? new guard.FontResolver();
+            if (!options.fontResolver)
+                owned.push(families);
+            const opts = { ...usvgOptions(options), fontdb: fonts, imageHrefResolver: images, fontResolver: families };
+            return { opts, images, families, owned };
+        }
+        catch (e) {
+            release({ owned });
+            throw e;
+        }
     }
-    function parsed(tree, { images, families, owned }) {
-        const out = { tree, pendingImages: images.misses(), pendingFonts: families.misses() };
+    /** Disposes what the parse made for itself, whether it succeeded or not. */
+    function release({ owned }) {
         for (const p of owned)
-            p?.dispose();
-        return out;
+            p.dispose();
     }
+    const misses = (tree, { images, families }) => ({ tree, pendingImages: images.misses(), pendingFonts: families.misses() });
     /** The fonts a parse asked for; `fontdb`, usvg's name, is read too. */
     const given = (options) => options.fonts ?? options.fontdb;
     function parse(svg, options) {
         options ??= {};
         check(svg);
-        const fonts = given(options) == null ? systemFonts() : database(given(options));
-        const p = prepare(options, fonts);
-        let tree;
+        const asked = given(options);
+        const fonts = asked == null ? systemFonts() : database(asked);
+        const p = prepare(options, fonts, asked != null && fonts !== asked);
         try {
-            tree = typeof svg === 'string' ? usvg.Tree.fromStr(svg, p.opts) : usvg.Tree.fromData(svg, p.opts);
+            const tree = typeof svg === 'string' ? usvg.Tree.fromStr(svg, p.opts) : usvg.Tree.fromData(svg, p.opts);
+            return misses(tree, p);
         }
         catch (e) {
             throw friendlier(e);
         }
-        return parsed(tree, p);
+        finally {
+            release(p);
+        }
     }
     async function parseAsync(svg, options) {
         options ??= {};
         const { signal } = options;
         check(svg);
-        const fonts = given(options) == null
-            ? await systemFontsAsync(signal) : database(given(options));
-        const p = prepare(options, fonts);
-        let tree;
+        const asked = given(options);
+        const fonts = asked == null ? await systemFontsAsync(signal) : database(asked);
+        const p = prepare(options, fonts, asked != null && fonts !== asked);
         try {
-            tree = await (typeof svg === 'string'
+            const tree = await (typeof svg === 'string'
                 ? usvg.Tree.fromStrAsync(svg, p.opts, signal)
                 : usvg.Tree.fromDataAsync(svg, p.opts, signal));
+            return misses(tree, p);
         }
         catch (e) {
             throw friendlier(e);
         }
-        return parsed(tree, p);
+        finally {
+            release(p);
+        }
     }
     /** A blank pixmap of the planned size, filled with `background`. */
     function pixmapFor(size, background) {
@@ -661,8 +710,10 @@ function build(binding) {
         .replace(/"/g, '&quot;');
     function measureText(text, { fontSize = 12, family, ...options } = {}) {
         const fam = family ?? options.fontFamily ?? 'sans-serif';
+        // `xml:space="preserve"`: the text as given, not with its whitespace
+        // collapsed (`a  b` drew as `a b`).
         const probe = '<svg xmlns="http://www.w3.org/2000/svg">'
-            + `<text id="m" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`
+            + `<text id="m" xml:space="preserve" font-family="${escapeXml(fam)}" font-size="${escapeXml(fontSize)}">`
             + `${escapeXml(text)}</text></svg>`;
         const { tree } = parse(probe, { ...options, fontFamily: fam });
         try {

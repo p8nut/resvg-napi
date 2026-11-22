@@ -8,7 +8,7 @@ import { copyFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import binding from '../index.js';
-import { fontsOrSkip, testFontFile, skip } from './support.mjs';
+import { testFonts, testFontFile } from './support.mjs';
 const { fontdb, usvg } = binding;
 
 // 1. which artifact is loaded: the native addon, or the WASI module when
@@ -25,7 +25,7 @@ if (wasi) {
   const db = new fontdb.Database();
   assert.equal(db.isEmpty(), true, 'a new database is empty');
   const file = testFontFile();
-  if (file && wasi) {
+  if (wasi) {
     // No mmap under WASI: fontdb is built without `memmap` there, so files
     // are read into memory.
     db.loadFontsDir(join(file, '..'));
@@ -33,21 +33,19 @@ if (wasi) {
     const one = new fontdb.Database();
     one.loadFontFile(file);
     assert.equal(one.len(), 1, 'loadFontFile under WASI');
-  } else if (file) {
+  } else {
     const dir = mkdtempSync(join(tmpdir(), 'resvg-fonts-'));
     copyFileSync(file, join(dir, 'face.ttf'));
     db.loadFontsDir(dir);
     assert.equal(db.isEmpty(), false, 'loadFontsDir found the face');
     db.loadFontsDir(join(dir, 'nowhere'));
     assert.equal(db.len(), 1, 'a missing directory adds nothing and does not throw');
-  } else {
-    skip('loadFontsDir', 'no font file in this environment');
   }
 }
 
 // 3. the walk, over the namespaced surface: the tree and every node,
 //    definition and value reachable from it
-const fonts = fontsOrSkip(binding, 'generated getters');
+const fonts = testFonts(binding);
 const png = readFileSync(new URL('../demo/assets/roster.png', import.meta.url)).toString('base64');
 const tree = usvg.Tree.fromStr(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="320" height="240">
   <defs>

@@ -770,7 +770,6 @@ dependencies = [
  "quote",
  "syn",
  "toy",
- "toy-dep",
 ]
 
 [[package]]

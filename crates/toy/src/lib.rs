@@ -14,6 +14,9 @@ mod limits;
 /// A constant of a private module, re-exported: `toy::MAX_LAYERS` to a
 /// caller, `toy.MAX_LAYERS` in JS. `limits::HIDDEN` is not exported.
 pub use limits::MAX_LAYERS;
+/// Another crate whole, re-exported: the toy binding reaches it through this
+/// (`Config::uses`), not as a dependency of its own.
+pub use toy_dep;
 /// Another crate's enum, re-exported: `toy::Shade` to a caller.
 pub use toy_dep::Shade;
 
@@ -41,6 +44,15 @@ pub enum Direction {
 pub struct Point {
     pub x: f32,
     pub y: f32,
+}
+
+impl Point {
+    /// The two coordinates as an array: a conversion, not data. The toy
+    /// binding lists it (`Config::not_data`), or `Point` would stop being a
+    /// plain object over it.
+    pub fn to_xy(&self) -> [f32; 2] {
+        [self.x, self.y]
+    }
 }
 
 /// How to build a [`Counter`].
@@ -689,6 +701,7 @@ impl Canvas {
             weights: Vec::new(),
             tilt: 0,
             serial: 0,
+            code: *b"CANV",
         })
     }
 
@@ -698,6 +711,31 @@ impl Canvas {
             width: self.width,
             data: &mut self.data,
         }
+    }
+
+    /// A writable view of the last row alone. A second method returning a
+    /// `CanvasView`: which one [`paint`] borrows is no longer derived, and
+    /// the toy binding names it (`Config::views`).
+    pub fn last_row(&mut self) -> CanvasView<'_> {
+        let start = self.data.len() - self.width as usize;
+        CanvasView {
+            width: self.width,
+            data: &mut self.data[start..],
+        }
+    }
+
+    /// The byte count, as `width * height`: behind the `extra` feature,
+    /// which the toy binding turns on.
+    #[cfg(feature = "extra")]
+    pub fn area(&self) -> u32 {
+        self.width * self.height()
+    }
+
+    /// Behind the `gpu` feature, which the toy binding turns on on wasm
+    /// alone: elsewhere, its method is kept and throws.
+    #[cfg(feature = "gpu")]
+    pub fn glow(&self) -> u32 {
+        self.width
     }
 
     /// The bytes, the canvas consumed.
@@ -781,11 +819,13 @@ impl Scene {
                 weights: Vec::new(),
                 tilt: 0,
                 serial: 0,
+                code: *b"BACK",
             })),
             zoom: 0.1,
             weights: vec![0.1, 0.2],
             tilt: -3,
             serial: 1 << 60,
+            code: *b"wght",
         };
         Arc::new(Scene {
             root: Layer {
@@ -907,6 +947,7 @@ pub struct Frame {
     weights: Vec<f64>,
     tilt: i16,
     serial: u64,
+    code: [u8; 4],
 }
 
 impl Frame {
@@ -946,6 +987,12 @@ impl Frame {
     /// A `u64` may not fit a JS number: left out, as `BIG` is.
     pub fn serial(&self) -> u64 {
         self.serial
+    }
+
+    /// Four ASCII bytes, an OpenType-like tag: a string in JS once the toy
+    /// binding lists `[u8; 4]` (`Config::tag4_types`).
+    pub fn code(&self) -> [u8; 4] {
+        self.code
     }
 }
 

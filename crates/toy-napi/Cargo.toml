@@ -14,8 +14,13 @@ crate-type = ["cdylib"]
 napi = { workspace = true, features = ["napi8", "napi9"] }
 napi-derive = { workspace = true }
 napi-support = { path = "../napi-support" }
-toy = { path = "../toy" }
-toy-dep = { path = "../toy-dep" }
+# `extra` on, `gpu` on wasm alone: `GEN.features` says the same. `toy-dep`
+# is reached through `toy`'s re-export (`GEN.uses`), not as a dependency of
+# its own.
+toy = { path = "../toy", features = ["extra"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+toy = { path = "../toy", features = ["extra", "gpu"] }
 
 [build-dependencies]
 napi-build = { workspace = true }

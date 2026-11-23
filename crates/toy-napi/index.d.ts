@@ -26,6 +26,12 @@ export declare namespace dep {
   }
 }
 
+export declare namespace hand {
+  export interface Shout {
+    [Symbol.dispose](): void
+  }
+}
+
 export declare namespace toy {
   export interface Album {
     [Symbol.dispose](): void
@@ -285,6 +291,25 @@ export declare namespace dep {
   }
 }
 
+export declare namespace hand {
+  /**
+   * Writes a report's finished line in capitals: the provider for
+   * `toy.ReportOptions.finish`.
+   */
+  export class Shout {
+    constructor()
+    /**
+     * Every later call throws `Disposed`, and so does passing it to a
+     * report. Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+}
+
 export declare namespace toy {
   /** Read-only handle on a `toy::Album`. */
   export class Album {
@@ -367,6 +392,16 @@ export declare namespace toy {
      * borrowed from anything.
      */
     framed(): toy.Content
+    /**
+     * The byte count, as `width * height`: behind the `extra` feature,
+     * which the toy binding turns on.
+     */
+    area(): number
+    /**
+     * Behind the `gpu` feature, which the toy binding turns on on wasm
+     * alone: elsewhere, its method is kept and throws.
+     */
+    glow(): number
     /** The bytes, the canvas consumed. */
     intoData(): Buffer
     /**
@@ -463,6 +498,7 @@ export declare namespace toy {
     get zoom(): number
     get weights(): Array<number>
     get tilt(): number
+    get code(): string
     /**
      * Drops this instance's value now, not at garbage collection: every later
      * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
@@ -935,6 +971,8 @@ export declare namespace toy {
      * Names counted before the tally's own.
      *
      * Default: none
+     *
+     * A `toy.Tally`, shared with the report rather than copied.
      */
     base?: toy.Tally
     /** Default: [`Width::Auto`] */
@@ -952,6 +990,14 @@ export declare namespace toy {
      * Default: 1
      */
     ratio?: number
+    /**
+     * Applied to the finished line.
+     *
+     * Default: unchanged
+     *
+     * A `hand.Shout`. Left out, the line is unchanged.
+     */
+    finish?: hand.Shout
   }
   /** A number constant: `toy.SCALE`. */
   export const SCALE: number

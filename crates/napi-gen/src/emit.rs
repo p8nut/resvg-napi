@@ -2058,6 +2058,10 @@ pub fn inspect_members(file: &syn::File) -> TokenStream {
                 )
                 && f.sig.inputs.len() == 1
                 && scalar(&f.sig.output)
+                // Not gated on an upstream feature (the `#[cfg_attr]` a
+                // gated body carries, see `method_gate`): where the
+                // feature is off it throws, and printing must not.
+                && !f.attrs.iter().any(|a| a.path().is_ident("cfg_attr"))
             {
                 methods.push(js);
             }

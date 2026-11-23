@@ -106,9 +106,16 @@ pub struct Config {
     /// Types JS sees as the list one of their methods iterates (see
     /// [`Iterated`]).
     pub iterated: &'static [Iterated],
-    /// The tree's own types: never followed as data.
+    /// Types never followed as data, by name (`Layer`): no data type is
+    /// derived for one, whether a member returns it, a payload carries it or
+    /// it is projected, and a data type's member of one is left out. For the
+    /// nodes of a projected tree: each has its projection class already, and
+    /// following one only drags every type behind it through the data walk
+    /// (and the report). One a listed class copies is still that class.
     pub node_types: &'static [&'static str],
-    /// Conversions, not data: members never counted as unmapped data.
+    /// Members that are conversions, not data, by name (`to_xy`): a data
+    /// type's member so named is neither mapped nor counted as one it lacks,
+    /// so it does not demote the type to a read-only class.
     pub not_data: &'static [&'static str],
     /// Upstream Cargo features an emitted method can be gated on, and what
     /// each is for the binding crate: `"true"` (always built) or a cfg it is

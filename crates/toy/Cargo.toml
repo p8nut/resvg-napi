@@ -9,3 +9,10 @@ publish = false
 
 [dependencies]
 toy-dep = { path = "../toy-dep" }
+
+[features]
+# On in the toy binding, which says so (`Config::features`): `Canvas::area`.
+extra = []
+# On in the toy binding on wasm alone: `Canvas::glow` is kept elsewhere, and
+# throws.
+gpu = []

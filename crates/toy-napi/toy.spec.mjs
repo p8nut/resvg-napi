@@ -27,6 +27,8 @@ test('an option struct is a partial object over Default', () => {
   assert.equal(new toy.toy.Counter({ step: 3 }).label(), 'counter');
 });
 
+// `Point::to_xy`, a conversion, is in `GEN.not_data`: it does not make
+// `Point` a read-only class.
 test('a plain data struct is an object copy', () => {
   assert.deepEqual(new toy.toy.Counter().origin(), { x: 0, y: 0 });
 });
@@ -55,7 +57,7 @@ test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () =
   // Nothing at the root but the generic prelude: one constructor per class
   // name, whatever the namespace, and every class is in its namespace.
   assert.deepEqual(Object.keys(toy).filter((k) => !k.startsWith('__')).sort(),
-    ['alt', 'dep', 'setLogLevel', 'takeLogs', 'toy']);
+    ['alt', 'dep', 'hand', 'setLogLevel', 'takeLogs', 'toy']);
   assert.equal(toy.Counter, undefined);
   assert.equal(typeof ns.Counter, 'function');
   assert.equal(ns.Counter.name, 'Counter');
@@ -154,6 +156,22 @@ test('a converter field takes its JS form, and refuses anything else', () => {
   for (const width of ['wide', 256, 1.5, -1]) {
     assert.throws(() => toy.toy.report(t, { width }), { code: 'InvalidArg' });
   }
+});
+
+// `GEN.hand_written` and a provider naming its class: `finish`, a function
+// pointer, has no JS form and no generated class to come from.
+test('a provider written by hand supplies a field nothing else can', () => {
+  const t = new toy.toy.Tally();
+  t.push('x');
+  const shout = new toy.hand.Shout();
+  assert.equal(toy.toy.report(t, { finish: shout }), 'TALLY[PLAIN]: X');
+  assert.equal(toy.toy.report(t, { finish: undefined }), 'tally[plain]: x');
+  assert.throws(() => toy.toy.report(t, { finish: new toy.toy.Tally() }), /Shout/);
+  // The generated file treats it as one of its own classes.
+  assert.equal(Object.prototype.toString.call(shout), '[object Shout]');
+  assert.match(inspect(shout), /^Shout /);
+  shout[Symbol.dispose]();
+  throwsCoded(() => toy.toy.report(t, { finish: shout }), 'Disposed', /Shout/);
 });
 
 // Classes with constructors and statics, free functions, `Result` errors,
@@ -264,6 +282,17 @@ test('a free function lands in its namespace, and takes classes as arguments', (
   assert.deepEqual(Object.values(PaintErrorCode), ['OutOfBounds']);
   // Another class's instance is refused.
   assert.throws(() => paint(new Vec2(0, 0), new Vec2(0, 0), Color.fromRgb(1, 1, 1)));
+});
+
+// `GEN.features`: `extra` is on, `gpu` off but on wasm. The method behind
+// `gpu` is still there, so the surface is the same on every target: it
+// throws, and printing leaves it out.
+test('a method behind a feature this binding leaves off throws', () => {
+  const c = new toy.toy.Canvas(3, 2);
+  assert.equal(c.area(), 6);
+  throwsCoded(() => c.glow(), 'GenericFailure', 'glow is not available on this target: its upstream feature is off here');
+  assert.match(inspect(c), /area: 6/);
+  assert.doesNotMatch(inspect(c), /glow/);
 });
 
 test('an owned class: &mut methods write it, a consuming one spends it', () => {
@@ -810,6 +839,8 @@ test('f64 members are read losslessly, i16 widens, u64 is left out', () => {
   assert.deepEqual(frame.value.weights, [0.1, 0.2]);
   assert.equal(frame.value.tilt, -3);
   assert.equal('serial' in frame.value, false);
+  // A `[u8; 4]` listed in `GEN.tag4_types` reads as a string.
+  assert.equal(frame.value.code, 'wght');
   const t = new toy.toy.Tally();
   t.push('x');
   assert.equal(toy.toy.report(t, { ratio: 0.1 }), 'tally[plain]: x x0.1');

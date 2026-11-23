@@ -741,3 +741,162 @@ impl ModTree {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(src: &str) -> syn::File {
+        syn::parse_str(src).expect("a fixture that parses")
+    }
+
+    #[test]
+    fn a_derive_is_read_by_its_last_segment() {
+        let files = [file(
+            "#[derive(Clone, std::marker::Copy)] pub struct Dot;
+             #[derive(Clone)] struct Hidden;
+             pub struct Frame;
+             impl Default for Frame { fn default() -> Self { Frame } }
+             #[derive(Default)] pub struct Options;",
+        )];
+        for (ty, tr, want) in [
+            ("Dot", "Clone", true),
+            ("Dot", "Copy", true),
+            ("Dot", "Default", false),
+            // Not public: not looked at.
+            ("Hidden", "Clone", false),
+            // A hand-written impl is no derive.
+            ("Frame", "Default", false),
+            ("Options", "Default", true),
+            ("Grid", "Clone", false),
+        ] {
+            assert_eq!(derives(&files, ty, tr), want, "{ty}: {tr}");
+        }
+        for (ty, want) in [
+            ("Options", true),
+            ("Frame", true),
+            ("Dot", false),
+            ("Grid", false),
+        ] {
+            assert_eq!(has_default(&files, ty), want, "{ty}");
+        }
+    }
+
+    #[test]
+    fn an_impl_is_named_by_its_last_segment() {
+        let f = file(
+            "impl crate::Scene {} impl Scene {} impl Drop for Layer { fn drop(&mut self) {} }",
+        );
+        let names: Vec<String> = f
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Impl(imp) => self_ident(imp).map(ToString::to_string),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names, ["Scene", "Scene", "Layer"]);
+        let files = [f];
+        assert_eq!(inherent_impls(&files, "Scene").count(), 2);
+        assert_eq!(inherent_impls(&files, "Layer").count(), 0);
+    }
+
+    #[test]
+    fn a_reexported_enum_is_read_as_its_own() {
+        let mut parsed = vec![(
+            PathBuf::from("/toy/src/lib.rs"),
+            file(
+                "mod alt;
+                 pub use toy_dep::{Shade, Hue as Tint};
+                 pub use toy_dep::Grid;
+                 pub use alt::Color;
+                 pub use crate::alt::Mark;
+                 use toy_dep::Cell;",
+            ),
+        )];
+        let mut asked = Vec::new();
+        let mut load = |krate: &str| {
+            asked.push(krate.to_string());
+            (krate == "toy_dep").then(|| {
+                vec![file(
+                    "pub enum Shade { Light, Dark } pub enum Hue { Warm } pub struct Grid;
+                     pub enum Cell { Empty }",
+                )]
+            })
+        };
+        let copied = inline_reexported_enums(&mut parsed, &mut load);
+        // Renamed as re-exported; a struct, a private `use` and a local
+        // module are not copied, and a crate is loaded once.
+        assert_eq!(copied, ["Shade", "Tint"]);
+        assert_eq!(asked, ["toy_dep"]);
+        let enums: Vec<String> = parsed[0]
+            .1
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Enum(e) => Some(e.ident.to_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(enums, ["Shade", "Tint"]);
+    }
+
+    /// The module tree decides what is public and where: by the exports,
+    /// not by the files. In memory: a file module is looked for as
+    /// `x/mod.rs` when no `x.rs` exists on disk.
+    #[test]
+    fn the_module_tree_follows_the_exports() {
+        let src = Path::new("/toy/src");
+        let parsed = vec![
+            (
+                src.join("lib.rs"),
+                file(
+                    "pub mod alt; mod inner;
+                     pub use inner::Scene;
+                     pub const NAME: &str = \"toy\";
+                     pub struct Point;",
+                ),
+            ),
+            (
+                src.join("alt/mod.rs"),
+                file("pub struct Color; pub const HIDDEN: u32 = 7;"),
+            ),
+            (
+                src.join("inner/mod.rs"),
+                file(
+                    "pub struct Scene; pub struct Hidden;
+                     impl Hidden { pub fn peek(&self) {} }
+                     impl Scene { pub fn width(&self) -> u32 { 0 } }",
+                ),
+            ),
+        ];
+        let tree = ModTree::load(src, &parsed);
+        let paths: Vec<(&str, &str)> = tree
+            .paths
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        assert_eq!(paths, [("Color", "alt"), ("Point", ""), ("Scene", "")]);
+        assert!(
+            tree.private
+                .contains(&(src.join("inner/mod.rs"), "Hidden".to_string()))
+        );
+        let consts: Vec<(&str, &str)> = tree
+            .consts
+            .iter()
+            .map(|(m, n, _)| (m.as_str(), n.as_str()))
+            .collect();
+        assert!(consts.contains(&("", "NAME")), "{consts:?}");
+        assert!(consts.contains(&("alt", "HIDDEN")), "{consts:?}");
+        // The private type goes, and its impl with it; the exported one
+        // and its impl stay.
+        let view = tree.public_view(&parsed, src);
+        let inner = &view
+            .iter()
+            .find(|(p, _)| *p == src.join("inner/mod.rs"))
+            .unwrap()
+            .1;
+        let kept: Vec<String> = inner.items.iter().filter_map(declared).collect();
+        assert_eq!(kept, ["Scene", "Scene"]);
+    }
+}

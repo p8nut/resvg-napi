@@ -388,3 +388,80 @@ impl Classes<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Config;
+    use crate::class::Source;
+
+    const FIXTURE: &str = "
+        #[derive(Clone, Copy)] pub struct Dot;
+        pub struct Frame; impl Frame { pub fn close(self) {} }
+        pub struct Scene; impl Scene { pub fn width(&self) -> u32 { 0 } }
+        #[derive(Clone)] pub struct Tally; impl Tally { pub fn push(&mut self) {} }
+        #[derive(Default)] pub struct Options;
+    ";
+
+    /// What crossing to the worker makes of each argument type: whether it
+    /// is leased, or why it cannot cross.
+    #[test]
+    fn an_argument_crosses_copied_cloned_or_leased() {
+        let files: Vec<syn::File> = vec![syn::parse_str(FIXTURE).unwrap()];
+        let modules = BTreeMap::new();
+        let config = Config {
+            classes: &[
+                ("toy", "Dot"),
+                ("toy", "Frame"),
+                ("toy", "Scene"),
+                ("toy", "Tally"),
+            ],
+            option_objects: &["Options"],
+            ..Config::EMPTY
+        };
+        let classes = Classes::new(
+            vec![Source {
+                root: "toy",
+                files: &files,
+                modules: &modules,
+            }],
+            config,
+        );
+        let pat = format_ident!("arg");
+        let lease = |ty: &str| {
+            let ty: Type = syn::parse_str(ty).unwrap();
+            classes
+                .twin_arg(0, None, &pat, &ty, &BTreeMap::new())
+                .map(|(_, _, _, leased)| leased)
+                .map_err(|_| ())
+        };
+        for (ty, want) in [
+            // Copied on the main thread.
+            ("&[u8]", Ok(false)),
+            ("Vec<u8>", Ok(false)),
+            ("&str", Ok(false)),
+            ("u32", Ok(false)),
+            ("f32", Ok(false)),
+            // `Copy`: copied, unless borrowed mutably.
+            ("Dot", Ok(false)),
+            ("&Dot", Ok(false)),
+            ("&mut Dot", Ok(true)),
+            // Held by value: lent to the call when borrowed, not taken.
+            ("&Frame", Ok(true)),
+            ("&mut Frame", Ok(true)),
+            ("Frame", Err(())),
+            // Behind an `Arc`: cloned; mutable only copy-on-write.
+            ("&Scene", Ok(false)),
+            ("&mut Scene", Err(())),
+            ("&Tally", Ok(false)),
+            ("&mut Tally", Ok(true)),
+            // An option object becomes its upstream struct.
+            ("&Options", Ok(false)),
+            // Nothing maps it.
+            ("Grid", Err(())),
+            ("&mut [u8]", Err(())),
+        ] {
+            assert_eq!(lease(ty), want, "{ty}");
+        }
+    }
+}

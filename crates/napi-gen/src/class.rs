@@ -208,7 +208,7 @@ impl Prim {
 const INLINE_VECTORS: &[&str] = &["TinyVec", "SmallVec", "ArrayVec"];
 
 /// What a method's receiver is.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Recv {
     None,
     Ref,
@@ -1782,5 +1782,96 @@ impl<'a> Classes<'a> {
                 )
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(src: &str) -> Vec<syn::File> {
+        vec![syn::parse_str(src).expect("a fixture that parses")]
+    }
+
+    #[test]
+    fn a_receiver_is_read_off_the_first_input() {
+        for (sig, want) in [
+            ("fn f()", Some(Recv::None)),
+            ("fn f(x: u32)", Some(Recv::None)),
+            ("fn f(&self)", Some(Recv::Ref)),
+            ("fn f(&'a self, x: u32)", Some(Recv::Ref)),
+            ("fn f(&mut self)", Some(Recv::Mut)),
+            ("fn f(self)", Some(Recv::Value)),
+            ("fn f(mut self)", Some(Recv::Value)),
+            // No JS form for these.
+            ("fn f(self: Box<Self>)", None),
+            ("fn f(self: std::sync::Arc<Self>)", None),
+        ] {
+            let parsed: syn::Signature = syn::parse_str(sig).unwrap();
+            assert_eq!(receiver(&parsed), want, "{sig}");
+        }
+    }
+
+    #[test]
+    fn holding_follows_copy_then_what_the_methods_take() {
+        for (src, want) in [
+            // `Copy` wins, whatever the methods take.
+            (
+                "#[derive(Clone, Copy)] pub struct Dot; impl Dot { pub fn spend(self) {} }",
+                Holding::Value,
+            ),
+            (
+                "#[derive(Clone, Copy)] pub struct Dot; impl Dot { pub fn nudge(&mut self) {} }",
+                Holding::Value,
+            ),
+            // A method taking `self` consumes it, `Clone` or not.
+            (
+                "#[derive(Clone)] pub struct Frame; \
+                 impl Frame { pub fn close(self) {} pub fn grow(&mut self) {} }",
+                Holding::Owned,
+            ),
+            // `&mut self` and `Clone`: copy-on-write behind the `Arc`.
+            (
+                "#[derive(Clone)] pub struct Tally; impl Tally { pub fn push(&mut self) {} }",
+                Holding::SharedCow,
+            ),
+            // `&mut self` and no `Clone`: held by value.
+            (
+                "pub struct Grid; impl Grid { pub fn set(&mut self) {} }",
+                Holding::Owned,
+            ),
+            // Read-only: shared.
+            (
+                "pub struct Scene; impl Scene { pub fn width(&self) -> u32 { 0 } }",
+                Holding::Shared,
+            ),
+            ("pub struct Album;", Holding::Shared),
+            // A private method is not one a class calls.
+            (
+                "pub struct Album; impl Album { fn reset(&mut self) {} fn burn(self) {} }",
+                Holding::Shared,
+            ),
+            // Only the type's own impls count.
+            (
+                "pub struct Album; pub struct Trail; impl Trail { pub fn end(self) {} }",
+                Holding::Shared,
+            ),
+            // Nor does a trait impl.
+            (
+                "pub struct Album; impl Drop for Album { fn drop(&mut self) {} }",
+                Holding::Shared,
+            ),
+        ] {
+            let files = file(src);
+            let name = files[0]
+                .items
+                .iter()
+                .find_map(|i| match i {
+                    Item::Struct(s) => Some(s.ident.to_string()),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(holding(&files, &name), want, "{src}");
+        }
     }
 }

@@ -357,3 +357,76 @@ impl Classes<'_> {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    const FIXTURE: &str = "
+        pub struct Layer; pub struct Dot; pub struct Scene;
+        pub enum Item { Layer(Box<Layer>), Dot(Dot) }
+    ";
+
+    fn with<T>(
+        listed: &'static [(&'static str, &'static str)],
+        f: impl FnOnce(Vec<Class>, Vec<Union>) -> T,
+    ) -> T {
+        let files: Vec<syn::File> = vec![syn::parse_str(FIXTURE).unwrap()];
+        let modules = BTreeMap::new();
+        let sources = [Source {
+            root: "toy",
+            files: &files,
+            modules: &modules,
+        }];
+        let config = Config {
+            projections: listed,
+            ..Config::EMPTY
+        };
+        let mut classes = Vec::new();
+        let unions = projections(&sources, &mut classes, &config);
+        f(classes, unions)
+    }
+
+    /// A listed struct is a projected class; a listed enum, a union of the
+    /// projected structs its variants carry, boxed or not.
+    #[test]
+    fn a_projection_is_a_class_and_an_enum_of_them_a_union() {
+        with(
+            &[("toy", "Layer"), ("toy", "Dot"), ("toy", "Item")],
+            |classes, unions| {
+                let names: Vec<(&str, Holding, Option<usize>)> = classes
+                    .iter()
+                    .map(|c| (c.name.as_str(), c.holding, c.of))
+                    .collect();
+                assert_eq!(
+                    names,
+                    [
+                        ("Layer", Holding::Projected, Some(0)),
+                        ("Dot", Holding::Projected, Some(0)),
+                    ]
+                );
+                assert_eq!(unions.len(), 1);
+                assert_eq!(unions[0].name, "Item");
+                let variants: Vec<(String, usize, bool)> = unions[0]
+                    .variants
+                    .iter()
+                    .map(|(v, c, boxed)| (v.to_string(), *c, *boxed))
+                    .collect();
+                assert_eq!(
+                    variants,
+                    [
+                        ("Layer".to_string(), 0, true),
+                        ("Dot".to_string(), 1, false)
+                    ]
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "carries no projected struct")]
+    fn a_union_variant_must_carry_a_projection() {
+        with(&[("toy", "Layer"), ("toy", "Item")], |_, _| ());
+    }
+}

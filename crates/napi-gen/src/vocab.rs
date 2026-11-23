@@ -54,14 +54,14 @@ pub enum Js {
     OptClass(String),
     // A listed class not held by value, whose upstream type is `Clone`: a
     // copy of the borrowed value, given to the class's `__from`; or, for a
-    // projected class reached from a projection (the `Tree` an image embeds,
-    // the `Group` an `feImage` draws), the value borrowed in place
+    // projected class reached from a projection (the `Scene` an album
+    // embeds, the `Layer` a frame draws), the value borrowed in place
     // (`Vocab::steps_into`). Never an object field: a class is not `Clone`.
     Owned(String),
     // `Vec<(A, B)>` or `&[(A, B)]`: an `Array<[A, B]>`, each element mapped
     // as a union's payload is.
     TupleList(Vec<(Type, Js)>),
-    // A newtype over f32 with a `get(&self) -> f32`, e.g. `Opacity`.
+    // A newtype over f32 with a `get(&self) -> f32`, e.g. `Weight`.
     Scalar,
     // `Arc<T>`: shareable, so a wrapper class can own one.
     Handle(String),
@@ -185,7 +185,7 @@ impl PayloadEnum {
         // `SVG` becomes `Svg`, because napi normalises a type name to PascalCase
         // on the way out and the union type here has to match what it wrote.
         // It aliases the original spelling back for classes -- `export type
-        // ImageKindPNG = ImageKindPng` -- but not for objects, so `ImageKindSVG`
+        // ContentPNG = ContentPng` -- but not for objects, so `ContentSVG`
         // named a type that did not exist.
         let v = if variant.len() > 1
             && variant
@@ -293,8 +293,8 @@ impl PayloadEnum {
                 return Err("it is itself a payload enum".into());
             }
             // A payload naming a public struct the registry dropped carries nothing
-            // mappable: `filter::Image` has one method, `root() -> &Group`, and a
-            // Group is a handle question. The variant keeps its discriminant and
+            // mappable: `alt::Frame` has one method, `root() -> &Layer`, and a
+            // Layer is a handle question. The variant keeps its discriminant and
             // loses its value, because there is no value to give it.
             if vocab.classify(p).is_none()
                 && key(p).is_some_and(|k| vocab.structs.contains(bare(&k)))
@@ -424,7 +424,7 @@ pub fn types_with_id(files: &[syn::File]) -> BTreeSet<String> {
             direct.insert(target);
         }
     }
-    // one hop is enough: LinearGradient -> BaseGradient -> id()
+    // one hop is enough: Stamp -> BaseStamp -> id()
     let mut out = direct.clone();
     for (from, to) in derefs {
         if direct.contains(&to) {
@@ -475,7 +475,7 @@ pub fn payload_shape(
 pub fn payload_enums(
     files: &[syn::File],
     // The module these files contribute to, and the names upstream defines twice.
-    // `filter::Kind::Image(Image)` means `filter::Image`, and nothing in the
+    // `alt::Kind::Frame(Frame)` means `alt::Frame`, and nothing in the
     // type says so -- the variant is written unqualified because it is
     // in the same module.
     module: &str,
@@ -714,10 +714,10 @@ impl Vocab {
         }
     }
 
-    /// `Opacity` -> `NormalizedF32` -> ... until it stops being an alias.
+    /// `Weight` -> `UnitF32` -> ... until it stops being an alias.
     ///
-    /// A whole type only: `&Opacity` is not followed. `crate::Opacity` and
-    /// `Opacity` are the same name ([`Shape::key`]).
+    /// A whole type only: `&Weight` is not followed. `crate::Weight` and
+    /// `Weight` are the same name ([`Shape::key`]).
     pub fn resolve<'a>(&'a self, ty: &'a Type) -> &'a Type {
         let mut t = ty;
         for _ in 0..8 {
@@ -732,7 +732,7 @@ impl Vocab {
 
     pub fn classify(&self, ty: &Type) -> Option<Js> {
         let t = self.resolve(ty);
-        // A plain `&` aside: `&Paint` and `Paint` are the same value, and
+        // A plain `&` aside: `&Ink` and `Ink` are the same value, and
         // the registries are keyed bare.
         let u = unref(t);
         let uk = key(u);
@@ -828,7 +828,7 @@ pub fn classify(
     let is = |t: &Type, name: &str| key(t).as_deref() == Some(name);
     // An `Arc` (or a plain `&` to one). An Arc around bytes is shared *data*,
     // not a shared entity: it has no identity to name it by, and treating it
-    // as a handle is what made `ImageKind`'s image payloads unmappable.
+    // as a handle is what made `Content`'s byte payloads unmappable.
     // `Arc<dyn AsRef<[u8]> + Send + Sync>` is bytes a crate shares without
     // saying what holds them, read through `AsRef` as any bytes are.
     let arc = |inner: &Type| match Shape::of(inner) {
@@ -846,7 +846,7 @@ pub fn classify(
     let shape = Shape::of(ty);
     if let Some(k) = shape.key() {
         return Some(match k.as_str() {
-            // No `Transform` arm: `Vocab::matrices` answers that one by shape,
+            // No matrix arm: `Vocab::matrices` answers that one by shape,
             // before this function is reached.
             "f32" => Js::F32,
             "f64" => Js::F64,
@@ -932,7 +932,7 @@ pub fn classify_object(ty: &Type, objects: &BTreeSet<String>) -> Option<Js> {
     let bare = unref(ty);
     let known = |t: &Type| key(t).filter(|k| objects.contains(k));
     match Shape::of(bare) {
-        // `&[T]`, `Vec<T>`, and `impl Iterator<Item = &FaceInfo> + '_`.
+        // `&[T]`, `Vec<T>`, and `impl Iterator<Item = &Dot> + '_`.
         Shape::Slice(inner) | Shape::Vec(inner) | Shape::ImplIter(inner) => {
             if let Some(k) = known(unref(inner)) {
                 return Some(Js::ObjectList(k));
@@ -980,7 +980,7 @@ pub fn int_newtypes(files: &[syn::File]) -> BTreeSet<String> {
 }
 
 /// Types that are a newtype over `f32`, spotted by their `get(&self) -> f32`.
-/// Derived, so `Opacity`, `PositiveF32`, `StrokeWidth`... all come along.
+/// Derived, so `Weight`, `UnitF32`, `Width`... all come along.
 pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for item in files.iter().flat_map(|f| &f.items) {
@@ -1021,7 +1021,7 @@ fn add(set: &mut Types, ty: &Type) {
 ///
 /// `returned_types` finds what methods hand back, which is how enums behind
 /// accessors get discovered. An enum held by a plain public field is not:
-/// `FaceInfo.style` never put `Style` in the wanted set, so the enum pass
+/// `Dot.shade` never put `Shade` in the wanted set, so the enum pass
 /// skipped it, leaving object discovery to report it as "not a public struct"
 /// and drop the field.
 pub fn field_types(files: &[syn::File]) -> Types {
@@ -1148,7 +1148,7 @@ pub enum Arg {
 }
 
 /// `impl Deref for X { type Target = Y }` -> Y. Upstream uses it as inheritance
-/// (`LinearGradient` derefs to `BaseGradient`), and a per-impl scan cannot see
+/// (`Stamp` derefs to `BaseStamp`), and a per-impl scan cannot see
 /// through it, so the chain has to be walked explicitly.
 pub fn deref_target(files: &[syn::File], ty: &str) -> Option<String> {
     files.iter().flat_map(|f| &f.items).find_map(|i| {
@@ -1171,7 +1171,7 @@ pub fn deref_target(files: &[syn::File], ty: &str) -> Option<String> {
     })
 }
 
-/// The upstream name inside a registry key: `filter::Image` -> `Image`.
+/// The upstream name inside a registry key: `alt::Color` -> `Color`.
 ///
 /// A key carries the module so that two types of the same name stay distinct;
 /// every lookup into the sources wants the name alone.
@@ -1197,7 +1197,7 @@ pub fn enum_ident(name: &str) -> proc_macro2::Ident {
     format_ident!("{}", name)
 }
 
-/// JS class name for an Arc-held upstream type: `filter::Filter` -> `Filter`.
+/// JS class name for an Arc-held upstream type: `alt::Stamp` -> `Stamp`.
 pub fn wrapper_ident(ty: &str) -> proc_macro2::Ident {
     format_ident!("{}", ty.rsplit("::").next().unwrap_or(ty))
 }
@@ -1217,7 +1217,7 @@ pub fn wrapper_path(
 }
 
 /// `render_png` -> `renderPng`, the name napi gives it in JS. An all-caps
-/// name is an acronym: `ImageKind::PNG` is `png`.
+/// name is an acronym: `Content::PNG` is `png`.
 pub fn lower_camel(s: &str) -> String {
     s.to_case(Case::Camel)
 }

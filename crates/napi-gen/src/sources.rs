@@ -161,17 +161,23 @@ pub fn locate(pkg: &str, marker: &str, locked: &BTreeMap<String, Vec<String>>) -
         return p;
     }
 
+    // Only the registry cache is searched past this point: a vendored or git
+    // dependency is never found there, and the way out is the override, so
+    // every failure names it.
     let locked_ver = match locked.get(pkg).map(Vec::as_slice) {
         Some([v]) => v,
-        Some(vs) => panic!("`{pkg}` is in Cargo.lock twice ({vs:?}): say which one to read"),
-        None => panic!("`{pkg}` is not in Cargo.lock"),
+        Some(vs) => {
+            panic!("`{pkg}` is in Cargo.lock twice ({vs:?}): set {key} to the checkout to read")
+        }
+        None => panic!("`{pkg}` is not in Cargo.lock: set {key} to its sources"),
     };
     registry_src(pkg, locked_ver)
         .filter(|p| p.join(marker).exists())
         .unwrap_or_else(|| {
             panic!(
                 "cannot find the sources of `{pkg}` {locked_ver} (looked for {marker}).\n\
-                 Run `cargo fetch` first, or point {key} at a checkout."
+                 Run `cargo fetch` first. A vendored or git dependency is not in the \
+                 registry cache: set {key} to its checkout (the directory holding {marker})."
             )
         })
 }
@@ -281,7 +287,7 @@ pub fn find_enum<'f>(files: &'f [syn::File], name: &str) -> Option<&'f syn::Item
 }
 
 /// The type an impl block is for, by its last path segment: upstream writes
-/// `impl crate::Tree` as well as `impl Tree`.
+/// `impl crate::Scene` as well as `impl Scene`.
 pub fn self_ident(imp: &ItemImpl) -> Option<&Ident> {
     match &*imp.self_ty {
         syn::Type::Path(p) => p.path.segments.last().map(|s| &s.ident),
@@ -691,8 +697,8 @@ impl ModTree {
     /// The files of the crate as the generator should see them: every file
     /// the module tree reaches (a binary's `main.rs` is not one), with the
     /// `pub` types no export reaches taken out. Their `impl`s, functions and
-    /// statics stay: `Tree::from_data` is implemented in the private `parser`,
-    /// and `POW_VEC` lives in the private `writer`.
+    /// statics stay: `Scene::from_data` is implemented in a private `parser`,
+    /// and a `const` table can live in a private `writer`.
     pub fn public_view(
         &self,
         parsed: &[(PathBuf, syn::File)],

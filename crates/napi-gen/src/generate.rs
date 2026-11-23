@@ -592,8 +592,8 @@ fn vocabulary(
     }
 
     // Object candidates: a *collection* of values wants a value type, whereas a
-    // single borrow wants a handle. So `&[Stop]` and `impl Iterator<Item=&Info>`
-    // make Stop/Info objects, while `&Group` stays a handle question.
+    // single borrow wants a handle. So `&[Cell]` and `impl Iterator<Item=&Dot>`
+    // make Cell/Dot objects, while `&Layer` stays a handle question.
     let seeds: BTreeSet<String> = referenced
         .values()
         .filter(|t| matches!(Shape::of(unref(t)), Shape::Slice(_) | Shape::ImplIter(_)))
@@ -802,7 +802,7 @@ fn data_types(
     let modules = &primary.tree.paths;
     let vocab = &mut words.vocab;
     // Fixpoint over object types: a generated object can reference another
-    // (`Stop` holds a `Color`).
+    // (`Dot` holds a `Color`).
     // Plus what a listed class of a discovered crate returns: the class maps
     // a member returning a data type only when that type is one. A struct of
     // a discovered crate, not itself a class, a node or an iterated list.
@@ -895,7 +895,7 @@ fn data_types(
         // and the pair stayed invisible.
         let mut seeded = false;
         // A dropped member whose type is itself a public struct is a candidate:
-        // that is how `Stop` reaches `Color`.
+        // that is how `Dot` reaches `Color`.
         for d in &dropped {
             let bare =
                 d.ty.as_ref()

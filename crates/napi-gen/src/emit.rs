@@ -1226,7 +1226,7 @@ fn names(ts: TokenStream, id: &str) -> bool {
 pub fn napi_name_clash(jsty: &TokenStream) -> Option<(String, String)> {
     const CLASHES: [&str; 5] = ["Path", "BigInt", "Symbol", "Null", "JsFunction"];
     let t: Type = syn::parse2(jsty.clone()).ok()?;
-    // `Option<Path>` and `Path`, but not `PathSegment`, `ClipPath` or `Vec<Path>`
+    // `Option<Path>` and `Path`, but not `PathSegment`, `TracePath` or `Vec<Path>`
     // -- napi only rewrites the type itself, so only those two shapes need it.
     let (inner, optional) = match Shape::of(&t) {
         Shape::Option(i) => (key(i)?, true),
@@ -1265,22 +1265,19 @@ pub fn data_members(
     let mut skipped = Vec::new();
     let mut reached = BTreeSet::new();
 
-    // `Config::not_data`: conversions such as `Stroke::to_tiny_skia`.
-
-    // The tree itself. Group, Node and Tree are what a handle exists for, and
-    // following one into the data registry drags every definition type behind
-    // it -- `Text::flattened` and `filter::Image::root` both hand back a Group.
-    // A type rule rather than the two member names, because the next one to
-    // return a Group should need no edit here: `Config::node_types`.
-
     // `step` borrows the member from `__v`, a reference to the value, when
     // it can be borrowed (a field, an accessor returning a reference).
     let mut push = |name: &str, ty: &Type, access: TokenStream, step: Option<TokenStream>| {
+        // `Config::not_data`: conversions such as `Point::to_xy`.
         if vocab.config.not_data.contains(&name) {
             return;
         }
         let js = vocab.classify(ty);
-        // A node type a listed class copies (`Js::Owned`) is that class, and
+        // The tree itself (`Config::node_types`): a node is what a handle
+        // exists for, and following one into the data registry drags every
+        // definition type behind it. A type rule rather than the member
+        // names, because the next member to return a `Layer` should need no
+        // edit here. A node type a listed class copies (`Js::Owned`) is that class, and
         // reaches nothing behind it.
         if key(peel(ty)).is_some_and(|k| vocab.config.node_types.contains(&bare(&k)))
             && !matches!(js, Some(Js::Owned(_)))
@@ -1288,8 +1285,8 @@ pub fn data_members(
             return;
         }
         let id = format_ident!("{}", name);
-        // `Image` was a read-only class only because `size` did not map;
-        // mapping it promoted Image to an object holding `ImageKind`, whose
+        // `Frame` was a read-only class only because `size` did not map;
+        // mapping it promoted Frame to an object holding `Content`, whose
         // byte variants are classes. Say so instead of relying on luck.
         if let Some(Js::PayloadEnum(t) | Js::PayloadEnumList(t)) = &js
             && !nested_values
@@ -1523,8 +1520,8 @@ pub fn object_struct(
 
 /// A data type that does *not* map completely becomes a read-only class instead:
 /// it keeps the upstream value, exposes what maps as getters, and never claims
-/// to be reconstructible. `FaceInfo` is the case that matters -- its `ID`,
-/// `Source`, `Style` and `Stretch` members have no JS form.
+/// to be reconstructible. A record whose id, source and style members have
+/// no JS form is the case that matters: what does map is still readable.
 pub fn value_class(
     files: &[syn::File],
     ty: &str,
@@ -1705,7 +1702,7 @@ pub fn map_methods(
     m: &MethodPass,
     vocab: &Vocab,
     // Method names already emitted on the target class: two passes can land on
-    // the same `impl` block (`Tree::filters` and `Group::filters` both do).
+    // the same `impl` block (`Scene::layers` and `Layer::layers` both do).
     taken: &mut BTreeSet<String>,
 ) -> (TokenStream, Vec<Skip>) {
     // Destructured by name so the body below is unchanged from when these were

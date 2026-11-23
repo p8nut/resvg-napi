@@ -273,6 +273,10 @@ fn main() {
     // - `dep.Grid::cells`: a slice of a value class is not followed (an
     //   array of instances), and `stamp` takes a `Token`, `Copy` but with
     //   nothing to call, so no class.
+    // `Vec2::from_array` and `to_array` are left out but not listed: they
+    // convert plain data to a type nothing maps, and `fromObject` and
+    // `toObject` already carry it. `Vec2::sum` and `shift_all` take a slice
+    // of it, an array of `Vec2Object`s.
     // `dep.Area`, `dep.Cell` and `dep.Mark` are listed nowhere: `Grid`'s
     // members reach the first two, `Cell::mark` the third (the fixpoint).
     assert_eq!(

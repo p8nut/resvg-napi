@@ -1141,6 +1141,35 @@ impl ToyVec2 {
             .map_err(napi_support::coded)?;
         Ok((f64::from(__v.0), f64::from(__v.1)))
     }
+    #[doc = " The sum of a slice of vectors: a slice of a plain-data class."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn sum(all: Vec<ToyVec2Object>) -> Result<Self, String> {
+        let __all = all
+            .into_iter()
+            .map(ToyVec2Object::__upstream)
+            .collect::<Result<Vec<_>, String>>()?;
+        let __v = napi_support::contained("Vec2::sum", || <toy::Vec2>::sum(&__all))
+            .map_err(napi_support::coded)?;
+        Ok(ToyVec2::__from(__v))
+    }
+    #[doc = " Adds this vector to each of `all`, in place: a `&mut` slice of a"]
+    #[doc = " plain-data class."]
+    #[doc = ""]
+    #[doc = " In JS, `all` is a copy the call cannot write through: it returns the"]
+    #[doc = " array as the call left it, and the one passed is unchanged."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn shift_all(&self, all: Vec<ToyVec2Object>) -> Result<Vec<ToyVec2Object>, String> {
+        let mut __all = all
+            .into_iter()
+            .map(ToyVec2Object::__upstream)
+            .collect::<Result<Vec<_>, String>>()?;
+        let __self = self.__ref()?;
+        napi_support::contained("Vec2::shift_all", || __self.shift_all(&mut __all))
+            .map_err(napi_support::coded)?;
+        Ok(__all.iter().map(ToyVec2Object::from).collect())
+    }
     #[doc = " Parses a `Vec2`, as Rust's `FromStr` does. Throws when it does not parse."]
     #[napi]
     #[allow(clippy::should_implement_trait)]
@@ -1185,10 +1214,7 @@ impl ToyVec2 {
     #[doc = " A `Vec2` from a plain object of its fields."]
     #[napi]
     pub fn from_object(obj: ToyVec2Object) -> Result<Self, String> {
-        Ok(Self::__from(toy::Vec2 {
-            x: to_f32(obj.x),
-            y: to_f32(obj.y),
-        }))
+        Ok(Self::__from(obj.__upstream()?))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
@@ -1221,6 +1247,15 @@ impl From<&toy::Vec2> for ToyVec2Object {
             x: f64::from(__v.x),
             y: f64::from(__v.y),
         }
+    }
+}
+impl ToyVec2Object {
+    fn __upstream(self) -> Result<toy::Vec2, String> {
+        let obj = self;
+        Ok(toy::Vec2 {
+            x: to_f32(obj.x),
+            y: to_f32(obj.y),
+        })
     }
 }
 impl ToyColor {
@@ -2434,11 +2469,7 @@ impl AltColor {
     #[doc = " A `Color` from a plain object of its fields."]
     #[napi(factory)]
     pub fn from_object(obj: AltColorObject) -> Result<Self, String> {
-        Ok(Self::__from(toy::alt::Color {
-            red: napi_support::int::<u8>("red", obj.red)?,
-            green: napi_support::int::<u8>("green", obj.green)?,
-            blue: napi_support::int::<u8>("blue", obj.blue)?,
-        }))
+        Ok(Self::__from(obj.__upstream()?))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
@@ -2473,6 +2504,16 @@ impl From<&toy::alt::Color> for AltColorObject {
             green: f64::from(u32::from(__v.green)),
             blue: f64::from(u32::from(__v.blue)),
         }
+    }
+}
+impl AltColorObject {
+    fn __upstream(self) -> Result<toy::alt::Color, String> {
+        let obj = self;
+        Ok(toy::alt::Color {
+            red: napi_support::int::<u8>("red", obj.red)?,
+            green: napi_support::int::<u8>("green", obj.green)?,
+            blue: napi_support::int::<u8>("blue", obj.blue)?,
+        })
     }
 }
 impl DepGrid {
@@ -2773,7 +2814,7 @@ impl DepMark {
     #[doc = " A `Mark` from a plain object of its fields."]
     #[napi]
     pub fn from_object(obj: DepMarkObject) -> Result<Self, String> {
-        Ok(Self::__from(toy_dep::Mark { on: obj.on }))
+        Ok(Self::__from(obj.__upstream()?))
     }
     #[doc = " Its fields, as a plain object `fromObject` takes back."]
     #[napi]
@@ -2800,6 +2841,12 @@ impl DepMark {
 impl From<&toy_dep::Mark> for DepMarkObject {
     fn from(__v: &toy_dep::Mark) -> Self {
         Self { on: __v.on }
+    }
+}
+impl DepMarkObject {
+    fn __upstream(self) -> Result<toy_dep::Mark, String> {
+        let obj = self;
+        Ok(toy_dep::Mark { on: obj.on })
     }
 }
 #[doc = " The constants of `toy`, apart: they keep their Rust names."]

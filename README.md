@@ -149,7 +149,10 @@ pixmap.encodePng()                                     // Buffer
   (`tiny_skia.Size.fromWh(w, h)`), the resolvers the `guard` classes.
 - **Classes.** `new` is the constructor, and throws where Rust returns `None`;
   every other `Option` is `null`. Plain-data classes (`Transform`, `Point`,
-  `svgtypes.Color`) have `fromObject` / `toObject`; `FromStr` is `fromStr`,
+  `svgtypes.Color`) have `fromObject` / `toObject`, and a slice of one is an
+  array of those objects (`tiny_skia.Rect.fromPoints([{ x, y }, …])`); a
+  `&mut` slice is returned as the call left it, the array passed being a copy
+  (`transform.mapPoints(points)`). `FromStr` is `fromStr`,
   `Display` is `toString`. A Rust tuple is an array (`dimensions()` is
   `[w, h]`, a face's `families` `[name, language]` pairs).
 - **Constants** keep their Rust name. A crate's own are values of its

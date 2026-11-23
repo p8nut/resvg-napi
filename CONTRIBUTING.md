@@ -78,7 +78,7 @@ library: an `Arc`-held `Counter` with a few `&self` methods, an `Options`
 struct with `Default`, a unit enum, a plain `Point`, a `Clone` `Tally`, a
 `ReportOptions` struct with a field of each option-object kind, and one class
 of each kind `napi_gen::class` makes (below): a plain-data `Vec2` with
-`FromStr` and `Display`, an owned `Canvas` with a consuming method and a
+`FromStr`, `Display` and members taking a slice of it, an owned `Canvas` with a consuming method and a
 borrowed view, two `Color`s in two modules, an error enum per fallible
 function, the free functions `report` and `paint`, and a `Scene` whose
 `Layer`s and `Dot`s are only ever borrowed from it, with an enum `Item` of
@@ -426,7 +426,12 @@ Q34):
   `fromStr(s)` that throws, `Display` gives `toString()`. A class whose fields
   are all public and of a number, boolean or string type is **plain data**:
   it gets a getter and a setter per field, and `fromObject(obj)` and
-  `toObject()` over a `<Name>Object` interface, always both (Q31).
+  `toObject()` over a `<Name>Object` interface, always both (Q31). A slice
+  of it (`&[Vec2]`) is an `Array<Vec2Object>`; a `&mut` one is returned, as
+  the call left it, by a function that returns nothing else (`Vec2::sum`,
+  `Vec2::shift_all`). A member that only converts it to or from a type
+  nothing maps (`Vec2::to_array`) is left out and not reported: the object
+  already carries the data.
 - **A class held by value is that class wherever a member names it**
   (`Js::Class`): a getter or a method of a data type, a handle or a
   projection returning `Transform`, `NonZeroRect` or `Size` hands out the

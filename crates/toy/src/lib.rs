@@ -507,6 +507,29 @@ impl Vec2 {
     pub fn parts(&self) -> (f32, f32) {
         (self.x, self.y)
     }
+
+    /// The sum of a slice of vectors: a slice of a plain-data class.
+    pub fn sum(all: &[Vec2]) -> Self {
+        all.iter().fold(Vec2::zero(), |acc, v| acc.plus(*v))
+    }
+
+    /// Adds this vector to each of `all`, in place: a `&mut` slice of a
+    /// plain-data class.
+    pub fn shift_all(&self, all: &mut [Vec2]) {
+        for v in all {
+            *v = v.plus(*self);
+        }
+    }
+
+    /// From another representation of the same data, which nothing maps.
+    pub fn from_array(a: [f32; 2]) -> Self {
+        Vec2::new(a[0], a[1])
+    }
+
+    /// To another representation of the same data, which nothing maps.
+    pub fn to_array(&self) -> [f32; 2] {
+        [self.x, self.y]
+    }
 }
 
 impl FromStr for Vec2 {

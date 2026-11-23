@@ -58,6 +58,30 @@ pub enum Holding {
     Projected,
 }
 
+/// Whether `sig`, a member of class `name`, only converts the class to or
+/// from `ty`, the type that kept it out (`reason`): a static taking one `ty`
+/// and returning the class, or a method taking nothing more and returning
+/// `ty`.
+fn converts(name: &str, sig: &syn::Signature, reason: Reason, ty: &Type) -> bool {
+    let args: Vec<&Type> = sig
+        .inputs
+        .iter()
+        .filter_map(|i| match i {
+            FnArg::Typed(t) => Some(&*t.ty),
+            FnArg::Receiver(_) => None,
+        })
+        .collect();
+    let ReturnType::Type(_, out) = &sig.output else {
+        return false;
+    };
+    let returns_class = matches!(segs(out).as_deref(), Some([s]) if s == "Self" || s == name);
+    match (reason, receiver(sig), &args[..]) {
+        (Reason::Arg, Some(Recv::None), [a]) => *a == ty && returns_class,
+        (Reason::Returns, Some(Recv::Ref | Recv::Value), []) => **out == *ty,
+        _ => false,
+    }
+}
+
 /// One listed class.
 pub struct Class {
     /// Index into [`Classes::sources`].
@@ -668,6 +692,17 @@ impl<'a> Classes<'a> {
         quote!(#id::__from(#v))
     }
 
+    /// `&[T]` or `&mut [T]` of a plain-data class `T` held by value: the
+    /// class, and whether the slice is `&mut`.
+    fn plain_slice(&self, ctx: usize, this: Option<usize>, ty: &Type) -> Option<(usize, bool)> {
+        let (Some(mutable), Type::Slice(s)) = deref(ty) else {
+            return None;
+        };
+        let c = self.class_of(ctx, this, &s.elem)?;
+        let class = &self.classes[c];
+        (class.holding == Holding::Value && !class.plain.is_empty()).then_some((c, mutable))
+    }
+
     /// One argument, or why it has no JS form.
     fn arg(
         &self,
@@ -707,6 +742,28 @@ impl<'a> Classes<'a> {
             let conv = p.js_in(&same, &name);
             let pre = (conv.to_string() != same.to_string()).then(|| quote!(let #pat = #conv;));
             return Some((quote!(#pat: #js), pre, quote!(#pat)));
+        }
+        // A slice of a plain-data class: an array of its `<Name>Object`,
+        // converted into a vector for the call. A `&mut` one is lent and
+        // the function returns it (`Classes::function`).
+        if let Some((c, mutable)) = self.plain_slice(ctx, this, ty) {
+            let obj = format_ident!("{}Object", self.classes[c].name);
+            let tmp = format_ident!("__{pat}");
+            let (bind, lend) = if mutable {
+                (quote!(let mut #tmp), quote!(&mut #tmp))
+            } else {
+                (quote!(let #tmp), quote!(&#tmp))
+            };
+            return Some((
+                quote!(#pat: Vec<#obj>),
+                Some(quote! {
+                    #bind = #pat
+                        .into_iter()
+                        .map(#obj::__upstream)
+                        .collect::<Result<Vec<_>, String>>()?;
+                }),
+                lend,
+            ));
         }
         if let Some(c) = self.class_of(ctx, this, inner) {
             let id = self.ident(c);
@@ -1061,6 +1118,9 @@ impl<'a> Classes<'a> {
         let callbacks = callbacks(sig);
         // The type a callback's result stands for: what its closure returns.
         let mut copied: Option<(String, Type)> = None;
+        // The `&mut` slice the function returns, written by the call
+        // (`Classes::plain_slice`): its vector, its class, its type.
+        let mut written: Option<(Ident, usize, Box<Type>)> = None;
         for input in sig.inputs.iter().skip(usize::from(recv != Recv::None)) {
             let FnArg::Typed(t) = input else { continue };
             let syn::Pat::Ident(p) = &*t.pat else {
@@ -1082,6 +1142,16 @@ impl<'a> Classes<'a> {
             let Some((param, pre, fwd)) = self.arg(ctx, this, &p.ident, &t.ty, &bounds) else {
                 return skip(Reason::Arg, Some(t.ty.clone()));
             };
+            // A `&mut` slice of a plain-data class: JS passed a copy, which
+            // the call cannot write through, so what it wrote is returned.
+            // One such slice, and nothing else returned: there is no other
+            // place for it.
+            if let Some((c, true)) = self.plain_slice(ctx, this, &t.ty) {
+                if written.is_some() {
+                    return skip(Reason::Arg, Some(t.ty.clone()));
+                }
+                written = Some((format_ident!("__{}", p.ident), c, t.ty.clone()));
+            }
             a.params.push(param);
             a.pre.extend(pre);
             a.fwd.push(fwd);
@@ -1122,7 +1192,7 @@ impl<'a> Classes<'a> {
         let self_pre = me.as_ref().map(|(_, p)| p);
         // A borrow out of a projection or an `Arc`: a projection again.
         let projected = match (&err, holding) {
-            (None, Some(h)) if me.is_some() => {
+            (None, Some(h)) if me.is_some() && written.is_none() => {
                 self.projected(h, ctx, ident, &out, optional, &a, vocab)
             }
             _ => None,
@@ -1142,7 +1212,16 @@ impl<'a> Classes<'a> {
             None => {
                 // `Option<()>` says whether it did anything: `true` or `null`,
                 // which napi would print as `boolean | null`.
-                let ret = if Shape::of(&out).is_unit() && optional {
+                let ret = if let Some((tmp, c, ty)) = &written {
+                    if !Shape::of(&out).is_unit() || optional {
+                        return skip(Reason::Arg, Some(ty.clone()));
+                    }
+                    let obj = format_ident!("{}Object", self.classes[*c].name);
+                    Ret {
+                        ty: quote!(Vec<#obj>),
+                        conv: quote!(#tmp.iter().map(#obj::from).collect()),
+                    }
+                } else if Shape::of(&out).is_unit() && optional {
                     napi.push(quote!(ts_return_type = "true | null"));
                     Ret {
                         ty: quote!(bool),
@@ -1193,7 +1272,11 @@ impl<'a> Classes<'a> {
                 };
                 let (js_ty, value) = if Shape::of(&out).is_unit() && !optional {
                     body.extend(quote!(#value;));
-                    (&ret.ty, &quote!(()))
+                    // Nothing, or the slice the call wrote.
+                    match written {
+                        Some(_) => (&ret.ty, &ret.conv),
+                        None => (&ret.ty, &quote!(())),
+                    }
                 } else {
                     body.extend(quote!(let __v = #value;));
                     (&ret.ty, &ret.conv)
@@ -1250,7 +1333,19 @@ impl<'a> Classes<'a> {
         };
         let recv = me.map(|(r, _)| r);
         let params = recv.into_iter().chain(a.params);
-        let doc = docs(attrs);
+        let mut doc = docs(attrs);
+        if let Some((tmp, ..)) = &written {
+            let arg = lower_camel(tmp.to_string().trim_start_matches("__"));
+            let note =
+                format!(" In JS, `{arg}` is a copy the call cannot write through: it returns the");
+            if !doc.is_empty() {
+                doc.push(quote!(#[doc = ""]));
+            }
+            doc.push(quote!(#[doc = #note]));
+            doc.push(
+                quote!(#[doc = " array as the call left it, and the one passed is unchanged."]),
+            );
+        }
         Ok(quote! {
             #(#doc)*
             #napi
@@ -1319,6 +1414,18 @@ impl<'a> Classes<'a> {
                     }
                     Err((reason, ty)) => {
                         taken.remove(&f.sig.ident.to_string());
+                        if !class.plain.is_empty()
+                            && ty
+                                .as_deref()
+                                .is_some_and(|t| converts(name, &f.sig, reason, t))
+                        {
+                            // Not a gap: the class's fields, `fromObject` and
+                            // `toObject` already carry all of its data, and
+                            // the other side of the conversion is a type
+                            // nothing maps, a representation JS has no value
+                            // of.
+                            continue;
+                        }
                         skipped.push(Skip::new(&f.sig.ident.to_string(), ty.as_deref(), reason));
                     }
                 }
@@ -1431,6 +1538,15 @@ impl<'a> Classes<'a> {
                         Self { #(#fields: #to_js,)* }
                     }
                 }
+
+                // Back, checked as an argument is: what `fromObject` and a
+                // slice argument of the class convert (`Classes::arg`).
+                impl #obj {
+                    fn __upstream(self) -> Result<#up, String> {
+                        let obj = self;
+                        Ok(#up { #(#fields: #from_js,)* })
+                    }
+                }
             });
             if taken.insert("from_object".into()) && taken.insert("to_object".into()) {
                 let doc = format!(" A `{name}` from a plain object of its fields.");
@@ -1438,7 +1554,7 @@ impl<'a> Classes<'a> {
                     #[doc = #doc]
                     #factory
                     pub fn from_object(obj: #obj) -> Result<Self, String> {
-                        Ok(Self::__from(#up { #(#fields: #from_js,)* }))
+                        Ok(Self::__from(obj.__upstream()?))
                     }
                     #[doc = " Its fields, as a plain object `fromObject` takes back."]
                     #[napi]

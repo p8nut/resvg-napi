@@ -45,8 +45,6 @@ tiny_skia::Pixmap member not in the class: pixels (returns &[PremultipliedColorU
 tiny_skia::Pixmap member not in the class: pixels_mut (returns &mut[PremultipliedColorU8])
 tiny_skia::Pixmap member not in the class: stroke_path (arg: &Path)
 tiny_skia::Point is a class: Value, plain data
-tiny_skia::Point member not in the class: from_f32x2 (arg: f32x2)
-tiny_skia::Point member not in the class: to_f32x2 (returns f32x2)
 tiny_skia::PremultipliedColor is a class: Value
 tiny_skia::PremultipliedColor member not in the class: demultiply (returns Color, a class whose JS name another namespace has: only its constructor and factories may)
 tiny_skia::PremultipliedColor reached by tiny_skia::Color::premultiply: a class, held by value
@@ -54,10 +52,8 @@ tiny_skia::PremultipliedColorU8 is a class: Value
 tiny_skia::PremultipliedColorU8 reached by tiny_skia::Pixmap::pixel: a class, held by value
 tiny_skia::PremultipliedColorU8::TRANSPARENT is a static: tiny_skia.PremultipliedColorU8.TRANSPARENT
 tiny_skia::Rect is a class: Value
-tiny_skia::Rect member not in the class: from_points (arg: &[Point])
 tiny_skia::Size is a class: Value
 tiny_skia::Transform is a class: Value, plain data
-tiny_skia::Transform member not in the class: map_points (arg: &mut[Point])
 usvg index bound for `*_precision` derived from POW_VEC: 12
 usvg re-exports enum FontFamily: read as its own
 usvg re-exports enum Indent: read as its own

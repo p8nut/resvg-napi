@@ -708,6 +708,16 @@ export declare namespace toy {
     translate(dx: number, dy: number): void
     /** `(x, y)`, a pair. */
     parts(): [number, number]
+    /** The sum of a slice of vectors: a slice of a plain-data class. */
+    static sum(all: Array<toy.Vec2Object>): toy.Vec2
+    /**
+     * Adds this vector to each of `all`, in place: a `&mut` slice of a
+     * plain-data class.
+     *
+     * In JS, `all` is a copy the call cannot write through: it returns the
+     * array as the call left it, and the one passed is unchanged.
+     */
+    shiftAll(all: Array<toy.Vec2Object>): Array<toy.Vec2Object>
     /** Parses a `Vec2`, as Rust's `FromStr` does. Throws when it does not parse. */
     static fromStr(s: string): toy.Vec2
     /** The `Vec2` as Rust's `Display` writes it. */

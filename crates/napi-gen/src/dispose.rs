@@ -360,3 +360,100 @@ pub fn aliases(file: &syn::File) -> (TokenStream, String) {
     };
     (code, header)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A class with a `#[napi]` `dispose()` is disposable, under its JS
+    /// name and namespace; one without, a plain method of that name, or an
+    /// object is not.
+    #[test]
+    fn a_disposable_class_has_a_napi_dispose() {
+        let file: syn::File = syn::parse_quote! {
+            #[napi(namespace = "toy")]
+            pub struct ToyScene { inner: u32 }
+            #[napi]
+            impl ToyScene {
+                #[napi]
+                pub fn dispose(&mut self) {}
+            }
+            #[napi(js_name = "Dot", namespace = "toy")]
+            pub struct ToyDot { inner: u32 }
+            #[napi]
+            impl ToyDot {
+                #[napi]
+                pub fn dispose(&mut self) {}
+            }
+            #[napi]
+            pub struct Tally { inner: u32 }
+            #[napi]
+            impl Tally {
+                #[napi]
+                pub fn dispose(&mut self) {}
+            }
+            #[napi(namespace = "toy")]
+            pub struct ToyFrame { inner: u32 }
+            impl ToyFrame {
+                pub fn dispose(&mut self) {}
+            }
+            #[napi(object, namespace = "toy")]
+            pub struct ToyPoint { pub x: f64 }
+            #[napi(namespace = "toy")]
+            pub struct ToyAlbum { inner: u32 }
+        };
+        let found = disposable(&file);
+        let found: Vec<(Option<&str>, Vec<&str>)> = found
+            .iter()
+            .map(|(ns, names)| (ns.as_deref(), names.iter().map(String::as_str).collect()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (None, vec!["Tally"]),
+                (Some("toy"), vec!["Dot", "ToyScene"])
+            ]
+        );
+        // The header declares each, by interface merging, in its namespace.
+        let (_, header) = aliases(&file);
+        assert!(header.contains("\nexport interface Tally {\n  [Symbol.dispose](): void\n}\n"));
+        assert!(header.contains(
+            "export declare namespace toy {\n  export interface Dot {\n    [Symbol.dispose](): void\n  }\n"
+        ));
+        assert!(!header.contains("ToyFrame") && !header.contains("ToyAlbum"));
+    }
+
+    /// A namespaced class not in a slot gets one, with `dispose()` and
+    /// `disposed`; its `#[napi]` methods take the value from the slot.
+    #[test]
+    fn a_namespaced_class_is_slotted() {
+        let mut file: syn::File = syn::parse_quote! {
+            #[napi(namespace = "toy")]
+            pub struct ToyLayer { inner: u32 }
+            #[napi(namespace = "toy")]
+            impl ToyLayer {
+                #[napi(getter)]
+                pub fn depth(&self) -> u32 { self.inner }
+            }
+            #[napi]
+            pub struct Tally { inner: u32 }
+        };
+        slotted(&mut file);
+        let text = quote!(#file).to_string();
+        assert!(
+            text.contains(&quote!(inner: napi_support::Slot<u32>).to_string()),
+            "{text}"
+        );
+        assert!(text.contains(&quote!(pub fn dispose(&mut self)).to_string()));
+        assert!(text.contains(&quote!(pub fn disposed(&self) -> bool).to_string()));
+        // A top-level class is none of the namespaced surface's: left alone.
+        let tally = file.items.iter().find_map(|i| match i {
+            Item::Struct(s) if s.ident == "Tally" => Some(s),
+            _ => None,
+        });
+        let Some(Fields::Named(f)) = tally.map(|s| &s.fields) else {
+            panic!("Tally is gone: {text}");
+        };
+        assert_eq!(key(&f.named[0].ty).as_deref(), Some("u32"));
+    }
+}

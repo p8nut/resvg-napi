@@ -111,13 +111,15 @@ jobs:
       # rather than `.test`, which `node --test` would also pick up from
       # `npm test` on every matrix entry.
       - run: node --test "scripts/*.spec.mts"
-      # The generic crates name no wrapped crate, comments included: whole
-      # words, case sensitive (ADR 0002, Q35). What is specific to resvg goes
-      # through napi_gen::Config, filled by build/config.rs; crates/toy-napi
-      # proves the rest builds without it.
+      # The generic crates name no wrapped crate, comments included: case
+      # sensitive (ADR 0002, Q35). A whole word, or one part of a snake_case
+      # identifier (`to_tiny_skia`; `grep -w` counts `_` as a word character
+      # and missed it), or the prefix of a CamelCase one (`UsvgTree`). What is
+      # specific to resvg goes through napi_gen::Config, filled by
+      # build/config.rs; crates/toy-napi proves the rest builds without it.
       - name: napi-gen and napi-support stay generic
         run: |
-          if git grep -nwE 'usvg|resvg|fontdb|tiny_skia|tiny-skia|svgtypes' -- crates/napi-gen crates/napi-support; then
+          if git grep -nE '(^|[^[:alnum:]])(usvg|resvg|fontdb|tiny_skia|tiny-skia|svgtypes)([^[:alnum:]]|$)|(Usvg|Resvg|Fontdb|TinySkia|Svgtypes)[A-Z_]' -- crates/napi-gen crates/napi-support; then
             echo "::error::crates/napi-gen and crates/napi-support must not name a wrapped crate (ADR 0002, Q35): move the spelling into napi_gen::Config (build/config.rs), or reword the comment with the toy crate's names"
             exit 1
           fi

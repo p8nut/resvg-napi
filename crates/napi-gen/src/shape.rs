@@ -163,7 +163,7 @@ impl<'a> Shape<'a> {
 
     /// The name a registry keys this type by: a path with no arguments,
     /// `crate::` left off (`crate::Foo` and `Foo` are the same type, and
-    /// upstream spells some of its own members either way). `filter::Image`
+    /// upstream spells some of its own members either way). `alt::Color`
     /// keeps its module.
     pub fn key(&self) -> Option<String> {
         match self {

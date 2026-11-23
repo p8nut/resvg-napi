@@ -37,6 +37,7 @@
     "test": "npm run test:node && npm run test:examples",
     "test:wasi": "NAPI_RS_NATIVE_LIBRARY_PATH=./resvg-napi.wasi.cjs npm run test:node",
     "test:node": "node --test",
+    "test:browser": "node --test demo/smoke.mts",
     "test:examples": "node demo/render.mjs examples/roster.svg --strict && node demo/render.mjs examples/badge-sheet.svg --strict && node demo/render.mjs examples/photo-card.svg --strict && node demo/render.mjs examples/sheet.svg --lang fr --strict",
     "typecheck": "tsc && tsc -p tsconfig.helpers.json --noEmit",
     "build:helpers": "tsc -p tsconfig.helpers.json",
@@ -57,6 +58,7 @@
     "emnapi": "2.0.0-beta.3",
     "esbuild": "^0.28.2",
     "liquidjs": "^10.30.1",
+    "playwright": "^1.65.0",
     "pngjs": "^7.0.0",
     "qrcode-generator": "^2.0.4",
     "typescript": "^7.0.2"

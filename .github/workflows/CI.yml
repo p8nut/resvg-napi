@@ -478,12 +478,60 @@ jobs:
           RUSTUP_TOOLCHAIN: stable
       - run: npm run conformance
 
+  # The browser half of the package in a browser. `npm test` resolves index.js,
+  # and test:wasi runs the wasm through the Node loader, so browser.js, the WASI
+  # browser loader and its worker never ran before the Pages deploy did (#249).
+  # demo/smoke.mts loads the demo, built on the wasm the build job made, in
+  # headless Chromium and checks a pixel of what it rendered; any console error,
+  # page error or failed request fails it.
+  browser:
+    name: browser smoke (chromium)
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install  # not `npm ci` -- see the build job
+      # The wasm and the shims beside it, from the wasm build: no second wasm
+      # build. The shims are the committed ones, which the drift check there
+      # compared.
+      - uses: actions/download-artifact@v8
+        with:
+          name: bindings-wasm32-wasip1-threads
+      # demo:build would rebuild the wasm; this bundles the one downloaded.
+      - run: node demo/build.mts
+      # The headless shell only (`--only-shell`): it is what a headless launch
+      # runs, and a smaller download than the full browser. The cache is
+      # keyed on the Playwright version, which fixes the browser build, and
+      # saved from main only, like rust-cache in the build job: a pull
+      # request's cache no other ref can restore still counts against the quota.
+      - id: pw
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      # `--with-deps` installs the system libraries through apt, which the cache
+      # cannot hold, so it runs on a hit too; the browser download is skipped then.
+      - run: npx playwright install --with-deps --only-shell chromium
+      - if: github.ref == 'refs/heads/main' && steps.pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - run: npm run test:browser
+
   publish:
     name: publish
     if: startsWith(github.ref, 'refs/tags/v')
     # Not `test` alone: a tag could otherwise publish with the conformance suite
-    # red, or with a platform package whose binary never arrived.
-    needs: [test, package, conformance]
+    # red, with a platform package whose binary never arrived, or with a
+    # browser entry that no longer loads.
+    needs: [test, package, conformance, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: write # gh release create

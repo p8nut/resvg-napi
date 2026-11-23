@@ -718,6 +718,7 @@ npm run build         # napi build --platform --release
 npm test              # the suite on the native binding, then the four examples
 npm run test:wasi     # the same suite against the wasm build (POSIX shells)
 npm run test:examples # renders demo/examples/*.svg headlessly
+npm run test:browser  # the demo in headless Chromium (after demo:build; see below)
 npm run conformance   # resvg's corpus against its references (conformance:fetch first)
 npm run typecheck     # tsc --strict over the .d.ts / .d.mts, every .mts, and the JSDoc of the .mjs below
 npm run build:helpers # emits helpers*.mjs and helpers*.d.mts from the .mts (commit them)
@@ -733,6 +734,17 @@ font file (`RESVG_TEST_FONT`, a few well-known paths, and last the repo's own
 `demo/fonts/IBMPlexSans-Latin.ttf`), so no test skips for want of a font. The
 fixtures' text is ASCII, which that face covers. The env-var prefix is POSIX-shell syntax; on Windows use
 `npm test`, which CI does too.
+
+`test:browser` is the only run of the browser entry: `browser.js`, which
+`demo/build.mts` bundles into `demo/resvg.js`, the WASI browser loader and its
+worker. Node resolves `index.js`, so `npm test` and `test:wasi` never reach
+them. `demo/smoke.mts` starts `demo/serve.mts` (it sets the COOP/COEP headers
+the threads build needs), loads the demo in headless Chromium through
+Playwright, and checks a pixel of the PNG the page renders on load; a console
+error, a page error or a failed request fails it. It needs `npm run demo:build`
+first and a browser once: `npx playwright install chromium`. It is not part of
+`npm test`, so the suite needs no browser; CI runs it in the `browser` job, on
+the wasm the build job made.
 
 
 ## Lint and guards

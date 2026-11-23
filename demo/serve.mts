@@ -3,6 +3,7 @@
 // which needs SharedArrayBuffer, which needs cross-origin isolation.
 // Hence the two headers below: without them the module fails to instantiate.
 import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,5 +37,10 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// PORT=0 takes any free port; the line below then names the one it got, which
+// is how demo/smoke.mts finds the server it started.
 const port = Number(process.env.PORT ?? 8787);
-server.listen(port, () => console.log(`demo on http://localhost:${port}/`));
+server.listen(port, () => {
+  const { port: bound } = server.address() as AddressInfo;
+  console.log(`demo on http://localhost:${bound}/`);
+});

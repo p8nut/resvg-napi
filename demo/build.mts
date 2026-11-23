@@ -20,10 +20,17 @@ await copyFile(join(root, 'resvg-napi.wasm32-wasi.wasm'),
 // bundler's `browser` condition (index.html). The loader carries the Buffer
 // polyfill, so no page has to install it before importing.
 //
+// The loader is entered through browser.js, what `resvg-napi` resolves to under
+// that same condition, so the pages (and CI's browser smoke test) run the
+// package's browser entry and not a shortcut past it. browser.js re-exports the
+// wasm package, `resvg-napi-wasm32-wasi`, which is not installed here: the
+// alias points it at the shim that package's `browser` field names, which is
+// in the repository root.
+//
 // `platform: 'browser'`, which is esbuild's default, said out loud: a `node:`
 // import reaching any of these bundles fails the build instead of the page.
 const bundles: Array<[entry: string, out: string, inject?: string[]]> = [
-  ['resvg-napi.wasi-browser.js', 'resvg.js', [join(here, 'buffer-shim.mts')]],
+  ['browser.js', 'resvg.js', [join(here, 'buffer-shim.mts')]],
   ['wasi-worker-browser.mjs', 'wasi-worker-browser.mjs'],
   ['demo/liquid-entry.mts', 'liquid.js'],
   ['helpers.browser.mjs', 'helpers.js'],
@@ -36,6 +43,7 @@ for (const [entry, out, inject = []] of bundles) {
     format: 'esm',
     platform: 'browser',
     inject,
+    alias: { 'resvg-napi-wasm32-wasi': join(root, 'resvg-napi.wasi-browser.js') },
   });
 }
 

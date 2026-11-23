@@ -301,8 +301,9 @@ Four things the demo has to handle, in `bench.html` and `build.mts`:
   but its `from` must accept a `SharedArrayBuffer`, or every buffer comes back
   empty. It lives in `buffer-shim.mts`, which `build.mts` injects into the
   `resvg.js` bundle.
-- **No Node in the bundles.** `build.mts` bundles `helpers.browser.mjs` (what
-  `resvg-napi/helpers` resolves to under the `browser` condition) for
+- **No Node in the bundles.** `build.mts` bundles `browser.js` (what
+  `resvg-napi` resolves to under the `browser` condition) into `resvg.js`,
+  `helpers.browser.mjs` (what `resvg-napi/helpers` resolves to there) for
   `index.html`, and `liquid-entry.mts`, which carries it too, for the bench,
   all with esbuild's `platform: 'browser'`: a `node:` import reaching one
   fails the build.

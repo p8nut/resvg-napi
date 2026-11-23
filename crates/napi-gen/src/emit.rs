@@ -2306,8 +2306,11 @@ pub fn namespaced(parts: &[(&str, TokenStream)], shared: &BTreeSet<String>) -> S
         if !own.is_empty() {
             let module = format_ident!("{}_consts", ns.to_case(convert_case::Case::Snake));
             let doc = format!(" The constants of `{ns}`, apart: they keep their Rust names.");
+            // napi's registration is what reads them, and a test build has
+            // none: the allow is on this module alone, not on the crate.
             consts.extend(quote! {
                 #[doc = #doc]
+                #[allow(dead_code)]
                 mod #module {
                     use super::*;
                     #(#own)*

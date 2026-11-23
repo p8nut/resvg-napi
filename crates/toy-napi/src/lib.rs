@@ -2921,6 +2921,7 @@ impl DepMarkObject {
     }
 }
 #[doc = " The constants of `toy`, apart: they keep their Rust names."]
+#[allow(dead_code)]
 mod toy_consts {
     use super::*;
     #[doc = " The library's name: a string constant, `toy.NAME`. `alt.NAME` is another."]
@@ -2937,6 +2938,7 @@ mod toy_consts {
     pub const MAX_LAYERS: u32 = toy::MAX_LAYERS;
 }
 #[doc = " The constants of `alt`, apart: they keep their Rust names."]
+#[allow(dead_code)]
 mod alt_consts {
     use super::*;
     #[doc = " The module's name: `alt.NAME`, beside `toy.NAME`."]

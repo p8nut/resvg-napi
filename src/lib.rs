@@ -9978,6 +9978,7 @@ fn fontdb_source_to_js(
     }
 }
 #[doc = " The constants of `usvg`, apart: they keep their Rust names."]
+#[allow(dead_code)]
 mod usvg_consts {
     use super::*;
     #[doc = " The default nesting limit when parsing."]

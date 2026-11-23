@@ -1,13 +1,15 @@
 //! Writes src/lib.rs from the toy crate's sources with `napi-gen`: the generic
 //! generator, on a crate it was not written for, through the same
 //! `napi_gen::generate::generate` the root crate calls. Everything specific to
-//! `toy` is in `GEN` and the small template below; the assertions read the
-//! codegen's report.
+//! `toy` is in `GEN`, the small template below and src/hand.rs; the assertions
+//! read the codegen's report.
 
-use napi_gen::{Config, Converter, Crate, Iterated, Role};
+use napi_gen::{Config, Converter, Crate, HandWritten, Iterated, Provider, Role, View};
 use quote::quote;
 
-/// The toy has no font tag and no feature gates: those answers are empty.
+/// Every field set, each for a toy item that needs it. No `..Config::EMPTY`:
+/// a knob added to `Config` stops this compiling until it is named here, and
+/// `every_field_set` fails the build while it is left empty.
 const GEN: Config = Config {
     log_env: "TOY_NAPI_CODEGEN_LOG",
     generated_from: "the toy crate's sources",
@@ -30,6 +32,14 @@ const GEN: Config = Config {
             modules: &[],
         },
     ],
+    // `toy` re-exports `toy_dep`, and this crate does not depend on it:
+    // the generated code reaches it by the re-export.
+    uses: &["toy::toy_dep"],
+    // `hand.Shout`, the provider below, written by hand.
+    hand_written: &[HandWritten {
+        path: "src/hand.rs",
+        doc: "The toy's hand-written providers (`hand.*`): src/hand.rs.",
+    }],
     // `ReportOptions::style_index` indexes `STYLES` unchecked.
     index_bounded: &[("_index", "STYLES")],
     // `ReportOptions`, `Options` and `Filter` need no entry: `report`,
@@ -40,9 +50,24 @@ const GEN: Config = Config {
     // `Default`, so it is reported and left out (it is a class with a
     // constructor instead).
     option_objects: &["Counter"],
-    // No providers: `ReportOptions::base`, an `Arc<Tally>`, is supplied by a
-    // `toy.Tally` (its `Arc` shared), and `ReportOptions::from`, a `Key`, by
-    // a `toy.Key` (copied), each derived from its class.
+    // `ReportOptions::base`, an `Arc<Tally>`, is supplied by a `toy.Tally`
+    // (its `Arc` shared), and `ReportOptions::from`, a `Key`, by a `toy.Key`
+    // (copied), each derived from its class: the first entry only documents
+    // it. `ReportOptions::finish`, a function pointer, has no class to
+    // derive one from: the hand-written `hand.Shout` supplies it.
+    providers: &[
+        Provider {
+            ty: "Arc<Tally>",
+            doc: "A `toy.Tally`, shared with the report rather than copied.",
+            ..Provider::DOC
+        },
+        Provider {
+            ty: "fn(String)->String",
+            class: "HandShout",
+            provide: "v.finish()?",
+            doc: "A `hand.Shout`. Left out, the line is unchanged.",
+        },
+    ],
     // `ReportOptions::width` is a payload enum: `width_from_js` below reads
     // a number or `'auto'`.
     converters: &[Converter {
@@ -58,6 +83,17 @@ const GEN: Config = Config {
         via: "steps",
         item: "Step",
     }],
+    // `Frame::code`, four ASCII bytes: a string.
+    tag4_types: &["[u8;4]"],
+    // A `Layer` holds the rest of the tree, which its projection class
+    // hands out: never followed as data.
+    node_types: &["Layer"],
+    // `Point::to_xy` converts the point: not a member it lacks, so `Point`
+    // stays a plain object.
+    not_data: &["to_xy"],
+    // As Cargo.toml turns them on: `extra` always (`Canvas::area`), `gpu`
+    // on wasm alone (`Canvas::glow`). Elsewhere `glow` is kept, and throws.
+    features: &[("extra", "true"), ("gpu", "target_family = \"wasm\"")],
     // One class of each holding: `Counter` shared, `Tally` copied on
     // write, `Vec2` and `Color` by value, `Canvas` owned. `Vec2` and
     // `alt::Color` are plain data, and the two `Color`s share a JS name.
@@ -102,16 +138,21 @@ const GEN: Config = Config {
         ("toy", "count"),
         ("toy", "spin"),
     ],
-    // No views: `paint` writes through a `CanvasView`, which JS hands over
-    // as the `Canvas` it borrows, `Canvas::as_view` being the one method
-    // returning it.
+    // `paint` writes through a `CanvasView`, which JS hands over as the
+    // `Canvas` it borrows. Two of its methods return one (`as_view` and
+    // `last_row`): the entry says which.
+    views: &[View {
+        ty: "CanvasView",
+        class: "Canvas",
+        via: "as_view",
+    }],
     // A `Scene`'s nodes are borrowed from it: `Layer` and `Dot` become
     // classes holding a projection, and `Item` a union of the two.
     projections: &[("toy", "Item"), ("toy", "Layer"), ("toy", "Dot")],
-    ..Config::EMPTY
 };
 
 fn main() {
+    every_field_set();
     napi_build::setup();
     println!("cargo::rerun-if-changed=build.rs");
 
@@ -180,12 +221,12 @@ fn main() {
     );
     // `Point` (an object `Counter::origin` returns) maps whole; `Frame` is a
     // read-only class (its `layer` is a copy of a projected class), its
-    // `f64`, `&[f64]` and `i16` mapped and its `u64` unable to fit a JS
-    // number. `Layer` and `Dot` are walked as data and left to their
-    // projection classes.
+    // `f64`, `&[f64]`, `i16` and `[u8; 4]` (a tag) mapped and its `u64`
+    // unable to fit a JS number. `Dot` is walked as data and left to its
+    // projection class; `Layer`, a node type, is not walked at all.
     assert_eq!(
         lines("data types emitted"),
-        ["data types emitted: Dot, Frame, Layer, Point"],
+        ["data types emitted: Dot, Frame, Point"],
         "the data types"
     );
     assert_eq!(
@@ -199,6 +240,7 @@ fn main() {
         ],
         "Frame maps all but serial"
     );
+    // `Point::to_xy` is a conversion (`GEN.not_data`), not a member it lacks.
     assert!(lines("Point member").is_empty(), "Point maps completely");
     // The unions: `Step` (a unit variant, one carrying a plain-data class,
     // one carrying two), `Shade` (re-exported), `Content` (variants carrying
@@ -246,19 +288,14 @@ fn main() {
     );
     // The option objects: `ReportOptions` with every field optional over
     // `Default`, `base` taken from a `toy.Tally` and `from` from a `toy.Key`
-    // (providers, derived), `width`
+    // (providers, derived), `finish`, a function pointer with no JS form,
+    // from the hand-written `hand.Shout` (a provider, listed), `width`
     // through `width_from_js` (a converter), `style_index` clamped to
-    // `STYLES` (the build fails when a bound matches no field). `finish` is
-    // a function pointer, with no JS form and no provider: left out, it
-    // keeps its default. `Options` and `Filter` map whole. `Counter` has no
-    // `Default`.
+    // `STYLES` (the build fails when a bound matches no field). `Options`
+    // and `Filter` map whole. `Counter` has no `Default`.
     assert_eq!(
         lines("option object"),
-        [
-            "toy::ReportOptions field not in the option object: finish: fn(String)->String \
-             (no provider: keeps the default)",
-            "toy::Counter not an option object: no Default to fill it from",
-        ],
+        ["toy::Counter not an option object: no Default to fill it from"],
         "what the option objects leave out"
     );
     // Each class holds its value as its shape asks; `Vec2` and `alt::Color`
@@ -267,7 +304,8 @@ fn main() {
     // - `toy::Color::checked`: `Option<Self>` outside the constructor. `null`
     //   would have to go through napi's constructor registry, which holds
     //   one `Color` of the two.
-    // - `Canvas::as_view`: a view has no JS form of its own; `paint` borrows it.
+    // - `Canvas::as_view` and `last_row`: a view has no JS form of its own;
+    //   `paint` borrows the first (`GEN.views`).
     // - `Tally`: a `Cell` over an array is no inline vector, and `alt` takes
     //   its `Hue` nowhere, so emits no input form of it.
     // - `dep.Grid::cells`: a slice of a value class is not followed (an
@@ -313,6 +351,7 @@ fn main() {
             "toy::Color member not in the class: checked (returns Self, a class whose JS name \
              another namespace has: only its constructor and factories may)",
             "toy::Canvas member not in the class: as_view (returns CanvasView<'_>)",
+            "toy::Canvas member not in the class: last_row (returns CanvasView<'_>)",
             "toy_dep::Grid member not in the class: cells (returns &[Cell])",
             "toy_dep::Grid member not in the class: stamp (arg: Token)",
         ],
@@ -387,4 +426,38 @@ fn main() {
         ],
         "nothing is left out, one union is not aliased"
     );
+}
+
+/// The toy is the proof each `Config` knob is generic, so it sets every one:
+/// the knobs `GEN` leaves empty fail the build.
+fn every_field_set() {
+    let empty: Vec<&str> = [
+        ("log_env", GEN.log_env.is_empty()),
+        ("generated_from", GEN.generated_from.is_empty()),
+        ("crates", GEN.crates.is_empty()),
+        ("uses", GEN.uses.is_empty()),
+        ("hand_written", GEN.hand_written.is_empty()),
+        ("index_bounded", GEN.index_bounded.is_empty()),
+        ("option_objects", GEN.option_objects.is_empty()),
+        // A listed class, not only a doc on a derived one.
+        (
+            "providers",
+            GEN.providers.iter().all(|p| p.class.is_empty()),
+        ),
+        ("converters", GEN.converters.is_empty()),
+        ("tag4_types", GEN.tag4_types.is_empty()),
+        ("iterated", GEN.iterated.is_empty()),
+        ("node_types", GEN.node_types.is_empty()),
+        ("not_data", GEN.not_data.is_empty()),
+        ("features", GEN.features.is_empty()),
+        ("classes", GEN.classes.is_empty()),
+        ("functions", GEN.functions.is_empty()),
+        ("views", GEN.views.is_empty()),
+        ("projections", GEN.projections.is_empty()),
+        ("asynchronous", GEN.asynchronous.is_empty()),
+    ]
+    .into_iter()
+    .filter_map(|(name, empty)| empty.then_some(name))
+    .collect();
+    assert!(empty.is_empty(), "GEN leaves Config knobs unset: {empty:?}");
 }

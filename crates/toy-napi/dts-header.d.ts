@@ -26,6 +26,12 @@ export declare namespace dep {
   }
 }
 
+export declare namespace hand {
+  export interface Shout {
+    [Symbol.dispose](): void
+  }
+}
+
 export declare namespace toy {
   export interface Album {
     [Symbol.dispose](): void

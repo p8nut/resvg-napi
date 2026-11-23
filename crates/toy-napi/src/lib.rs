@@ -26,6 +26,10 @@ pub fn set_log_level(level: String) -> Result<()> {
 pub fn take_logs() -> Vec<String> {
     napi_support::logs::take()
 }
+use toy::toy_dep;
+#[doc = " The toy's hand-written providers (`hand.*`): src/hand.rs."]
+mod hand;
+use hand::HandShout;
 #[doc = " A number or `'auto'` as a `toy::Width`: `GEN.converters`."]
 fn width_from_js(
     v: &Either<f64, String>,
@@ -116,6 +120,8 @@ pub struct ToyReportOptions<'a> {
     #[doc = " Names counted before the tally's own."]
     #[doc = ""]
     #[doc = " Default: none"]
+    #[doc = ""]
+    #[doc = " A `toy.Tally`, shared with the report rather than copied."]
     pub base: Option<ClassInstance<'a, ToyTally>>,
     #[doc = " Default: [`Width::Auto`]"]
     #[napi(ts_type = "number | 'auto'")]
@@ -129,6 +135,12 @@ pub struct ToyReportOptions<'a> {
     #[doc = ""]
     #[doc = " Default: 1"]
     pub ratio: Option<f64>,
+    #[doc = " Applied to the finished line."]
+    #[doc = ""]
+    #[doc = " Default: unchanged"]
+    #[doc = ""]
+    #[doc = " A `hand.Shout`. Left out, the line is unchanged."]
+    pub finish: Option<ClassInstance<'a, HandShout>>,
 }
 #[doc = " Where some bytes come from: shared bytes, a path, or both. The last is"]
 #[doc = " built on some targets only, as a crate gates a variant on a feature."]
@@ -582,6 +594,10 @@ impl ToyReportOptions<'_> {
         }
         if let Some(v) = self.ratio {
             o.ratio = v;
+        }
+        if let Some(v) = &self.finish {
+            let v = &**v;
+            o.finish = v.finish()?;
         }
         Ok(o)
     }
@@ -1583,6 +1599,37 @@ impl ToyCanvas {
             .map_err(napi_support::coded)?;
         Ok(toy_content_to_js(napi_support::Projection::owned(__v)))
     }
+    #[doc = " The byte count, as `width * height`: behind the `extra` feature,"]
+    #[doc = " which the toy binding turns on."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn area(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Canvas::area", || __self.area())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " Behind the `gpu` feature, which the toy binding turns on on wasm"]
+    #[doc = " alone: elsewhere, its method is kept and throws."]
+    #[napi]
+    #[cfg_attr(not(target_family = "wasm"), allow(unused_variables))]
+    #[allow(clippy::redundant_closure)]
+    pub fn glow(&self) -> Result<u32, String> {
+        #[cfg(target_family = "wasm")]
+        {
+            let __self = self.__ref()?;
+            let __v = napi_support::contained("Canvas::glow", || __self.glow())
+                .map_err(napi_support::coded)?;
+            Ok(__v)
+        }
+        #[cfg(not(target_family = "wasm"))]
+        {
+            Err(napi_support::thrown(
+                "GenericFailure",
+                "glow is not available on this target: its upstream feature is off here",
+            ))
+        }
+    }
     #[doc = " The bytes, the canvas consumed."]
     #[napi]
     #[allow(clippy::redundant_closure)]
@@ -2229,6 +2276,15 @@ impl ToyFrame {
             let __p = __inner;
             let v = __p.get();
             i32::from(v.tilt())
+        })
+    }
+    #[napi(getter)]
+    pub fn code(&self) -> Result<String, String> {
+        let __inner = self.inner.get("Frame")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            String::from_utf8_lossy(&v.code()).into_owned()
         })
     }
 }
@@ -2972,6 +3028,7 @@ fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
         (Some("dep"), "Cell"),
         (Some("dep"), "Grid"),
         (Some("dep"), "Mark"),
+        (Some("hand"), "Shout"),
         (Some("toy"), "Album"),
         (Some("toy"), "Canvas"),
         (Some("toy"), "Color"),
@@ -3250,7 +3307,7 @@ impl ToyCanvas {
             &this,
             "Canvas",
             &["disposed"],
-            &["width", "height", "boom"],
+            &["width", "height", "boom", "area"],
             depth,
             options,
             inspect,
@@ -3366,7 +3423,8 @@ impl ToyFrame {
             &this,
             "Frame",
             &[
-                "layer", "shades", "content", "backdrop", "zoom", "weights", "tilt", "disposed",
+                "layer", "shades", "content", "backdrop", "zoom", "weights", "tilt", "code",
+                "disposed",
             ],
             &[],
             depth,
@@ -3581,5 +3639,34 @@ impl DepMark {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Mark".to_string()
+    }
+}
+#[napi(namespace = "hand")]
+impl HandShout {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Shout",
+            &["disposed"],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Shout".to_string()
     }
 }

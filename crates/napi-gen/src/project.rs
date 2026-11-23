@@ -275,6 +275,9 @@ impl Classes<'_> {
                 Self { inner: napi_support::Slot::new(inner) #of_none }
             }
             fn __from(inner: #up) -> Self { Self::__proj(napi_support::Projection::owned(inner)) }
+            // Called only where a member hands the class out: the
+            // allow is on it alone, not on the generated crate.
+            #[allow(dead_code)]
             fn wrap(inner: #up) -> Self { Self::__from(inner) }
         };
         (def, helpers)

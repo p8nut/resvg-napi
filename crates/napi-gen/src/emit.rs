@@ -687,12 +687,18 @@ does this. Copied out on each read.",
     // the enum, which that value steps into; the rest read the enum through it.
     items.extend(if info.projects(vocab) {
         quote! {
+            // Called only by what returns the enum: a union no member
+            // returns (an error's, thrown instead) leaves it unused.
+            #[allow(dead_code)]
             fn #conv(p: napi_support::Projection<#up>) -> #ety {
                 match p.get() { #(#arms)* }
             }
         }
     } else {
         quote! {
+            // Called only by what returns the enum: a union no member
+            // returns (an error's, thrown instead) leaves it unused.
+            #[allow(dead_code)]
             fn #conv(v: &#up) -> #ety {
                 match v { #(#arms)* }
             }
@@ -1566,6 +1572,9 @@ pub fn value_class(
         }
 
         impl #name {
+            // Called only where a member hands the class out: the
+            // allow is on it alone, not on the generated crate.
+            #[allow(dead_code)]
             fn wrap(inner: #up) -> Self {
                 Self::__proj(napi_support::Projection::owned(inner))
             }
@@ -1658,6 +1667,9 @@ pub fn wrapper_class(
         }
 
         impl #name {
+            // Called only where a member hands the class out: the
+            // allow is on it alone, not on the generated crate.
+            #[allow(dead_code)]
             fn wrap(inner: std::sync::Arc<#path>) -> Self {
                 Self { inner }
             }

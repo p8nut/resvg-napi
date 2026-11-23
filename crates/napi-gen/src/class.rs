@@ -1602,6 +1602,9 @@ impl<'a> Classes<'a> {
                 quote!(std::sync::Arc<#up>),
                 quote!(pub struct #id { inner: napi_support::Slot<std::sync::Arc<#up>> }),
                 quote! {
+                    // Called only where a member hands the class out: the
+                    // allow is on it alone, not on the generated crate.
+                    #[allow(dead_code)]
                     fn wrap(inner: std::sync::Arc<#up>) -> Self { Self { inner: napi_support::Slot::new(inner) } }
                     fn __from(inner: #up) -> Self { Self::wrap(std::sync::Arc::new(inner)) }
                 },

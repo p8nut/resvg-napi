@@ -1011,7 +1011,9 @@ impl<'a> Classes<'a> {
         sig: &syn::Signature,
         attrs: &[syn::Attribute],
         gate: Option<(TokenStream, TokenStream)>,
-        napi: TokenStream,
+        // What its `#[napi(..)]` says, `js_name` and the like: nothing for a
+        // method.
+        mut napi: Vec<TokenStream>,
         vocab: &Vocab,
     ) -> Result<TokenStream, Why> {
         let name = sig.ident.to_string();
@@ -1138,8 +1140,10 @@ impl<'a> Classes<'a> {
                 (body, ty)
             }
             None => {
-                // `Option<()>` says whether it did anything: `true` or `null`.
+                // `Option<()>` says whether it did anything: `true` or `null`,
+                // which napi would print as `boolean | null`.
                 let ret = if Shape::of(&out).is_unit() && optional {
+                    napi.push(quote!(ts_return_type = "true | null"));
                     Ret {
                         ty: quote!(bool),
                         conv: quote!(true),
@@ -1239,8 +1243,10 @@ impl<'a> Classes<'a> {
             quote!(#[napi(constructor)])
         } else if factory && self.classes[this.expect("a factory's class")].shared_name {
             quote!(#[napi(factory)])
+        } else if napi.is_empty() {
+            quote!(#[napi])
         } else {
-            napi
+            quote!(#[napi(#(#napi),*)])
         };
         let recv = me.map(|(r, _)| r);
         let params = recv.into_iter().chain(a.params);
@@ -1289,7 +1295,7 @@ impl<'a> Classes<'a> {
                     &f.sig,
                     &f.attrs,
                     gate.clone(),
-                    quote!(#[napi]),
+                    Vec::new(),
                     vocab,
                 ) {
                     Ok(code) => {
@@ -1607,7 +1613,7 @@ impl<'a> Classes<'a> {
                 crate::cfg::Gate::When(p, n) => Some((p, n)),
             };
             let js = lower_camel(name);
-            let napi = quote!(#[napi(js_name = #js, namespace = #ns)]);
+            let napi = vec![quote!(js_name = #js), quote!(namespace = #ns)];
             let twin = self.listed(root, name);
             match self.function(ctx, None, &f.sig, &f.attrs, gate.clone(), napi, vocab) {
                 Ok(c) => code.extend(c),

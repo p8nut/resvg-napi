@@ -94,6 +94,7 @@ const GEN: Config = Config {
         ("toy", "Canvas::from_text"),
         ("toy", "Canvas::fill"),
         ("toy", "Canvas::smash"),
+        ("toy", "Canvas::boom"),
         ("toy", "boom"),
         ("toy", "Tally::push"),
         ("toy", "Tally::joined"),
@@ -202,13 +203,14 @@ fn main() {
     // The unions: `Step` (a unit variant, one carrying a plain-data class,
     // one carrying two), `Shade` (re-exported), `Content` (variants carrying
     // a class and a read-only class), `Origin` (shared bytes, a path, and a
-    // tuple under its variant's own `#[cfg(unix)]`), `Label` and the error
-    // `PaintError`. `Weighted::Held(Canvas, u32)` is a class beside a number,
-    // an object field napi requires `Clone` of: refused, rather than a union
-    // that does not compile.
+    // tuple under its variant's own `#[cfg(unix)]`), `Label`, the error
+    // `PaintError`, and `Ink`, carrying an `Arc<Stamp>` as the handle class
+    // `Stamp`, which nothing else returns. `Weighted::Held(Canvas, u32)` is a
+    // class beside a number, an object field napi requires `Clone` of:
+    // refused, rather than a union that does not compile.
     assert_eq!(
         lines("payload enums emitted"),
-        ["payload enums emitted as unions: Content, Label, Origin, PaintError, Shade, Step"],
+        ["payload enums emitted as unions: Content, Ink, Label, Origin, PaintError, Shade, Step"],
         "the unions"
     );
     // Only a real gap is reported. `Item` (a union of projections),

@@ -53,14 +53,12 @@ pub enum Site {
 }
 
 /// One conversion: the JS type, the expression, the data type it reaches (for
-/// the discovery fixpoint), whether the expression is already a `Result`, and
-/// the field name a carried handle takes instead of `value`.
+/// the discovery fixpoint), and whether the expression is already a `Result`.
 pub struct Conv {
     pub ty: TokenStream,
     pub expr: TokenStream,
     pub reached: Option<String>,
     pub is_result: bool,
-    pub field: Option<&'static str>,
 }
 
 /// The one Js -> JS table. `access` is the Rust expression to convert; `src_ty`
@@ -85,7 +83,6 @@ pub fn js_conv(
         expr,
         reached: None,
         is_result: false,
-        field: None,
     };
     let reaching = |ty: TokenStream, expr: TokenStream, t: &str| Conv {
         reached: Some(t.to_string()),
@@ -290,12 +287,21 @@ pub fn js_conv(
             )
         }
         // An Arc-held definition is shared by every element referencing it, so
-        // it is named rather than copied -- and the field is called `id`,
-        // because it should say what it is instead of hiding behind `value`.
-        (Js::Handle(t), Carried) if vocab.with_id.contains(t) => Conv {
-            field: Some("id"),
-            ..plain(quote!(String), quote!(#a.id().to_string()))
-        },
+        // it is its handle class, the `Arc` cloned, rather than a copy: the
+        // mirror of the toy's `Ink::Stamped(Arc<Stamp>)`. Carried
+        // alone only (`payload_blocker`), by an output-only object. A type
+        // `Config::projections` lists is that class, owning the `Arc`.
+        (Js::Handle(t), Carried) if vocab.with_id.contains(t) => {
+            let w = wrapper_ident(t);
+            if vocab.config.projections.iter().any(|(_, p)| p == t) {
+                plain(
+                    quote!(#w),
+                    quote!(#w::__proj(napi_support::Projection::of(#a.clone()))),
+                )
+            } else {
+                plain(quote!(#w), quote!(#w::wrap(#a.clone())))
+            }
+        }
         (Js::TryUnit, Method) => Conv {
             is_result: true,
             ..plain(
@@ -337,9 +343,9 @@ pub fn carried_field(
     vocab: &Vocab,
     ty: &Type,
     access: &TokenStream,
-) -> Option<(Option<&'static str>, TokenStream, TokenStream)> {
+) -> Option<(TokenStream, TokenStream)> {
     let c = js_conv(&vocab.classify(ty)?, ty, vocab, access, Site::Carried)?;
-    Some((c.field, c.ty, c.expr))
+    Some((c.ty, c.expr))
 }
 
 /// The Rust name of the alias naming the union of enum `name`: `NodeUnion`.
@@ -496,10 +502,12 @@ does this. Copied out on each read.",
                 arms.push(quote!(#g #up::#vid(v) => #value,));
                 continue;
             }
-            // A class carried alone: an output-only object holding it, which
-            // napi does not require to be `Clone`.
+            // A class carried alone, or the handle class of an `Arc`-held
+            // definition: an output-only object holding it, which napi does
+            // not require to be `Clone`.
             Payload::Value(ty)
-                if let Some(js @ (Js::Owned(_) | Js::Value(_))) = vocab.classify(ty) =>
+                if let Some(js @ (Js::Owned(_) | Js::Value(_) | Js::Handle(_))) =
+                    vocab.classify(ty) =>
             {
                 // Borrowed from the enum, when the union is made from a
                 // projection of it (`projects`): the variant found again.
@@ -510,7 +518,7 @@ does this. Copied out on each read.",
                         let p = quote!(p.then(|__e| match __e { #up::#vid(__v) => Some(__v), _ => None }));
                         Some((fty, quote!(#conv(#p.expect("the variant matched")))))
                     }
-                    None => carried_field(vocab, ty, &quote!(v)).map(|(_, fty, expr)| (fty, expr)),
+                    None => carried_field(vocab, ty, &quote!(v)),
                 };
                 let Some((fty, expr)) = carried else {
                     return Err(format!(
@@ -538,17 +546,16 @@ does this. Copied out on each read.",
             }
             Payload::Value(ty) => {
                 let access = quote!(v);
-                let Some((hint, fty, expr)) = carried_field(vocab, ty, &access) else {
+                let Some((fty, expr)) = carried_field(vocab, ty, &access) else {
                     return Err(format!(
                         "{name}::{n} carries {}, which cannot be a field",
                         ty_str(ty)
                     ));
                 };
-                let field = format_ident!("{}", hint.unwrap_or("value"));
                 (
-                    vec![quote!(pub #field: #fty,)],
+                    vec![quote!(pub value: #fty,)],
                     quote!(#up::#vid(v)),
-                    vec![quote!(#field: #expr,)],
+                    vec![quote!(value: #expr,)],
                 )
             }
             // A tuple holding bytes: a read-only class, as bytes alone are,
@@ -568,7 +575,7 @@ does this. Copied out on each read.",
                     let (jty, conv) = if matches!(vocab.classify(ty), Some(Js::Bytes)) {
                         (quote!(Buffer), quote!(napi_support::copied(#b)))
                     } else {
-                        let Some((_, jty, conv)) = carried_field(vocab, ty, &quote!(#b)) else {
+                        let Some((jty, conv)) = carried_field(vocab, ty, &quote!(#b)) else {
                             return Err(format!(
                                 "{name}::{n}.{j} carries {}, which cannot be a field",
                                 ty_str(ty)
@@ -614,7 +621,7 @@ does this. Copied out on each read.",
                 let (mut binds, mut ftys, mut exprs) = (Vec::new(), Vec::new(), Vec::new());
                 for (j, ty) in tys.iter().enumerate() {
                     let id = format_ident!("v{j}");
-                    let Some((_, fty, expr)) = carried_field(vocab, ty, &quote!(#id)) else {
+                    let Some((fty, expr)) = carried_field(vocab, ty, &quote!(#id)) else {
                         return Err(format!(
                             "{name}::{n}.{j} carries {}, which cannot be a field",
                             ty_str(ty)
@@ -637,7 +644,7 @@ does this. Copied out on each read.",
                 for (fname, ty) in fields {
                     let id = format_ident!("{}", fname);
                     let access = quote!(#id);
-                    let Some((_, fty, expr)) = carried_field(vocab, ty, &access) else {
+                    let Some((fty, expr)) = carried_field(vocab, ty, &access) else {
                         return Err(format!(
                             "{name}::{n}.{fname} carries {}, which cannot be a field",
                             ty_str(ty)
@@ -2511,12 +2518,24 @@ fn with_napi_args(attrs: &mut [syn::Attribute], extra: TokenStream) {
 
 /// `ts` with every identifier in `renames` replaced, except where it names
 /// something else: after `::` (an upstream path, a variant), after `.` (a
-/// field, a method), or as a variant of an enum being declared. What was
-/// renamed is added to `named`.
+/// field, a method), after `fn` inside an item (a method of an impl, which
+/// may share a free function's name), or as a variant of an enum being
+/// declared. What was renamed is added to `named`.
 fn rename_idents(
     ts: TokenStream,
     renames: &BTreeMap<String, proc_macro2::Ident>,
     named: &mut BTreeSet<String>,
+) -> TokenStream {
+    rename_in(ts, renames, named, false)
+}
+
+/// [`rename_idents`], `nested` inside one of the item's groups: a function
+/// defined there is a method, never the free function of the same name.
+fn rename_in(
+    ts: TokenStream,
+    renames: &BTreeMap<String, proc_macro2::Ident>,
+    named: &mut BTreeSet<String>,
+    nested: bool,
 ) -> TokenStream {
     use proc_macro2::{Delimiter, Group, TokenTree};
     let toks: Vec<TokenTree> = ts.into_iter().collect();
@@ -2530,8 +2549,10 @@ fn rename_idents(
             TokenTree::Ident(id) => {
                 let path = i >= 2 && punct(i - 1, ':') && punct(i - 2, ':');
                 let member = i >= 1 && punct(i - 1, '.');
+                let method =
+                    nested && i >= 1 && matches!(&toks[i - 1], TokenTree::Ident(f) if f == "fn");
                 match renames.get(&id.to_string()) {
-                    Some(new) if !path && !member => {
+                    Some(new) if !path && !member && !method => {
                         named.insert(new.to_string());
                         let mut new = new.clone();
                         new.set_span(id.span());
@@ -2548,7 +2569,7 @@ fn rename_idents(
                 out.push(t.clone());
             }
             TokenTree::Group(g) => {
-                let mut ng = Group::new(g.delimiter(), rename_idents(g.stream(), renames, named));
+                let mut ng = Group::new(g.delimiter(), rename_in(g.stream(), renames, named, true));
                 ng.set_span(g.span());
                 out.push(TokenTree::Group(ng));
             }
@@ -2743,6 +2764,19 @@ pub fn enum_input(
             .collect()
     };
     let (strs, bytes) = (listed(false), listed(true));
+    // The forms it is passed in as: the bytes one only when a variant
+    // carries bytes, or the doc names a field the type does not have.
+    let forms = [
+        (!strs.is_empty(), "`{ type, value }`"),
+        (!bytes.is_empty(), "`{ type, bytes }`"),
+    ]
+    .into_iter()
+    .filter_map(|(has, form)| has.then_some(form))
+    .collect::<Vec<_>>();
+    let passed = (!forms.is_empty()).then(|| {
+        let d = format!(" Passed in as {}.", forms.join(" or "));
+        quote!(#[doc = ""] #[doc = #d])
+    });
     let mut fields = Vec::new();
     if !strs.is_empty() {
         let d = format!(
@@ -2796,8 +2830,7 @@ pub fn enum_input(
     let invalid = format!("invalid {name} type: {{:?}}");
     quote! {
         #(#doc)*
-        #[doc = ""]
-        #[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
+        #passed
         #[napi(object, object_to_js = false)]
         pub struct #ident {
             #[doc = " The variant."]
@@ -2886,5 +2919,36 @@ mod tests {
                 "{js:?}: getter and method disagree"
             );
         }
+    }
+
+    /// A free function is renamed where it is defined and called, a method
+    /// of the same name is not (#260).
+    #[test]
+    fn a_method_keeps_its_name() {
+        let renames = BTreeMap::from([("boom".to_string(), format_ident!("ToyBoom"))]);
+        let mut named = BTreeSet::new();
+        let free = rename_idents(
+            quote!(
+                pub fn boom() {}
+            ),
+            &renames,
+            &mut named,
+        );
+        assert_eq!(
+            free.to_string(),
+            quote!(
+                pub fn ToyBoom() {}
+            )
+            .to_string()
+        );
+        let method = rename_idents(
+            quote!(impl Canvas { pub fn boom(&self) { boom() } }),
+            &renames,
+            &mut named,
+        );
+        assert_eq!(
+            method.to_string(),
+            quote!(impl Canvas { pub fn boom(&self) { ToyBoom() } }).to_string()
+        );
     }
 }

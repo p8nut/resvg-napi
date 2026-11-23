@@ -24,6 +24,7 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.
     <clipPath id="c"><rect width="50" height="50"/></clipPath>
     <mask id="m"><rect width="50" height="50" fill="white"/></mask>
     <filter id="f"><feGaussianBlur stdDeviation="1"/><feImage xlink:href="#r"/></filter>
+    <path id="curve" d="M0 80 L100 80"/>
   </defs>
   <g id="g" clip-path="url(#c)" mask="url(#m)" filter="url(#f)">
     <rect id="r" width="10" height="10" fill="url(#lg)" stroke="url(#rg)"/>
@@ -31,6 +32,7 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.
   </g>
   <image id="i" width="1" height="1" xlink:href="data:image/png;base64,${PNG}"/>
   <text id="t" x="10" y="50" font-family="IBM Plex Sans" font-size="12">Hi</text>
+  <text id="tp" font-family="IBM Plex Sans" font-size="12" text-decoration="underline"><textPath xlink:href="#curve">On</textPath></text>
 </svg>`;
 
 /** One instance of every class, by `namespace.Class`: fresh each call. */
@@ -44,6 +46,8 @@ function everyClass() {
   const image = node('i').children()[0].value;
   const [span] = text.layouted();
   const [feImage] = tree.filters().flatMap((f) => f.primitives()).filter((p) => p.kind.type === 'image');
+  const [chunk] = text.chunks();
+  const [onPath] = node('tp').chunks();
   return {
     'fontdb.Database': db,
     'fontdb.FaceInfo': db.faces()[0],
@@ -78,6 +82,13 @@ function everyClass() {
     'usvg.Span': span,
     'usvg.PositionedGlyph': span.positionedGlyphs[0],
     'usvg.ImageKindPng': image.kind(),
+    'usvg.Fill': node('r').fill(),
+    'usvg.Stroke': node('r').stroke(),
+    'usvg.TextChunk': chunk,
+    'usvg.TextSpan': chunk.spans[0],
+    'usvg.TextDecoration': chunk.spans[0].decoration,
+    'usvg.TextDecorationStyle': onPath.spans[0].decoration.underline,
+    'usvg.TextPath': onPath.textFlow.value,
     'guard.ImageHrefResolver': new guard.ImageHrefResolver(),
     'guard.FontResolver': new guard.FontResolver(),
   };

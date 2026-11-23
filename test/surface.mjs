@@ -112,11 +112,14 @@ const wanted = [
   'Text.dy', 'Text.writingMode',
   'PositionedGlyph.outlineTransform', 'PositionedGlyph.svgTransform', 'PositionedGlyph.colrTransform',
   'RadialGradient.fx', 'RadialGradient.fy', 'Image.isVisible',
+  // reached only as the payload of a `TextFlow` (#251)
+  'TextPath.id', 'TextPath.startOffset', 'TextPath.path',
 ];
 const missed = wanted.filter((m) => !read.has(m));
 assert.deepEqual(missed, [], 'getters the walk should have reached');
-// `TextChunk`, `TextSpan` and `Font` are plain objects (every member maps,
-// `Font.families` included): their members are properties, read here.
+// `TextChunk` and `TextSpan` are read-only classes (a `Fill` in them holds a
+// paint server's class), whose getters `in` finds on the prototype; `Font` is
+// a plain object (every member maps, `Font.families` included).
 const [chunk] = tree.nodeById('t').value.chunks();
 const [span] = chunk.spans;
 for (const k of ['letterSpacing', 'wordSpacing', 'smallCaps', 'applyKerning', 'dominantBaseline',

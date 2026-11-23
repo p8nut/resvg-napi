@@ -100,16 +100,19 @@ if (found?.kind === 'path') {
       // only the colour branch has `color`
       const { red, green, blue }: usvg.Color = paint.value;
       console.log(`fill rgb(${red} ${green} ${blue})`);
+    } else if (paint.type === 'linearGradient') {
+      // a server branch carries the server's class, the kind narrowing it
+      const server: usvg.LinearGradient = paint.value;
+      console.log(`fill is a linear gradient named ${server.id()}`);
     } else {
-      // and only the server branch has `id`, with the kind narrowed too
-      const kind: 'linearGradient' | 'radialGradient' | 'pattern' = paint.type;
-      console.log(`fill is a ${kind} named ${paint.id}`);
+      const kind: 'radialGradient' | 'pattern' = paint.type;
+      console.log(`fill is a ${kind} named ${paint.value.id()}`);
     }
-    // @ts-expect-error a colour carries a value, not an id
+    // @ts-expect-error the server is the payload, not an id beside it
     paint.id?.toString();
   }
 
-  const dashes: number[] | undefined = shape.stroke()?.dasharray;
+  const dashes: number[] | null | undefined = shape.stroke()?.dasharray;
   console.log(`dashes: ${dashes?.join(" ") ?? "none"}`);
 }
 

@@ -925,6 +925,23 @@ pub fn generate(config: &Config, head: TokenStream, tail: TokenStream) -> Output
             .collect()
     };
     let mut todo: Vec<String> = handles_of(&referenced).into_iter().collect();
+    // Plus the handles a union carries (the toy's `Ink::Stamped(Arc<Stamp>)`):
+    // the variant's object holds the class, so the class has to exist even
+    // where no wrapped impl returns the type (`Stamp`).
+    todo.extend(
+        vocab
+            .payload
+            .values()
+            .filter(|info| info.payload_blocker(&vocab).is_none())
+            .flat_map(|info| &info.variants)
+            .filter_map(|(_, p)| match p {
+                Payload::Value(ty) => match vocab.classify(ty) {
+                    Some(Js::Handle(x)) => Some(x),
+                    _ => None,
+                },
+                _ => None,
+            }),
+    );
     let mut done: BTreeSet<String> = BTreeSet::new();
     while let Some(t) = todo.pop() {
         if !done.insert(t.clone()) {

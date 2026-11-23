@@ -98,6 +98,7 @@ tests:
 
 ```bash
 npx napi build --cwd crates/toy-napi --platform --no-js
+node scripts/dts-aliases.mts crates/toy-napi/index.d.ts
 node --test crates/toy-napi/toy.spec.mjs
 ```
 
@@ -191,10 +192,12 @@ make it, all generic:
   with its namespace as a prefix: `FaceInfo` becomes `FontdbFaceInfo`, and a
   helper `paint_to_js` becomes `usvg_paint_to_js`. It also sets `js_name` and
   `namespace`. Two Rust items cannot share a name, so the prefix is needed,
-  and JS never sees it. The one trace is the type alias napi declares for
-  every class (`export type FontdbFaceInfo = FaceInfo`). References between
-  items are renamed with them. Paths, fields, methods and enum variants are
-  not renamed. napi resolves a reference's TypeScript name when the item
+  and JS never sees it. napi does declare a type alias for every class
+  (`export type FontdbFaceInfo = FaceInfo`), unconditionally; every build
+  drops those lines (`scripts/dts-aliases.mts`, run after `napi build` by
+  `npm run build` and CI). References between items are renamed with them.
+  Paths, fields, methods (their definitions included: `Canvas.boom` beside
+  the free `boom`) and enum variants are not renamed. napi resolves a reference's TypeScript name when the item
   expands, and falls back to the Rust name for anything not seen yet. So the
   definitions are emitted in dependency order, and impls and functions after
   all of them.
@@ -432,6 +435,15 @@ Q34):
   a class cannot go (an `#[napi(object)]` field, a union's payload), a
   plain-data class is its `<Name>Object`, and any other makes its holder a
   read-only class (`usvg.Primitive`, which holds a `NonZeroRect`).
+- **An `Arc`-held definition a union carries is its handle class**: a
+  variant carrying `Arc<T>` alone, `T` with an `id()`, is an output-only
+  object whose `value` is the `T` class, the `Arc` cloned:
+  `Paint::LinearGradient(Arc<LinearGradient>)` is
+  `{ type: 'linearGradient', value: usvg.LinearGradient }`, and
+  `TextFlow::Path` holds a `usvg.TextPath`, a class generated for it though
+  no method returns one (the toy's `Ink::Stamped(Arc<Stamp>)`). The union
+  then holds a class, so a type holding it is a read-only class too:
+  `usvg.Fill`, `usvg.Stroke` and the text types that reach them.
 - **Tuples are arrays** (Q38): `Vec<(A, B)>` or `&[(A, B)]` is
   `Array<[A, B]>`, each element mapped as a union's payload is (a face's
   `families`, `Array<[string, fontdb.Language]>`); a tuple of numbers,
@@ -577,8 +589,9 @@ hold a borrow, so `Config::projections` lists these types and
   move into the step, so they must be values (a string, a number). A type
   reached both ways (from a table and from what refers to it) is one class.
 
-`Option<()>` returns `true` or `null` (`boolean | null` in the `.d.ts`): the
-value says whether the call did anything.
+`Option<()>` returns `true` or `null` (`true | null` in the `.d.ts`, where
+napi would write `boolean | null`): the value says whether the call did
+anything.
 
 The root lists `usvg::Node` and the four node types: `tree.root()` is a
 `usvg.Group`, `group.children()` and `tree.nodeById(id)` hand out
@@ -646,7 +659,7 @@ render-then-encode chain (Q29): two round trips, which the helpers chain.
   an argument with no owned form, a class with a shared name returned
   (napi builds it from the sync factory's constructor only). Its
   `.d.ts` is napi's, from the return type (`Promise<usvg.Tree>`), with
-  `Promise<void>` and `Promise<boolean | null>` written out for `()` and
+  `Promise<void>` and `Promise<true | null>` written out for `()` and
   `Option<()>`.
 
 The toy has one of each: a static that throws (`Canvas.fromTextAsync`),

@@ -60,6 +60,9 @@ export declare namespace toy {
   export interface Scene {
     [Symbol.dispose](): void
   }
+  export interface Stamp {
+    [Symbol.dispose](): void
+  }
   export interface Tally {
     [Symbol.dispose](): void
   }

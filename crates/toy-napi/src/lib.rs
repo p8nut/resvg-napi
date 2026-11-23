@@ -47,7 +47,7 @@ pub enum ToyDirection {
 }
 #[doc = " A tag a filter matches on: a name it borrows, or any."]
 #[doc = ""]
-#[doc = " Passed in as `{ type, value }` or `{ type, bytes }`."]
+#[doc = " Passed in as `{ type, value }`."]
 #[napi(object, object_to_js = false, js_name = "Tag", namespace = "toy")]
 pub struct ToyTag {
     #[doc = " The variant."]
@@ -143,6 +143,11 @@ pub struct ToyOrigin {
     pub value: Option<String>,
     #[doc = " The bytes the variant carries, copied: required for `'inline'`, ignored otherwise."]
     pub bytes: Option<Uint8Array>,
+}
+#[doc = " Read-only handle on a `toy::Stamp`."]
+#[napi(js_name = "Stamp", namespace = "toy")]
+pub struct ToyStamp {
+    inner: napi_support::Slot<std::sync::Arc<toy::Stamp>>,
 }
 #[doc = " Read-only handle on a `toy::Album`."]
 #[napi(js_name = "Album", namespace = "toy")]
@@ -312,6 +317,30 @@ pub struct ToyContentLayer {
 #[napi(js_name = "Content", namespace = "toy")]
 pub type ToyContentUnion =
     Either4<ToyContentPlain, ToyContentCanvas, ToyContentFrame, ToyContentLayer>;
+#[doc = " The payload-free variants of `Ink`."]
+#[napi(object, js_name = "InkPlain", namespace = "toy")]
+#[derive(Clone)]
+pub struct ToyInkPlain {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'plain'")]
+    pub r#type: String,
+}
+#[doc = " `Ink::Stamped`."]
+#[napi(
+    object,
+    object_from_js = false,
+    js_name = "InkStamped",
+    namespace = "toy"
+)]
+pub struct ToyInkStamped {
+    #[doc = " Discriminant. Narrow on this."]
+    #[napi(ts_type = "'stamped'")]
+    pub r#type: String,
+    pub value: ToyStamp,
+}
+#[doc = " Any variant of `Ink`."]
+#[napi(js_name = "Ink", namespace = "toy")]
+pub type ToyInkUnion = Either<ToyInkPlain, ToyInkStamped>;
 #[doc = " The payload-free variants of `Label`."]
 #[napi(object, js_name = "LabelPlain", namespace = "toy")]
 #[derive(Clone)]
@@ -609,6 +638,27 @@ impl ToyTag {
                 ));
             }
         })
+    }
+}
+impl ToyStamp {
+    fn wrap(inner: std::sync::Arc<toy::Stamp>) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyStamp {
+    #[doc = " The name a use refers to it by."]
+    #[napi]
+    pub fn id(&self) -> Result<String, String> {
+        let __inner = self.inner.get("Stamp")?;
+        Ok((*__inner).id().to_string())
+    }
+    #[napi]
+    pub fn size(&self) -> Result<f64, String> {
+        let __inner = self.inner.get("Stamp")?;
+        Ok(f64::from((*__inner).size()))
     }
 }
 impl ToyAlbum {
@@ -1444,6 +1494,50 @@ impl ToyCanvas {
             .map_err(napi_support::coded)?;
         Ok(__v.to_vec().into())
     }
+    #[doc = " The byte count. Named like the free [`boom`], and a method all the"]
+    #[doc = " same: it keeps its own name in JS, async twin included."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn boom(&self) -> Result<u32, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Canvas::boom", || __self.boom())
+            .map_err(napi_support::coded)?;
+        Ok(__v)
+    }
+    #[doc = " `boom` on a worker thread. The arguments are read now, the call runs"]
+    #[doc = " off the main thread, and the promise resolves with its result or rejects"]
+    #[doc = " as `boom` throws. `signal` drops the call while it is still queued."]
+    #[doc = " Until it settles, this instance is in use: any other use throws `Leased`."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn boom_async(
+        &mut self,
+        env: Env,
+        #[napi(ts_arg_type = "AbortSignal | undefined | null")] signal: Option<
+            napi_support::Signal,
+        >,
+    ) -> Result<PromiseRaw<'static, u32>, String> {
+        let __self = self.__lease()?;
+        napi_support::spawn(
+            env,
+            vec![__self.hold()],
+            move || {
+                napi_support::contained("Canvas::boom", || __self.boom())
+                    .map_err(napi_support::coded)
+            },
+            |__v| Ok(__v),
+            signal,
+        )
+    }
+    #[doc = " An ink stamped with a fresh `Stamp` named `id`, as wide as the canvas."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn inked(&self, id: String) -> Result<ToyInkUnion, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Canvas::inked", || __self.inked(&id))
+            .map_err(napi_support::coded)?;
+        Ok(toy_ink_to_js(&__v))
+    }
     #[doc = " A copy of the canvas in a frame of its own: a union made, not"]
     #[doc = " borrowed from anything."]
     #[napi]
@@ -1893,7 +1987,7 @@ pub fn toy_count_async(
     )
 }
 #[doc = " `None` for an empty layer: nothing to visit."]
-#[napi(js_name = "visit", namespace = "toy")]
+#[napi(js_name = "visit", namespace = "toy", ts_return_type = "true | null")]
 #[allow(clippy::redundant_closure)]
 pub fn toy_visit(#[napi(ts_arg_type = "toy.Item")] item: Object) -> Result<Option<bool>, String> {
     let __item = toy_item_from_js(&item)?;
@@ -2139,6 +2233,17 @@ fn toy_content_to_js(p: napi_support::Projection<toy::Content>) -> ToyContentUni
                 })
                 .expect("the variant matched"),
             ),
+        }),
+    }
+}
+fn toy_ink_to_js(v: &toy::Ink) -> ToyInkUnion {
+    match v {
+        toy::Ink::Plain => Either::A(ToyInkPlain {
+            r#type: "plain".to_string(),
+        }),
+        toy::Ink::Stamped(v) => Either::B(ToyInkStamped {
+            r#type: "stamped".to_string(),
+            value: ToyStamp::wrap(v.clone()),
         }),
     }
 }
@@ -2731,6 +2836,21 @@ pub fn toy_shared(a: &ToyTally, b: &ToyTally) -> Result<bool, String> {
     Ok(std::sync::Arc::ptr_eq(a.__ref()?, b.__ref()?))
 }
 #[napi(namespace = "toy")]
+impl ToyStamp {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Stamp")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "toy")]
 impl ToyAlbum {
     #[doc = " Drops this instance's value now, not at garbage collection: every later"]
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
@@ -2816,6 +2936,7 @@ fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
         (Some("toy"), "OriginInline"),
         (Some("toy"), "OriginPinned"),
         (Some("toy"), "Scene"),
+        (Some("toy"), "Stamp"),
         (Some("toy"), "Tally"),
         (Some("toy"), "Vec2"),
     ];
@@ -2918,6 +3039,35 @@ impl ToyTally {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Tally".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyStamp {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Stamp",
+            &["disposed"],
+            &["id", "size"],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Stamp".to_string()
     }
 }
 #[napi(namespace = "toy")]
@@ -3053,7 +3203,7 @@ impl ToyCanvas {
             &this,
             "Canvas",
             &["disposed"],
-            &["width", "height"],
+            &["width", "height", "boom"],
             depth,
             options,
             inspect,

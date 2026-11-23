@@ -169,6 +169,17 @@ test('a member moved into a namespace: breaking', () => {
   assert.ok(d.added.includes('toy.counter'));
 });
 
+test("napi's class alias is not API: dropping it is no change", () => {
+  const withAlias = edit(
+    '  get [globalThis.Symbol.toStringTag](): string\n}\n',
+    '  get [globalThis.Symbol.toStringTag](): string\n}\nexport type ToyCounter = Counter\n',
+  );
+  assert.equal(declarations(withAlias).has('ToyCounter'), false);
+  assert.equal(apiDiff(withAlias, BASE).classification, 'none');
+  // An alias of anything but a class is a type like any other.
+  assert.equal(declarations(edit('export type Kind', 'export type Other = Point\nexport type Kind')).has('Other'), true);
+});
+
 test('getter to method, static to instance: breaking', () => {
   assert.equal(apiDiff(BASE, edit('get origin(): Point', 'origin(): Point')).classification, 'breaking');
   assert.equal(apiDiff(BASE, edit('static fromLabel', 'fromLabel')).classification, 'breaking');

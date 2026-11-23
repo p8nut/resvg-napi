@@ -60,19 +60,22 @@ const shape = (id) => tree.nodeById(id).value;
   assert.equal(stroke.dashoffset, 1);
 }
 
-// 4. a paint server arrives as an id, not a copy: the document shares one
-//    gradient between every element referencing it. `id` is a field here and a
-//    method on the classes -- objects get fields, classes get accessors.
+// 4. a paint server arrives as its class, not a copy: the document shares one
+//    gradient between every element referencing it, as `Paint` holds an `Arc`
+//    of it in Rust. The same class the tree's tables hand out.
 {
   const g = shape('grad-filled').fill().paint;
   assert.equal(g.type, 'linearGradient');
-  assert.equal(g.id, 'grad');
-  assert.equal(g.value, undefined, 'a server carries no value, only an id');
-  assert.ok(tree.linearGradients().some((x) => x.id() === g.id), 'id resolves in defs');
+  assert.ok(g.value instanceof usvg.LinearGradient);
+  assert.equal(g.value.id(), 'grad');
+  assert.equal(g.id, undefined, 'the server is the payload, not an id beside it');
+  assert.ok(tree.linearGradients().some((x) => x.id() === g.value.id()), 'the same definition as in defs');
+  assert.ok(g.value.stops().length > 1);
 
   const p = shape('pat-filled').fill().paint;
   assert.equal(p.type, 'pattern');
-  assert.ok(tree.patterns().some((x) => x.id() === p.id));
+  assert.ok(p.value instanceof usvg.Pattern);
+  assert.ok(tree.patterns().some((x) => x.id() === p.value.id()));
 }
 
 // 5. usvg normalises a single-stop gradient into the plain colour it is

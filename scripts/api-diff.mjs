@@ -208,6 +208,15 @@ export function declarations(text) {
     }
   }
 
+  // `export type UsvgTree = Tree`: napi aliases a class's Rust identifier to
+  // its JS name, and that identifier is the binding's business, not the API
+  // (ADR 0002). The build drops these aliases (scripts/dts-aliases.mts);
+  // ignored here too, so a d.ts that still has them diffs as one without.
+  for (const [k, sigs] of found) {
+    const m = sigs.length === 1 && sigs[0].match(/^type = ([\w$]+)$/);
+    const sibling = m && [...k.split('.').slice(0, -1), m[1]].join('.');
+    if (sibling && found.get(sibling)?.some((s) => s.startsWith('class'))) found.delete(k);
+  }
   return new Map([...found].map(([k, sigs]) => [k, [...new Set(sigs)].sort().join(' & ')]));
 }
 

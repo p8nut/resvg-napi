@@ -563,9 +563,23 @@
   const analyseSoon = debounce(() => analyse(), 200);
   const renderSoon = debounce(() => render(), 350);
 
+  // One controller per pass of `analyse` and of `render`, declared up here for
+  // the same reason: each call aborts the one before it, and so does a change
+  // (`refresh`). A call still queued on the wasm's worker threads rejects with
+  // an AbortError, one already running finishes; either way its result is
+  // dropped (`signal.aborted`), so a stale pass never overwrites a newer one and
+  // an abort is not an error.
+  const analysing = {}, rendering = {};
+  function supersede(slot) {
+    slot.current?.abort();
+    return (slot.current = new AbortController()).signal;
+  }
+
   /** Anything that changes the input goes through here, so the two stay in step. */
   function refresh() {
     beginPass();
+    analysing.current?.abort();
+    rendering.current?.abort();
     analyseSoon();
     renderSoon();
   }
@@ -1128,7 +1142,7 @@
     $('slugEngine').title = `${Object.keys(mod).length} exports in the wasm module`;
     log('idle');
     report('info', 'page',
-      `Ready. loadSystemFonts() finds ${helpers.systemFonts().len()} faces in this sandbox, so a font has to come from somewhere else.`);
+      `Ready. loadSystemFonts() finds ${(await helpers.systemFontsAsync()).len()} faces in this sandbox, so a font has to come from somewhere else.`);
     // ...and this page ships one, because a first visit that cannot draw text
     // is a dead end in front of the one thing the bench exists to show. Local
     // and same-origin: no CDN, no rate limit, and it works offline. Dropping a
@@ -1152,12 +1166,13 @@
   // Every parse goes through the helpers: the page's fonts, the dropped images
   // by href, and `guard`'s resolvers, because the pasted SVG is untrusted and
   // usvg's default resolver would read any path. `{ tree, pendingImages,
-  // pendingFonts }`.
+  // pendingFonts }`. On the wasm's worker threads, so a heavy document does not
+  // freeze the page; `signal` drops a parse still queued there.
   function parseOptions() {
     return { ...defaults(), fonts: db, images: Object.fromEntries(images) };
   }
-  function parse(svg = source()) {
-    return helpers.parse(svg, parseOptions());
+  function parse(svg = source(), signal) {
+    return helpers.parseAsync(svg, { ...parseOptions(), signal });
   }
 
   // Parse once with the current state to find out what the document is missing:
@@ -1165,20 +1180,23 @@
   // `pendingImages` the hrefs neither the uploads nor the page resolved,
   // and a look at the source tells us whether there is any text at all
   // (a generic `font-family` never shows up as a named family).
-  function analyse() {
+  async function analyse() {
     showVariables();
+    const signal = supersede(analysing);
     let parsed;
     try {
-      parsed = parse();
+      parsed = await parse(undefined, signal);
     } catch (e) {
+      if (signal.aborted) return;
       report('error', 'resvg', e.message);
       drainEngineLogs();
       $('wanted').hidden = true;
       return;
     }
+    parsed.tree.dispose();
+    if (signal.aborted) return;
     drainEngineLogs();
 
-    parsed.tree.dispose();
     const missingFonts = parsed.pendingFonts;
     const hasText = /<text[\s>]/.test(source());
     const needAnyFont = hasText && db.len() === 0;
@@ -1304,7 +1322,7 @@
     // still waiting for a file.
     let pending = [];
     try {
-      const parsed = parse();
+      const parsed = await parse();
       parsed.tree.dispose();
       pending = parsed.pendingImages;
     } catch { /* unparseable, skip */ }
@@ -1514,15 +1532,14 @@
   // The proof's current blob URL, revoked when the next render replaces it.
   let outUrl = null;
 
-  function render() {
+  async function render() {
+    const signal = supersede(rendering);
     const t0 = performance.now();
+    let tree;
     try {
       const rendered = fittedSource();
-      // The exact string resvg was handed: a template bench without this makes
-      // every Liquid question a guess.
-      $('renderedSource').textContent = rendered;
       // One parse serves the proof, the measurements and the Nodes panel.
-      const { tree } = parse(rendered);
+      ({ tree } = await parse(rendered, signal));
       // The root group's layer box, as a plain `{ x, y, width, height }`.
       const bbox = nodeExtent({ kind: 'group', value: tree.root() });
       const size = tree.size();
@@ -1533,8 +1550,21 @@
         background: $('bg').value || undefined,
         crop: $('crop').checked ? bbox : undefined,
       };
-      const png = helpers.renderPng(tree, params);
+      const png = await helpers.renderPngAsync(tree, { ...params, signal });
+      // The resolved tree: CSS applied, `use` expanded, inheritance settled --
+      // and text either kept or flattened to paths, which is the one thing a
+      // rendered source cannot tell you.
+      const resolved = await tree.toStringAsync({
+        preserveText: $('preserveText').checked,
+        coordinatesPrecision: 2,
+        transformsPrecision: 4,
+      }, signal);
+      if (signal.aborted) return;
       const ms = (performance.now() - t0).toFixed(1);
+
+      // The exact string resvg was handed: a template bench without this makes
+      // every Liquid question a guess.
+      $('renderedSource').textContent = rendered;
 
       // The buffer is a view over the wasm module's shared memory, and Blob
       // refuses shared views -- so copy out first. Same reason applies to
@@ -1571,25 +1601,21 @@
         + `${png.length.toLocaleString()} bytes, ${ms} ms`;
       $('slugFonts').textContent = String(db.len());
       lastRender = { doc, params, nodes: showTree(tree) };
-      // The resolved tree: CSS applied, `use` expanded, inheritance settled --
-      // and text either kept or flattened to paths, which is the one thing a
-      // rendered source cannot tell you.
-      $('resolvedTree').textContent = tree.toString({
-        preserveText: $('preserveText').checked,
-        coordinatesPrecision: 2,
-        transformsPrecision: 4,
-      });
-      // The rows' node handles keep what they point at alive on their own.
-      tree.dispose();
+      $('resolvedTree').textContent = resolved;
       drawBoxes();
       drainEngineLogs();
       log(`${ms} ms`);
     } catch (e) {
+      // Superseded: the AbortError, or the error of a source already replaced.
+      if (signal.aborted) return;
       // No `$('info')` reset here: that element is long gone, and touching it
       // made the catch throw and hide the error it was reporting.
       report('error', 'resvg', e.message);
       drainEngineLogs();
       log('failed');
+    } finally {
+      // The rows' node handles keep what they point at alive on their own.
+      tree?.dispose();
     }
   }
 

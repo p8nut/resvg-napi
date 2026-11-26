@@ -13,7 +13,7 @@ Two pages:
 
 - **`index.html`** -- the first thing a visitor sees: an SVG editor, the PNG
   resvg draws from it, four plain examples (shapes, text, gradient, filter) and
-  the Node.js call that does the same (`renderPng` from `resvg-napi/helpers`).
+  the Node.js call that does the same (`renderPngAsync` from `resvg-napi/helpers`).
   No templates, no options beyond scale and the nodes' bounding boxes.
 - **`bench.html`** -- the bench, linked from the simple page and
   described below: everything else the API can do.
@@ -25,6 +25,11 @@ Both pages, and `render.mjs`, use the API the way a user would:
 `resvg`...) where the helpers stop: the one `fontdb.Database` of the page's
 fonts, the Elements panel's walk of `tree.root().children()`, the global
 `takeLogs()`. The demo is the helpers' real-world test (ADR 0001).
+
+The pages render with the async helpers (`parseAsync`, `renderPngAsync`), on
+the wasm's worker threads, so a heavy SVG does not freeze typing. Each render
+has its own `AbortController` and a change aborts the one before it: its
+`AbortError` is not reported, and a stale result is never shown.
 
 The generic families (`sans-serif`...) point at the first font the demo
 loads, by the family fontdb read for it: `db.faces()[n].families[0][0]`, the

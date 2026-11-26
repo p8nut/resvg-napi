@@ -265,6 +265,33 @@ pub struct ToyItemLayer {
 #[doc = " Any variant of `Item`."]
 #[napi(js_name = "Item", namespace = "toy")]
 pub type ToyItemUnion = Either<ToyItemLayer, ToyItemDot>;
+#[doc = " Every public field of `Entry`, as a plain object: what a member taking one by value reads."]
+#[napi(
+    object,
+    object_to_js = false,
+    js_name = "EntryObject",
+    namespace = "toy"
+)]
+pub struct ToyEntryObject<'a> {
+    #[doc = " Replaced by `push_entry`, whatever it was."]
+    pub key: ClassInstance<'a, ToyKey>,
+    #[doc = " Where its bytes come from: an input enum."]
+    pub origin: ToyOrigin,
+    pub index: f64,
+    #[doc = " Names with a direction, a list of pairs. Never empty: the toy"]
+    #[doc = " binding says so (`Config::non_empty`)."]
+    pub names: Vec<(String, ToyDirection)>,
+    pub label: String,
+    pub direction: ToyDirection,
+    #[doc = " A number newtype."]
+    pub min_len: f64,
+    pub on: bool,
+}
+#[doc = " Read-only view of an `Entry`."]
+#[napi(js_name = "Entry", namespace = "toy")]
+pub struct ToyEntry {
+    inner: napi_support::Slot<napi_support::Projection<toy::Entry>>,
+}
 #[doc = " Read-only view of a `Frame`."]
 #[napi(js_name = "Frame", namespace = "toy")]
 pub struct ToyFrame {
@@ -1042,6 +1069,26 @@ impl ToyTally {
         let __v = napi_support::contained("Tally::origins", || __self.origins())
             .map_err(napi_support::coded)?;
         Ok(__v.iter().map(toy_origin_to_js).collect())
+    }
+    #[doc = " Keeps `entry` under a key of its own, which replaces its `key`: a"]
+    #[doc = " data type taken by value."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn push_entry(&mut self, entry: ToyEntryObject) -> Result<ToyKey, String> {
+        let __entry = entry.into_upstream()?;
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
+        let __v = napi_support::contained("Tally::push_entry", || __self.push_entry(__entry))
+            .map_err(napi_support::coded)?;
+        Ok(ToyKey::__from(__v))
+    }
+    #[doc = " The entries kept, in order."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn entries(&self) -> Result<Vec<ToyEntry>, String> {
+        let __self = self.__ref()?;
+        let __v = napi_support::contained("Tally::entries", || __self.entries())
+            .map_err(napi_support::coded)?;
+        Ok(__v.into_iter().map(|x| ToyEntry::wrap(x.clone())).collect())
     }
     #[doc = " Runs `p` with the joined names' bytes and how many there are: the"]
     #[doc = " data is lent, not returned."]
@@ -2205,6 +2252,147 @@ fn toy_item_from_js(o: &Object) -> Result<napi_support::Projection<toy::Item>, S
         )
     })
 }
+impl ToyEntryObject<'_> {
+    #[doc = " The upstream value, built from the fields."]
+    fn into_upstream(self) -> Result<toy::Entry, String> {
+        Ok(toy::Entry {
+            key: {
+                let v = self.key;
+                *v.__ref()?
+            },
+            origin: {
+                let v = self.origin;
+                v.to_upstream()?
+            },
+            index: {
+                let v = self.index;
+                napi_support::int("Entry.index", v)?
+            },
+            names: {
+                let v = {
+                    let v = self.names;
+                    v.into_iter()
+                        .map(|(x0, x1)| {
+                            Ok((x0, {
+                                let v = x1;
+                                v.into()
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, String>>()?
+                };
+                if v.is_empty() {
+                    return Err(napi_support::thrown(
+                        "InvalidArg",
+                        "Entry.names may not be empty",
+                    ));
+                }
+                v
+            },
+            label: self.label,
+            direction: {
+                let v = self.direction;
+                v.into()
+            },
+            min_len: {
+                let v = self.min_len;
+                toy::MinLen(napi_support::int("Entry.minLen", v)?)
+            },
+            on: self.on,
+        })
+    }
+}
+impl ToyEntry {
+    #[allow(dead_code)]
+    fn wrap(inner: toy::Entry) -> Self {
+        Self::__proj(napi_support::Projection::owned(inner))
+    }
+    fn __proj(inner: napi_support::Projection<toy::Entry>) -> Self {
+        Self {
+            inner: napi_support::Slot::new(inner),
+        }
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyEntry {
+    #[napi(getter)]
+    pub fn key(&self) -> Result<ToyKey, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            ToyKey::__from(v.key)
+        })
+    }
+    #[napi(getter)]
+    pub fn origin(
+        &self,
+    ) -> Result<Either3<ToyOriginInline, ToyOriginPath, ToyOriginPinned>, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            toy_origin_to_js(&v.origin.clone())
+        })
+    }
+    #[napi(getter)]
+    pub fn index(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.index
+        })
+    }
+    #[napi(getter)]
+    pub fn names(&self) -> Result<Vec<(String, ToyDirection)>, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.names
+                .clone()
+                .iter()
+                .map(|(x0, x1)| (x0.to_string(), ToyDirection::from(*x1)))
+                .collect()
+        })
+    }
+    #[napi(getter)]
+    pub fn label(&self) -> Result<String, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.label.clone().to_string()
+        })
+    }
+    #[napi(getter)]
+    pub fn direction(&self) -> Result<ToyDirection, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            ToyDirection::from(v.direction)
+        })
+    }
+    #[napi(getter)]
+    pub fn min_len(&self) -> Result<u32, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            u32::from(v.min_len.0)
+        })
+    }
+    #[napi(getter)]
+    pub fn on(&self) -> Result<bool, String> {
+        let __inner = self.inner.get("Entry")?;
+        Ok({
+            let __p = __inner;
+            let v = __p.get();
+            v.on
+        })
+    }
+}
 impl ToyFrame {
     #[allow(dead_code)]
     fn wrap(inner: toy::Frame) -> Self {
@@ -3009,6 +3197,21 @@ impl ToyAlbum {
     }
 }
 #[napi(namespace = "toy")]
+impl ToyEntry {
+    #[doc = " Drops this instance's value now, not at garbage collection: every later"]
+    #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
+    #[doc = " the symbol, for `using`. Harmless twice."]
+    #[napi]
+    pub fn dispose(&mut self) -> Result<(), String> {
+        self.inner.dispose("Entry")
+    }
+    #[doc = " Whether `dispose()` has been called."]
+    #[napi(getter)]
+    pub fn disposed(&self) -> bool {
+        self.inner.disposed()
+    }
+}
+#[napi(namespace = "toy")]
 impl ToyFrame {
     #[doc = " Drops this instance's value now, not at garbage collection: every later"]
     #[doc = " call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has"]
@@ -3074,6 +3277,7 @@ fn alias_dispose(env: &Env, exports: Object) -> Result<()> {
         (Some("toy"), "Color"),
         (Some("toy"), "Counter"),
         (Some("toy"), "Dot"),
+        (Some("toy"), "Entry"),
         (Some("toy"), "Frame"),
         (Some("toy"), "Key"),
         (Some("toy"), "Layer"),
@@ -3444,6 +3648,45 @@ impl ToyDot {
     #[napi(getter, well_known_symbol = "toStringTag")]
     pub fn to_string_tag(&self) -> String {
         "Dot".to_string()
+    }
+}
+#[napi(namespace = "toy")]
+impl ToyEntry {
+    #[doc = " What `console.log` and `util.inspect` print: the getters, under the class name."]
+    #[napi(symbol_for = "nodejs.util.inspect.custom")]
+    pub fn inspect_custom(
+        &self,
+        env: Env,
+        this: This,
+        depth: Option<f64>,
+        options: Object,
+        inspect: Function<FnArgs<(Object, Object)>, String>,
+    ) -> Result<String> {
+        napi_support::inspect(
+            &env,
+            &this,
+            "Entry",
+            &[
+                "key",
+                "origin",
+                "index",
+                "names",
+                "label",
+                "direction",
+                "minLen",
+                "on",
+                "disposed",
+            ],
+            &[],
+            depth,
+            options,
+            inspect,
+        )
+    }
+    #[doc = " The class name, for `Object.prototype.toString`."]
+    #[napi(getter, well_known_symbol = "toStringTag")]
+    pub fn to_string_tag(&self) -> String {
+        "Entry".to_string()
     }
 }
 #[napi(namespace = "toy")]

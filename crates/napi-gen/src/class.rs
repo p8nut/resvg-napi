@@ -115,6 +115,11 @@ pub struct Classes<'a> {
     /// once they are done: one pass, local to this table. A `RefCell` because
     /// the error mapper that finds one sits deep under `&self`.
     errors: RefCell<BTreeSet<(usize, String)>>,
+    /// The input forms of the data types an argument takes by value
+    /// ([`Classes::data_input`]), by (source, name): `None` for one with
+    /// none. Filled while members emit, as `errors` is; emitted by
+    /// [`Classes::data_inputs`].
+    inputs: RefCell<BTreeMap<(usize, String), Option<TokenStream>>>,
     /// The build script's config: the allowlists the table is read from.
     pub config: Config,
 }
@@ -321,6 +326,16 @@ fn copy_out(inputs: &[Type]) -> Option<(TokenStream, Type)> {
     Some((quote!(|#(#pats),*| #body), syn::parse2(ty).ok()?))
 }
 
+/// `conv`, an expression of `v`, applied to `value`: `value` itself when
+/// `conv` is `v` alone.
+fn bind(value: TokenStream, conv: TokenStream) -> TokenStream {
+    if conv.to_string() == "v" {
+        value
+    } else {
+        quote!({ let v = #value; #conv })
+    }
+}
+
 /// Whether `files` define a public type called `name`, of any kind.
 fn defines(files: &[syn::File], name: &str) -> bool {
     files
@@ -482,6 +497,7 @@ impl<'a> Classes<'a> {
             classes,
             unions,
             errors: RefCell::new(BTreeSet::new()),
+            inputs: RefCell::new(BTreeMap::new()),
             config,
         }
     }
@@ -711,6 +727,7 @@ impl<'a> Classes<'a> {
         pat: &Ident,
         ty: &Type,
         bounds: &BTreeMap<String, Option<Bound>>,
+        vocab: &Vocab,
     ) -> Option<(TokenStream, Option<TokenStream>, TokenStream)> {
         let name = lower_camel(&pat.to_string());
         let (r, inner) = deref(ty);
@@ -855,7 +872,217 @@ impl<'a> Classes<'a> {
                 },
             ));
         }
+        // A data type taken by value: its `<Name>Object`, built for the call
+        // from the fields' input forms (`Classes::data_input`).
+        if r.is_none()
+            && let Some(obj) = self.data_input(ctx, &segs, vocab)
+        {
+            let tmp = format_ident!("__{pat}");
+            return Some((
+                quote!(#pat: #obj),
+                Some(quote!(let #tmp = #pat.into_upstream()?;)),
+                quote!(#tmp),
+            ));
+        }
         None
+    }
+
+    /// The input form of the data type `segs` names from source `ctx`
+    /// (`Vocab::objects`, `Vocab::values`), its ident: `<Name>Object`, a
+    /// plain object of the struct's fields, each in its input form, and an
+    /// `into_upstream(self)` that builds the struct from them. The reverse of
+    /// the output form, through the paths an argument already has: a class
+    /// held by value is its instance, copied; an input enum its `{ type,
+    /// value }` (one some member takes, `emit::input_enums`), its bytes
+    /// copied into a fresh `Arc`; an enum, a number, a string, a boolean, a
+    /// number newtype, or a list of pairs of those as they are. A number
+    /// that does not fit throws, as an argument does, and so does an empty
+    /// list `Config::non_empty` names.
+    ///
+    /// `None` when the struct has a private field, a generic parameter or
+    /// `#[non_exhaustive]` (JS could not build every value), or a field with
+    /// no input form.
+    fn data_input(&self, ctx: usize, segs: &[String], vocab: &Vocab) -> Option<Ident> {
+        let name = segs.last()?;
+        if !vocab.objects.contains(name) && !vocab.values.contains(name) {
+            return None;
+        }
+        let s = self.resolve(ctx, segs, |s| {
+            crate::vocab::struct_fields_opt(self.sources[s].files, name).is_some()
+        })?;
+        let key = (s, name.clone());
+        if !self.inputs.borrow().contains_key(&key) {
+            let code = self.data_input_code(s, name, vocab);
+            self.inputs.borrow_mut().insert(key.clone(), code);
+        }
+        self.inputs.borrow()[&key]
+            .is_some()
+            .then(|| format_ident!("{name}Object"))
+    }
+
+    /// [`Classes::data_input`]'s code for struct `name` of source `s`.
+    fn data_input_code(&self, s: usize, name: &str, vocab: &Vocab) -> Option<TokenStream> {
+        let st = self.sources[s]
+            .files
+            .iter()
+            .flat_map(|f| &f.items)
+            .find_map(|i| match i {
+                Item::Struct(st) if st.ident == name && is_pub(&st.vis) => Some(st),
+                _ => None,
+            })?;
+        let open = !st.attrs.iter().any(|a| a.path().is_ident("non_exhaustive"));
+        if !open || st.generics.params.iter().next().is_some() {
+            return None;
+        }
+        let Fields::Named(named) = &st.fields else {
+            return None;
+        };
+        let (mut decls, mut inits, mut borrows) = (Vec::new(), Vec::new(), false);
+        for f in &named.named {
+            if !is_pub(&f.vis) {
+                return None;
+            }
+            let id = f.ident.clone()?;
+            let label = format!("{name}.{}", lower_camel(&id.to_string()));
+            let (ty, conv, borrowed) = self.input_field(s, &f.ty, &label, vocab)?;
+            borrows |= borrowed;
+            let check = self
+                .config
+                .non_empty
+                .contains(&(name, id.to_string().as_str()))
+                .then(|| {
+                    let why = format!("{label} may not be empty");
+                    quote! {
+                        if v.is_empty() {
+                            return Err(napi_support::thrown("InvalidArg", #why));
+                        }
+                    }
+                });
+            let doc = docs(&f.attrs);
+            decls.push(quote! { #(#doc)* pub #id: #ty, });
+            let value = bind(quote!(self.#id), conv);
+            inits.push(match check {
+                Some(check) => quote! { #id: { let v = #value; #check v }, },
+                None => quote! { #id: #value, },
+            });
+        }
+        let obj = format_ident!("{name}Object");
+        let up = self.path(s, name);
+        let (generics, anon) = if borrows {
+            (quote!(<'a>), quote!(<'_>))
+        } else {
+            (TokenStream::new(), TokenStream::new())
+        };
+        let doc = format!(
+            " Every public field of `{name}`, as a plain object: what a member taking one by value reads."
+        );
+        Some(quote! {
+            #[doc = #doc]
+            #[napi(object, object_to_js = false)]
+            pub struct #obj #generics {
+                #(#decls)*
+            }
+
+            impl #obj #anon {
+                #[doc = " The upstream value, built from the fields."]
+                fn into_upstream(self) -> Result<#up, String> {
+                    Ok(#up { #(#inits)* })
+                }
+            }
+        })
+    }
+
+    /// One field of a data type's input form ([`Classes::data_input`]), of
+    /// source `s`: its JS type, the expression converting `v` (the JS
+    /// value, owned) for upstream, and whether it borrows an instance.
+    fn input_field(
+        &self,
+        s: usize,
+        ty: &Type,
+        label: &str,
+        vocab: &Vocab,
+    ) -> Option<(TokenStream, TokenStream, bool)> {
+        // A class held by value: its instance, copied.
+        if let Some(c) = self.class_of(s, None, ty) {
+            if self.classes[c].holding != Holding::Value {
+                return None;
+            }
+            let id = self.ident(c);
+            return Some((quote!(ClassInstance<'a, #id>), quote!(*v.__ref()?), true));
+        }
+        let segs = segs(ty);
+        // An input enum: its `{ type, value }`.
+        if let Some(segs) = &segs
+            && let Some(last) = segs.last()
+            && self
+                .resolve(s, segs, |s| {
+                    crate::emit::is_input(self.sources[s].files, last, &self.config)
+                })
+                .is_some()
+        {
+            let e = format_ident!("{last}");
+            return Some((quote!(#e), quote!(v.to_upstream()?), false));
+        }
+        let js = vocab.classify(ty)?;
+        // A list of pairs (`Vec<(String, Lang)>`): each element as a field.
+        if let Js::TupleList(elems) = &js {
+            let (mut tys, mut convs, mut pats) = (Vec::new(), Vec::new(), Vec::new());
+            for (i, (t, j)) in elems.iter().enumerate() {
+                let (ty, conv) = self.input_scalar(s, t, j, label, vocab)?;
+                let x = format_ident!("x{i}");
+                convs.push(bind(quote!(#x), conv));
+                tys.push(ty);
+                pats.push(x);
+            }
+            return Some((
+                quote!(Vec<(#(#tys),*)>),
+                quote! {
+                    v.into_iter()
+                        .map(|(#(#pats),*)| Ok((#(#convs),*)))
+                        .collect::<Result<Vec<_>, String>>()?
+                },
+                false,
+            ));
+        }
+        self.input_scalar(s, ty, &js, label, vocab)
+            .map(|(t, c)| (t, c, false))
+    }
+
+    /// A value of type `ty` of source `s`, mapped as `js`, in its input form
+    /// ([`Classes::input_field`]): its JS type and the expression converting
+    /// `v`. A number, a string, a boolean, an enum or a number newtype.
+    fn input_scalar(
+        &self,
+        s: usize,
+        ty: &Type,
+        js: &Js,
+        label: &str,
+        vocab: &Vocab,
+    ) -> Option<(TokenStream, TokenStream)> {
+        Some(match js {
+            Js::Bool => (quote!(bool), quote!(v)),
+            Js::Str => (quote!(String), quote!(v)),
+            Js::StrList => (quote!(Vec<String>), quote!(v)),
+            Js::Path => (quote!(String), quote!(v.into())),
+            Js::F64 => (quote!(f64), quote!(v)),
+            Js::F32 => (quote!(f64), quote!(to_f32(v))),
+            Js::U8 | Js::U16 | Js::U32 | Js::I16 | Js::I32 => {
+                (quote!(f64), quote!(napi_support::int(#label, v)?))
+            }
+            Js::Enum => {
+                let e = enum_ident(&key(vocab.resolve(ty))?);
+                (quote!(#e), quote!(v.into()))
+            }
+            // `Weight(pub u16)`: built from the number, which must fit.
+            Js::IntNewtype(k) => {
+                let at = self.resolve(s, std::slice::from_ref(k), |s| {
+                    defines(self.sources[s].files, k)
+                })?;
+                let path = self.path(at, k);
+                (quote!(f64), quote!(#path(napi_support::int(#label, v)?)))
+            }
+            _ => return None,
+        })
     }
 
     /// The expression turning an error `e` of type `ty` into what is thrown:
@@ -1139,7 +1366,8 @@ impl<'a> Classes<'a> {
                 copied = Some((result.clone(), ty));
                 continue;
             }
-            let Some((param, pre, fwd)) = self.arg(ctx, this, &p.ident, &t.ty, &bounds) else {
+            let Some((param, pre, fwd)) = self.arg(ctx, this, &p.ident, &t.ty, &bounds, vocab)
+            else {
                 return skip(Reason::Arg, Some(t.ty.clone()));
             };
             // A `&mut` slice of a plain-data class: JS passed a copy, which
@@ -1756,6 +1984,39 @@ impl<'a> Classes<'a> {
     /// a JS form (its `code`) of its own. Read once emission is done.
     pub fn throws(&self, name: &str) -> bool {
         self.errors.borrow().iter().any(|(_, n)| n == name)
+    }
+
+    /// The input forms of the data types an argument took by value
+    /// ([`Classes::data_input`]), by source and name. One with none is left
+    /// to the member's own report line.
+    pub fn data_inputs(&self) -> Vec<(usize, String, TokenStream)> {
+        self.inputs
+            .borrow()
+            .iter()
+            .filter_map(|((s, name), code)| Some((*s, name.clone(), code.clone()?)))
+            .collect()
+    }
+
+    /// The `Config::non_empty` entries no emitted input form has: each a
+    /// field of a data type an argument takes by value, or the build fails.
+    pub fn unused_non_empty(&self) -> Vec<String> {
+        let inputs = self.inputs.borrow();
+        self.config
+            .non_empty
+            .iter()
+            .filter(|(ty, field)| {
+                !inputs.iter().any(|((s, name), code)| {
+                    name == ty
+                        && code.is_some()
+                        && crate::vocab::struct_fields_opt(self.sources[*s].files, name)
+                            .is_some_and(|f| {
+                                f.iter()
+                                    .any(|f| f.ident.as_ref().is_some_and(|i| i == field))
+                            })
+                })
+            })
+            .map(|(ty, field)| format!("{ty}.{field}"))
+            .collect()
     }
 
     /// The type of codes each thrown error enum gets (Q23), by source:

@@ -1278,6 +1278,19 @@ fn listed_classes(
     {
         surface.put(classes.sources[s].root, code);
     }
+    for (s, name, code) in classes.data_inputs() {
+        let root = classes.sources[s].root;
+        say!(log, "{root}::{name} is taken by value, as {name}Object");
+        surface.put(root, code);
+    }
+    // A `Config::non_empty` entry no input form has is upstream moving, or
+    // a typo: loud, like an index bound matching nothing.
+    let unused = classes.unused_non_empty();
+    assert!(
+        unused.is_empty(),
+        "Config::non_empty: no data type taken by value has {}",
+        unused.join(", ")
+    );
     statics
 }
 

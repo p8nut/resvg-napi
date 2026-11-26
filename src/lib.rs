@@ -2059,6 +2059,51 @@ pub struct FontdbSource {
 pub struct FontdbID {
     inner: napi_support::Slot<usvg::fontdb::ID>,
 }
+#[doc = " Every public field of `FaceInfo`, as a plain object: what a member taking one by value reads."]
+#[napi(
+    object,
+    object_to_js = false,
+    js_name = "FaceInfoObject",
+    namespace = "fontdb"
+)]
+pub struct FontdbFaceInfoObject<'a> {
+    #[doc = " An unique ID."]
+    pub id: ClassInstance<'a, FontdbID>,
+    #[doc = " A font source."]
+    #[doc = ""]
+    #[doc = " Note that multiple `FaceInfo` objects can reference the same data in case of"]
+    #[doc = " font collections, which means that they'll use the same Source."]
+    pub source: FontdbSource,
+    #[doc = " A face index in the `source`."]
+    pub index: f64,
+    #[doc = " A list of family names."]
+    #[doc = ""]
+    #[doc = " Contains pairs of Name + Language. Where the first family is always English US,"]
+    #[doc = " unless it's missing from the font."]
+    #[doc = ""]
+    #[doc = " Corresponds to a *Typographic Family* (ID 16) or a *Font Family* (ID 1) [name ID]"]
+    #[doc = " in a TrueType font."]
+    #[doc = ""]
+    #[doc = " This is not an *Extended Typographic Family* or a *Full Name*."]
+    #[doc = " Meaning it will contain _Arial_ and not _Arial Bold_."]
+    #[doc = ""]
+    #[doc = " [name ID]: https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids"]
+    pub families: Vec<(String, FontdbLanguage)>,
+    #[doc = " A PostScript name."]
+    #[doc = ""]
+    #[doc = " Corresponds to a *PostScript name* (6) [name ID] in a TrueType font."]
+    #[doc = ""]
+    #[doc = " [name ID]: https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids"]
+    pub post_script_name: String,
+    #[doc = " A font face style."]
+    pub style: FontdbStyle,
+    #[doc = " A font face weight."]
+    pub weight: f64,
+    #[doc = " A font face stretch."]
+    pub stretch: FontdbStretch,
+    #[doc = " Indicates that the font face is monospaced."]
+    pub monospaced: bool,
+}
 #[doc = " Read-only view of a `FaceInfo`."]
 #[napi(js_name = "FaceInfo", namespace = "fontdb")]
 pub struct FontdbFaceInfo {
@@ -9540,6 +9585,22 @@ impl FontdbDatabase {
             signal,
         )
     }
+    #[doc = " Pushes a user-provided `FaceInfo` to the database."]
+    #[doc = ""]
+    #[doc = " In some cases, a caller might want to ignore the font's metadata and provide their own."]
+    #[doc = " This method doesn't parse the `source` font."]
+    #[doc = ""]
+    #[doc = " The `id` field should be set to [`ID::dummy()`] and will be then overwritten by this method."]
+    #[napi]
+    #[allow(clippy::redundant_closure)]
+    pub fn push_face_info(&mut self, info: FontdbFaceInfoObject) -> Result<FontdbID, String> {
+        let __info = info.into_upstream()?;
+        let __self = std::sync::Arc::make_mut(self.__mut()?);
+        let __v =
+            napi_support::contained("Database::push_face_info", || __self.push_face_info(__info))
+                .map_err(napi_support::coded)?;
+        Ok(FontdbID::__from(__v))
+    }
     #[doc = " Removes a font face by `id` from the database."]
     #[doc = ""]
     #[doc = " Returns `false` while attempting to remove a non-existing font face."]
@@ -9823,6 +9884,59 @@ impl FontdbID {
     #[napi(getter)]
     pub fn disposed(&self) -> bool {
         self.inner.disposed()
+    }
+}
+impl FontdbFaceInfoObject<'_> {
+    #[doc = " The upstream value, built from the fields."]
+    fn into_upstream(self) -> Result<usvg::fontdb::FaceInfo, String> {
+        Ok(usvg::fontdb::FaceInfo {
+            id: {
+                let v = self.id;
+                *v.__ref()?
+            },
+            source: {
+                let v = self.source;
+                v.to_upstream()?
+            },
+            index: {
+                let v = self.index;
+                napi_support::int("FaceInfo.index", v)?
+            },
+            families: {
+                let v = {
+                    let v = self.families;
+                    v.into_iter()
+                        .map(|(x0, x1)| {
+                            Ok((x0, {
+                                let v = x1;
+                                v.into()
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, String>>()?
+                };
+                if v.is_empty() {
+                    return Err(napi_support::thrown(
+                        "InvalidArg",
+                        "FaceInfo.families may not be empty",
+                    ));
+                }
+                v
+            },
+            post_script_name: self.post_script_name,
+            style: {
+                let v = self.style;
+                v.into()
+            },
+            weight: {
+                let v = self.weight;
+                usvg::fontdb::Weight(napi_support::int("FaceInfo.weight", v)?)
+            },
+            stretch: {
+                let v = self.stretch;
+                v.into()
+            },
+            monospaced: self.monospaced,
+        })
     }
 }
 impl FontdbFaceInfo {

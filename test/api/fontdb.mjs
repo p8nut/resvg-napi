@@ -132,3 +132,66 @@ test('Source in: loadFontSource takes { type, bytes } or { type, value }', () =>
     { code: 'InvalidArg', message: "Source 'sharedFile' cannot be passed in: it carries several values" });
   assert.throws(() => db.loadFontSource({ type: 'nope' }), { code: 'InvalidArg' });
 });
+
+// `pushFaceInfo` takes a `fontdb.FaceInfoObject`: every field of a
+// `FaceInfo` in its input form. fontdb does not parse the source, so what
+// JS says is what a later parse finds.
+test('pushFaceInfo: a face handed out, changed, goes back in', () => {
+  const db = database();
+  const [face] = db.faces();
+  const id = db.pushFaceInfo({
+    id: face.id,
+    source: face.source,
+    index: face.index,
+    families: [['Renamed', 'englishUnitedStates'], ...face.families],
+    postScriptName: 'Renamed-Bold',
+    style: face.style,
+    weight: 700,
+    stretch: face.stretch,
+    monospaced: face.monospaced,
+  });
+  assert.ok(id instanceof fontdb.ID);
+  assert.notEqual(String(id), String(face.id), 'the ID is the one the database gave');
+  assert.equal(db.len(), 2);
+  const pushed = db.face(id);
+  assert.equal(pushed.postScriptName, 'Renamed-Bold');
+  assert.equal(pushed.weight, 700);
+  assert.deepEqual(pushed.families, [['Renamed', 'englishUnitedStates'], [FAMILY, 'englishUnitedStates']]);
+  assert.ok(pushed.source.bytes.equals(FONT), 'the bytes, copied');
+  assert.deepEqual(db.faces().map((f) => f.postScriptName), ['IBMPlexSans-Regular', 'Renamed-Bold']);
+  // Found by the family JS gave it, and drawn from the bytes.
+  const q = db.query({ families: [{ type: 'name', value: 'Renamed' }], weight: 700 });
+  assert.equal(String(q), String(id));
+  const tree = usvg.Tree.fromStr('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="30"><text id="t" x="2" y="20">Hi</text></svg>',
+    { fontdb: db, fontFamily: 'Renamed' });
+  assert.equal(String(tree.nodeById('t').value.layouted()[0].positionedGlyphs[0].font), String(id));
+});
+
+test('pushFaceInfo: what JS says is checked at the call, or harmless later', () => {
+  const db = database();
+  const [face] = db.faces();
+  const info = {
+    id: fontdb.ID.dummy(), source: { type: 'binary', bytes: FONT }, index: 0, families: [['Bogus', 'englishUnitedStates']],
+    postScriptName: 'Bogus', style: 'normal', weight: 400, stretch: 'normal', monospaced: false,
+  };
+  // usvg's font fallback reads `families[0]` unchecked: an empty list
+  // would panic in a later parse, so it throws here.
+  assert.throws(() => db.pushFaceInfo({ ...info, families: [] }),
+    { code: 'InvalidArg', message: 'FaceInfo.families may not be empty' });
+  assert.throws(() => db.pushFaceInfo({ ...info, index: -1 }), { code: 'InvalidArg', message: /FaceInfo\.index/ });
+  assert.throws(() => db.pushFaceInfo({ ...info, weight: 70000 }), { code: 'InvalidArg', message: /FaceInfo\.weight/ });
+  assert.throws(() => db.pushFaceInfo({ ...info, source: { type: 'sharedFile', value: '/f', bytes: FONT } }),
+    { code: 'InvalidArg' });
+  assert.throws(() => db.pushFaceInfo({ ...info, id: String(face.id) }));
+  assert.equal(db.len(), 1, 'nothing refused was kept');
+  // A face index past the font's, or bytes that are no font: the face is
+  // kept, and a parse that picks it draws nothing rather than failing.
+  db.pushFaceInfo({ ...info, index: 9 });
+  db.pushFaceInfo({ ...info, families: [['Junk', 'englishUnitedStates']], source: { type: 'binary', bytes: Buffer.from('junk') } });
+  assert.equal(db.len(), 3);
+  for (const family of ['Bogus', 'Junk']) {
+    const tree = usvg.Tree.fromStr('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="30"><text id="t" x="2" y="20">Hi</text></svg>',
+      { fontdb: db, fontFamily: family });
+    assert.ok(tree);
+  }
+});

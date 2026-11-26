@@ -30,6 +30,18 @@ pub const STRICT: bool = true;
 pub const BIG: u64 = 1 << 60;
 /// A struct is no JS value of its own: left out.
 pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 };
+/// A newtype over `f32` whose `get` is a `const fn`: `toy.HALF`, its `f32`.
+pub const HALF: Ratio = Ratio(0.5);
+
+/// A newtype over `f32`, read by its `get`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ratio(f32);
+
+impl Ratio {
+    pub const fn get(&self) -> f32 {
+        self.0
+    }
+}
 
 /// Which way a counter counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

@@ -672,6 +672,9 @@ pub struct Vocab {
     pub payload: BTreeMap<String, PayloadEnum>,
     pub enums: BTreeSet<String>,
     pub scalars: BTreeSet<String>,
+    /// Those of them whose `get` is a `const fn`: a constant of one has a
+    /// constant JS value (`emit::constants`).
+    pub const_scalars: BTreeSet<String>,
     /// `pub type X = Y;`, by name: what [`Vocab::resolve`] follows.
     pub aliases: BTreeMap<String, Type>,
     pub ints: BTreeSet<String>,
@@ -980,30 +983,33 @@ pub fn int_newtypes(files: &[syn::File]) -> BTreeSet<String> {
 }
 
 /// Types that are a newtype over `f32`, spotted by their `get(&self) -> f32`.
-/// Derived, so `Weight`, `UnitF32`, `Width`... all come along.
-pub fn f32_newtypes(files: &[syn::File]) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
+/// Derived, so `Weight`, `UnitF32`, `Width`... all come along. Each with
+/// whether that `get` is a `const fn`.
+pub fn f32_newtypes(files: &[syn::File]) -> BTreeMap<String, bool> {
+    let mut out = BTreeMap::new();
     for item in files.iter().flat_map(|f| &f.items) {
         let Item::Impl(imp) = item else { continue };
         if imp.trait_.is_some() {
             continue;
         }
         let name = ty_str(&imp.self_ty);
-        let hit = imp.items.iter().any(|it| match it {
-            ImplItem::Fn(f) => {
-                is_pub(&f.vis)
+        let get = imp.items.iter().find_map(|it| match it {
+            ImplItem::Fn(f)
+                if is_pub(&f.vis)
                     && f.sig.ident == "get"
                     // The receiver and nothing else. `ConvolveMatrixData` has
                     // `get(&self, x: u32, y: u32) -> f32` -- a matrix accessor,
                     // not a newtype unwrapping itself -- and counting it as a
                     // scalar made the whole type invisible to discovery.
                     && f.sig.inputs.len() == 1
-                    && matches!(&f.sig.output, ReturnType::Type(_, t) if key(t).as_deref() == Some("f32"))
+                    && matches!(&f.sig.output, ReturnType::Type(_, t) if key(t).as_deref() == Some("f32")) =>
+            {
+                Some(f.sig.constness.is_some())
             }
-            _ => false,
+            _ => None,
         });
-        if hit {
-            out.insert(name);
+        if let Some(constness) = get {
+            *out.entry(name).or_default() |= constness;
         }
     }
     out

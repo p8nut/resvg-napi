@@ -9977,6 +9977,32 @@ fn fontdb_source_to_js(
         }),
     }
 }
+#[doc = " The constants of `tiny_skia`, apart: they keep their Rust names."]
+#[allow(dead_code)]
+mod tiny_skia_consts {
+    use super::*;
+    #[doc = " Represents fully transparent AlphaU8 value."]
+    #[napi(namespace = "tiny_skia")]
+    pub const ALPHA_U8_TRANSPARENT: u8 = tiny_skia::ALPHA_U8_TRANSPARENT;
+    #[doc = " Represents fully opaque AlphaU8 value."]
+    #[napi(namespace = "tiny_skia")]
+    pub const ALPHA_U8_OPAQUE: u8 = tiny_skia::ALPHA_U8_OPAQUE;
+    #[doc = " Represents fully transparent Alpha value."]
+    #[napi(namespace = "tiny_skia")]
+    pub const ALPHA_TRANSPARENT: f32 = tiny_skia::ALPHA_TRANSPARENT.get();
+    #[doc = " Represents fully opaque Alpha value."]
+    #[napi(namespace = "tiny_skia")]
+    pub const ALPHA_OPAQUE: f32 = tiny_skia::ALPHA_OPAQUE.get();
+    #[doc = " Number of bytes per pixel."]
+    #[napi(namespace = "tiny_skia")]
+    pub const BYTES_PER_PIXEL: u32 = {
+        assert!(
+            tiny_skia::BYTES_PER_PIXEL <= u32::MAX as usize,
+            "tiny_skia::BYTES_PER_PIXEL does not fit a u32"
+        );
+        tiny_skia::BYTES_PER_PIXEL as u32
+    };
+}
 #[doc = " The constants of `usvg`, apart: they keep their Rust names."]
 #[allow(dead_code)]
 mod usvg_consts {

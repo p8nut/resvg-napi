@@ -19,7 +19,11 @@ numbered item matches the decision log (Q21–Q35).
 - Constants keep their Rust name, `SCREAMING_CASE` included:
   `usvg::DEFAULT_MAX_DEPTH` is `usvg.DEFAULT_MAX_DEPTH`. Every public `const`
   a wrapped crate exports, of a number, boolean or string type, is mirrored
-  without an allowlist; any other type is left out and reported.
+  without an allowlist, a crate read only for its listed classes
+  (`Role::Classes`) included: `tiny_skia.BYTES_PER_PIXEL`. A `usize` is a
+  number the build checks fits a `u32`; a newtype over `f32` whose `get` is a
+  `const fn` is its number (`tiny_skia.ALPHA_OPAQUE === 1`). Any other type
+  is left out and reported.
 - Associated constants (`impl T { pub const X }`) keep their Rust name too,
   as static read-only properties `T.X`:
   - On a class, a constant of a number, boolean or string type is that
@@ -33,10 +37,10 @@ numbered item matches the decision log (Q21–Q35).
     static methods, turned into getters when the module loads, and the
     `.d.ts` header declares them, merged into the class by a namespace of
     its name.
-  - Anything else is left out and reported. So is every constant of a crate
-    read only for its listed classes (`Role::Classes`) that is neither on one
-    of those classes nor associated with one: tiny-skia's `BYTES_PER_PIXEL`
-    and `ALPHA_*`. Its surface is what its listed classes reach.
+  - Anything else is left out and reported. So is every associated constant
+    of a crate read only for its listed classes (`Role::Classes`) that is
+    not on one of those classes: its types are what its listed classes
+    reach.
 - napi keys classes by Rust identifier, so the binding prefixes identifiers
   with the crate (`UsvgColor`) and sets `js_name` and `namespace`. The prefix
   is invisible from JS: the `export type UsvgColor = Color` alias napi writes

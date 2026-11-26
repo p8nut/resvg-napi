@@ -372,17 +372,19 @@ fn main() {
     );
     // The constants the crate exports, in the namespace of the module that
     // exports them: `MAX_LAYERS` re-exported from a private module, `NAME`
-    // in both namespaces, and two with no JS value. `toy_dep`, read for its
-    // classes alone, has its `CELL_BYTES` reported, never emitted, and so
-    // is the associated constant of a type of it that is no class
-    // (`Token::SIZE`). The associated constants left out: a `u64` (on a
-    // class and on a number newtype), and `Self` on a class not held by
-    // value, which could not hand out a copy per read.
+    // in both namespaces, `HALF` a newtype over `f32`, and two with no JS
+    // value. `toy_dep`, read for its classes alone, has its `CELL_BYTES`
+    // (a `usize`) and `CELL_FULL` (its type an alias of its own) mirrored
+    // all the same, but the associated constant of a type of it that is no
+    // class (`Token::SIZE`) reported, never emitted. The associated
+    // constants left out: a `u64` (on a class and on a number newtype), and
+    // `Self` on a class not held by value, which could not hand out a copy
+    // per read.
     assert_eq!(
         lines("constant"),
         [
-            "toy_dep constants not exposed: CELL_BYTES, Token::SIZE (read only for its listed \
-             classes and functions)",
+            "toy_dep constants not exposed: Token::SIZE (read only for its listed classes and \
+             functions)",
             "toy::Color::BITS constant not exposed: u64 (no JS value)",
             "toy::Canvas::EMPTY constant not exposed: Canvas is not held by value, so no copy \
              per read",
@@ -391,9 +393,12 @@ fn main() {
             "toy::STRICT is a constant: toy.STRICT",
             "toy::BIG constant not exposed: u64 (no JS value)",
             "toy::ORIGIN constant not exposed: Point (no JS value)",
+            "toy::HALF is a constant: toy.HALF",
             "toy::alt::NAME is a constant: alt.NAME",
             "toy::MAX_LAYERS is a constant: toy.MAX_LAYERS",
             "toy::MinLen::HUGE constant not exposed: u64 (no JS value)",
+            "toy_dep::CELL_BYTES is a constant: dep.CELL_BYTES",
+            "toy_dep::CELL_FULL is a constant: dep.CELL_FULL",
         ],
         "what becomes a constant"
     );

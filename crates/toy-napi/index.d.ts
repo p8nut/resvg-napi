@@ -285,6 +285,17 @@ export declare namespace dep {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
+  /**
+   * The bytes a cell takes. A constant of a crate read for its classes
+   * alone, mirrored all the same: `dep.CELL_BYTES`, a `usize` read as a
+   * number.
+   */
+  export const CELL_BYTES: number
+  /**
+   * A full cell. Its type an alias of this crate's own, read through:
+   * `dep.CELL_FULL`, a number.
+   */
+  export const CELL_FULL: number
   /** A `Mark`'s public fields, as a plain object. */
   export interface MarkObject {
     on: boolean
@@ -836,6 +847,8 @@ export declare namespace toy {
     tags?: Array<toy.Tag>
     minLen?: number
   }
+  /** A newtype over `f32` whose `get` is a `const fn`: `toy.HALF`, its `f32`. */
+  export const HALF: number
   /** Any variant of `Ink`. */
   export type Ink = toy.InkPlain | toy.InkStamped
   /** The payload-free variants of `Ink`. */

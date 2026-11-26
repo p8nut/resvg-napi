@@ -190,8 +190,9 @@ pub enum Role {
     /// own, and its listed classes and functions are emitted.
     Discover,
     /// Read only for the classes and functions [`Config::classes`] and
-    /// [`Config::functions`] list for it, and the value types their classes'
-    /// members reach (see [`Config::classes`]): nothing else of it is
+    /// [`Config::functions`] list for it, the value types their classes'
+    /// members reach (see [`Config::classes`]), and the constants it exports
+    /// (mirrored as a [`Role::Discover`] crate's are): nothing else of it is
     /// discovered, so nothing else would give those a JS form.
     Classes,
     /// Read only for vocabulary (newtypes, aliases, payload enums), never

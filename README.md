@@ -156,7 +156,8 @@ pixmap.encodePng()                                     // Buffer
   `Display` is `toString`. A Rust tuple is an array (`dimensions()` is
   `[w, h]`, a face's `families` `[name, language]` pairs).
 - **Constants** keep their Rust name. A crate's own are values of its
-  namespace (`usvg.DEFAULT_MAX_DEPTH`); a type's associated constants are
+  namespace (`usvg.DEFAULT_MAX_DEPTH`, `tiny_skia.BYTES_PER_PIXEL`,
+  `tiny_skia.ALPHA_OPAQUE`); a type's associated constants are
   static read-only properties: `tiny_skia.Color.BLACK` / `WHITE` /
   `TRANSPARENT` and `tiny_skia.PremultipliedColorU8.TRANSPARENT` (a fresh
   instance on each read), and `fontdb.Weight.BOLD` (`700`) and its siblings,

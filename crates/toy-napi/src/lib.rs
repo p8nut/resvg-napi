@@ -2933,6 +2933,9 @@ mod toy_consts {
     #[doc = " A boolean constant: `toy.STRICT`."]
     #[napi(namespace = "toy")]
     pub const STRICT: bool = toy::STRICT;
+    #[doc = " A newtype over `f32` whose `get` is a `const fn`: `toy.HALF`, its `f32`."]
+    #[napi(namespace = "toy")]
+    pub const HALF: f32 = toy::HALF.get();
     #[doc = " How many layers a scene may hold: `toy::MAX_LAYERS`."]
     #[napi(namespace = "toy")]
     pub const MAX_LAYERS: u32 = toy::MAX_LAYERS;
@@ -2944,6 +2947,26 @@ mod alt_consts {
     #[doc = " The module's name: `alt.NAME`, beside `toy.NAME`."]
     #[napi(namespace = "alt")]
     pub const NAME: &str = toy::alt::NAME;
+}
+#[doc = " The constants of `dep`, apart: they keep their Rust names."]
+#[allow(dead_code)]
+mod dep_consts {
+    use super::*;
+    #[doc = " The bytes a cell takes. A constant of a crate read for its classes"]
+    #[doc = " alone, mirrored all the same: `dep.CELL_BYTES`, a `usize` read as a"]
+    #[doc = " number."]
+    #[napi(namespace = "dep")]
+    pub const CELL_BYTES: u32 = {
+        assert!(
+            toy_dep::CELL_BYTES <= u32::MAX as usize,
+            "toy_dep::CELL_BYTES does not fit a u32"
+        );
+        toy_dep::CELL_BYTES as u32
+    };
+    #[doc = " A full cell. Its type an alias of this crate's own, read through:"]
+    #[doc = " `dep.CELL_FULL`, a number."]
+    #[napi(namespace = "dep")]
+    pub const CELL_FULL: u8 = toy_dep::CELL_FULL;
 }
 #[doc = " A second handle on the same `Tally`: shared until one of them writes."]
 #[napi(js_name = "share", namespace = "toy")]

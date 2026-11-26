@@ -46,7 +46,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
+    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'HALF', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
     'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Stamp', 'Tally', 'Vec2', 'boom', 'boomAsync', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
@@ -890,6 +890,13 @@ test('a public constant is a value of its namespace, under its Rust name', () =>
   assert.equal(toy.alt.NAME, 'alt');
   assert.equal(toy.toy.SCALE, 0.5);
   assert.equal(toy.toy.STRICT, true);
+  // A newtype over f32 with a `const fn get`: its number.
+  assert.equal(toy.toy.HALF, 0.5);
+  // A crate read for its classes alone (`Role::Classes`) mirrors its
+  // constants too: a `usize`, a number.
+  assert.equal(toy.dep.CELL_BYTES, 1);
+  // Its type an alias of that crate's own, read through.
+  assert.equal(toy.dep.CELL_FULL, 255);
   // Re-exported from a private module; what nothing exports stays out.
   assert.equal(toy.toy.MAX_LAYERS, 64);
   assert.ok(!('HIDDEN' in toy.toy));
@@ -939,10 +946,10 @@ test('an associated constant is a static read-only property, under its Rust name
 // `dep.Grid` is the one class of `toy-dep`, a crate read for its listed
 // classes alone. The value types its members take and return are classes
 // too, listed nowhere: `Area` and `Cell`, and `Mark`, which only `Cell`
-// reaches.
+// reaches. Its constants are mirrored beside them.
 test('the value types a listed class reaches are classes, to a fixpoint', () => {
   const dep = toy.dep;
-  assert.deepEqual(Object.keys(dep).sort(), ['Area', 'Cell', 'Grid', 'Mark']);
+  assert.deepEqual(Object.keys(dep).sort(), ['Area', 'CELL_BYTES', 'CELL_FULL', 'Cell', 'Grid', 'Mark']);
   const grid = new dep.Grid(3, 2);
   const bounds = grid.bounds();
   assert.ok(bounds instanceof dep.Area);

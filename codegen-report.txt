@@ -20,7 +20,11 @@ not aliased: fontdb.Source: a type named Source exists already, so its union is 
 payload enums emitted as unions: BaselineShift, ColorMatrixKind, CompositeOperator, FontFamily, ImageKind, Input, Kind, LightSource, Paint, PathSegment, Source, TextFlow, TransferFunction
 payload enums found: BaselineShift(4), ColorMatrixKind(4), CompositeOperator(7), Error(6), Family(6), FontFamily(6), ImageKind(5), Input(3), Kind(17), LightSource(3), Node(4), Paint(4), PathSegment(5), Source(3), TextFlow(2), TransferFunction(5)
 svgtypes::Color is a class: Value, plain data, a JS name another namespace has
-tiny_skia constants not exposed: ALPHA_U8_TRANSPARENT, ALPHA_U8_OPAQUE, ALPHA_TRANSPARENT, ALPHA_OPAQUE, BYTES_PER_PIXEL (read only for its listed classes and functions)
+tiny_skia::ALPHA_OPAQUE is a constant: tiny_skia.ALPHA_OPAQUE
+tiny_skia::ALPHA_TRANSPARENT is a constant: tiny_skia.ALPHA_TRANSPARENT
+tiny_skia::ALPHA_U8_OPAQUE is a constant: tiny_skia.ALPHA_U8_OPAQUE
+tiny_skia::ALPHA_U8_TRANSPARENT is a constant: tiny_skia.ALPHA_U8_TRANSPARENT
+tiny_skia::BYTES_PER_PIXEL is a constant: tiny_skia.BYTES_PER_PIXEL
 tiny_skia::Color is a class: Value, a JS name another namespace has
 tiny_skia::Color member not in the class: from_rgba (returns Self, a class whose JS name another namespace has: only its constructor and factories may)
 tiny_skia::Color member not in the class: from_rgba_unchecked (unsafe)

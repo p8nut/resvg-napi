@@ -1635,6 +1635,16 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
+  /** Represents fully opaque Alpha value. */
+  export const ALPHA_OPAQUE: number
+  /** Represents fully transparent Alpha value. */
+  export const ALPHA_TRANSPARENT: number
+  /** Represents fully opaque AlphaU8 value. */
+  export const ALPHA_U8_OPAQUE: number
+  /** Represents fully transparent AlphaU8 value. */
+  export const ALPHA_U8_TRANSPARENT: number
+  /** Number of bytes per pixel. */
+  export const BYTES_PER_PIXEL: number
   /** Any variant of `PathSegment`. */
   export type PathSegment = tiny_skia.PathSegmentPlain | tiny_skia.PathSegmentMoveTo | tiny_skia.PathSegmentLineTo | tiny_skia.PathSegmentQuadTo | tiny_skia.PathSegmentCubicTo
   /** `PathSegment::CubicTo`. */

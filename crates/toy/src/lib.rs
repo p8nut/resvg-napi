@@ -30,6 +30,18 @@ pub const STRICT: bool = true;
 pub const BIG: u64 = 1 << 60;
 /// A struct is no JS value of its own: left out.
 pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 };
+/// A newtype over `f32` whose `get` is a `const fn`: `toy.HALF`, its `f32`.
+pub const HALF: Ratio = Ratio(0.5);
+
+/// A newtype over `f32`, read by its `get`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Ratio(f32);
+
+impl Ratio {
+    pub const fn get(&self) -> f32 {
+        self.0
+    }
+}
 
 /// Which way a counter counts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -123,6 +135,28 @@ impl Counter {
 pub struct Tally {
     names: Vec<String>,
     origins: Vec<Origin>,
+    entries: Vec<Entry>,
+}
+
+/// A kept record, as a database keeps one: plain data with every field
+/// public, handed out by [`Tally::entries`] and taken back by value by
+/// [`Tally::push_entry`]. Its `key` is a class, so JS reads an `Entry` as a
+/// read-only class, and passes an `EntryObject` of the fields' input forms.
+#[derive(Clone, Debug)]
+pub struct Entry {
+    /// Replaced by `push_entry`, whatever it was.
+    pub key: Key,
+    /// Where its bytes come from: an input enum.
+    pub origin: Origin,
+    pub index: u32,
+    /// Names with a direction, a list of pairs. Never empty: the toy
+    /// binding says so (`Config::non_empty`).
+    pub names: Vec<(String, Direction)>,
+    pub label: String,
+    pub direction: Direction,
+    /// A number newtype.
+    pub min_len: MinLen,
+    pub on: bool,
 }
 
 impl Tally {
@@ -251,6 +285,19 @@ impl Tally {
     /// The origins kept, in order.
     pub fn origins(&self) -> &[Origin] {
         &self.origins
+    }
+
+    /// Keeps `entry` under a key of its own, which replaces its `key`: a
+    /// data type taken by value.
+    pub fn push_entry(&mut self, mut entry: Entry) -> Key {
+        entry.key = Key(self.entries.len() as u32);
+        self.entries.push(entry);
+        Key(self.entries.len() as u32 - 1)
+    }
+
+    /// The entries kept, in order.
+    pub fn entries(&self) -> Vec<Entry> {
+        self.entries.clone()
     }
 
     /// Runs `p` with the joined names' bytes and how many there are: the

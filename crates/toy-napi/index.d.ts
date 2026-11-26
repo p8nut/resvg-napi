@@ -48,6 +48,9 @@ export declare namespace toy {
   export interface Dot {
     [Symbol.dispose](): void
   }
+  export interface Entry {
+    [Symbol.dispose](): void
+  }
   export interface Frame {
     [Symbol.dispose](): void
   }
@@ -285,6 +288,17 @@ export declare namespace dep {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
+  /**
+   * The bytes a cell takes. A constant of a crate read for its classes
+   * alone, mirrored all the same: `dep.CELL_BYTES`, a `usize` read as a
+   * number.
+   */
+  export const CELL_BYTES: number
+  /**
+   * A full cell. Its type an alias of this crate's own, read through:
+   * `dep.CELL_FULL`, a number.
+   */
+  export const CELL_FULL: number
   /** A `Mark`'s public fields, as a plain object. */
   export interface MarkObject {
     on: boolean
@@ -482,6 +496,27 @@ export declare namespace toy {
      * holds it.
      * Also `[Symbol.dispose]` where the runtime has the symbol, for `using`.
      * Harmless twice.
+     */
+    dispose(): void
+    /** Whether `dispose()` has been called. */
+    get disposed(): boolean
+    /** The class name, for `Object.prototype.toString`. */
+    get [globalThis.Symbol.toStringTag](): string
+  }
+  /** Read-only view of an `Entry`. */
+  export class Entry {
+    get key(): toy.Key
+    get origin(): toy.OriginInline | toy.OriginPath | toy.OriginPinned
+    get index(): number
+    get names(): Array<[string, toy.Direction]>
+    get label(): string
+    get direction(): toy.Direction
+    get minLen(): number
+    get on(): boolean
+    /**
+     * Drops this instance's value now, not at garbage collection: every later
+     * call throws `Disposed`. Also `[Symbol.dispose]` where the runtime has
+     * the symbol, for `using`. Harmless twice.
      */
     dispose(): void
     /** Whether `dispose()` has been called. */
@@ -709,6 +744,13 @@ export declare namespace toy {
     /** The origins kept, in order. */
     origins(): Array<toy.OriginInline | toy.OriginPath | toy.OriginPinned>
     /**
+     * Keeps `entry` under a key of its own, which replaces its `key`: a
+     * data type taken by value.
+     */
+    pushEntry(entry: toy.EntryObject): toy.Key
+    /** The entries kept, in order. */
+    entries(): Array<toy.Entry>
+    /**
      * Runs `p` with the joined names' bytes and how many there are: the
      * data is lent, not returned.
      */
@@ -827,6 +869,24 @@ export declare namespace toy {
     Up = 'up',
     Down = 'down',
   }
+  /** Every public field of `Entry`, as a plain object: what a member taking one by value reads. */
+  export interface EntryObject {
+    /** Replaced by `push_entry`, whatever it was. */
+    key: toy.Key
+    /** Where its bytes come from: an input enum. */
+    origin: toy.Origin
+    index: number
+    /**
+     * Names with a direction, a list of pairs. Never empty: the toy
+     * binding says so (`Config::non_empty`).
+     */
+    names: Array<[string, toy.Direction]>
+    label: string
+    direction: toy.Direction
+    /** A number newtype. */
+    minLen: number
+    on: boolean
+  }
   /**
    * What [`Tally::find`] looks for: a list it borrows.
    *
@@ -836,6 +896,8 @@ export declare namespace toy {
     tags?: Array<toy.Tag>
     minLen?: number
   }
+  /** A newtype over `f32` whose `get` is a `const fn`: `toy.HALF`, its `f32`. */
+  export const HALF: number
   /** Any variant of `Ink`. */
   export type Ink = toy.InkPlain | toy.InkStamped
   /** The payload-free variants of `Ink`. */

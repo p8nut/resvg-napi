@@ -82,6 +82,11 @@ pub const GEN: Config = Config {
     // name suffix, and the table: `*_precision` indexes `POW_VEC`. Clamped to the
     // table's length; the build fails if the suffix matches nothing.
     index_bounded: &[("_precision", "POW_VEC")],
+    // `FaceInfo::families`, which `fontdb.Database.pushFaceInfo` takes from
+    // JS: fontdb never builds a face without a family (it refuses the font),
+    // and usvg's font fallback reads `families[0]` unchecked. An empty one
+    // throws at the call instead of panicking in a later parse.
+    non_empty: &[("FaceInfo", "families")],
     // No option objects: the option structs mirrored as plain objects are
     // what the listed members take by `&`. `usvg.Options` and
     // `usvg.WriteOptions` (ADR 0002, Q15): what `usvg.Tree` parses with, and

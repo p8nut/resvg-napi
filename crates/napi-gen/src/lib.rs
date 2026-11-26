@@ -82,6 +82,12 @@ pub struct Config {
     /// without a bounds check, by its name suffix, and the `static` table it
     /// indexes. Clamped to the table's last index (see [`emit::index_bounds`]).
     pub index_bounded: &'static [(&'static str, &'static str)],
+    /// Fields an upstream invariant keeps non-empty, which upstream code
+    /// then indexes unchecked: `(type, field)`, a list field of a data type.
+    /// The type's input form (a data type taken by value,
+    /// [`class::Classes`]) refuses an empty one rather than letting it reach
+    /// that code. The build fails when an entry names no such input field.
+    pub non_empty: &'static [(&'static str, &'static str)],
     /// Upstream option structs mirrored as plain objects on the namespaced
     /// surface ([`emit::option_object`]): every field optional, and what is
     /// left out keeps the struct's `Default`. Beside the ones derived: a
@@ -190,8 +196,9 @@ pub enum Role {
     /// own, and its listed classes and functions are emitted.
     Discover,
     /// Read only for the classes and functions [`Config::classes`] and
-    /// [`Config::functions`] list for it, and the value types their classes'
-    /// members reach (see [`Config::classes`]): nothing else of it is
+    /// [`Config::functions`] list for it, the value types their classes'
+    /// members reach (see [`Config::classes`]), and the constants it exports
+    /// (mirrored as a [`Role::Discover`] crate's are): nothing else of it is
     /// discovered, so nothing else would give those a JS form.
     Classes,
     /// Read only for vocabulary (newtypes, aliases, payload enums), never
@@ -303,6 +310,7 @@ impl Config {
         uses: &[],
         hand_written: &[],
         index_bounded: &[],
+        non_empty: &[],
         option_objects: &[],
         providers: &[],
         converters: &[],

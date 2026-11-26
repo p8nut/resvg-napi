@@ -48,6 +48,9 @@ export declare namespace toy {
   export interface Dot {
     [Symbol.dispose](): void
   }
+  export interface Entry {
+    [Symbol.dispose](): void
+  }
   export interface Frame {
     [Symbol.dispose](): void
   }

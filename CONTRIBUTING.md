@@ -440,6 +440,18 @@ Q34):
   a class cannot go (an `#[napi(object)]` field, a union's payload), a
   plain-data class is its `<Name>Object`, and any other makes its holder a
   read-only class (`usvg.Primitive`, which holds a `NonZeroRect`).
+- **A data type taken by value is its `<Name>Object`** (`Classes::data_input`,
+  ADR 0002, Q34): a struct the data types hold (`Vocab::objects`,
+  `Vocab::values`), every field public, whose every field has an input
+  form, is an input-only `#[napi(object)]` whose `into_upstream(self)` builds
+  the struct: a class held by value is its instance, copied; an input enum
+  its `{ type, value }`; numbers (checked as an argument is), strings,
+  booleans, enums, number newtypes and lists of pairs of those as they are.
+  `fontdb.Database.pushFaceInfo` takes a `fontdb.FaceInfoObject`; the toy's
+  `Tally::push_entry` an `EntryObject`. A list upstream indexes unchecked is
+  named in `Config::non_empty` and throws when empty (a face's `families`:
+  usvg's font fallback reads `families[0]`). One field with no input form
+  leaves the member out, as before, with its `(arg: T)` report line.
 - **An `Arc`-held definition a union carries is its handle class**: a
   variant carrying `Arc<T>` alone, `T` with an `id()`, is an output-only
   object whose `value` is the `T` class, the `Arc` cloned:
@@ -468,17 +480,22 @@ Q34):
   skip; a test that makes one must not run there.
 
 **Constants** need no allowlist: every public `const` a wrapped crate
-exports (a `Role::Discover` crate of `GEN.crates`) is a value
-of the namespace of the module that exports it, under its Rust name
-(`usvg.DEFAULT_MAX_DEPTH`, ADR 0002, Q21), when its type is a number that
-fits a JS number, a `bool` or a string (`napi_gen::emit::constants`). Any
-other is left out, and the report says so. `ModTree::consts` finds them
+exports (a `Role::Discover` or `Role::Classes` crate of `GEN.crates`) is a
+value of the namespace of the module that exports it, under its Rust name
+(`usvg.DEFAULT_MAX_DEPTH`, `tiny_skia.BYTES_PER_PIXEL`, ADR 0002, Q21), when
+its type is a number that fits a JS number, a `bool` or a string
+(`napi_gen::emit::constants`). A `usize` is a `u32` the build checks it
+fits, and a newtype over `f32` whose `get` is a `const fn` its `f32`
+(`tiny_skia.ALPHA_OPAQUE`). A `Role::Classes` crate's constants are read
+through its own type aliases (`AlphaU8`), which are no vocabulary of the
+others'. Any other is left out, and the report says so. `ModTree::consts` finds them
 through re-exports, as it finds types. napi registers a `#[napi] const`
 under its Rust identifier, whatever its `js_name`, so the namespace prefix
 cannot apply: each namespace's constants sit in a module of their own
 (`usvg_consts`). The toy has one of each (`toy.NAME` and `alt.NAME`,
-`MAX_LAYERS` re-exported from a private module, a `u64` and a struct left
-out).
+`MAX_LAYERS` re-exported from a private module, `toy.HALF` a newtype, a
+`u64` and a struct left out, and `toy_dep`'s `dep.CELL_BYTES` and
+`dep.CELL_FULL`).
 
 **Associated constants** (`impl T { pub const X }`) are static read-only
 properties `T.X`, under their Rust name (ADR 0002, Q21;
@@ -491,8 +508,8 @@ declares no static property, so a class's constants are hidden static
 methods that a `#[napi(module_exports)]` hook turns into getters at load,
 and the same hook builds the objects; both are declared in the `.d.ts`
 header (`dts-header.d.ts`). Anything else is left out and reported, as is
-every constant of a `Role::Classes` crate that is not on one of its listed
-classes (tiny-skia's `BYTES_PER_PIXEL`). The report has a line per static
+every associated constant of a `Role::Classes` crate that is not on one of
+its listed classes (the toy's `Token::SIZE`). The report has a line per static
 (`... is a static: fontdb.Weight.BOLD`); the toy has one of each kind
 (`toy.Color.BLACK`, `toy.Key.LAST`, the object `toy.MinLen`).
 

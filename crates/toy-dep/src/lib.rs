@@ -14,8 +14,16 @@ pub enum Shade {
 }
 
 /// The bytes a cell takes. A constant of a crate read for its classes
-/// alone: seen, reported, never emitted.
+/// alone, mirrored all the same: `dep.CELL_BYTES`, a `usize` read as a
+/// number.
 pub const CELL_BYTES: usize = 1;
+
+/// A cell's byte, by name: an alias of this crate's own.
+pub type CellByte = u8;
+
+/// A full cell. Its type an alias of this crate's own, read through:
+/// `dep.CELL_FULL`, a number.
+pub const CELL_FULL: CellByte = 0xFF;
 
 /// A grid of one-byte cells, row by row: a class of a crate read for its
 /// classes alone. What its members take and return, no config lists:

@@ -2123,12 +2123,40 @@ pub fn const_type(ty: &Type, vocab: &Vocab) -> Option<(TokenStream, &'static str
     }
 }
 
+/// A constant `path` of type `ty` as a `#[napi] const`: its JS type and
+/// its value, a constant expression. What [`const_type`] maps is read as it
+/// is. A `usize` is a `u32`, checked when the binding builds: a constant that
+/// does not fit fails the build rather than being cut. A newtype over `f32`
+/// is its `get()`, when that is a `const fn`.
+fn const_value(ty: &Type, path: &TokenStream, vocab: &Vocab) -> Option<(TokenStream, TokenStream)> {
+    if let Some((js_ty, _)) = const_type(ty, vocab) {
+        return Some((js_ty, path.clone()));
+    }
+    let k = key(vocab.resolve(ty))?;
+    if k == "usize" {
+        let why = format!("{} does not fit a u32", path.to_string().replace(' ', ""));
+        return Some((
+            quote!(u32),
+            quote!({
+                assert!(#path <= u32::MAX as usize, #why);
+                #path as u32
+            }),
+        ));
+    }
+    vocab
+        .const_scalars
+        .contains(&k)
+        .then(|| (quote!(f32), quote!(#path.get())))
+}
+
 /// The public constants a source exports ([`ModTree::consts`]), each as a
 /// `#[napi] const` of the namespace of the module that exports it, under its
 /// Rust name: `toy::LIMIT` is `toy.LIMIT`, `toy::alt::LIMIT` is `alt.LIMIT`.
 /// `root` is the source's path (`toy`). A constant of a number type that fits
-/// a JS number, a `bool` or a string maps, through type aliases; any other
-/// is left out, and so is one exported by a module with no namespace. Returns
+/// a JS number, a `bool` or a string maps, through type aliases; so does a
+/// `usize`, as a `u32` the build checks it fits, and a newtype over `f32`
+/// whose `get` is a `const fn`, as its `f32`. Any other is left out, and so
+/// is one exported by a module with no namespace. Returns
 /// the code by the root it goes under (`toy::alt`, its namespace by
 /// [`Config::namespace_of`](crate::Config::namespace_of)), and a report line
 /// per constant.
@@ -2146,7 +2174,8 @@ pub fn constants(
         } else {
             format!("{root}::{module}")
         };
-        let Some((js_ty, _)) = const_type(&c.ty, vocab) else {
+        let path: TokenStream = format!("{at}::{name}").parse().expect("a path");
+        let Some((js_ty, value)) = const_value(&c.ty, &path, vocab) else {
             report.push(format!(
                 "{at}::{name} constant not exposed: {} (no JS value)",
                 ty_str(&c.ty)
@@ -2160,7 +2189,6 @@ pub fn constants(
             continue;
         };
         let id = &c.ident;
-        let path: TokenStream = format!("{at}::{name}").parse().expect("a path");
         let docs = docs(&c.attrs);
         let gate = crate::cfg::attr(&vocab.config, &c.attrs);
         report.push(format!("{at}::{name} is a constant: {ns}.{name}"));
@@ -2170,7 +2198,7 @@ pub fn constants(
                 #(#docs)*
                 #gate
                 #[napi(namespace = #ns)]
-                pub const #id: #js_ty = #path;
+                pub const #id: #js_ty = #value;
             },
         ));
     }

@@ -293,6 +293,15 @@ export declare namespace fontdb {
      */
     loadSystemFontsAsync(signal?: AbortSignal | undefined | null): Promise<void>
     /**
+     * Pushes a user-provided `FaceInfo` to the database.
+     *
+     * In some cases, a caller might want to ignore the font's metadata and provide their own.
+     * This method doesn't parse the `source` font.
+     *
+     * The `id` field should be set to [`ID::dummy()`] and will be then overwritten by this method.
+     */
+    pushFaceInfo(info: fontdb.FaceInfoObject): fontdb.ID
+    /**
      * Removes a font face by `id` from the database.
      *
      * Returns `false` while attempting to remove a non-existing font face.
@@ -482,6 +491,51 @@ export declare namespace fontdb {
     get disposed(): boolean
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
+  }
+  /** Every public field of `FaceInfo`, as a plain object: what a member taking one by value reads. */
+  export interface FaceInfoObject {
+    /** An unique ID. */
+    id: fontdb.ID
+    /**
+     * A font source.
+     *
+     * Note that multiple `FaceInfo` objects can reference the same data in case of
+     * font collections, which means that they'll use the same Source.
+     */
+    source: fontdb.Source
+    /** A face index in the `source`. */
+    index: number
+    /**
+     * A list of family names.
+     *
+     * Contains pairs of Name + Language. Where the first family is always English US,
+     * unless it's missing from the font.
+     *
+     * Corresponds to a *Typographic Family* (ID 16) or a *Font Family* (ID 1) [name ID]
+     * in a TrueType font.
+     *
+     * This is not an *Extended Typographic Family* or a *Full Name*.
+     * Meaning it will contain _Arial_ and not _Arial Bold_.
+     *
+     * [name ID]: https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids
+     */
+    families: Array<[string, fontdb.Language]>
+    /**
+     * A PostScript name.
+     *
+     * Corresponds to a *PostScript name* (6) [name ID] in a TrueType font.
+     *
+     * [name ID]: https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids
+     */
+    postScriptName: string
+    /** A font face style. */
+    style: fontdb.Style
+    /** A font face weight. */
+    weight: number
+    /** A font face stretch. */
+    stretch: fontdb.Stretch
+    /** Indicates that the font face is monospaced. */
+    monospaced: boolean
   }
   /**
    * A [font family](https://www.w3.org/TR/2018/REC-css-fonts-3-20180920/#propdef-font-family).
@@ -1635,6 +1689,16 @@ export declare namespace tiny_skia {
     /** The class name, for `Object.prototype.toString`. */
     get [globalThis.Symbol.toStringTag](): string
   }
+  /** Represents fully opaque Alpha value. */
+  export const ALPHA_OPAQUE: number
+  /** Represents fully transparent Alpha value. */
+  export const ALPHA_TRANSPARENT: number
+  /** Represents fully opaque AlphaU8 value. */
+  export const ALPHA_U8_OPAQUE: number
+  /** Represents fully transparent AlphaU8 value. */
+  export const ALPHA_U8_TRANSPARENT: number
+  /** Number of bytes per pixel. */
+  export const BYTES_PER_PIXEL: number
   /** Any variant of `PathSegment`. */
   export type PathSegment = tiny_skia.PathSegmentPlain | tiny_skia.PathSegmentMoveTo | tiny_skia.PathSegmentLineTo | tiny_skia.PathSegmentQuadTo | tiny_skia.PathSegmentCubicTo
   /** `PathSegment::CubicTo`. */

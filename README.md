@@ -137,7 +137,7 @@ pixmap.encodePng()                                     // Buffer
 | `usvg` | `Tree` (`fromStr`, `fromData`, `toString`, `root()`, `nodeById`, the definition tables), the nodes (`Group`, `Path`, `Image`, `Text`, as a `{ kind, value }` union), `ClipPath`, `Mask`, `Pattern`, the paint servers and filters, `Options` and `WriteOptions` as plain objects |
 | `resvg` | `render(tree, transform, pixmap)`, `renderNode(node, transform, pixmap)` |
 | `tiny_skia` | `Pixmap` (`encodePng`, `decodePng`, `data`, `takeDemultiplied`, `pixel`, `cloneRect`...), `Transform`, `Rect`, `NonZeroRect`, `IntRect`, `Size`, `IntSize`, `Point`, `Color`, `ColorU8`, `PremultipliedColor`, `PremultipliedColorU8`; a path's segments (`PathSegment`) |
-| `fontdb` | `Database` (`loadSystemFonts`, `loadFontData`, `loadFontFile`, `loadFontsDir`, `faces()`, the generic-family setters), `FaceInfo` |
+| `fontdb` | `Database` (`loadSystemFonts`, `loadFontData`, `loadFontFile`, `loadFontsDir`, `faces()`, `pushFaceInfo`, the generic-family setters), `FaceInfo` |
 | `svgtypes` | `Color.fromStr`, CSS colours as an SVG attribute reads them |
 | `guard` | `ImageHrefResolver`, `FontResolver`: the [untrusted SVG](#untrusted-svg) opt-in, resvg-napi's own |
 | root | `setLogLevel`, `takeLogs` ([Warnings and logs](#warnings-and-logs)) |
@@ -156,7 +156,8 @@ pixmap.encodePng()                                     // Buffer
   `Display` is `toString`. A Rust tuple is an array (`dimensions()` is
   `[w, h]`, a face's `families` `[name, language]` pairs).
 - **Constants** keep their Rust name. A crate's own are values of its
-  namespace (`usvg.DEFAULT_MAX_DEPTH`); a type's associated constants are
+  namespace (`usvg.DEFAULT_MAX_DEPTH`, `tiny_skia.BYTES_PER_PIXEL`,
+  `tiny_skia.ALPHA_OPAQUE`); a type's associated constants are
   static read-only properties: `tiny_skia.Color.BLACK` / `WHITE` /
   `TRANSPARENT` and `tiny_skia.PremultipliedColorU8.TRANSPARENT` (a fresh
   instance on each read), and `fontdb.Weight.BOLD` (`700`) and its siblings,
@@ -343,6 +344,10 @@ A face is named by its `fontdb.ID` (`face.id`): `db.face(id)`,
 returns the best match's `ID`, `familyName(family)` resolves a generic family,
 and `loadFontSource({ type: 'binary', bytes })` loads and returns the new
 `ID`s. A rendered glyph's `font` is the `ID` of the face that drew it.
+`pushFaceInfo(info)` adds a face with metadata of your own, unparsed: `info`
+is a `fontdb.FaceInfoObject`, a face's fields as a plain object (`source` as
+`loadFontSource` takes it, `families` never empty), so a face from `faces()`
+goes back in changed. Its `id` is replaced, and the new one returned.
 
 ## Paint servers
 

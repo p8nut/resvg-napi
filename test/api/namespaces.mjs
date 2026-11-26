@@ -72,6 +72,16 @@ test('a public constant is a value under its Rust name', () => {
   assert.equal(binding.usvg.DEFAULT_MAX_DEPTH, 1024);
 });
 
+test('a crate read for its listed classes alone mirrors its constants too', () => {
+  const { tiny_skia } = binding;
+  assert.equal(tiny_skia.BYTES_PER_PIXEL, 4);
+  // `AlphaU8`, an alias of `u8`; `NormalizedF32`, read by its `get`.
+  assert.equal(tiny_skia.ALPHA_U8_OPAQUE, 255);
+  assert.equal(tiny_skia.ALPHA_U8_TRANSPARENT, 0);
+  assert.equal(tiny_skia.ALPHA_OPAQUE, 1);
+  assert.equal(tiny_skia.ALPHA_TRANSPARENT, 0);
+});
+
 test('an associated constant is a static read-only property under its Rust name', () => {
   const { fontdb, tiny_skia } = binding;
   // `fontdb::Weight` is a number in JS: its constants are a frozen object.

@@ -89,9 +89,10 @@ struct ClassCrate {
     /// the others. A later package's export the first does not re-export (an
     /// internal helper type) is not one.
     exported: BTreeSet<String>,
-    /// The constants its first package exports, as a caller names them
-    /// (`module::NAME`): seen, never emitted.
-    consts: Vec<String>,
+    /// The constants its first package exports ([`ModTree::consts`]), their
+    /// types read through its type aliases: emitted as a discovered crate's
+    /// are (`emit::constants`).
+    consts: Vec<(String, String, syn::ItemConst)>,
 }
 
 /// A source of classes and functions inside a discovered crate: its root
@@ -417,17 +418,20 @@ fn class_crates(config: &Config, locked: &BTreeMap<String, Vec<String>>) -> Vec<
                 }
                 if i == 0 {
                     exported.extend(tree.paths.keys().cloned());
-                    consts = tree
-                        .consts
-                        .iter()
-                        .map(|(m, name, _)| {
-                            if m.is_empty() {
-                                name.clone()
-                            } else {
-                                format!("{m}::{name}")
-                            }
-                        })
-                        .collect();
+                    consts = tree.consts.clone();
+                    // Its type aliases are no vocabulary of the others' (it
+                    // is read for its classes alone), but a constant's type
+                    // may be one, exported or not (`pub const OPAQUE: Alpha
+                    // = 255` with `pub type Alpha = u8` in a private
+                    // module): read through them, so it maps as the aliased
+                    // type does.
+                    let files: Vec<syn::File> = all.iter().map(|(_, f)| f.clone()).collect();
+                    let aliases = type_aliases(&files);
+                    for (_, _, k) in &mut consts {
+                        if let Some(to) = key(&k.ty).and_then(|t| aliases.get(&t)) {
+                            *k.ty = to.clone();
+                        }
+                    }
                 }
                 for (name, at) in tree.paths {
                     modules.entry(name).or_insert(at);
@@ -526,16 +530,14 @@ fn settle_classes<'a>(
         }
     };
     classes.config = config;
-    // A Role::Classes crate's constants are seen, never emitted: only a
-    // discovered crate's are (`emit::constants`), and only its listed
-    // classes' associated ones (`statics::of_class`). Said, so their absence
-    // reads as a choice. A `Role::Vocabulary` crate is not read through its
-    // module tree, so what it exports, constants included, is never seen.
+    // A Role::Classes crate's constants are mirrored as a discovered
+    // crate's are (`emit::constants`, ADR 0002), but of its types' associated
+    // ones only its listed classes' (`statics::of_class`): the rest are said,
+    // so their absence reads as a choice. A `Role::Vocabulary` crate is not
+    // read through its module tree, so what it exports, constants included,
+    // is never seen.
     for c in extra_crates {
-        let mut consts = c.consts.clone();
-        consts.extend(crate::statics::unexposed(&c.files, &c.exported, |t| {
-            classes.lists(c.root, t)
-        }));
+        let consts = crate::statics::unexposed(&c.files, &c.exported, |t| classes.lists(c.root, t));
         if !consts.is_empty() {
             say!(
                 log,
@@ -664,7 +666,12 @@ fn vocabulary(
         // A vocabulary crate is parsed for exactly this kind of answer: a
         // wrapped crate re-exports its types, so the struct that decides the
         // mapping is never in the wrapped crate's own files.
-        vocab.scalars.extend(f32_newtypes(set));
+        for (name, constness) in f32_newtypes(set) {
+            if constness {
+                vocab.const_scalars.insert(name.clone());
+            }
+            vocab.scalars.insert(name);
+        }
         vocab.aliases.extend(type_aliases(set));
         vocab
             .payload
@@ -1179,7 +1186,7 @@ fn handle_classes(
 }
 
 /// The listed classes (`crate::class`), the free functions, the constants
-/// the discovered crates export, the error codes and the unions of
+/// the discovered and [`Role::Classes`] crates export, the error codes and the unions of
 /// projections. Returns the associated constants found on the way, static
 /// read-only (`crate::statics`), for [`assemble`] to hook.
 fn listed_classes(
@@ -1249,6 +1256,17 @@ fn listed_classes(
         }
         statics.extend(found_here);
     }
+    // A Role::Classes crate's, as a discovered crate's (ADR 0002: every
+    // public constant a wrapped crate exports is mirrored).
+    for c in extra_crates {
+        let (code, lines) = constants(c.root, &c.consts, vocab);
+        for line in lines {
+            say!(log, "{line}");
+        }
+        for (root, code) in code {
+            surface.put(&root, code);
+        }
+    }
     for u in &classes.unions {
         let root = classes.sources[u.source].root;
         say!(log, "{root}::{} is a union of projections", u.name);
@@ -1260,6 +1278,19 @@ fn listed_classes(
     {
         surface.put(classes.sources[s].root, code);
     }
+    for (s, name, code) in classes.data_inputs() {
+        let root = classes.sources[s].root;
+        say!(log, "{root}::{name} is taken by value, as {name}Object");
+        surface.put(root, code);
+    }
+    // A `Config::non_empty` entry no input form has is upstream moving, or
+    // a typo: loud, like an index bound matching nothing.
+    let unused = classes.unused_non_empty();
+    assert!(
+        unused.is_empty(),
+        "Config::non_empty: no data type taken by value has {}",
+        unused.join(", ")
+    );
     statics
 }
 

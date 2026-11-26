@@ -46,7 +46,7 @@ test('util.inspect prints the cheap methods under the class name', () => {
 test('the namespace mirrors the crate: Rust names, a prefix JS never sees', () => {
   const ns = toy.toy;
   assert.deepEqual(Object.keys(ns).sort(), [
-    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Frame', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
+    'Album', 'Canvas', 'Color', 'Counter', 'Direction', 'Dot', 'Entry', 'Frame', 'HALF', 'Key', 'Layer', 'MAX_LAYERS', 'MinLen', 'NAME',
     'OriginInline', 'OriginPinned', 'PaintErrorCode', 'ParseErrorCode', 'SCALE', 'STRICT', 'Scene', 'Stamp', 'Tally', 'Vec2', 'boom', 'boomAsync', 'copies', 'count', 'countAsync', 'paint',
     'paintAsync',
     'report', 'share', 'shared',
@@ -395,6 +395,46 @@ test('a borrowed enum is passed as { type, value }, and a list of them in an opt
   assert.equal(t.find({ tags: [{ type: 'named', value: 'x' }] }), null);
   assert.equal(t.find(), null, 'Default: no tags, nothing found');
   assert.throws(() => t.find({ minLen: 70000 }), { code: 'InvalidArg', message: 'invalid minLen: 70000' });
+});
+
+test('a data type taken by value: its fields in their input forms, read back as data', () => {
+  const t = new toy.toy.Tally();
+  const entry = {
+    key: toy.toy.Key.LAST,
+    origin: { type: 'inline', bytes: Buffer.from('abc') },
+    index: 2,
+    names: [['a', 'up'], ['b', 'down']],
+    label: 'first',
+    direction: 'down',
+    minLen: 4,
+    on: true,
+  };
+  const key = t.pushEntry(entry);
+  assert.ok(key instanceof toy.toy.Key);
+  const [e] = t.entries();
+  assert.ok(e instanceof toy.toy.Entry, 'out: a read-only class');
+  assert.notEqual(e.key.toString(), toy.toy.Key.LAST.toString(), 'the key is the one push_entry gave');
+  assert.equal(e.origin.bytes.toString(), 'abc', 'an input enum, its bytes copied');
+  assert.deepEqual([e.index, e.names, e.label, e.direction, e.minLen, e.on],
+    [2, [['a', 'up'], ['b', 'down']], 'first', 'down', 4, true]);
+  // Round trip: what it handed out, changed, goes back in.
+  const again = {
+    key: e.key, origin: e.origin, index: e.index, names: [...e.names, ['c', 'up']], label: 'second',
+    direction: e.direction, minLen: e.minLen, on: false,
+  };
+  t.pushEntry(again);
+  const [, second] = t.entries();
+  assert.deepEqual([second.label, second.names.length, second.on, second.origin.bytes.toString()],
+    ['second', 3, false, 'abc']);
+  // Refused at the boundary, as an argument is.
+  assert.throws(() => t.pushEntry({ ...entry, names: [] }),
+    { code: 'InvalidArg', message: 'Entry.names may not be empty' });
+  assert.throws(() => t.pushEntry({ ...entry, index: -1 }), { code: 'InvalidArg', message: /Entry\.index/ });
+  assert.throws(() => t.pushEntry({ ...entry, minLen: 70000 }), { code: 'InvalidArg', message: /Entry\.minLen/ });
+  assert.throws(() => t.pushEntry({ ...entry, origin: { type: 'inline' } }),
+    { code: 'InvalidArg', message: "Origin 'inline' needs bytes" });
+  assert.throws(() => t.pushEntry({ ...entry, key: {} }));
+  assert.equal(t.entries().length, 2, 'nothing refused was kept');
 });
 
 test('an owned enum in and out: shared bytes, a path, a tuple holding bytes, an inline list', () => {
@@ -890,6 +930,13 @@ test('a public constant is a value of its namespace, under its Rust name', () =>
   assert.equal(toy.alt.NAME, 'alt');
   assert.equal(toy.toy.SCALE, 0.5);
   assert.equal(toy.toy.STRICT, true);
+  // A newtype over f32 with a `const fn get`: its number.
+  assert.equal(toy.toy.HALF, 0.5);
+  // A crate read for its classes alone (`Role::Classes`) mirrors its
+  // constants too: a `usize`, a number.
+  assert.equal(toy.dep.CELL_BYTES, 1);
+  // Its type an alias of that crate's own, read through.
+  assert.equal(toy.dep.CELL_FULL, 255);
   // Re-exported from a private module; what nothing exports stays out.
   assert.equal(toy.toy.MAX_LAYERS, 64);
   assert.ok(!('HIDDEN' in toy.toy));
@@ -939,10 +986,10 @@ test('an associated constant is a static read-only property, under its Rust name
 // `dep.Grid` is the one class of `toy-dep`, a crate read for its listed
 // classes alone. The value types its members take and return are classes
 // too, listed nowhere: `Area` and `Cell`, and `Mark`, which only `Cell`
-// reaches.
+// reaches. Its constants are mirrored beside them.
 test('the value types a listed class reaches are classes, to a fixpoint', () => {
   const dep = toy.dep;
-  assert.deepEqual(Object.keys(dep).sort(), ['Area', 'Cell', 'Grid', 'Mark']);
+  assert.deepEqual(Object.keys(dep).sort(), ['Area', 'CELL_BYTES', 'CELL_FULL', 'Cell', 'Grid', 'Mark']);
   const grid = new dep.Grid(3, 2);
   const bounds = grid.bounds();
   assert.ok(bounds instanceof dep.Area);

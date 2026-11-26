@@ -79,4 +79,52 @@ test('the demo renders through the browser entry', { timeout: 60_000 }, async (t
   });
   assert.deepEqual({ width, height }, { width: 480, height: 320 });
   assert.deepEqual(pixel, [0x00, 0x91, 0xb4, 0xff]);
+
+  // The render is async and a change aborts the one before it (#269). A slow
+  // document starts rendering (the scale field renders at once, no debounce),
+  // then a plain one replaces it while the slow render runs on a worker
+  // thread. The plain one is what ends up on screen, the slow one, finishing
+  // later, never replaces it, and the main thread kept answering timers
+  // throughout: a sync render would hold it for the whole slow render.
+  const superseded = await page.evaluate(async () => {
+    const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+    const src = $<HTMLTextAreaElement>('src'), scale = $<HTMLInputElement>('scale'), img = $<HTMLImageElement>('out');
+    const circles = Array.from({ length: 300 }, (_, i) =>
+      `<circle cx="${(i * 37) % 800}" cy="${(i * 91) % 800}" r="30" fill="#0091b4" filter="url(#b)"/>`).join('');
+    const slow = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">`
+      + `<defs><filter id="b"><feGaussianBlur stdDeviation="8"/></filter></defs>${circles}</svg>`;
+    const plain = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#c8005e"/></svg>';
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    let swaps = 0, gap = 0, last = performance.now(), ticking = true;
+    new MutationObserver(() => { swaps += 1; }).observe(img, { attributes: true, attributeFilter: ['src'] });
+    const tick = () => {
+      const now = performance.now();
+      gap = Math.max(gap, now - last);
+      last = now;
+      if (ticking) setTimeout(tick, 10);
+    };
+    setTimeout(tick, 10);
+
+    src.value = slow;
+    scale.dispatchEvent(new Event('input'));
+    await wait(150);                       // the slow render is under way
+    src.value = plain;
+    scale.dispatchEvent(new Event('input'));
+    // Long enough for the slow render (about 2 s here) to come back and be dropped.
+    await wait(5000);
+    ticking = false;
+    await img.decode();
+    const ctx = new OffscreenCanvas(img.naturalWidth, img.naturalHeight).getContext('2d');
+    if (!ctx) throw new Error('no 2d context');
+    ctx.drawImage(img, 0, 0);
+    return { swaps, gap, width: img.naturalWidth, pixel: [...ctx.getImageData(5, 5, 1, 1).data],
+             err: $('status').classList.contains('err') };
+  });
+  assert.deepEqual(problems, []);
+  assert.equal(superseded.err, false);
+  assert.equal(superseded.width, 20, 'the last source, at scale 2');
+  assert.deepEqual(superseded.pixel, [0xc8, 0x00, 0x5e, 0xff]);
+  assert.equal(superseded.swaps, 1, 'the superseded render never reached the image');
+  assert.ok(superseded.gap < 500, `the main thread stalled for ${superseded.gap.toFixed(0)} ms`);
 });

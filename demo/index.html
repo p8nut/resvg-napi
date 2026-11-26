@@ -137,11 +137,12 @@
 
   function showCode() {
     const scale = Number($('scale').value) || 1;
-    $('code').textContent = `import { renderPng } from 'resvg-napi/helpers'   // npm install resvg-napi
+    $('code').textContent = `import { renderPngAsync } from 'resvg-napi/helpers'   // npm install resvg-napi
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const svg = readFileSync('input.svg', 'utf8')
-const png = renderPng(svg, { scale: ${scale} })
+// On a worker thread; { signal } drops it while it is still queued.
+const png = await renderPngAsync(svg, { scale: ${scale} })
 writeFileSync('out.png', png)`;
   }
 
@@ -195,14 +196,25 @@ writeFileSync('out.png', png)`;
     }
   }
 
-  function render() {
+  // One controller per render. A change aborts the render in flight: a call
+  // still queued on the wasm's worker threads is dropped and rejects with an
+  // AbortError, and one already running finishes but is not shown, so a stale
+  // PNG never replaces a newer one.
+  let current;
+  const cancel = () => current?.abort();
+
+  async function render() {
     if (!helpers) return;
+    cancel();
+    const { signal } = current = new AbortController();
     const t0 = performance.now();
     let tree;
     try {
-      // Parsed once, for the PNG and for the boxes drawn over it.
-      ({ tree } = helpers.parse($('src').value, { fonts: db }));
-      const png = helpers.renderPng(tree, { scale: Number($('scale').value) || 1 });
+      // Parsed once, for the PNG and for the boxes drawn over it. Both steps
+      // run off the main thread, so typing stays live on a heavy document.
+      ({ tree } = await helpers.parseAsync($('src').value, { fonts: db, signal }));
+      const png = await helpers.renderPngAsync(tree, { scale: Number($('scale').value) || 1, signal });
+      if (signal.aborted) return;
       // A view over the wasm's shared memory: Blob refuses it, so copy out.
       const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
       if (url) URL.revokeObjectURL(url);
@@ -212,6 +224,8 @@ writeFileSync('out.png', png)`;
       status(`${png.length.toLocaleString()} bytes in ${(performance.now() - t0).toFixed(1)} ms`);
       drawBoxes(tree);
     } catch (e) {
+      // Superseded: the AbortError, or the error of a source already replaced.
+      if (signal.aborted) return;
       status(e.message, true);
     } finally {
       tree?.dispose();
@@ -219,7 +233,7 @@ writeFileSync('out.png', png)`;
   }
 
   let timer;
-  $('src').oninput = () => { select(null); clearTimeout(timer); timer = setTimeout(render, 250); };
+  $('src').oninput = () => { select(null); cancel(); clearTimeout(timer); timer = setTimeout(render, 250); };
   $('scale').oninput = () => { showCode(); render(); };
   $('showBoxes').onchange = render;
 

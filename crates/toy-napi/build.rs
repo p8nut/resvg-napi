@@ -42,6 +42,9 @@ const GEN: Config = Config {
     }],
     // `ReportOptions::style_index` indexes `STYLES` unchecked.
     index_bounded: &[("_index", "STYLES")],
+    // `Entry::names`, which `Tally::push_entry` takes from JS, may not be
+    // empty: an empty one throws at the call.
+    non_empty: &[("Entry", "names")],
     // `ReportOptions`, `Options` and `Filter` need no entry: `report`,
     // `Counter::new` and `Tally::find` take them by `&`, so they become
     // `toy.ReportOptions`, `toy.Options` and `toy.Filter`. `Filter` borrows
@@ -224,10 +227,17 @@ fn main() {
     // `f64`, `&[f64]`, `i16` and `[u8; 4]` (a tag) mapped and its `u64`
     // unable to fit a JS number. `Dot` is walked as data and left to its
     // projection class; `Layer`, a node type, is not walked at all.
+    // `Entry` is a read-only class too (its `key` is a class), and
+    // `Tally::push_entry` takes one by value: its `EntryObject`.
     assert_eq!(
         lines("data types emitted"),
-        ["data types emitted: Dot, Frame, Point"],
+        ["data types emitted: Dot, Entry, Frame, Point"],
         "the data types"
+    );
+    assert_eq!(
+        lines("taken by value"),
+        ["toy::Entry is taken by value, as EntryObject"],
+        "the data types taken by value"
     );
     assert_eq!(
         lines("Frame:")
@@ -443,6 +453,7 @@ fn every_field_set() {
         ("uses", GEN.uses.is_empty()),
         ("hand_written", GEN.hand_written.is_empty()),
         ("index_bounded", GEN.index_bounded.is_empty()),
+        ("non_empty", GEN.non_empty.is_empty()),
         ("option_objects", GEN.option_objects.is_empty()),
         // A listed class, not only a doc on a derived one.
         (

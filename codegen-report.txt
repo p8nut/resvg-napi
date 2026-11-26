@@ -78,7 +78,7 @@ usvg::Tree is a class: Projected
 usvg::Tree member not in the class: from_xmltree (arg: &roxmltree::Document)
 usvg::fontdb::Database is a class: SharedCow
 usvg::fontdb::Database member not in the class: make_shared_face_data (unsafe)
-usvg::fontdb::Database member not in the class: push_face_info (arg: FaceInfo)
+usvg::fontdb::FaceInfo is taken by value, as FaceInfoObject
 usvg::fontdb::Family is an input enum: { type, value }
 usvg::fontdb::ID is a class: Value
 usvg::fontdb::Source is an input enum: { type, value }

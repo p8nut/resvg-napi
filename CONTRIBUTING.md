@@ -440,6 +440,18 @@ Q34):
   a class cannot go (an `#[napi(object)]` field, a union's payload), a
   plain-data class is its `<Name>Object`, and any other makes its holder a
   read-only class (`usvg.Primitive`, which holds a `NonZeroRect`).
+- **A data type taken by value is its `<Name>Object`** (`Classes::data_input`,
+  ADR 0002, Q34): a struct the data types hold (`Vocab::objects`,
+  `Vocab::values`), every field public, whose every field has an input
+  form, is an input-only `#[napi(object)]` whose `into_upstream(self)` builds
+  the struct: a class held by value is its instance, copied; an input enum
+  its `{ type, value }`; numbers (checked as an argument is), strings,
+  booleans, enums, number newtypes and lists of pairs of those as they are.
+  `fontdb.Database.pushFaceInfo` takes a `fontdb.FaceInfoObject`; the toy's
+  `Tally::push_entry` an `EntryObject`. A list upstream indexes unchecked is
+  named in `Config::non_empty` and throws when empty (a face's `families`:
+  usvg's font fallback reads `families[0]`). One field with no input form
+  leaves the member out, as before, with its `(arg: T)` report line.
 - **An `Arc`-held definition a union carries is its handle class**: a
   variant carrying `Arc<T>` alone, `T` with an `id()`, is an output-only
   object whose `value` is the `T` class, the `Arc` cloned:

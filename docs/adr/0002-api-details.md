@@ -157,12 +157,20 @@ As built (0.11, #181): all five are back. `fontdb.Database` has `query`,
 - Every class whose fields are all public and convertible gets a static
   `fromObject(obj)` and an instance `toObject()`, for example `Transform`,
   `Rect`, `Size` and `svgtypes.Color`.
-- Arguments accept only the class, so a conversion is always explicit. The
-  one exception is a slice of a plain-data class (`&[Point]`): an array of
+- Arguments accept only the class, so a conversion is always explicit. Two
+  exceptions. A slice of a plain-data class (`&[Point]`) is an array of
   its `<Name>Object`s, since an array of instances would mean one crossing
   per element to build them. A `&mut` slice is returned as the call left
   it: JS passed a copy, which the call cannot write through
-  (`Rect.fromPoints`, `Transform.mapPoints`; #252).
+  (`Rect.fromPoints`, `Transform.mapPoints`; #252). And a data type taken by
+  value, which has no class to build it with (`fontdb.FaceInfo` is
+  read-only), is its `<Name>Object` when every field has an input form:
+  `fontdb.Database.pushFaceInfo(info)` takes a `fontdb.FaceInfoObject`
+  whose `id` is a `fontdb.ID`, `source` a `fontdb.Source` (`{ type, bytes }`,
+  copied), and the rest numbers, strings and enums (#271). It is input-only:
+  JS builds it from what the read-only class hands out. A list an upstream
+  invariant keeps non-empty, and upstream code indexes unchecked, is refused
+  empty at the call (`Config::non_empty`: a face's `families`).
 - A member that only converts a plain-data class to or from a type nothing
   maps (`Point::to_f32x2`) is left out without being reported: `fromObject`
   and `toObject` already carry the data.

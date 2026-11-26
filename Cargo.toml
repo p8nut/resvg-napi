@@ -77,6 +77,6 @@ members = ["crates/napi-support", "crates/napi-gen", "crates/toy", "crates/toy-d
 # wasm: under WASI its class identity check (from 3.15.0) refuses another
 # class's instance instead. test/api/errors.mjs checks it is refused on both.
 # napi9 is `Symbol.for` keys: every class's `util.inspect.custom` (emit.rs).
-napi = { version = "3.16.2", default-features = false }
-napi-derive = "3.7.1"
-napi-build = "2.6.0"
+napi = { version = "3.16.3", default-features = false }
+napi-derive = "3.7.2"
+napi-build = "2.7.0"
